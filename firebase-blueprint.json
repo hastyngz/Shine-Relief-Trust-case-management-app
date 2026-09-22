@@ -1,0 +1,282 @@
+{
+  "entities": {
+    "girls": {
+      "title": "Girls",
+      "description": "Registered SHINE girls receiving care and educational support",
+      "fields": {
+        "id": { "type": "string", "description": "Unique identifier e.g. SG-001" },
+        "fullName": { "type": "string", "description": "Full legal name" },
+        "dateOfBirth": { "type": "string", "description": "Birth date" },
+        "gender": { "type": "string", "description": "Gender" },
+        "dateAdmitted": { "type": "string", "description": "Date admitted to SHINE" },
+        "school": { "type": "string", "description": "Current school attended" },
+        "classLevel": { "type": "string", "description": "Current class or standard level" },
+        "householdId": { "type": "string", "description": "Linked SHINE household ID" },
+        "status": { "type": "string", "description": "Status: Active, On Holiday, Completed, Left SHINE" },
+        "guardianInfo": { "type": "map", "description": "Guardian and village contact details" },
+        "notes": { "type": "string", "description": "General intake or background notes" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      }
+    },
+    "households": {
+      "title": "Households",
+      "description": "SHINE residential houses caring for girls",
+      "fields": {
+        "id": { "type": "string", "description": "Unique identifier e.g. SH-01" },
+        "name": { "type": "string", "description": "House name" },
+        "location": { "type": "string", "description": "Physical location / neighborhood" },
+        "monthlyRentCost": { "type": "number", "description": "Monthly rent in MWK" },
+        "houseMum": { "type": "string", "description": "House mother name" },
+        "houseMumPhone": { "type": "string", "description": "House mother phone number" },
+        "status": { "type": "string", "description": "Status: Active, Not in use, Closed" },
+        "notes": { "type": "string", "description": "Household notes" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" }
+      }
+    },
+    "educationalFollowUps": {
+      "title": "Educational Follow Ups",
+      "description": "Longitudinal academic monitoring records per girl",
+      "fields": {
+        "id": { "type": "string", "description": "Follow-up identifier" },
+        "girlId": { "type": "string", "description": "Target girl ID" },
+        "date": { "type": "string", "description": "Visit or review date" },
+        "school": { "type": "string", "description": "School name" },
+        "classLevel": { "type": "string", "description": "Class level" },
+        "academicIssue": { "type": "string", "description": "Academic issue or focus" },
+        "problemsExperienced": { "type": "string", "description": "Problems observed" },
+        "subjectsNeedingSupport": { "type": "string", "description": "Subjects requiring attention" },
+        "supportProvided": { "type": "string", "description": "Interventions provided" },
+        "progressOutcome": { "type": "string", "description": "Progress outcome" },
+        "furtherActionRequired": { "type": "boolean", "description": "Action needed flag" },
+        "recommendations": { "type": "string", "description": "Staff recommendations" },
+        "nextFollowUpDate": { "type": "string", "description": "Target date for next review" },
+        "recordedBy": { "type": "string", "description": "Staff member" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "healthFollowUps": {
+      "title": "Health Follow Ups",
+      "description": "Medical visits and clinic follow-up records",
+      "fields": {
+        "id": { "type": "string", "description": "Follow-up identifier" },
+        "girlId": { "type": "string", "description": "Target girl ID" },
+        "date": { "type": "string", "description": "Visit date" },
+        "reasonForVisit": { "type": "string", "description": "Reason for medical visit" },
+        "healthIssueComplaint": { "type": "string", "description": "Symptoms or complaints" },
+        "medicalFacility": { "type": "string", "description": "Facility visited" },
+        "treatmentProvided": { "type": "string", "description": "Medications or lab tests" },
+        "outcome": { "type": "string", "description": "Health outcome" },
+        "furtherActionRequired": { "type": "boolean", "description": "Action needed flag" },
+        "recommendations": { "type": "string", "description": "Medical recommendations" },
+        "nextFollowUpDate": { "type": "string", "description": "Next clinic checkup date" },
+        "recordedBy": { "type": "string", "description": "Staff member" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "familyFollowUps": {
+      "title": "Family Follow Ups",
+      "description": "Home visits and guardian communication logs",
+      "fields": {
+        "id": { "type": "string", "description": "Follow-up identifier" },
+        "girlId": { "type": "string", "description": "Target girl ID" },
+        "date": { "type": "string", "description": "Contact date" },
+        "contactType": { "type": "string", "description": "Home visit, phone call, etc." },
+        "familySituation": { "type": "string", "description": "Family situation notes" },
+        "challengesOrConcerns": { "type": "string", "description": "Challenges identified" },
+        "supportProvided": { "type": "string", "description": "Support provided" },
+        "furtherActionRequired": { "type": "boolean", "description": "Action needed flag" },
+        "recommendations": { "type": "string", "description": "Recommendations" },
+        "nextFollowUpDate": { "type": "string", "description": "Next contact date" },
+        "recordedBy": { "type": "string", "description": "Staff member" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "rentPayments": {
+      "title": "Rent Payments",
+      "description": "Monthly residential lease payments for SHINE houses",
+      "fields": {
+        "id": { "type": "string", "description": "Payment identifier" },
+        "householdId": { "type": "string", "description": "Target house ID" },
+        "datePaid": { "type": "string", "description": "Payment date" },
+        "monthCovered": { "type": "string", "description": "Month covered" },
+        "amountPaid": { "type": "number", "description": "Amount paid in MWK" },
+        "paymentStatus": { "type": "string", "description": "Paid, Partially paid, Not paid" },
+        "receiptNumber": { "type": "string", "description": "Landlord receipt number" },
+        "notes": { "type": "string", "description": "Payment notes" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "expenses": {
+      "title": "Expenses",
+      "description": "Itemized household operational expenses and groceries",
+      "fields": {
+        "id": { "type": "string", "description": "Expense identifier" },
+        "householdId": { "type": "string", "description": "Target house ID" },
+        "date": { "type": "string", "description": "Expense date" },
+        "category": { "type": "string", "description": "Expense category" },
+        "itemDescription": { "type": "string", "description": "Item or service description" },
+        "quantity": { "type": "string", "description": "Quantity purchased" },
+        "unitCost": { "type": "number", "description": "Unit cost in MWK" },
+        "totalCost": { "type": "number", "description": "Total cost in MWK" },
+        "supplier": { "type": "string", "description": "Vendor or shop" },
+        "notes": { "type": "string", "description": "Expense notes" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "householdActivities": {
+      "title": "Household Activities",
+      "description": "Communal house events, meetings, and life skills sessions",
+      "fields": {
+        "id": { "type": "string", "description": "Activity identifier" },
+        "householdId": { "type": "string", "description": "Target house ID" },
+        "date": { "type": "string", "description": "Activity date" },
+        "activityName": { "type": "string", "description": "Activity title" },
+        "activityType": { "type": "string", "description": "Type of activity" },
+        "participantCount": { "type": "number", "description": "Number of participants" },
+        "participatingGirlIds": { "type": "array", "description": "Girl IDs who attended" },
+        "description": { "type": "string", "description": "Activity description" },
+        "outcome": { "type": "string", "description": "Outcomes achieved" },
+        "challenges": { "type": "string", "description": "Challenges encountered" },
+        "supportProvided": { "type": "string", "description": "Resources provided" },
+        "recommendations": { "type": "string", "description": "Recommendations" },
+        "furtherActionRequired": { "type": "boolean", "description": "Follow-up needed flag" },
+        "nextFollowUpDate": { "type": "string", "description": "Next scheduled date" },
+        "recordedBy": { "type": "string", "description": "Staff member" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" },
+        "createdBy": { "type": "string", "description": "Staff name who created this record" },
+        "updatedBy": { "type": "string", "description": "Staff name who last modified this record" }
+      }
+    },
+    "staffUsers": {
+      "title": "Staff Users",
+      "description": "SHINE staff members and administrators with role-based permissions",
+      "fields": {
+        "id": { "type": "string", "description": "Document ID / Auth UID" },
+        "uid": { "type": "string", "description": "Firebase Authentication UID" },
+        "email": { "type": "string", "description": "Staff email address" },
+        "fullName": { "type": "string", "description": "Staff full name" },
+        "role": { "type": "string", "description": "Role: Administrator, Manager, Staff, View Only" },
+        "status": { "type": "string", "description": "Status: Active, Suspended" },
+        "departmentOrTitle": { "type": "string", "description": "Job title or department" },
+        "phone": { "type": "string", "description": "Staff contact phone" },
+        "createdAt": { "type": "string", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" },
+        "createdBy": { "type": "string", "description": "Admin who invited this staff member" },
+        "lastLoginAt": { "type": "string", "description": "Timestamp of most recent login" }
+      }
+    },
+    "aiAuditLogs": {
+      "title": "AI Audit Logs",
+      "description": "Privacy-safe operational audit logs tracking SHINE AI Assistant function usage and access",
+      "fields": {
+        "id": { "type": "string", "description": "Log entry identifier" },
+        "userId": { "type": "string", "description": "Authenticated staff user UID" },
+        "userEmail": { "type": "string", "description": "Staff email" },
+        "userRole": { "type": "string", "description": "Staff role when invoking AI" },
+        "timestamp": { "type": "string", "description": "ISO timestamp of query" },
+        "aiFunction": { "type": "string", "description": "AI tool or function invoked" },
+        "status": { "type": "string", "description": "success or failure" },
+        "recordIdsAccessed": { "type": "array", "description": "IDs of records retrieved e.g. ['SG-001']" },
+        "errorMessage": { "type": "string", "description": "Sanitized error message if failed" }
+      }
+    },
+    "staffConversations": {
+      "title": "Staff Conversations",
+      "description": "Direct and group messaging threads between authorized SHINE staff",
+      "fields": {
+        "id": { "type": "string", "description": "Conversation identifier" },
+        "type": { "type": "string", "description": "direct or group or announcement" },
+        "title": { "type": "string", "description": "Thread title or recipient summary" },
+        "participants": { "type": "array", "description": "List of staff member UIDs" },
+        "participantDetails": { "type": "array", "description": "Metadata for participants: uid, name, role, email" },
+        "lastMessageText": { "type": "string", "description": "Snippet of last message sent" },
+        "lastMessageAt": { "type": "string", "description": "ISO timestamp of last activity" },
+        "lastMessageSenderId": { "type": "string", "description": "UID of last sender" },
+        "lastMessageSenderName": { "type": "string", "description": "Name of last sender" },
+        "unreadCounts": { "type": "map", "description": "Unread count per participant UID" },
+        "archivedBy": { "type": "array", "description": "UIDs of staff who archived this thread" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" },
+        "createdBy": { "type": "string", "description": "UID of thread creator" }
+      }
+    },
+    "staffMessages": {
+      "title": "Staff Messages",
+      "description": "Encrypted in-transit individual staff messages strictly tied to auth UID",
+      "fields": {
+        "id": { "type": "string", "description": "Message identifier" },
+        "conversationId": { "type": "string", "description": "Parent conversation ID" },
+        "senderId": { "type": "string", "description": "Authenticated sender UID" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "senderEmail": { "type": "string", "description": "Sender email" },
+        "recipientId": { "type": "string", "description": "Direct recipient UID if 1-on-1" },
+        "recipientName": { "type": "string", "description": "Direct recipient name" },
+        "recipientUids": { "type": "array", "description": "All target UIDs authorized to read this message" },
+        "text": { "type": "string", "description": "Message content text" },
+        "status": { "type": "string", "description": "sent, delivered, or read" },
+        "readBy": { "type": "array", "description": "UIDs of users who read this message" },
+        "readAt": { "type": "map", "description": "Timestamps when read by user UIDs" },
+        "relatedRecordType": { "type": "string", "description": "Optional case reference: girl, household, followUp, etc." },
+        "relatedRecordId": { "type": "string", "description": "Optional ID of referenced record" },
+        "relatedRecordTitle": { "type": "string", "description": "Optional title/name of referenced record" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "staffNotifications": {
+      "title": "Staff Notifications",
+      "description": "In-app notifications for direct messages, assignments, data changes, and reminders",
+      "fields": {
+        "id": { "type": "string", "description": "Notification identifier" },
+        "userId": { "type": "string", "description": "Target recipient UID" },
+        "type": { "type": "string", "description": "direct_message, data_change, assignment, followup_reminder, announcement, system" },
+        "title": { "type": "string", "description": "Short heading" },
+        "message": { "type": "string", "description": "Notification body description" },
+        "source": { "type": "string", "description": "Source category or staff name" },
+        "priority": { "type": "string", "description": "normal, important, urgent" },
+        "isRead": { "type": "boolean", "description": "Whether read by user" },
+        "readAt": { "type": "string", "description": "ISO timestamp when marked read" },
+        "relatedRecordType": { "type": "string", "description": "girl, household, educationalFollowUp, etc." },
+        "relatedRecordId": { "type": "string", "description": "ID of related record" },
+        "relatedRecordTitle": { "type": "string", "description": "Name/code of related record" },
+        "createdBy": { "type": "string", "description": "Staff name or SHINE System" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "staffAnnouncements": {
+      "title": "Staff Announcements",
+      "description": "Administrator broadcast announcements for organizational communications",
+      "fields": {
+        "id": { "type": "string", "description": "Announcement identifier" },
+        "title": { "type": "string", "description": "Announcement headline" },
+        "message": { "type": "string", "description": "Full announcement text" },
+        "priority": { "type": "string", "description": "normal, important, urgent" },
+        "targetGroup": { "type": "string", "description": "all, managers, staff, selected" },
+        "targetUids": { "type": "array", "description": "Targeted staff UIDs" },
+        "createdByUid": { "type": "string", "description": "UID of admin creator" },
+        "createdByName": { "type": "string", "description": "Name of admin creator" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "expiresAt": { "type": "string", "description": "Optional expiry date" },
+        "readBy": { "type": "array", "description": "UIDs of staff who acknowledged" }
+      }
+    },
+    "userNotificationPreferences": {
+      "title": "User Notification Preferences",
+      "description": "Per-staff notification and push alert configurations",
+      "fields": {
+        "userId": { "type": "string", "description": "UID of the staff member" },
+        "directMessages": { "type": "boolean", "description": "Direct message notifications" },
+        "caseAssignments": { "type": "boolean", "description": "Case assignment notifications" },
+        "followUpReminders": { "type": "boolean", "description": "Follow-up due/overdue reminders" },
+        "dataChangeNotifications": { "type": "boolean", "description": "Data update notifications" },
+        "administrativeAnnouncements": { "type": "boolean", "description": "Admin announcement alerts" },
+        "reminderTiming": { "type": "map", "description": "7d, 3d, 1d, onDue, overdue flags" },
+        "pushEnabled": { "type": "boolean", "description": "Web push alert enabled" },
+        "fcmTokens": { "type": "array", "description": "Registered FCM tokens" },
+        "updatedAt": { "type": "string", "description": "Last modified timestamp" }
+      }
+    }
+  }
+}

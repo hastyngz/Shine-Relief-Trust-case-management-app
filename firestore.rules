@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isHastings() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == 'hastingszidanamot@gmail.com';
+    }
+
+    function getStaffDoc(uid) {
+      return get(/databases/$(database)/documents/staffUsers/$(uid));
+    }
+
+    function isStaffActive() {
+      return isSignedIn() && (
+        isHastings() ||
+        (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
+         getStaffDoc(request.auth.uid).data.status == 'Active')
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isHastings() ||
+        (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
+         getStaffDoc(request.auth.uid).data.role == 'Administrator' &&
+         getStaffDoc(request.auth.uid).data.status == 'Active')
+      );
+    }
+
+    function isManagerOrStaff() {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
+         (getStaffDoc(request.auth.uid).data.role == 'Manager' || getStaffDoc(request.auth.uid).data.role == 'Staff') &&
+         getStaffDoc(request.auth.uid).data.status == 'Active')
+      );
+    }
+
+    // Staff Users Management collection
+    match /staffUsers/{userId} {
+      // Authenticated users can view staff profiles (directory lookup, attribution)
+      allow read: if isSignedIn();
+
+      // Bootstrap rule: Hastings can initialize his own Administrator doc.
+      // All other staff creations MUST be performed by an existing Administrator.
+      // Self-registration as Administrator by anyone else is strictly blocked.
+      allow create: if isSignedIn() && (
+        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator') ||
+        isAdmin()
+      );
+
+      // Only Administrators can modify roles or toggle active/suspended statuses.
+      // Non-admin staff can only update their own basic profile fields (phone, etc.)
+      // and CANNOT modify role, status, or promote themselves.
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (request.auth.uid == userId &&
+         request.resource.data.role == resource.data.role &&
+         request.resource.data.status == resource.data.status)
+      );
+
+      // Only Administrators can delete a staff user, and Hastings' primary account cannot be deleted.
+      allow delete: if isAdmin() &&
+        resource.data.email != null &&
+        resource.data.email.lower() != 'hastingszidanamot@gmail.com';
+    }
+
+    // SHINE Operational Collections
+    // Enforces RBAC permissions:
+    // - Active Staff / Managers / Administrators / View Only can READ.
+    // - View Only users CANNOT modify data (create, update, delete are blocked).
+    // - Manager and Staff can create and update operational records.
+    // - Deletion of high-impact entities (girls, households, rent) requires Administrator.
+
+    match /girls/{girlId} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /households/{houseId} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /educationalFollowUps/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    match /healthFollowUps/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    match /familyFollowUps/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    match /rentPayments/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    match /householdActivities/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    match /attachments/{id} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff();
+      allow update: if isManagerOrStaff();
+      allow delete: if isAdmin() || (isManagerOrStaff() && resource.data.uploadedBy.uid == request.auth.uid);
+    }
+
+    match /aiAuditLogs/{id} {
+      allow read: if isAdmin();
+      allow create: if isStaffActive();
+      allow update, delete: if false;
+    }
+
+    // Staff Conversations
+    match /staffConversations/{convId} {
+      allow read: if isStaffActive() && (
+        request.auth.uid in resource.data.participants ||
+        isAdmin()
+      );
+      allow create: if isStaffActive() &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if isStaffActive() && (
+        request.auth.uid in resource.data.participants ||
+        isAdmin()
+      );
+      allow delete: if isAdmin() || (isStaffActive() && request.auth.uid in resource.data.participants);
+    }
+
+    // Staff Messages - strictly prevents impersonation
+    match /staffMessages/{msgId} {
+      allow read: if isStaffActive() && (
+        request.auth.uid in resource.data.recipientUids ||
+        resource.data.senderId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isStaffActive() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.auth.uid in request.resource.data.recipientUids;
+      allow update: if isStaffActive() && (
+        request.auth.uid in resource.data.recipientUids ||
+        resource.data.senderId == request.auth.uid
+      );
+      allow delete: if isAdmin() || (isStaffActive() && resource.data.senderId == request.auth.uid);
+    }
+
+    // Staff Notifications - private to target recipient
+    match /staffNotifications/{notifId} {
+      allow read: if isStaffActive() && resource.data.userId == request.auth.uid;
+      allow create: if isStaffActive();
+      allow update: if isStaffActive() && resource.data.userId == request.auth.uid;
+      allow delete: if isStaffActive() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Staff Announcements - org-wide broadcasts strictly restricted to Admins
+    match /staffAnnouncements/{annId} {
+      allow read: if isStaffActive();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isStaffActive() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+      allow delete: if isAdmin();
+    }
+
+    // User Notification Preferences
+    match /userNotificationPreferences/{userId} {
+      allow read: if isStaffActive() && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isStaffActive() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin() || (isStaffActive() && request.auth.uid == userId);
+    }
+  }
+}

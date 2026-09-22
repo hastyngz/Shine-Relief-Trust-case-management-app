@@ -1,0 +1,6 @@
+{
+  "name": "SHINE Relief Trust Malawi Case Management",
+  "description": "Mobile-friendly case management and monitoring app for SHINE Relief Trust in Malawi, managing SHINE Girls, households, educational, medical, and family follow-ups, rent, and expenditures.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
