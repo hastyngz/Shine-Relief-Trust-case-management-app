@@ -8,6 +8,13 @@ import {
   HouseholdRentPayment,
   HouseholdExpense,
   HouseholdActivity,
+  BudgetItem,
+  WorkplanItem,
+  ScheduleItem,
+  HistoricalCaseRecord,
+  ImportAuditRecord,
+  EarlyYearsRecord,
+  Person,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import {
@@ -27,6 +34,17 @@ import {
   deleteExpenseFromFirestore,
   persistHouseholdActivityToFirestore,
   deleteHouseholdActivityFromFirestore,
+  persistBudgetItemToFirestore,
+  deleteBudgetItemFromFirestore,
+  persistWorkplanItemToFirestore,
+  deleteWorkplanItemFromFirestore,
+  persistScheduleItemToFirestore,
+  deleteScheduleItemFromFirestore,
+  persistHistoricalCaseRecordToFirestore,
+  deleteHistoricalCaseRecordFromFirestore,
+  persistImportAuditToFirestore,
+  persistPersonToFirestore,
+  deletePersonFromFirestore,
   clearAllFirestoreCollections,
   syncEntireDatabaseToFirestore,
 } from '../services/firestoreSync';
@@ -57,6 +75,15 @@ export function getDatabase(): AppDatabase {
       rentPayments: parsed.rentPayments || [],
       expenses: parsed.expenses || [],
       householdActivities: parsed.householdActivities || [],
+      attachments: parsed.attachments || [],
+      budgets: parsed.budgets || [],
+      workplans: parsed.workplans || [],
+      schedules: parsed.schedules || [],
+      historicalRecords: parsed.historicalRecords || [],
+      importAudits: parsed.importAudits || [],
+      earlyYearsRecords: parsed.earlyYearsRecords || [],
+      people: parsed.people || [],
+      customPersonTypes: parsed.customPersonTypes || [],
     };
   } catch (error) {
     console.error('Error reading database from localStorage:', error);
@@ -490,4 +517,340 @@ export function addHouseholdActivity(
     console.error('Failed to persist household activity to Firestore:', err)
   );
   return newItem;
+}
+
+// ----------------------------------------------------------------------
+// BUDGET MANAGEMENT HELPERS
+// ----------------------------------------------------------------------
+export function addBudgetItem(
+  item: Omit<BudgetItem, 'id' | 'createdAt'>,
+  auditActor?: string
+): BudgetItem {
+  const db = getDatabase();
+  if (!db.budgets) db.budgets = [];
+  const now = new Date().toISOString();
+  const newItem: BudgetItem = {
+    ...item,
+    id: generateFollowUpId('BDG'),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: auditActor || item.createdBy || 'SHINE Staff',
+    updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
+  };
+  db.budgets.unshift(newItem);
+  saveDatabase(db);
+  persistBudgetItemToFirestore(newItem).catch((err) =>
+    console.error('Failed to persist budget item to Firestore:', err)
+  );
+  return newItem;
+}
+
+export function updateBudgetItem(
+  id: string,
+  updates: Partial<BudgetItem>,
+  auditActor?: string
+): BudgetItem | null {
+  const db = getDatabase();
+  if (!db.budgets) db.budgets = [];
+  const index = db.budgets.findIndex((b) => b.id === id);
+  if (index === -1) return null;
+  const updated: BudgetItem = {
+    ...db.budgets[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: auditActor || db.budgets[index].updatedBy || 'SHINE Staff',
+  };
+  db.budgets[index] = updated;
+  saveDatabase(db);
+  persistBudgetItemToFirestore(updated).catch((err) =>
+    console.error('Failed to update budget item in Firestore:', err)
+  );
+  return updated;
+}
+
+export function deleteBudgetItem(id: string): boolean {
+  const db = getDatabase();
+  if (!db.budgets) return false;
+  const index = db.budgets.findIndex((b) => b.id === id);
+  if (index === -1) return false;
+  db.budgets.splice(index, 1);
+  saveDatabase(db);
+  deleteBudgetItemFromFirestore(id).catch((err) =>
+    console.error('Failed to delete budget item from Firestore:', err)
+  );
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// WORKPLAN HELPERS
+// ----------------------------------------------------------------------
+export function addWorkplanItem(
+  item: Omit<WorkplanItem, 'id' | 'createdAt'>,
+  auditActor?: string
+): WorkplanItem {
+  const db = getDatabase();
+  if (!db.workplans) db.workplans = [];
+  const now = new Date().toISOString();
+  const newItem: WorkplanItem = {
+    ...item,
+    id: generateFollowUpId('WKP'),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: auditActor || item.createdBy || 'SHINE Staff',
+    updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
+  };
+  db.workplans.unshift(newItem);
+  saveDatabase(db);
+  persistWorkplanItemToFirestore(newItem).catch((err) =>
+    console.error('Failed to persist workplan item to Firestore:', err)
+  );
+  return newItem;
+}
+
+export function updateWorkplanItem(
+  id: string,
+  updates: Partial<WorkplanItem>,
+  auditActor?: string
+): WorkplanItem | null {
+  const db = getDatabase();
+  if (!db.workplans) db.workplans = [];
+  const index = db.workplans.findIndex((w) => w.id === id);
+  if (index === -1) return null;
+  const updated: WorkplanItem = {
+    ...db.workplans[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: auditActor || db.workplans[index].updatedBy || 'SHINE Staff',
+  };
+  db.workplans[index] = updated;
+  saveDatabase(db);
+  persistWorkplanItemToFirestore(updated).catch((err) =>
+    console.error('Failed to update workplan item in Firestore:', err)
+  );
+  return updated;
+}
+
+export function deleteWorkplanItem(id: string): boolean {
+  const db = getDatabase();
+  if (!db.workplans) return false;
+  const index = db.workplans.findIndex((w) => w.id === id);
+  if (index === -1) return false;
+  db.workplans.splice(index, 1);
+  saveDatabase(db);
+  deleteWorkplanItemFromFirestore(id).catch((err) =>
+    console.error('Failed to delete workplan item from Firestore:', err)
+  );
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// SCHEDULE HELPERS
+// ----------------------------------------------------------------------
+export function addScheduleItem(
+  item: Omit<ScheduleItem, 'id' | 'createdAt'>,
+  auditActor?: string
+): ScheduleItem {
+  const db = getDatabase();
+  if (!db.schedules) db.schedules = [];
+  const now = new Date().toISOString();
+  const newItem: ScheduleItem = {
+    ...item,
+    id: generateFollowUpId('SCH'),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: auditActor || item.createdBy || 'SHINE Staff',
+    updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
+  };
+  db.schedules.unshift(newItem);
+  saveDatabase(db);
+  persistScheduleItemToFirestore(newItem).catch((err) =>
+    console.error('Failed to persist schedule item to Firestore:', err)
+  );
+  return newItem;
+}
+
+export function updateScheduleItem(
+  id: string,
+  updates: Partial<ScheduleItem>,
+  auditActor?: string
+): ScheduleItem | null {
+  const db = getDatabase();
+  if (!db.schedules) db.schedules = [];
+  const index = db.schedules.findIndex((s) => s.id === id);
+  if (index === -1) return null;
+  const updated: ScheduleItem = {
+    ...db.schedules[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: auditActor || db.schedules[index].updatedBy || 'SHINE Staff',
+  };
+  db.schedules[index] = updated;
+  saveDatabase(db);
+  persistScheduleItemToFirestore(updated).catch((err) =>
+    console.error('Failed to update schedule item in Firestore:', err)
+  );
+  return updated;
+}
+
+export function deleteScheduleItem(id: string): boolean {
+  const db = getDatabase();
+  if (!db.schedules) return false;
+  const index = db.schedules.findIndex((s) => s.id === id);
+  if (index === -1) return false;
+  db.schedules.splice(index, 1);
+  saveDatabase(db);
+  deleteScheduleItemFromFirestore(id).catch((err) =>
+    console.error('Failed to delete schedule item from Firestore:', err)
+  );
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// HISTORICAL CASE RECORDS (CRITICAL TO PRESERVE TIMELINE & PREVENT SILENT OVERWRITES)
+// ----------------------------------------------------------------------
+export function addHistoricalCaseRecord(
+  item: Omit<HistoricalCaseRecord, 'id' | 'createdAt'>
+): HistoricalCaseRecord {
+  const db = getDatabase();
+  if (!db.historicalRecords) db.historicalRecords = [];
+  const now = new Date().toISOString();
+  const newItem: HistoricalCaseRecord = {
+    ...item,
+    id: generateFollowUpId('HIST'),
+    createdAt: now,
+  };
+  db.historicalRecords.unshift(newItem);
+  saveDatabase(db);
+  persistHistoricalCaseRecordToFirestore(newItem).catch((err) =>
+    console.error('Failed to persist historical record to Firestore:', err)
+  );
+  return newItem;
+}
+
+export function deleteHistoricalCaseRecord(id: string): boolean {
+  const db = getDatabase();
+  if (!db.historicalRecords) return false;
+  const index = db.historicalRecords.findIndex((h) => h.id === id);
+  if (index === -1) return false;
+  db.historicalRecords.splice(index, 1);
+  saveDatabase(db);
+  deleteHistoricalCaseRecordFromFirestore(id).catch((err) =>
+    console.error('Failed to delete historical record from Firestore:', err)
+  );
+  return true;
+}
+
+// ----------------------------------------------------------------------
+// IMPORT AUDIT HISTORY
+// ----------------------------------------------------------------------
+export function addImportAuditRecord(
+  item: Omit<ImportAuditRecord, 'id'>
+): ImportAuditRecord {
+  const db = getDatabase();
+  if (!db.importAudits) db.importAudits = [];
+  const newItem: ImportAuditRecord = {
+    ...item,
+    id: generateFollowUpId('AUD'),
+  };
+  db.importAudits.unshift(newItem);
+  saveDatabase(db);
+  persistImportAuditToFirestore(newItem).catch((err) =>
+    console.error('Failed to persist import audit to Firestore:', err)
+  );
+  return newItem;
+}
+
+// ----------------------------------------------------------------------
+// PEOPLE / CONTACTS DIRECTORY (Central Stakeholder Directory)
+// Strictly separate from Application Login Accounts!
+// ----------------------------------------------------------------------
+export function generatePersonId(existingPeople?: Person[]): string {
+  const db = getDatabase();
+  const list = existingPeople || db.people || [];
+  const nextNum = list.length + 1;
+  return `PER-${String(nextNum).padStart(3, '0')}`;
+}
+
+export function addPerson(personData: Omit<Person, 'id'> & { id?: string }): Person {
+  const db = getDatabase();
+  if (!db.people) db.people = [];
+
+  const id = personData.id || generatePersonId(db.people);
+  const now = new Date().toISOString();
+
+  const newPerson: Person = {
+    ...personData,
+    id,
+    dateRegistered: personData.dateRegistered || now,
+    dateFirstIdentified: personData.dateFirstIdentified || now,
+    createdDate: personData.createdDate || now,
+    updatedDate: now,
+    status: personData.status || 'Active',
+    linkedGirlIds: personData.linkedGirlIds || [],
+    linkedGirlNames: personData.linkedGirlNames || [],
+    linkedHouseholdIds: personData.linkedHouseholdIds || [],
+    linkedHouseholdNames: personData.linkedHouseholdNames || [],
+    sourceDocuments: personData.sourceDocuments || [],
+    isLoginUser: false,
+  };
+
+  db.people.unshift(newPerson);
+  saveDatabase(db);
+  persistPersonToFirestore(newPerson).catch((err) =>
+    console.error('Failed to persist person to Firestore:', err)
+  );
+
+  return newPerson;
+}
+
+export function updatePerson(person: Person): Person {
+  const db = getDatabase();
+  if (!db.people) db.people = [];
+
+  const index = db.people.findIndex((p) => p.id === person.id);
+  const updated: Person = {
+    ...person,
+    updatedDate: new Date().toISOString(),
+    isLoginUser: false,
+  };
+
+  if (index !== -1) {
+    db.people[index] = updated;
+  } else {
+    db.people.unshift(updated);
+  }
+
+  saveDatabase(db);
+  persistPersonToFirestore(updated).catch((err) =>
+    console.error('Failed to update person in Firestore:', err)
+  );
+
+  return updated;
+}
+
+export function deletePerson(id: string): boolean {
+  const db = getDatabase();
+  if (!db.people) return false;
+
+  const index = db.people.findIndex((p) => p.id === id);
+  if (index === -1) return false;
+
+  db.people.splice(index, 1);
+  saveDatabase(db);
+  deletePersonFromFirestore(id).catch((err) =>
+    console.error('Failed to delete person from Firestore:', err)
+  );
+
+  return true;
+}
+
+export function addCustomPersonType(type: string): string[] {
+  const db = getDatabase();
+  if (!db.customPersonTypes) db.customPersonTypes = [];
+  const clean = type.trim();
+  if (clean && !db.customPersonTypes.includes(clean)) {
+    db.customPersonTypes.push(clean);
+    saveDatabase(db);
+  }
+  return db.customPersonTypes;
 }

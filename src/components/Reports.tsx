@@ -24,7 +24,9 @@ import {
   Sparkles,
   BarChart3,
   Calendar,
+  FileDown,
 } from 'lucide-react';
+import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
 
 interface ReportsProps {
   db: AppDatabase;
@@ -43,6 +45,7 @@ type ReportTab =
 
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse }) => {
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
+  const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
 
   const houseMap = new Map(db.households.map((h) => [h.id, h.name]));
   const girlMap = new Map(db.girls.map((g) => [g.id, g.fullName]));
@@ -119,13 +122,23 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
           </p>
         </div>
 
-        <button
-          onClick={() => setActiveTab('exports')}
-          className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95 self-start sm:self-center"
-        >
-          <Download className="w-4 h-4 text-amber-300" />
-          <span>Export All Data (CSV)</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <button
+            onClick={() => setIsComprehensiveModalOpen(true)}
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+          >
+            <FileDown className="w-4 h-4 text-white" />
+            <span>Generate Word / Excel / PDF Report</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('exports')}
+            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+          >
+            <Download className="w-4 h-4 text-amber-300" />
+            <span>Export CSVs</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -712,6 +725,14 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
           )}
         </div>
       </div>
+
+      {/* Comprehensive Report Modal */}
+      {isComprehensiveModalOpen && (
+        <ComprehensiveReportModal
+          db={db}
+          onClose={() => setIsComprehensiveModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

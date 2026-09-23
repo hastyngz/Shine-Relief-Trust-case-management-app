@@ -139,6 +139,48 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Budgets - Financial planning and allocations
+    match /budgets/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Workplans - Strategic and operational work planning
+    match /workplans/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Schedules - Field activity and visit timelines
+    match /schedules/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    // Historical Case Records - Non-overwriting historical documents archive
+    match /historicalCaseRecords/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Import Audits - Document parsing audit trails
+    match /importAudits/{id} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff();
+      allow update, delete: if isAdmin();
+    }
+
+    // Early Years Programme - Pre-school and ECD programme monitoring
+    match /earlyYearsRecords/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
     // Staff Conversations
     match /staffConversations/{convId} {
       allow read: if isStaffActive() && (

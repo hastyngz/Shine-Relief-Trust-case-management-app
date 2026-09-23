@@ -55,6 +55,8 @@ import { GirlProfile } from './components/GirlProfile';
 import { HouseholdProfile } from './components/HouseholdProfile';
 import { AIAssistantView } from './components/AIAssistant/AIAssistantView';
 import { MessagingView } from './components/Messaging/MessagingView';
+import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkplansView';
+import { DataImportWizard } from './components/Import/DataImportWizard';
 import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
@@ -85,6 +87,8 @@ type AppView =
   | 'houses'
   | 'activities'
   | 'messages'
+  | 'planning'
+  | 'import'
   | 'reports'
   | 'staff'
   | 'ai-assistant'
@@ -121,6 +125,8 @@ function parseHash(): {
   if (hash === 'houses') return { view: 'houses', activeTab: 'houses' };
   if (hash === 'activities') return { view: 'activities', activeTab: 'activities' };
   if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
+  if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
+  if (hash === 'import' || hash === 'ingestion') return { view: 'import', activeTab: 'import' };
   if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
   if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
   if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
@@ -276,6 +282,12 @@ function AppContent() {
         break;
       case 'messages':
         targetHash = '#/messages';
+        break;
+      case 'planning':
+        targetHash = '#/planning';
+        break;
+      case 'import':
+        targetHash = '#/import';
         break;
       case 'reports':
         targetHash = '#/reports';
@@ -1061,6 +1073,23 @@ function AppContent() {
           />
         )}
 
+        {/* VIEW: PLANNING (BUDGETS, WORKPLANS & FIELD SCHEDULES) */}
+        {view === 'planning' && (
+          <BudgetsAndWorkplansView db={db} onRefresh={reloadData} />
+        )}
+
+        {/* VIEW: DOCUMENT INGESTION WIZARD */}
+        {view === 'import' && (
+          <DataImportWizard
+            db={db}
+            onImportComplete={() => {
+              reloadData();
+              showToast('Data ingestion completed and saved to Firestore!');
+            }}
+            onCancel={() => navigateTo('girls', 'girls')}
+          />
+        )}
+
         {/* VIEW 6: GIRL PROFILE */}
         {view === 'girl-profile' && currentGirl && (
           <GirlProfile
@@ -1069,6 +1098,7 @@ function AppContent() {
             educationalFollowUps={currentGirlEdu}
             healthFollowUps={currentGirlHealth}
             familyFollowUps={currentGirlFamily}
+            historicalRecords={db.historicalRecords?.filter((h) => h.girlId === currentGirl.id) || []}
             onBack={() => navigateTo('girls', 'girls')}
             onNavigateToHouse={handleOpenHouseProfile}
             onEditGirl={handleStartEditGirl}

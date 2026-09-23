@@ -13,4 +13,12 @@ export const INITIAL_DATABASE: AppDatabase = {
   rentPayments: [],
   expenses: [],
   householdActivities: [],
+  attachments: [],
+  budgets: [],
+  workplans: [],
+  schedules: [],
+  historicalRecords: [],
+  importAudits: [],
+  people: [],
+  customPersonTypes: [],
 };

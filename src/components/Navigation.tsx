@@ -1,9 +1,30 @@
 import React from 'react';
-import { LayoutDashboard, Users, Home, FileSpreadsheet, Sparkles, UserCheck, Bot, MessageSquare } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Users,
+  Home,
+  FileSpreadsheet,
+  Sparkles,
+  UserCheck,
+  Bot,
+  MessageSquare,
+  CalendarRange,
+  UploadCloud,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
 
-export type NavTab = 'dashboard' | 'girls' | 'houses' | 'activities' | 'messages' | 'reports' | 'ai-assistant' | 'staff';
+export type NavTab =
+  | 'dashboard'
+  | 'girls'
+  | 'houses'
+  | 'activities'
+  | 'messages'
+  | 'planning'
+  | 'import'
+  | 'reports'
+  | 'ai-assistant'
+  | 'staff';
 
 interface NavigationProps {
   activeTab: NavTab;
@@ -39,6 +60,8 @@ export const Navigation: React.FC<NavigationProps> = ({
       icon: MessageSquare,
       count: totalUnreadCount > 0 ? totalUnreadCount : undefined,
     },
+    { id: 'planning', label: 'Budgets & Workplans', icon: CalendarRange },
+    { id: 'import', label: 'Document Ingestion', icon: UploadCloud },
     { id: 'reports', label: 'Reports & Export', icon: FileSpreadsheet },
     { id: 'ai-assistant', label: 'SHINE AI Assistant', icon: Bot, isAi: true },
     ...(isAdmin
@@ -57,7 +80,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <>
       {/* Desktop & Tablet Top Navigation Bar */}
-      <nav id="desktop-nav" className="hidden md:block bg-stone-100 border-b border-stone-200">
+      <nav id="desktop-nav" className="hidden md:block bg-stone-100 border-b border-stone-200 overflow-x-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-1 py-2">
             {navItems.map((item) => {
@@ -68,13 +91,13 @@ export const Navigation: React.FC<NavigationProps> = ({
                   key={item.id}
                   id={`nav-tab-${item.id}`}
                   onClick={() => onSelectTab(item.id)}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
+                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-teal-800 text-white shadow-xs'
                       : 'text-stone-700 hover:text-teal-900 hover:bg-stone-200'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
                   <span>{item.label}</span>
                   {item.count !== undefined && (
                     <span
@@ -105,9 +128,9 @@ export const Navigation: React.FC<NavigationProps> = ({
       {/* Mobile Bottom Navigation Bar */}
       <nav
         id="mobile-bottom-nav"
-        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 z-40 px-1 py-1.5 shadow-lg overflow-x-auto"
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 z-40 px-2 py-1 shadow-lg overflow-x-auto flex gap-1 justify-start"
       >
-        <div className={`grid ${isAdmin ? 'grid-cols-8' : 'grid-cols-7'} gap-0.5`}>
+        <div className="flex items-center gap-1 min-w-max mx-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -116,12 +139,12 @@ export const Navigation: React.FC<NavigationProps> = ({
                 key={item.id}
                 id={`mobile-nav-tab-${item.id}`}
                 onClick={() => onSelectTab(item.id)}
-                className={`flex flex-col items-center justify-center py-1 rounded-lg transition-colors relative ${
+                className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-lg transition-colors relative min-w-[54px] ${
                   isActive ? 'text-teal-900 font-bold' : 'text-stone-500 hover:text-stone-800'
                 }`}
               >
                 <div className={`p-1 rounded-lg relative ${isActive ? 'bg-teal-100 text-teal-900' : ''}`}>
-                  <Icon className={`w-5 h-5 ${isActive ? 'text-teal-900' : 'text-stone-500'}`} />
+                  <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-teal-900' : 'text-stone-500'}`} />
                   {item.isAi && (
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full" />
                   )}
@@ -131,7 +154,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     </span>
                   )}
                 </div>
-                <span className="text-[8.5px] leading-tight mt-0.5 tracking-tight truncate max-w-full">
+                <span className="text-[8.5px] leading-tight mt-0.5 tracking-tight truncate max-w-[62px]">
                   {item.label === 'SHINE Girls'
                     ? 'Girls'
                     : item.label === 'Households'
@@ -146,6 +169,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                     ? 'Activities'
                     : item.label === 'Messages'
                     ? 'Messages'
+                    : item.label === 'Budgets & Workplans'
+                    ? 'Planning'
+                    : item.label === 'Document Ingestion'
+                    ? 'Import'
                     : item.label}
                 </span>
               </button>

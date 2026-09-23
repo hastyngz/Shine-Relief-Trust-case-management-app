@@ -23,6 +23,13 @@ import {
   HouseholdRentPayment,
   HouseholdExpense,
   HouseholdActivity,
+  BudgetItem,
+  WorkplanItem,
+  ScheduleItem,
+  HistoricalCaseRecord,
+  ImportAuditRecord,
+  EarlyYearsRecord,
+  Person,
   StaffUser,
 } from '../types';
 
@@ -73,6 +80,13 @@ export const COLLECTIONS = {
   RENT_PAYMENTS: 'rentPayments',
   EXPENSES: 'expenses',
   ACTIVITIES: 'householdActivities',
+  BUDGETS: 'budgets',
+  WORKPLANS: 'workplans',
+  SCHEDULES: 'schedules',
+  HISTORICAL_RECORDS: 'historicalCaseRecords',
+  IMPORT_AUDITS: 'importAudits',
+  EARLY_YEARS: 'earlyYearsRecords',
+  PEOPLE: 'people',
   STAFF_USERS: 'staffUsers',
   CONVERSATIONS: 'staffConversations',
   MESSAGES: 'staffMessages',
@@ -370,6 +384,155 @@ export async function deleteHouseholdActivityFromFirestore(id: string): Promise<
   }
 }
 
+// Budgets persistence
+export async function persistBudgetItemToFirestore(item: BudgetItem): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.BUDGETS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistBudgetItem error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteBudgetItemFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.BUDGETS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteBudgetItem error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+// Workplans persistence
+export async function persistWorkplanItemToFirestore(item: WorkplanItem): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.WORKPLANS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistWorkplanItem error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteWorkplanItemFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.WORKPLANS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteWorkplanItem error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+// Schedules persistence
+export async function persistScheduleItemToFirestore(item: ScheduleItem): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.SCHEDULES, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistScheduleItem error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteScheduleItemFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.SCHEDULES, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteScheduleItem error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+// Historical Case Records persistence
+export async function persistHistoricalCaseRecordToFirestore(item: HistoricalCaseRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.HISTORICAL_RECORDS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistHistoricalCaseRecord error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteHistoricalCaseRecordFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.HISTORICAL_RECORDS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteHistoricalCaseRecord error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+// Import Audits persistence
+export async function persistImportAuditToFirestore(item: ImportAuditRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistImportAudit error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+// Early Years Records persistence
+export async function persistEarlyYearsRecordToFirestore(item: EarlyYearsRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.EARLY_YEARS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistEarlyYearsRecord error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteEarlyYearsRecordFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.EARLY_YEARS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteEarlyYearsRecord error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistPersonToFirestore(person: Person): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.PEOPLE, person.id), sanitizeForFirestore(person), { merge: true });
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistPerson error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deletePersonFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.PEOPLE, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deletePerson error:', err);
+    updateSyncStatus('error');
+  }
+}
+
 // Bulk commit entire database into Firestore (e.g. for backup restore)
 export async function syncEntireDatabaseToFirestore(db: AppDatabase): Promise<void> {
   try {
@@ -444,6 +607,69 @@ export async function syncEntireDatabaseToFirestore(db: AppDatabase): Promise<vo
       });
     });
 
+    if (db.budgets) {
+      db.budgets.forEach((b) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.BUDGETS, b.id),
+          data: sanitizeForFirestore(b),
+        });
+      });
+    }
+
+    if (db.workplans) {
+      db.workplans.forEach((w) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.WORKPLANS, w.id),
+          data: sanitizeForFirestore(w),
+        });
+      });
+    }
+
+    if (db.schedules) {
+      db.schedules.forEach((s) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.SCHEDULES, s.id),
+          data: sanitizeForFirestore(s),
+        });
+      });
+    }
+
+    if (db.historicalRecords) {
+      db.historicalRecords.forEach((hr) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.HISTORICAL_RECORDS, hr.id),
+          data: sanitizeForFirestore(hr),
+        });
+      });
+    }
+
+    if (db.importAudits) {
+      db.importAudits.forEach((ia) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.IMPORT_AUDITS, ia.id),
+          data: sanitizeForFirestore(ia),
+        });
+      });
+    }
+
+    if (db.earlyYearsRecords) {
+      db.earlyYearsRecords.forEach((ey) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.EARLY_YEARS, ey.id),
+          data: sanitizeForFirestore(ey),
+        });
+      });
+    }
+
+    if (db.people) {
+      db.people.forEach((p) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.PEOPLE, p.id),
+          data: sanitizeForFirestore(p),
+        });
+      });
+    }
+
     await commitInBatches(operations);
     updateSyncStatus('synced');
   } catch (err) {
@@ -477,7 +703,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
 let activeUnsubscribers: Unsubscribe[] = [];
 
 /**
- * Initializes real-time Firestore synchronization for all 8 collections.
+ * Initializes real-time Firestore synchronization for all collections.
  * Dispatches 'shine_db_updated' whenever Firestore records are loaded or changed.
  */
 export function initFirestoreListeners(
@@ -499,10 +725,17 @@ export function initFirestoreListeners(
     rentPayments: [],
     expenses: [],
     householdActivities: [],
+    budgets: [],
+    workplans: [],
+    schedules: [],
+    historicalRecords: [],
+    importAudits: [],
+    earlyYearsRecords: [],
+    people: [],
   };
 
   let initialLoadsCount = 0;
-  const TOTAL_COLLECTIONS = 8;
+  const TOTAL_COLLECTIONS = 15;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -514,6 +747,13 @@ export function initFirestoreListeners(
       rentPayments: [...liveState.rentPayments],
       expenses: [...liveState.expenses],
       householdActivities: [...liveState.householdActivities],
+      budgets: [...(liveState.budgets || [])],
+      workplans: [...(liveState.workplans || [])],
+      schedules: [...(liveState.schedules || [])],
+      historicalRecords: [...(liveState.historicalRecords || [])],
+      importAudits: [...(liveState.importAudits || [])],
+      earlyYearsRecords: [...(liveState.earlyYearsRecords || [])],
+      people: [...(liveState.people || [])],
     });
   };
 
@@ -555,6 +795,13 @@ export function initFirestoreListeners(
   handleCollection<HouseholdRentPayment>(COLLECTIONS.RENT_PAYMENTS, 'rentPayments');
   handleCollection<HouseholdExpense>(COLLECTIONS.EXPENSES, 'expenses');
   handleCollection<HouseholdActivity>(COLLECTIONS.ACTIVITIES, 'householdActivities');
+  handleCollection<BudgetItem>(COLLECTIONS.BUDGETS, 'budgets');
+  handleCollection<WorkplanItem>(COLLECTIONS.WORKPLANS, 'workplans');
+  handleCollection<ScheduleItem>(COLLECTIONS.SCHEDULES, 'schedules');
+  handleCollection<HistoricalCaseRecord>(COLLECTIONS.HISTORICAL_RECORDS, 'historicalRecords');
+  handleCollection<ImportAuditRecord>(COLLECTIONS.IMPORT_AUDITS, 'importAudits');
+  handleCollection<EarlyYearsRecord>(COLLECTIONS.EARLY_YEARS, 'earlyYearsRecords');
+  handleCollection<Person>(COLLECTIONS.PEOPLE, 'people');
 
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());

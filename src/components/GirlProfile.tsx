@@ -5,6 +5,7 @@ import {
   EducationalFollowUp,
   HealthFollowUp,
   FamilyFollowUp,
+  HistoricalCaseRecord,
   PhotoAttachment,
 } from '../types';
 import { formatDate } from '../utils/export';
@@ -28,6 +29,7 @@ import {
   ShieldAlert,
   Camera,
   Bot,
+  Archive,
 } from 'lucide-react';
 import { PhotoGallery } from './Attachments/PhotoGallery';
 import { PhotoUploadModal } from './Attachments/PhotoUploadModal';
@@ -40,6 +42,7 @@ interface GirlProfileProps {
   educationalFollowUps: EducationalFollowUp[];
   healthFollowUps: HealthFollowUp[];
   familyFollowUps: FamilyFollowUp[];
+  historicalRecords?: HistoricalCaseRecord[];
   onBack: () => void;
   onNavigateToHouse: (houseId: string) => void;
   onEditGirl: (girl: Girl) => void;
@@ -51,11 +54,11 @@ interface GirlProfileProps {
   onAskAI?: (girlId: string) => void;
 }
 
-type TimelineFilter = 'all' | 'educational' | 'health' | 'family';
+type TimelineFilter = 'all' | 'educational' | 'health' | 'family' | 'historical';
 
 interface UnifiedTimelineItem {
   id: string;
-  type: 'educational' | 'health' | 'family';
+  type: 'educational' | 'health' | 'family' | 'historical';
   date: string;
   title: string;
   subtitle: string;
@@ -66,7 +69,9 @@ interface UnifiedTimelineItem {
   recommendations?: string;
   nextFollowUpDate?: string;
   recordedBy?: string;
-  original: EducationalFollowUp | HealthFollowUp | FamilyFollowUp;
+  original: EducationalFollowUp | HealthFollowUp | FamilyFollowUp | HistoricalCaseRecord;
+  isDateUnknown?: boolean;
+  sourceDocument?: string;
 }
 
 export const GirlProfile: React.FC<GirlProfileProps> = ({
@@ -75,6 +80,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   educationalFollowUps,
   healthFollowUps,
   familyFollowUps,
+  historicalRecords = [],
   onBack,
   onNavigateToHouse,
   onEditGirl,
@@ -149,6 +155,23 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
       nextFollowUpDate: fam.nextFollowUpDate,
       recordedBy: fam.recordedBy,
       original: fam,
+    })),
+    ...historicalRecords.map((hist) => ({
+      id: hist.id,
+      type: 'historical' as const,
+      date: hist.eventDate || hist.createdAt || '1970-01-01',
+      title: hist.title || `Preserved Case History: ${hist.historicalSchool || 'Past Education'} (${hist.historicalClass || 'Past Level'})`,
+      subtitle: hist.isDateUnknown ? 'Historical Record - Date Unknown' : `Archived from ${hist.source?.originalFileName || 'Imported Document'}`,
+      description: hist.description || `Preserved historical record. Prior school: ${hist.historicalSchool || 'N/A'}. Prior class: ${hist.historicalClass || 'N/A'}.`,
+      supportProvided: hist.historicalSupport,
+      progressOrOutcome: hist.outcome,
+      furtherActionRequired: false,
+      recommendations: undefined,
+      nextFollowUpDate: undefined,
+      recordedBy: hist.recordedBy || hist.source?.originalFileName,
+      original: hist,
+      isDateUnknown: hist.isDateUnknown,
+      sourceDocument: hist.source?.originalFileName,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -494,6 +517,19 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
               <Users className="w-3 h-3" />
               <span>Family ({familyFollowUps.length})</span>
             </button>
+            {historicalRecords.length > 0 && (
+              <button
+                onClick={() => setFilter('historical')}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors flex items-center gap-1 ${
+                  filter === 'historical'
+                    ? 'bg-amber-700 text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Archive className="w-3 h-3" />
+                <span>Historical ({historicalRecords.length})</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -512,12 +548,15 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
               const isEdu = item.type === 'educational';
               const isHlt = item.type === 'health';
               const isFam = item.type === 'family';
+              const isHist = item.type === 'historical';
 
               return (
                 <div
                   key={item.id}
                   className={`p-4 rounded-xl border transition-all ${
-                    item.furtherActionRequired
+                    isHist
+                      ? 'border-amber-400/80 bg-amber-50/20 shadow-xs'
+                      : item.furtherActionRequired
                       ? 'border-amber-300 bg-amber-50/30 shadow-xs'
                       : 'border-stone-200 bg-white hover:border-stone-300'
                   }`}
@@ -530,12 +569,15 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                             ? 'bg-teal-100 text-teal-800'
                             : isHlt
                             ? 'bg-rose-100 text-rose-800'
+                            : isHist
+                            ? 'bg-amber-200 text-amber-900'
                             : 'bg-amber-100 text-amber-800'
                         }`}
                       >
                         {isEdu && <GraduationCap className="w-5 h-5" />}
                         {isHlt && <HeartPulse className="w-5 h-5" />}
                         {isFam && <Users className="w-5 h-5" />}
+                        {isHist && <Archive className="w-5 h-5" />}
                       </div>
 
                       <div>
@@ -546,18 +588,29 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                                 ? 'bg-teal-800 text-white'
                                 : isHlt
                                 ? 'bg-rose-800 text-white'
+                                : isHist
+                                ? 'bg-amber-700 text-white'
                                 : 'bg-amber-800 text-white'
                             }`}
                           >
-                            {item.type === 'educational'
+                            {isHist
+                              ? item.isDateUnknown
+                                ? 'Historical Record - Date Unknown'
+                                : 'Preserved History'
+                              : item.type === 'educational'
                               ? 'Educational Follow-Up'
                               : item.type === 'health'
                               ? 'Health / Medical Record'
                               : 'Family / Guardian Contact'}
                           </span>
                           <span className="text-xs text-stone-500 font-medium">
-                            {formatDate(item.date)}
+                            {item.isDateUnknown ? 'Date Unknown' : formatDate(item.date)}
                           </span>
+                          {item.sourceDocument && (
+                            <span className="text-[10px] px-2 py-0.5 bg-stone-100 text-stone-600 rounded-md font-mono">
+                              File: {item.sourceDocument}
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="text-sm sm:text-base font-bold text-stone-900 mt-1">
@@ -630,9 +683,9 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                         {item.recordedBy && <span>Staff: {item.recordedBy}</span>}
                       </div>
 
-                      {onDeleteFollowUp && (
+                      {onDeleteFollowUp && item.type !== 'historical' && (
                         <button
-                          onClick={() => onDeleteFollowUp(item.type, item.id)}
+                          onClick={() => onDeleteFollowUp(item.type as 'educational' | 'health' | 'family', item.id)}
                           className="text-stone-400 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
                           title="Delete this follow-up record"
                         >

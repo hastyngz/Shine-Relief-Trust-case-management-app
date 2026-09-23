@@ -277,6 +277,26 @@
         "fcmTokens": { "type": "array", "description": "Registered FCM tokens" },
         "updatedAt": { "type": "string", "description": "Last modified timestamp" }
       }
+    },
+    "earlyYearsRecords": {
+      "title": "Early Years Records",
+      "description": "Pre-school and Early Childhood Development programme monitoring metrics",
+      "fields": {
+        "id": { "type": "string", "description": "Record identifier" },
+        "reportingPeriod": { "type": "string", "description": "Reporting period e.g. July to September 2026" },
+        "previousEnrolment": { "type": "number", "description": "Previous child enrolment" },
+        "graduates": { "type": "number", "description": "Number of children graduated to primary school" },
+        "targetEnrolment": { "type": "number", "description": "Target enrolment intake" },
+        "teacherCaregiverRatio": { "type": "string", "description": "Ratio e.g. 1:25" },
+        "teachersRequired": { "type": "number", "description": "Number of caregivers/teachers needed" },
+        "communityVolunteers": { "type": "number", "description": "Community volunteer count" },
+        "programmeStartDate": { "type": "string", "description": "Programme start date" },
+        "feedingProgrammeStartDate": { "type": "string", "description": "Feeding programme launch date" },
+        "notes": { "type": "string", "description": "Operational and ECD narrative notes" },
+        "sourceDocument": { "type": "string", "description": "Original file name" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "createdBy": { "type": "string", "description": "Staff member" }
+      }
     }
   }
 }
