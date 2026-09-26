@@ -148,7 +148,7 @@ export async function parseDocxFile(
  */
 export function analyzeImportRows(
   rawRows: Array<Record<string, any>>,
-  targetEntity: 'girl' | 'household' | 'educationalFollowUp' | 'healthFollowUp' | 'familyFollowUp',
+  targetEntity: 'girl' | 'person' | 'household' | 'educationalFollowUp' | 'healthFollowUp' | 'familyFollowUp',
   db: AppDatabase,
   sourceFileName: string,
   currentUser: StaffUser
@@ -211,20 +211,21 @@ export function analyzeImportRows(
           extractedData: {
             id: girlId || `SG-${String(db.girls.length + previewItems.length + 1).padStart(3, '0')}`,
             fullName: fullName || 'Unnamed Girl',
-            dateOfBirth: dob || '2010-01-01',
-            school: school || 'Local Primary School',
-            classLevel: classLevel || 'Standard 1',
-            dateEnrolled: recordDate || new Date().toISOString().slice(0, 10),
-            householdId: db.households[0]?.id || 'SH-01',
+            dateOfBirth: dob,
+            gender: 'Female',
+            school,
+            classLevel,
+            dateAdmitted: recordDate,
+            householdId: '',
             status: 'Active',
             guardianInfo: {
-              name: guardianName || 'Guardian',
-              relationship: guardianRelation || 'Parent',
-              phone: guardianPhone || '',
-              nationalId: '',
-              address: '',
+              name: guardianName,
+              relationship: guardianRelation,
+              phone: guardianPhone,
+              villageOrLocation: '',
+              situationNotes: '',
             },
-            notes: `Imported from ${sourceFileName}`,
+            notes: `Imported from ${sourceFileName}${!dob ? '. Date of birth was not provided in the source.' : ''}`,
           },
           isHistorical: false,
           selected: true,
@@ -388,7 +389,7 @@ export function analyzeImportRows(
       const girlNameOrId = findVal('girl', 'girlname', 'beneficiary', 'student');
       const notes = findVal('notes', 'comments', 'remarks', 'context');
 
-      if (!fullName) continue;
+      if (!fullName) return;
 
       const matchedGirl = girlNameOrId
         ? girlById.get(girlNameOrId.toLowerCase()) || girlByName.get(girlNameOrId.toLowerCase())
@@ -504,6 +505,7 @@ export async function commitImportBatch(
 
   let processed = 0;
   const total = approvedItems.length;
+  const auditId = generateFollowUpId('AUD');
 
   for (const item of approvedItems) {
     if (!item.selected) continue;
@@ -651,18 +653,23 @@ export async function commitImportBatch(
         const newGirl: Girl = {
           id: newGirlId,
           fullName: item.extractedData.fullName || item.title || 'New Beneficiary',
-          dateOfBirth: '2010-01-01',
-          age: 14,
+          dateOfBirth: item.extractedData.dateOfBirth || '',
+          gender: item.extractedData.gender || 'Female',
+          dateAdmitted: item.extractedData.dateAdmitted || item.extractedData.dateEnrolled || '',
           status: 'Active',
-          householdId: updatedDb.households[0]?.id || 'SH-01',
-          school: item.extractedData.workplaceOrAffiliation || item.extractedData.historicalSchool || 'To be assigned',
-          classLevel: item.extractedData.historicalClass || 'Standard 7',
-          guardianName: item.extractedData.relationshipToGirl || 'Information not provided in source',
-          guardianPhone: item.extractedData.phoneNumber || '',
-          healthStatus: 'Good',
-          profilePhoto: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&q=80',
-          supportRequired: 'Educational and residential care',
+          householdId: item.extractedData.householdId || '',
+          school: item.extractedData.workplaceOrAffiliation || item.extractedData.historicalSchool || '',
+          classLevel: item.extractedData.historicalClass || '',
+          guardianInfo: {
+            name: item.extractedData.guardianInfo?.name || '',
+            relationship: item.extractedData.guardianInfo?.relationship || item.extractedData.relationshipToGirl || '',
+            phone: item.extractedData.guardianInfo?.phone || item.extractedData.phoneNumber || '',
+            villageOrLocation: item.extractedData.guardianInfo?.villageOrLocation || '',
+            situationNotes: item.extractedData.guardianInfo?.situationNotes || '',
+          },
           notes: `Identified from historical progress report: ${auditRecord.fileName}. ${item.originalSnippet || ''}`,
+          createdBy: auditRecord.importedByName,
+          updatedBy: auditRecord.importedByName,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -705,7 +712,7 @@ export async function commitImportBatch(
           const newDocEntry: PersonSourceDocument = {
             docName: auditRecord.fileName,
             reportingPeriod: item.reportingPeriod,
-            importBatchId: auditRecord.id,
+            importBatchId: auditId,
             section: item.extractedData.section || item.classificationLabel,
             date: item.recordDate || new Date().toISOString().slice(0, 10),
           };
@@ -751,7 +758,7 @@ export async function commitImportBatch(
         const sourceDocEntry: PersonSourceDocument = {
           docName: auditRecord.fileName,
           reportingPeriod: item.reportingPeriod,
-          importBatchId: auditRecord.id,
+          importBatchId: auditId,
           section: item.extractedData.section || item.classificationLabel,
           date: item.recordDate || new Date().toISOString().slice(0, 10),
         };
@@ -826,8 +833,8 @@ export async function commitImportBatch(
   }
 
   // Calculate people audit statistics
-  const peopleItems = selectedItems.filter(
-    (i) => i.classification === 'PEOPLE_DIRECTORY_RECORD' || i.targetEntity === 'person'
+  const peopleItems = approvedItems.filter(
+    (i) => i.selected && (i.classification === 'PEOPLE_DIRECTORY_RECORD' || i.targetEntity === 'person')
   );
   const peopleDetectedCount = peopleItems.length;
   const newPeopleCount = peopleItems.filter(
@@ -847,7 +854,7 @@ export async function commitImportBatch(
   // Save Audit Record
   const finalAudit: ImportAuditRecord = {
     ...auditRecord,
-    id: generateFollowUpId('AUD'),
+    id: auditId,
     status: 'completed',
     peopleDetectedCount,
     newPeopleCount,

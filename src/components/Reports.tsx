@@ -11,6 +11,7 @@ import {
   exportExpensesToCSV,
   formatMWK,
   formatDate,
+  downloadCSV,
 } from '../utils/export';
 import {
   FileSpreadsheet,
@@ -27,6 +28,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ReportsProps {
   db: AppDatabase;
@@ -41,9 +43,11 @@ type ReportTab =
   | 'followups'
   | 'rent'
   | 'expenses'
+  | 'caseManagement'
   | 'exports';
 
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse }) => {
+  const { canViewHealthRecords, canViewCaseReviews } = useAuth();
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
 
@@ -190,6 +194,14 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
           >
             <Sparkles className="w-4 h-4" />
             <span>Follow-Ups Summary</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('caseManagement')}
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${activeTab === 'caseManagement' ? 'bg-sky-800 text-white' : 'text-stone-700 hover:bg-stone-200'}`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Case Management</span>
           </button>
 
           <button
@@ -401,7 +413,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   </div>
                 </div>
 
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl">
+                {canViewHealthRecords && <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl">
                   <div className="flex items-center justify-between text-xs font-bold text-rose-950">
                     <span>Medical / Health Visits</span>
                     <HeartPulse className="w-4 h-4 text-rose-700" />
@@ -412,7 +424,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   <div className="text-xs text-rose-800 mt-1">
                     {db.healthFollowUps.filter((h) => h.furtherActionRequired).length} Require Action
                   </div>
-                </div>
+                </div>}
 
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                   <div className="flex items-center justify-between text-xs font-bold text-amber-950">
@@ -563,6 +575,46 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'caseManagement' && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Case Management Reports</h3>
+                <p className="text-xs text-stone-500">Counts and exports are derived only from records available to your account.</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
+                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Education history</span><div className="text-lg font-black">{(db.educationHistory || []).length}</div></div>
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Academic support</span><div className="text-lg font-black">{(db.academicSupports || []).length}</div></div>
+                {canViewHealthRecords && <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Health follow-ups</span><div className="text-lg font-black">{db.healthFollowUps.length}</div></div>}
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Attendance entries</span><div className="text-lg font-black">{(db.attendanceRecords || []).length}</div></div>
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Leave records</span><div className="text-lg font-black">{(db.girlLeaves || []).length}</div></div>
+                {canViewCaseReviews && <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Case reviews</span><div className="text-lg font-black">{(db.caseReviews || []).length}</div></div>}
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-stone-700">Export records</h4>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => downloadCSV('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...(db.caseActions || []).map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions CSV</button>
+                  <button onClick={() => downloadCSV('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education history CSV</button>
+                  <button onClick={() => downloadCSV('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education support CSV</button>
+                  {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups CSV</button>}
+                  <button onClick={() => downloadCSV('SHINE_Attendance', [['Girl ID', 'Activity', 'Type', 'Location', 'Date', 'Status', 'Notes'], ...(db.attendanceRecords || []).map((item) => [item.girlId, item.activityName, item.activityType, item.location || '', item.date, item.status, item.notes || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Attendance CSV</button>
+                  <button onClick={() => downloadCSV('SHINE_Leave_History', [['Girl ID', 'Type', 'Start', 'Expected Return', 'Actual Return', 'Reason', 'Approved By', 'Status'], ...(db.girlLeaves || []).map((item) => [item.girlId, item.leaveType, item.startDate, item.expectedReturnDate, item.actualReturnDate || '', item.reason, item.approvedBy, item.status])])} className="px-3 py-2 border rounded-md text-xs font-bold">Leave history CSV</button>
+                  {canViewCaseReviews && <button onClick={() => downloadCSV('SHINE_Case_Reviews', [['Girl ID', 'Review Date', 'Progress', 'Challenges', 'Support Required', 'Action Plan', 'Next Review'], ...(db.caseReviews || []).map((item) => [item.girlId, item.reviewDate, item.progress || '', item.challenges || '', item.supportRequired || '', item.actionPlan || '', item.nextReviewDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Case reviews CSV</button>}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border-y border-stone-200">
+                <table className="w-full text-left text-xs">
+                  <thead><tr className="text-stone-600"><th className="py-2 pr-3">Action</th><th className="py-2 pr-3">Assigned staff</th><th className="py-2 pr-3">Priority</th><th className="py-2 pr-3">Due</th><th className="py-2">Status</th></tr></thead>
+                  <tbody className="divide-y divide-stone-100">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
+                </table>
+                {(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
+              </div>
             </div>
           )}
 

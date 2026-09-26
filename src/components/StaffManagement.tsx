@@ -209,6 +209,30 @@ export const StaffManagement: React.FC = () => {
     }
   };
 
+  const updateSensitiveAccess = async (
+    staff: StaffUser,
+    field: 'canViewHealthRecords' | 'canEditHealthRecords' | 'canViewCaseReviews' | 'canEditCaseReviews' | 'safeguardingPermissions',
+    permission?: 'canView' | 'canCreate' | 'canEdit' | 'canClose'
+  ) => {
+    try {
+      if (field === 'safeguardingPermissions' && permission) {
+        const current = staff.safeguardingPermissions || {
+          canView: false,
+          canCreate: false,
+          canEdit: false,
+          canClose: false,
+        };
+        await updateStaffAccount(staff.id, {
+          safeguardingPermissions: { ...current, [permission]: !current[permission] },
+        });
+      } else {
+        await updateStaffAccount(staff.id, { [field]: !staff[field] });
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'Could not update sensitive record permissions.');
+    }
+  };
+
   // Metrics
   const totalCount = allStaff.length;
   const adminCount = allStaff.filter((s) => s.role === 'Administrator').length;
@@ -338,6 +362,9 @@ export const StaffManagement: React.FC = () => {
                 <th className="py-3 px-4">Staff Member</th>
                 <th className="py-3 px-4">Department / Title</th>
                 <th className="py-3 px-4">Assigned Role</th>
+                <th className="py-3 px-4">Health Records</th>
+                <th className="py-3 px-4">Case Reviews</th>
+                <th className="py-3 px-4">Safeguarding Access</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Audit Info</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -346,7 +373,7 @@ export const StaffManagement: React.FC = () => {
             <tbody className="divide-y divide-stone-100">
               {filteredStaff.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-stone-500 text-xs">
+                  <td colSpan={9} className="py-8 text-center text-stone-500 text-xs">
                     No staff records found matching your filters.
                   </td>
                 </tr>
@@ -416,6 +443,59 @@ export const StaffManagement: React.FC = () => {
                             </select>
                           )}
                         </div>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        {staff.role === 'Administrator' || staff.role === 'Manager' ? (
+                          <span className="text-[10px] text-stone-500">Full access</span>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {(['canViewHealthRecords', 'canEditHealthRecords'] as const).map((field) => (
+                              <label key={field} className="flex items-center gap-1.5 text-[10px] text-stone-700 whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={staff[field] === true}
+                                  onChange={() => updateSensitiveAccess(staff, field)}
+                                />
+                                {field === 'canViewHealthRecords' ? 'View' : 'Edit'}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        {staff.role === 'Administrator' || staff.role === 'Manager' ? (
+                          <span className="text-[10px] text-stone-500">Full access</span>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {(['canViewCaseReviews', 'canEditCaseReviews'] as const).map((field) => (
+                              <label key={field} className="flex items-center gap-1.5 text-[10px] text-stone-700 whitespace-nowrap">
+                                <input type="checkbox" checked={staff[field] === true} onChange={() => updateSensitiveAccess(staff, field)} />
+                                {field === 'canViewCaseReviews' ? 'View' : 'Edit'}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        {staff.role === 'Administrator' ? (
+                          <span className="text-[10px] text-stone-500">Full access</span>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                            {(['canView', 'canCreate', 'canEdit', 'canClose'] as const).map((permission) => (
+                              <label key={permission} className="flex items-center gap-1 text-[10px] text-stone-700 whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={staff.safeguardingPermissions?.[permission] === true}
+                                  onChange={() => updateSensitiveAccess(staff, 'safeguardingPermissions', permission)}
+                                />
+                                {permission.replace('can', '')}
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </td>
 
                       {/* Status */}

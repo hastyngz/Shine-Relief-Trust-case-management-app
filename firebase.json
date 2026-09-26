@@ -1,0 +1,23 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291",
+      "rules": "firestore.rules"
+    }
+  ],
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
+}

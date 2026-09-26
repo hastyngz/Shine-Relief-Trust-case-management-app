@@ -10,6 +10,7 @@ import {
   MessageSquare,
   CalendarRange,
   UploadCloud,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
@@ -24,7 +25,8 @@ export type NavTab =
   | 'import'
   | 'reports'
   | 'ai-assistant'
-  | 'staff';
+  | 'staff'
+  | 'case-management';
 
 interface NavigationProps {
   activeTab: NavTab;
@@ -54,6 +56,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'girls', label: 'SHINE Girls', icon: Users, count: girlsCount },
     { id: 'houses', label: 'Households', icon: Home, count: housesCount },
     { id: 'activities', label: 'Group Activities', icon: Sparkles },
+    { id: 'case-management', label: 'Case Management', icon: ClipboardList },
     {
       id: 'messages',
       label: 'Messages',

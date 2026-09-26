@@ -17,6 +17,7 @@ import {
   Person,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
+import { getAllAttachmentMetadata } from '../services/attachmentService';
 import {
   persistGirlToFirestore,
   deleteGirlFromFirestore,
@@ -47,7 +48,18 @@ import {
   deletePersonFromFirestore,
   clearAllFirestoreCollections,
   syncEntireDatabaseToFirestore,
+  persistPhase2Record,
+  appendCaseActionAudit,
 } from '../services/firestoreSync';
+import {
+  CaseAction,
+  EducationHistoryRecord,
+  AcademicSupportRecord,
+  ExaminationRecord,
+  AttendanceRecord,
+  GirlLeaveRecord,
+  CaseReview,
+} from '../types';
 
 const STORAGE_KEY = 'shine_relief_trust_prod_v1';
 const LEGACY_STORAGE_KEY = 'shine_relief_trust_db_v1';
@@ -84,6 +96,13 @@ export function getDatabase(): AppDatabase {
       earlyYearsRecords: parsed.earlyYearsRecords || [],
       people: parsed.people || [],
       customPersonTypes: parsed.customPersonTypes || [],
+      caseActions: parsed.caseActions || [],
+      educationHistory: parsed.educationHistory || [],
+      academicSupports: parsed.academicSupports || [],
+      examinationRecords: parsed.examinationRecords || [],
+      attendanceRecords: parsed.attendanceRecords || [],
+      girlLeaves: parsed.girlLeaves || [],
+      caseReviews: parsed.caseReviews || [],
     };
   } catch (error) {
     console.error('Error reading database from localStorage:', error);
@@ -103,24 +122,22 @@ export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): vo
   }
 }
 
-export function clearAllDatabase(): AppDatabase {
+export async function clearAllDatabase(): Promise<AppDatabase> {
+  await clearAllFirestoreCollections();
   saveDatabase(INITIAL_DATABASE);
-  // Asynchronously wipe all documents across Firestore collections
-  clearAllFirestoreCollections().catch((err) =>
-    console.error('Error clearing Firestore database:', err)
-  );
   return INITIAL_DATABASE;
 }
 
 export const resetDatabaseToDefault = clearAllDatabase;
 export const resetDatabaseToSeed = clearAllDatabase;
 
-export function exportDatabaseJSON(): string {
+export async function exportDatabaseJSON(): Promise<string> {
   const db = getDatabase();
+  db.attachments = await getAllAttachmentMetadata();
   return JSON.stringify(db, null, 2);
 }
 
-export function importDatabaseJSON(rawJson: string): boolean {
+export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
   try {
     const parsed = JSON.parse(rawJson);
     if (!Array.isArray(parsed.girls) || !Array.isArray(parsed.households)) {
@@ -135,12 +152,25 @@ export function importDatabaseJSON(rawJson: string): boolean {
       rentPayments: Array.isArray(parsed.rentPayments) ? parsed.rentPayments : [],
       expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
       householdActivities: Array.isArray(parsed.householdActivities) ? parsed.householdActivities : [],
+      attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
+      budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
+      workplans: Array.isArray(parsed.workplans) ? parsed.workplans : [],
+      schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+      historicalRecords: Array.isArray(parsed.historicalRecords) ? parsed.historicalRecords : [],
+      importAudits: Array.isArray(parsed.importAudits) ? parsed.importAudits : [],
+      earlyYearsRecords: Array.isArray(parsed.earlyYearsRecords) ? parsed.earlyYearsRecords : [],
+      people: Array.isArray(parsed.people) ? parsed.people : [],
+      customPersonTypes: Array.isArray(parsed.customPersonTypes) ? parsed.customPersonTypes : [],
+      caseActions: Array.isArray(parsed.caseActions) ? parsed.caseActions : [],
+      educationHistory: Array.isArray(parsed.educationHistory) ? parsed.educationHistory : [],
+      academicSupports: Array.isArray(parsed.academicSupports) ? parsed.academicSupports : [],
+      examinationRecords: Array.isArray(parsed.examinationRecords) ? parsed.examinationRecords : [],
+      attendanceRecords: Array.isArray(parsed.attendanceRecords) ? parsed.attendanceRecords : [],
+      girlLeaves: Array.isArray(parsed.girlLeaves) ? parsed.girlLeaves : [],
+      caseReviews: Array.isArray(parsed.caseReviews) ? parsed.caseReviews : [],
     };
+    await syncEntireDatabaseToFirestore(validatedDb, true);
     saveDatabase(validatedDb);
-    // Asynchronously synchronize imported records to Firestore
-    syncEntireDatabaseToFirestore(validatedDb).catch((err) =>
-      console.error('Error syncing imported data to Firestore:', err)
-    );
     return true;
   } catch (err) {
     console.error('Failed to parse database backup:', err);
@@ -517,6 +547,169 @@ export function addHouseholdActivity(
     console.error('Failed to persist household activity to Firestore:', err)
   );
   return newItem;
+}
+
+type Phase2TrackedRecord = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+};
+
+function addPhase2Record<T extends Phase2TrackedRecord>(
+  dbField: string,
+  collectionName: string,
+  prefix: string,
+  data: Omit<T, keyof Phase2TrackedRecord>,
+  actor: string
+): T {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  const record = {
+    ...data,
+    id: generateFollowUpId(prefix),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: actor,
+    updatedBy: actor,
+  } as T;
+  const allData = db as unknown as Record<string, unknown>;
+  const records = (allData[dbField] as T[] | undefined) || [];
+  records.unshift(record);
+  allData[dbField] = records;
+  saveDatabase(db);
+  persistPhase2Record(collectionName, record).catch((err) =>
+    console.error(`Failed to persist ${collectionName}:`, err)
+  );
+  return record;
+}
+
+export function addCaseAction(
+  data: Omit<CaseAction, keyof Phase2TrackedRecord | 'createdByUid' | 'updatedByUid'>,
+  actor: { uid: string; name: string }
+): CaseAction {
+  const record = addPhase2Record<CaseAction>('caseActions', 'caseActions', 'ACTN', {
+    ...data,
+    createdByUid: actor.uid,
+    updatedByUid: actor.uid,
+  }, actor.name);
+  appendCaseActionAudit({
+    action: 'created',
+    recordId: record.id,
+    userId: actor.uid,
+    userName: actor.name,
+    timestamp: record.createdAt,
+  }).catch((err) => console.error('Failed to write case-action audit:', err));
+  return record;
+}
+
+export function updateCaseAction(
+  id: string,
+  updates: Partial<CaseAction>,
+  actor: { uid: string; name: string }
+): CaseAction | null {
+  const db = getDatabase();
+  const records = db.caseActions || [];
+  const index = records.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const current = records[index];
+  const now = new Date().toISOString();
+  const updated: CaseAction = {
+    ...current,
+    ...updates,
+    updatedBy: actor.name,
+    updatedByUid: actor.uid,
+    updatedAt: now,
+    ...(updates.status === 'Completed' && current.status !== 'Completed'
+      ? { completedAt: now }
+      : {}),
+  };
+  records[index] = updated;
+  db.caseActions = records;
+  saveDatabase(db);
+  persistPhase2Record('caseActions', updated).catch((err) =>
+    console.error('Failed to update case action:', err)
+  );
+  appendCaseActionAudit({
+    action: 'updated',
+    recordId: id,
+    userId: actor.uid,
+    userName: actor.name,
+    timestamp: now,
+    changedFields: Object.keys(updates),
+  }).catch((err) => console.error('Failed to write case-action audit:', err));
+  return updated;
+}
+
+export function addEducationHistoryRecord(
+  data: Omit<EducationHistoryRecord, keyof Phase2TrackedRecord>, actorName: string
+): EducationHistoryRecord {
+  return addPhase2Record('educationHistory', 'educationHistory', 'EDH', data, actorName);
+}
+
+export function updateEducationHistoryRecord(
+  id: string,
+  updates: Partial<EducationHistoryRecord>,
+  actorName: string
+): EducationHistoryRecord | null {
+  const db = getDatabase();
+  const records = db.educationHistory || [];
+  const index = records.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  records[index] = updated;
+  db.educationHistory = records;
+  saveDatabase(db);
+  persistPhase2Record('educationHistory', updated).catch((err) => console.error('Failed to update education history:', err));
+  return updated;
+}
+
+export function addAcademicSupportRecord(
+  data: Omit<AcademicSupportRecord, keyof Phase2TrackedRecord>, actorName: string
+): AcademicSupportRecord {
+  return addPhase2Record('academicSupports', 'academicSupports', 'ACS', data, actorName);
+}
+
+export function addExaminationRecord(
+  data: Omit<ExaminationRecord, keyof Phase2TrackedRecord>, actorName: string
+): ExaminationRecord {
+  return addPhase2Record('examinationRecords', 'examinationRecords', 'EXM', data, actorName);
+}
+
+export function addAttendanceRecord(
+  data: Omit<AttendanceRecord, keyof Phase2TrackedRecord>, actorName: string
+): AttendanceRecord {
+  return addPhase2Record<AttendanceRecord>('attendanceRecords', 'attendanceRecords', 'ATT', data, actorName);
+}
+
+export function addGirlLeaveRecord(
+  data: Omit<GirlLeaveRecord, keyof Phase2TrackedRecord>, actorName: string
+): GirlLeaveRecord {
+  return addPhase2Record('girlLeaves', 'girlLeaves', 'LEV', data, actorName);
+}
+
+export function updateGirlLeaveRecord(
+  id: string,
+  updates: Partial<GirlLeaveRecord>,
+  actorName: string
+): GirlLeaveRecord | null {
+  const db = getDatabase();
+  const records = db.girlLeaves || [];
+  const index = records.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  records[index] = updated;
+  db.girlLeaves = records;
+  saveDatabase(db);
+  persistPhase2Record('girlLeaves', updated).catch((err) => console.error('Failed to update leave record:', err));
+  return updated;
+}
+
+export function addCaseReview(
+  data: Omit<CaseReview, keyof Phase2TrackedRecord>, actorName: string
+): CaseReview {
+  return addPhase2Record('caseReviews', 'caseReviews', 'REV', data, actorName);
 }
 
 // ----------------------------------------------------------------------

@@ -22,9 +22,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AppDatabase, Girl, Household } from '../../types';
-import { persistStaffUserToFirestore } from '../../services/firestoreSync';
-import { doc, setDoc } from 'firebase/firestore';
-import { firestore } from '../../firebase';
 
 export interface ChatMessage {
   id: string;
@@ -205,16 +202,6 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       if (idToken) {
         headers['Authorization'] = `Bearer ${idToken}`;
       }
-      if (staffProfile) {
-        headers['X-Staff-User'] = JSON.stringify({
-          uid: staffProfile.uid || currentUser?.uid || 'unknown',
-          email: staffProfile.email || currentUser?.email || '',
-          fullName: staffProfile.fullName || 'Staff Member',
-          role: staffProfile.role || role,
-          status: staffProfile.status || 'Active',
-        });
-      }
-
       // Convert messages for API history
       const history = messages.slice(-6).map((m) => ({
         role: m.role,
@@ -231,15 +218,6 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           context: {
             girlId: selectedGirlId || undefined,
             householdId: selectedHouseId || undefined,
-          },
-          // Send synchronized database snapshot so the server-side tools can analyze verified records
-          dbSnapshot: db,
-          staffUser: {
-            uid: staffProfile?.uid || currentUser?.uid || 'guest',
-            email: staffProfile?.email || currentUser?.email || '',
-            fullName: staffProfile?.fullName || 'Staff Member',
-            role: staffProfile?.role || role,
-            status: staffProfile?.status || 'Active',
           },
         }),
       });
@@ -271,19 +249,6 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
       setMessages([...newMessages, assistantMsg]);
 
-      // Record client-side audit log to Firestore if audit log is present
-      if (data.auditEntry && firestore) {
-        try {
-          const logId = 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-          const auditRef = doc(firestore, 'aiAuditLogs', logId);
-          await setDoc(auditRef, {
-            ...data.auditEntry,
-            id: logId,
-          });
-        } catch (auditErr) {
-          console.warn('AI audit logging notice:', auditErr);
-        }
-      }
     } catch (err: any) {
       console.error('AI chat error:', err);
       const assistantMsg: ChatMessage = {

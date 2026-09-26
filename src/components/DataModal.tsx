@@ -31,18 +31,22 @@ export const DataModal: React.FC<DataModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleDownloadJSON = () => {
-    const jsonStr = exportDatabaseJSON();
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `shine_relief_malawi_backup_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setMessage({ text: 'Full database exported successfully as JSON file.', type: 'success' });
+  const handleDownloadJSON = async () => {
+    try {
+      const jsonStr = await exportDatabaseJSON();
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `shine_relief_malawi_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setMessage({ text: 'Database records and attachment metadata exported. Media files remain in Firebase Storage.', type: 'success' });
+    } catch (err) {
+      setMessage({ text: 'Could not export database backup: ' + String(err), type: 'error' });
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,10 +58,10 @@ export const DataModal: React.FC<DataModalProps> = ({
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
-        const success = importDatabaseJSON(content);
+        const success = await importDatabaseJSON(content);
         if (success) {
           setMessage({ text: 'Database restored and synchronized to Cloud Firestore successfully!', type: 'success' });
           onDataChanged();
@@ -88,7 +92,7 @@ export const DataModal: React.FC<DataModalProps> = ({
     }
   };
 
-  const handleResetToSeed = () => {
+  const handleResetToSeed = async () => {
     if (!isAdmin) {
       setMessage({ text: 'Clearing records is strictly restricted to Administrators.', type: 'error' });
       return;
@@ -97,10 +101,14 @@ export const DataModal: React.FC<DataModalProps> = ({
       setConfirmReset(true);
       return;
     }
-    resetDatabaseToSeed();
-    setConfirmReset(false);
-    setMessage({ text: 'All data cleared from both Cloud Firestore and local storage.', type: 'success' });
-    onDataChanged();
+    try {
+      await resetDatabaseToSeed();
+      setConfirmReset(false);
+      setMessage({ text: 'All data cleared from both Cloud Firestore and local storage.', type: 'success' });
+      onDataChanged();
+    } catch (err) {
+      setMessage({ text: 'Could not clear all records: ' + String(err), type: 'error' });
+    }
   };
 
   return (

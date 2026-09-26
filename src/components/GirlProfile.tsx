@@ -7,6 +7,13 @@ import {
   FamilyFollowUp,
   HistoricalCaseRecord,
   PhotoAttachment,
+  CaseAction,
+  EducationHistoryRecord,
+  AcademicSupportRecord,
+  ExaminationRecord,
+  AttendanceRecord,
+  GirlLeaveRecord,
+  CaseReview,
 } from '../types';
 import { formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,6 +50,13 @@ interface GirlProfileProps {
   healthFollowUps: HealthFollowUp[];
   familyFollowUps: FamilyFollowUp[];
   historicalRecords?: HistoricalCaseRecord[];
+  caseActions?: CaseAction[];
+  educationHistory?: EducationHistoryRecord[];
+  academicSupports?: AcademicSupportRecord[];
+  examinationRecords?: ExaminationRecord[];
+  attendanceRecords?: AttendanceRecord[];
+  girlLeaves?: GirlLeaveRecord[];
+  caseReviews?: CaseReview[];
   onBack: () => void;
   onNavigateToHouse: (houseId: string) => void;
   onEditGirl: (girl: Girl) => void;
@@ -54,11 +68,11 @@ interface GirlProfileProps {
   onAskAI?: (girlId: string) => void;
 }
 
-type TimelineFilter = 'all' | 'educational' | 'health' | 'family' | 'historical';
+type TimelineFilter = 'all' | 'educational' | 'health' | 'family' | 'historical' | 'action' | 'education-history' | 'support' | 'examination' | 'attendance' | 'leave' | 'review';
 
 interface UnifiedTimelineItem {
   id: string;
-  type: 'educational' | 'health' | 'family' | 'historical';
+  type: TimelineFilter;
   date: string;
   title: string;
   subtitle: string;
@@ -69,7 +83,6 @@ interface UnifiedTimelineItem {
   recommendations?: string;
   nextFollowUpDate?: string;
   recordedBy?: string;
-  original: EducationalFollowUp | HealthFollowUp | FamilyFollowUp | HistoricalCaseRecord;
   isDateUnknown?: boolean;
   sourceDocument?: string;
 }
@@ -81,6 +94,13 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   healthFollowUps,
   familyFollowUps,
   historicalRecords = [],
+  caseActions = [],
+  educationHistory = [],
+  academicSupports = [],
+  examinationRecords = [],
+  attendanceRecords = [],
+  girlLeaves = [],
+  caseReviews = [],
   onBack,
   onNavigateToHouse,
   onEditGirl,
@@ -91,7 +111,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   onAddFamilyFollowUp,
   onAskAI,
 }) => {
-  const { isViewOnly } = useAuth();
+  const { isViewOnly, canViewHealthRecords, canEditHealthRecords } = useAuth();
   const [filter, setFilter] = useState<TimelineFilter>('all');
   const [attachments, setAttachments] = useState<PhotoAttachment[]>([]);
   const [isProfilePhotoModalOpen, setIsProfilePhotoModalOpen] = useState(false);
@@ -124,7 +144,6 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
       recommendations: edu.recommendations,
       nextFollowUpDate: edu.nextFollowUpDate,
       recordedBy: edu.recordedBy,
-      original: edu,
     })),
     ...healthFollowUps.map((hlt) => ({
       id: hlt.id,
@@ -139,7 +158,6 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
       recommendations: hlt.recommendations,
       nextFollowUpDate: hlt.nextFollowUpDate,
       recordedBy: hlt.recordedBy,
-      original: hlt,
     })),
     ...familyFollowUps.map((fam) => ({
       id: fam.id,
@@ -154,7 +172,6 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
       recommendations: fam.recommendations,
       nextFollowUpDate: fam.nextFollowUpDate,
       recordedBy: fam.recordedBy,
-      original: fam,
     })),
     ...historicalRecords.map((hist) => ({
       id: hist.id,
@@ -169,9 +186,92 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
       recommendations: undefined,
       nextFollowUpDate: undefined,
       recordedBy: hist.recordedBy || hist.source?.originalFileName,
-      original: hist,
       isDateUnknown: hist.isDateUnknown,
       sourceDocument: hist.source?.originalFileName,
+    })),
+    ...caseActions.map((action) => ({
+      id: action.id,
+      type: 'action' as const,
+      date: action.createdAt,
+      title: action.title,
+      subtitle: `Case action · ${action.status}`,
+      description: action.description,
+      supportProvided: action.completionNotes,
+      progressOrOutcome: `Assigned to ${action.assignedStaffName} · ${action.priority} priority`,
+      furtherActionRequired: !['Completed', 'Cancelled'].includes(action.status),
+      nextFollowUpDate: action.dueDate,
+      recordedBy: action.createdBy,
+    })),
+    ...educationHistory.map((record) => ({
+      id: record.id,
+      type: 'education-history' as const,
+      date: record.startDate || record.createdAt,
+      title: `${record.school} · ${record.classLevel}`,
+      subtitle: `Education history · ${record.academicYear || 'Academic year not recorded'} · ${record.status}`,
+      description: record.notes || record.reasonForChange || '',
+      furtherActionRequired: false,
+      recordedBy: record.createdBy,
+    })),
+    ...academicSupports.map((record) => ({
+      id: record.id,
+      type: 'support' as const,
+      date: record.date,
+      title: `${record.subject || 'Academic support'} · ${record.areaOfConcern}`,
+      subtitle: 'Academic support',
+      description: record.problemIdentified,
+      supportProvided: record.supportProvided,
+      progressOrOutcome: record.outcome,
+      furtherActionRequired: record.furtherActionRequired,
+      nextFollowUpDate: record.nextFollowUpDate,
+      recordedBy: record.responsiblePerson || record.createdBy,
+    })),
+    ...examinationRecords.map((record) => ({
+      id: record.id,
+      type: 'examination' as const,
+      date: record.createdAt,
+      title: `${record.examinationType} · ${record.examinationYear}`,
+      subtitle: 'Examination record',
+      description: record.subjects?.map((subject) => subject.result ? `${subject.subject}: ${subject.result}` : subject.subject).join(', ') || 'No subject results recorded',
+      supportProvided: record.supportRequired,
+      progressOrOutcome: record.overallOutcome,
+      furtherActionRequired: Boolean(record.supportRequired),
+      recordedBy: record.createdBy,
+      sourceDocument: record.sourceDocument,
+    })),
+    ...attendanceRecords.map((record) => ({
+      id: record.id,
+      type: 'attendance' as const,
+      date: record.date,
+      title: record.activityName,
+      subtitle: `${record.activityType}${record.location ? ` · ${record.location}` : ''}`,
+      description: record.notes || `Attendance: ${record.status}`,
+      progressOrOutcome: record.status,
+      furtherActionRequired: false,
+      recordedBy: record.recordedBy,
+    })),
+    ...girlLeaves.map((record) => ({
+      id: record.id,
+      type: 'leave' as const,
+      date: record.startDate,
+      title: record.leaveType,
+      subtitle: `${record.status} · Expected return ${record.expectedReturnDate}`,
+      description: record.reason,
+      progressOrOutcome: record.actualReturnDate ? `Returned ${record.actualReturnDate}` : undefined,
+      furtherActionRequired: record.status === 'Active',
+      recordedBy: record.approvedBy,
+    })),
+    ...caseReviews.map((review) => ({
+      id: review.id,
+      type: 'review' as const,
+      date: review.reviewDate,
+      title: 'Periodic case review',
+      subtitle: review.nextReviewDate ? `Next review ${review.nextReviewDate}` : 'Next review not set',
+      description: review.currentSituation || review.progress || '',
+      supportProvided: review.supportRequired,
+      progressOrOutcome: review.actionPlan,
+      furtherActionRequired: Boolean(review.actionPlan),
+      nextFollowUpDate: review.nextReviewDate,
+      recordedBy: review.createdBy,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -252,14 +352,14 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                   <GraduationCap className="w-3.5 h-3.5 text-teal-800" />
                   <span>+ Education</span>
                 </button>
-                <button
+                {canEditHealthRecords && <button
                   onClick={() => onAddHealthFollowUp(girl)}
                   className="inline-flex items-center gap-1 text-xs font-bold text-rose-950 bg-rose-100 hover:bg-rose-200 border border-rose-300 px-2.5 py-2 rounded-lg shadow-xs transition-colors"
                   title="Add medical follow-up"
                 >
                   <HeartPulse className="w-3.5 h-3.5 text-rose-800" />
                   <span>+ Medical</span>
-                </button>
+                </button>}
                 <button
                   onClick={() => onAddFamilyFollowUp(girl)}
                   className="inline-flex items-center gap-1 text-xs font-bold text-amber-950 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-2 rounded-lg shadow-xs transition-colors"
@@ -417,6 +517,16 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
             <span>
               Recorded: {girl.createdAt ? formatDate(girl.createdAt) : 'Initial registration'}
               {girl.createdBy ? ` by ${girl.createdBy}` : ''}
+            <select value={filter} onChange={(event) => setFilter(event.target.value as TimelineFilter)} aria-label="Filter case timeline" className="max-w-36 bg-white border border-stone-200 rounded-md px-2 py-1.5 text-[11px] text-stone-700">
+              <option value="all">All case events</option>
+              <option value="action">Case actions</option>
+              <option value="education-history">Education history</option>
+              <option value="support">Academic support</option>
+              <option value="examination">Examinations</option>
+              <option value="attendance">Attendance</option>
+              <option value="leave">Leave</option>
+              <option value="review">Case reviews</option>
+            </select>
             </span>
             {girl.updatedAt && (
               <span>
@@ -495,7 +605,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
               <GraduationCap className="w-3 h-3" />
               <span>Edu ({educationalFollowUps.length})</span>
             </button>
-            <button
+            {canViewHealthRecords && <button
               onClick={() => setFilter('health')}
               className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors flex items-center gap-1 ${
                 filter === 'health'
@@ -505,7 +615,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
             >
               <HeartPulse className="w-3 h-3" />
               <span>Health ({healthFollowUps.length})</span>
-            </button>
+            </button>}
             <button
               onClick={() => setFilter('family')}
               className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors flex items-center gap-1 ${
@@ -549,6 +659,9 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
               const isHlt = item.type === 'health';
               const isFam = item.type === 'family';
               const isHist = item.type === 'historical';
+              const isEducationRecord = ['education-history', 'support', 'examination'].includes(item.type);
+              const isOther = !isEdu && !isHlt && !isFam && !isHist && !isEducationRecord;
+              const typeLabel = isHist ? 'Historical Record' : isEdu ? 'Educational Follow-Up' : isHlt ? 'Health / Medical Record' : isFam ? 'Family / Guardian Contact' : item.type === 'action' ? 'Case Action' : item.type === 'education-history' ? 'Education History' : item.type === 'support' ? 'Academic Support' : item.type === 'examination' ? 'Examination' : item.type === 'attendance' ? 'Attendance' : item.type === 'leave' ? 'Leave' : 'Case Review';
 
               return (
                 <div
@@ -571,6 +684,8 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                             ? 'bg-rose-100 text-rose-800'
                             : isHist
                             ? 'bg-amber-200 text-amber-900'
+                            : isOther
+                            ? 'bg-sky-100 text-sky-900'
                             : 'bg-amber-100 text-amber-800'
                         }`}
                       >
@@ -578,6 +693,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                         {isHlt && <HeartPulse className="w-5 h-5" />}
                         {isFam && <Users className="w-5 h-5" />}
                         {isHist && <Archive className="w-5 h-5" />}
+                        {isOther && <Calendar className="w-5 h-5" />}
                       </div>
 
                       <div>
@@ -590,18 +706,12 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                                 ? 'bg-rose-800 text-white'
                                 : isHist
                                 ? 'bg-amber-700 text-white'
+                                : isOther
+                                ? 'bg-sky-800 text-white'
                                 : 'bg-amber-800 text-white'
                             }`}
                           >
-                            {isHist
-                              ? item.isDateUnknown
-                                ? 'Historical Record - Date Unknown'
-                                : 'Preserved History'
-                              : item.type === 'educational'
-                              ? 'Educational Follow-Up'
-                              : item.type === 'health'
-                              ? 'Health / Medical Record'
-                              : 'Family / Guardian Contact'}
+                            {item.isDateUnknown ? 'Historical Record - Date Unknown' : typeLabel}
                           </span>
                           <span className="text-xs text-stone-500 font-medium">
                             {item.isDateUnknown ? 'Date Unknown' : formatDate(item.date)}
@@ -638,16 +748,18 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
 
                   {/* Detailed descriptions */}
                   <div className="mt-3 pl-0 sm:pl-12 space-y-2 text-xs text-stone-700">
-                    <div className="bg-stone-50 p-3 rounded-lg border border-stone-200">
+                    {item.description && <div className="bg-stone-50 p-3 rounded-lg border border-stone-200">
                       <span className="font-semibold text-stone-900 block mb-1">
                         {isEdu
                           ? 'Problems & Observations:'
                           : isHlt
                           ? 'Symptoms & Complaint:'
-                          : 'Family Situation:'}
+                          : isFam
+                          ? 'Family Situation:'
+                          : `${typeLabel}:`}
                       </span>
                       <p className="whitespace-pre-line leading-relaxed">{item.description}</p>
-                    </div>
+                    </div>}
 
                     {item.supportProvided && (
                       <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/80">
@@ -683,7 +795,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                         {item.recordedBy && <span>Staff: {item.recordedBy}</span>}
                       </div>
 
-                      {onDeleteFollowUp && item.type !== 'historical' && (
+                      {onDeleteFollowUp && ['educational', 'health', 'family'].includes(item.type) && (
                         <button
                           onClick={() => onDeleteFollowUp(item.type as 'educational' | 'health' | 'family', item.id)}
                           className="text-stone-400 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
@@ -695,7 +807,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                     </div>
 
                     {/* Attached photos for this specific follow-up */}
-                    <RecordAttachmentBar
+                    {['educational', 'health', 'family'].includes(item.type) && <RecordAttachmentBar
                       targetType={
                         item.type === 'educational'
                           ? 'educationalFollowUp'
@@ -712,7 +824,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
                           ? 'Medical Document'
                           : 'Family Visit'
                       }
-                    />
+                    />}
                   </div>
                 </div>
               );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   AppDatabase,
   Girl,
@@ -31,6 +31,8 @@ import {
   deleteExpense,
   addHouseholdActivity,
   deleteHouseholdActivity,
+  addEducationHistoryRecord,
+  updateEducationHistoryRecord,
 } from './utils/storage';
 import {
   initFirestoreListeners,
@@ -56,6 +58,7 @@ import { HouseholdProfile } from './components/HouseholdProfile';
 import { AIAssistantView } from './components/AIAssistant/AIAssistantView';
 import { MessagingView } from './components/Messaging/MessagingView';
 import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkplansView';
+import { CaseManagementView } from './components/CaseManagementView';
 import { DataImportWizard } from './components/Import/DataImportWizard';
 import {
   triggerDataChangeNotification,
@@ -92,6 +95,7 @@ type AppView =
   | 'reports'
   | 'staff'
   | 'ai-assistant'
+  | 'case-management'
   | 'girl-profile'
   | 'house-profile'
   | 'form-girl'
@@ -124,6 +128,7 @@ function parseHash(): {
   if (hash === 'girls') return { view: 'girls', activeTab: 'girls' };
   if (hash === 'houses') return { view: 'houses', activeTab: 'houses' };
   if (hash === 'activities') return { view: 'activities', activeTab: 'activities' };
+  if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
   if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
   if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
   if (hash === 'import' || hash === 'ingestion') return { view: 'import', activeTab: 'import' };
@@ -148,9 +153,46 @@ function AppContent() {
     auditActor,
     isViewOnly,
     isAdmin,
+    canViewHealthRecords,
+    canEditHealthRecords,
+    canViewCaseReviews,
+    canViewSafeguarding,
     logout,
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
+  const [safeguardingCount, setSafeguardingCount] = useState<number>();
+
+  useEffect(() => {
+    if (!currentUser || isSuspended || (!isAdmin && !canViewSafeguarding)) {
+      setSafeguardingCount(undefined);
+      return;
+    }
+    currentUser.getIdToken().then((token) => fetch('/api/safeguarding/count', {
+      headers: { Authorization: `Bearer ${token}` },
+    })).then((response) => response.ok ? response.json() : null)
+      .then((result) => setSafeguardingCount(typeof result?.count === 'number' ? result.count : undefined))
+      .catch((err) => {
+        console.warn('Safeguarding count could not be loaded:', err);
+        setSafeguardingCount(undefined);
+      });
+  }, [currentUser?.uid, isSuspended, isAdmin, canViewSafeguarding]);
+
+  useLayoutEffect(() => {
+    if (currentUser && (
+      (!canViewHealthRecords && db.healthFollowUps.length > 0) ||
+      (!canViewHealthRecords && (db.historicalRecords || []).some((record) => record.recordType === 'medical')) ||
+      (!canViewCaseReviews && (db.caseReviews || []).length > 0)
+    )) {
+      const restrictedDb = {
+        ...db,
+        healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
+        historicalRecords: canViewHealthRecords ? db.historicalRecords : (db.historicalRecords || []).filter((record) => record.recordType !== 'medical'),
+        caseReviews: canViewCaseReviews ? db.caseReviews : [],
+      };
+      saveDatabase(restrictedDb, false);
+      setDb(restrictedDb);
+    }
+  }, [currentUser?.uid, canViewHealthRecords, canViewCaseReviews, db]);
 
   // Trigger follow-up reminders check automatically (with deduplication)
   useEffect(() => {
@@ -206,9 +248,14 @@ function AppContent() {
     const unsub = initFirestoreListeners((cloudDb) => {
       saveDatabase(cloudDb, false);
       setDb(cloudDb);
+    }, {
+      uid: currentUser.uid,
+      canViewTeamTasks: isAdmin || role === 'Manager',
+      canReadHealthRecords: canViewHealthRecords,
+      canReadCaseReviews: canViewCaseReviews,
     });
     return () => unsub();
-  }, [currentUser, isSuspended]);
+  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -279,6 +326,9 @@ function AppContent() {
         break;
       case 'activities':
         targetHash = '#/activities';
+        break;
+      case 'case-management':
+        targetHash = '#/case-management';
         break;
       case 'messages':
         targetHash = '#/messages';
@@ -408,8 +458,8 @@ function AppContent() {
   };
 
   const handleStartHealthFollowUp = (girl: Girl) => {
-    if (isViewOnly) {
-      showToast('View-only accounts cannot add health visits.');
+    if (!canEditHealthRecords) {
+      showToast('Your account does not have permission to add health records.');
       return;
     }
     setSelectedGirlId(girl.id);
@@ -550,6 +600,40 @@ function AppContent() {
     let targetId = '';
     if (editingGirl) {
       targetId = editingGirl.id;
+      const schoolChanged = editingGirl.school !== girlData.school || editingGirl.classLevel !== girlData.classLevel;
+      if (schoolChanged) {
+        const changeDate = new Date().toISOString().slice(0, 10);
+        const currentEntries = (db.educationHistory || []).filter(
+          (entry) => entry.girlId === editingGirl.id && entry.status === 'Current'
+        );
+        if (currentEntries.length > 0) {
+          currentEntries.forEach((entry) => updateEducationHistoryRecord(entry.id, {
+            status: 'Transferred',
+            endDate: entry.endDate || changeDate,
+            reasonForChange: entry.reasonForChange || 'School or class updated in girl profile',
+          }, auditActor));
+        } else if (editingGirl.school || editingGirl.classLevel) {
+          addEducationHistoryRecord({
+            girlId: editingGirl.id,
+            academicYear: '',
+            school: editingGirl.school,
+            classLevel: editingGirl.classLevel,
+            endDate: changeDate,
+            status: 'Transferred',
+            reasonForChange: 'School or class updated in girl profile',
+            source: 'Girl profile before edit',
+          }, auditActor);
+        }
+        addEducationHistoryRecord({
+          girlId: editingGirl.id,
+          academicYear: '',
+          school: girlData.school,
+          classLevel: girlData.classLevel,
+          startDate: changeDate,
+          status: 'Current',
+          source: 'Girl profile update',
+        }, auditActor);
+      }
       updateGirl(editingGirl.id, girlData, auditActor);
       showToast(`Profile updated for ${girlData.fullName}`);
       navigateTo('girl-profile', 'girls', editingGirl.id);
@@ -652,7 +736,10 @@ function AppContent() {
     data: Omit<HealthFollowUp, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
   ) => {
-    if (isViewOnly) return;
+    if (!canEditHealthRecords) {
+      showToast('Your account does not have permission to save health records.');
+      return;
+    }
     const created = addHealthFollowUp(data, auditActor);
     const girl = db.girls.find((g) => g.id === data.girlId);
     showToast('Health / medical visit recorded successfully.');
@@ -729,8 +816,8 @@ function AppContent() {
 
   // Deletion Handlers
   const handleDeleteGirl = (girlId: string) => {
-    if (isViewOnly) {
-      showToast('View-only accounts cannot delete profiles.');
+    if (!isAdmin) {
+      showToast('Only Administrators can delete girl profiles.');
       return;
     }
     const girl = db.girls.find((g) => g.id === girlId);
@@ -745,8 +832,8 @@ function AppContent() {
   };
 
   const handleDeleteHousehold = (houseId: string) => {
-    if (isViewOnly) {
-      showToast('View-only accounts cannot delete households.');
+    if (!isAdmin) {
+      showToast('Only Administrators can delete households.');
       return;
     }
     const house = db.households.find((h) => h.id === houseId);
@@ -764,6 +851,10 @@ function AppContent() {
     type: 'educational' | 'health' | 'family',
     id: string
   ) => {
+    if (type === 'health' && !canEditHealthRecords) {
+      showToast('Your account does not have permission to delete health records.');
+      return;
+    }
     if (isViewOnly) {
       showToast('View-only accounts cannot delete records.');
       return;
@@ -776,8 +867,8 @@ function AppContent() {
   };
 
   const handleDeleteRentPayment = (id: string) => {
-    if (isViewOnly) {
-      showToast('View-only accounts cannot delete payments.');
+    if (!isAdmin) {
+      showToast('Only Administrators can delete rent payments.');
       return;
     }
     if (!window.confirm('Delete this rent payment entry?')) return;
@@ -982,6 +1073,8 @@ function AppContent() {
             onNavigateToHousesList={() => navigateTo('houses', 'houses')}
             onNavigateToReports={() => navigateTo('reports', 'reports')}
             onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+            onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
+            safeguardingCount={safeguardingCount}
           />
         )}
 
@@ -1019,6 +1112,15 @@ function AppContent() {
             girls={db.girls}
             onSelectHouse={handleOpenHouseProfile}
             onAddActivity={() => handleStartActivity()}
+          />
+        )}
+
+        {view === 'case-management' && (
+          <CaseManagementView
+            db={db}
+            onRefresh={reloadData}
+            onOpenGirl={handleOpenGirlProfile}
+            onOpenHousehold={handleOpenHouseProfile}
           />
         )}
 
@@ -1099,6 +1201,13 @@ function AppContent() {
             healthFollowUps={currentGirlHealth}
             familyFollowUps={currentGirlFamily}
             historicalRecords={db.historicalRecords?.filter((h) => h.girlId === currentGirl.id) || []}
+            caseActions={(db.caseActions || []).filter((item) => item.girlId === currentGirl.id)}
+            educationHistory={(db.educationHistory || []).filter((item) => item.girlId === currentGirl.id)}
+            academicSupports={(db.academicSupports || []).filter((item) => item.girlId === currentGirl.id)}
+            examinationRecords={(db.examinationRecords || []).filter((item) => item.girlId === currentGirl.id)}
+            attendanceRecords={(db.attendanceRecords || []).filter((item) => item.girlId === currentGirl.id)}
+            girlLeaves={(db.girlLeaves || []).filter((item) => item.girlId === currentGirl.id)}
+            caseReviews={(db.caseReviews || []).filter((item) => item.girlId === currentGirl.id)}
             onBack={() => navigateTo('girls', 'girls')}
             onNavigateToHouse={handleOpenHouseProfile}
             onEditGirl={handleStartEditGirl}
@@ -1277,6 +1386,7 @@ function AppContent() {
         onClose={() => setIsSearchOpen(false)}
         onSelectGirl={handleOpenGirlProfile}
         onSelectHouse={handleOpenHouseProfile}
+        onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
       />
 
       <DataModal

@@ -27,6 +27,11 @@ import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
 
+export async function getAllAttachmentMetadata(): Promise<PhotoAttachment[]> {
+  const snapshot = await getDocs(collection(firestore, ATTACHMENTS_COLLECTION));
+  return snapshot.docs.map((document) => document.data() as PhotoAttachment);
+}
+
 export interface UploadAttachmentParams {
   file: File;
   targetType: AttachmentTargetType;
@@ -201,21 +206,27 @@ export function subscribeAllGirlAttachments(
 ): () => void {
   try {
     const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
-    return onSnapshot(
-      colRef,
-      (snapshot) => {
-        const all = snapshot.docs.map((d) => d.data() as PhotoAttachment);
-        const related = all.filter(
-          (att) => att.targetId === girlId || followUpIds.includes(att.targetId)
-        );
-        related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        onUpdate(related);
-      },
-      (err) => {
-        console.warn('All girl attachments snapshot notice:', err.message);
-        onUpdate([]);
-      }
+    const current = new Map<string, PhotoAttachment[]>();
+    const emit = () => {
+      const related = Array.from(current.values()).flat();
+      related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onUpdate(related);
+    };
+    const unsubscribers = Array.from(new Set([girlId, ...followUpIds])).map((targetId) =>
+      onSnapshot(
+        query(colRef, where('targetId', '==', targetId)),
+        (snapshot) => {
+          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+          emit();
+        },
+        (err) => {
+          console.warn('Girl attachment subscription notice:', err.message);
+          current.set(targetId, []);
+          emit();
+        }
+      )
     );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   } catch (err) {
     console.warn('Error in subscribeAllGirlAttachments:', err);
     return () => {};
@@ -232,21 +243,27 @@ export function subscribeAllHouseholdAttachments(
 ): () => void {
   try {
     const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
-    return onSnapshot(
-      colRef,
-      (snapshot) => {
-        const all = snapshot.docs.map((d) => d.data() as PhotoAttachment);
-        const related = all.filter(
-          (att) => att.targetId === householdId || linkedRecordIds.includes(att.targetId)
-        );
-        related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        onUpdate(related);
-      },
-      (err) => {
-        console.warn('All household attachments snapshot notice:', err.message);
-        onUpdate([]);
-      }
+    const current = new Map<string, PhotoAttachment[]>();
+    const emit = () => {
+      const related = Array.from(current.values()).flat();
+      related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onUpdate(related);
+    };
+    const unsubscribers = Array.from(new Set([householdId, ...linkedRecordIds])).map((targetId) =>
+      onSnapshot(
+        query(colRef, where('targetId', '==', targetId)),
+        (snapshot) => {
+          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+          emit();
+        },
+        (err) => {
+          console.warn('Household attachment subscription notice:', err.message);
+          current.set(targetId, []);
+          emit();
+        }
+      )
     );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   } catch (err) {
     console.warn('Error in subscribeAllHouseholdAttachments:', err);
     return () => {};

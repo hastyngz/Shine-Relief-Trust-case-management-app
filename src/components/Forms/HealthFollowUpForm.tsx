@@ -21,7 +21,11 @@ export const HealthFollowUpForm: React.FC<HealthFollowUpFormProps> = ({
   const [reasonForVisit, setReasonForVisit] = useState('');
   const [healthIssueComplaint, setHealthIssueComplaint] = useState('');
   const [medicalFacility, setMedicalFacility] = useState('Zomba Central Hospital');
+  const [healthProfessional, setHealthProfessional] = useState('');
   const [treatmentProvided, setTreatmentProvided] = useState('');
+  const [medication, setMedication] = useState('');
+  const [referral, setReferral] = useState('');
+  const [notes, setNotes] = useState('');
   const [outcome, setOutcome] = useState('');
   const [furtherActionRequired, setFurtherActionRequired] = useState(false);
   const [recommendations, setRecommendations] = useState('');
@@ -52,7 +56,11 @@ export const HealthFollowUpForm: React.FC<HealthFollowUpFormProps> = ({
         reasonForVisit: reasonForVisit.trim(),
         healthIssueComplaint: healthIssueComplaint.trim(),
         medicalFacility: medicalFacility.trim(),
+        healthProfessional: healthProfessional.trim() || undefined,
         treatmentProvided: treatmentProvided.trim(),
+        medication: medication.trim() || undefined,
+        referral: referral.trim() || undefined,
+        notes: notes.trim() || undefined,
         outcome: outcome.trim(),
         furtherActionRequired,
         recommendations: recommendations.trim(),
@@ -150,6 +158,18 @@ export const HealthFollowUpForm: React.FC<HealthFollowUpFormProps> = ({
 
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
+            Health professional (if provided)
+          </label>
+          <input
+            type="text"
+            value={healthProfessional}
+            onChange={(e) => setHealthProfessional(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-rose-700 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">
             Treatment / Medication Provided
           </label>
           <textarea
@@ -159,6 +179,16 @@ export const HealthFollowUpForm: React.FC<HealthFollowUpFormProps> = ({
             placeholder="e.g. Artemether-Lumefantrine (Coartem) 6 doses, Paracetamol 500mg, Amoxicillin, lab tests performed..."
             className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-rose-700 focus:outline-none"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">Medication (as documented)</label>
+          <textarea value={medication} onChange={(e) => setMedication(e.target.value)} rows={2} className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-rose-700 focus:outline-none" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">Referral</label>
+          <textarea value={referral} onChange={(e) => setReferral(e.target.value)} rows={2} className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-rose-700 focus:outline-none" />
         </div>
 
         <div>
@@ -227,6 +257,11 @@ export const HealthFollowUpForm: React.FC<HealthFollowUpFormProps> = ({
             placeholder="Dietary instructions, medication schedule supervision by House Mum, bed rest guidelines..."
             className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-rose-700 focus:outline-none"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">Additional notes</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-rose-700 focus:outline-none" />
         </div>
 
         <div>

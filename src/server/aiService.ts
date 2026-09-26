@@ -28,7 +28,7 @@ export interface AIChatRequest {
     girlId?: string;
     householdId?: string;
   };
-  dbSnapshot?: AppDatabase;
+  db: AppDatabase;
   staffUser: {
     uid: string;
     email: string;
@@ -166,7 +166,7 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
     };
   }
 
-  if (staff.status && staff.status !== 'Active') {
+  if (staff.status !== 'Active') {
     return {
       success: false,
       reply: 'Access Denied: Your staff account is suspended or inactive.',
@@ -175,17 +175,7 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
   }
 
   // 2. Prepare database context
-  const db: AppDatabase = request.dbSnapshot || {
-    girls: [],
-    households: [],
-    educationalFollowUps: [],
-    healthFollowUps: [],
-    familyFollowUps: [],
-    rentPayments: [],
-    expenses: [],
-    householdActivities: [],
-    attachments: [],
-  };
+  const db = request.db;
 
   try {
     const ai = getGenAI();

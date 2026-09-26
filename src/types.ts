@@ -39,6 +39,13 @@ export type StaffRole = 'Administrator' | 'Manager' | 'Staff' | 'View Only';
 
 export type StaffStatus = 'Active' | 'Suspended';
 
+export interface SafeguardingPermissions {
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canClose: boolean;
+}
+
 export interface StaffUser {
   id: string; // document id / uid
   uid: string;
@@ -52,6 +59,11 @@ export interface StaffUser {
   updatedAt: string;
   createdBy?: string;
   lastLoginAt?: string;
+  safeguardingPermissions?: SafeguardingPermissions;
+  canViewHealthRecords?: boolean;
+  canEditHealthRecords?: boolean;
+  canViewCaseReviews?: boolean;
+  canEditCaseReviews?: boolean;
 }
 
 export interface Girl {
@@ -117,7 +129,11 @@ export interface HealthFollowUp {
   reasonForVisit: string;
   healthIssueComplaint: string; // Detailed complaint
   medicalFacility: string; // e.g., "Zomba Central Hospital"
+  healthProfessional?: string;
   treatmentProvided: string; // Medication, dosage, labs
+  medication?: string;
+  referral?: string;
+  notes?: string;
   outcome: string;
   furtherActionRequired: boolean;
   recommendations: string;
@@ -127,6 +143,209 @@ export interface HealthFollowUp {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+}
+
+export type CaseActionPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type CaseActionStatus = 'Open' | 'In Progress' | 'Completed' | 'Overdue' | 'Cancelled';
+export type CaseActionSourceType =
+  | 'educationalFollowUp'
+  | 'healthFollowUp'
+  | 'familyFollowUp'
+  | 'householdActivity'
+  | 'rentPayment'
+  | 'expense'
+  | 'safeguarding'
+  | 'manual';
+
+export interface CaseAction {
+  id: string;
+  title: string;
+  description: string;
+  girlId?: string;
+  householdId?: string;
+  personId?: string;
+  assignedStaffId: string;
+  assignedStaffName: string;
+  sourceType: CaseActionSourceType;
+  sourceId?: string;
+  priority: CaseActionPriority;
+  status: CaseActionStatus;
+  dueDate: string;
+  completedAt?: string;
+  completionNotes?: string;
+  createdBy: string;
+  createdByUid: string;
+  updatedBy: string;
+  updatedByUid: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SafeguardingCategory =
+  | 'Protection concern'
+  | 'Incident'
+  | 'Disclosure'
+  | 'Risk concern'
+  | 'Referral'
+  | 'Intervention'
+  | 'Follow-up'
+  | 'Other';
+export type SafeguardingRiskLevel = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type SafeguardingCaseStatus =
+  | 'Open'
+  | 'Under Review'
+  | 'Action Required'
+  | 'Referred'
+  | 'Monitoring'
+  | 'Resolved'
+  | 'Closed';
+
+export interface SafeguardingCase {
+  id: string;
+  girlId: string;
+  dateReported: string;
+  incidentDate?: string;
+  category: SafeguardingCategory;
+  description: string;
+  immediateConcern: string;
+  riskLevel: SafeguardingRiskLevel;
+  actionTaken: string;
+  referralMade: boolean;
+  referredTo?: string;
+  responsibleStaffId: string;
+  responsibleStaffName: string;
+  followUpDate?: string;
+  outcome?: string;
+  status: SafeguardingCaseStatus;
+  authorizedStaffUids: string[];
+  createdBy: string;
+  createdByUid: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedByUid: string;
+  updatedAt: string;
+}
+
+export interface SafeguardingAuditEvent {
+  id: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  action: 'read' | 'create' | 'update' | 'close';
+  recordId: string;
+}
+
+export type EducationHistoryStatus = 'Current' | 'Completed' | 'Transferred' | 'Other';
+
+export interface EducationHistoryRecord {
+  id: string;
+  girlId: string;
+  academicYear: string;
+  school: string;
+  classLevel: string;
+  startDate?: string;
+  endDate?: string;
+  status: EducationHistoryStatus;
+  reasonForChange?: string;
+  notes?: string;
+  source?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface AcademicSupportRecord {
+  id: string;
+  girlId: string;
+  subject: string;
+  areaOfConcern: string;
+  problemIdentified: string;
+  supportProvided: string;
+  responsiblePerson?: string;
+  date: string;
+  outcome?: string;
+  furtherActionRequired: boolean;
+  nextFollowUpDate?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface ExaminationRecord {
+  id: string;
+  girlId: string;
+  examinationType: string;
+  examinationYear: string;
+  subjects?: Array<{ subject: string; result?: string }>;
+  overallOutcome?: string;
+  supportRequired?: string;
+  notes?: string;
+  sourceDocument?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export type AttendanceStatus = 'Present' | 'Absent' | 'Excused' | 'Late';
+
+export interface AttendanceRecord {
+  id: string;
+  activityId?: string;
+  activityName: string;
+  activityType: string;
+  location?: string;
+  date: string;
+  girlId: string;
+  status: AttendanceStatus;
+  notes?: string;
+  recordedBy: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export type LeaveType = 'On Holiday' | 'Medical Leave' | 'Family Leave' | 'School Leave' | 'Temporarily Away' | 'Other';
+export type GirlLeaveStatus = 'Active' | 'Returned' | 'Cancelled';
+
+export interface GirlLeaveRecord {
+  id: string;
+  girlId: string;
+  leaveType: LeaveType;
+  startDate: string;
+  expectedReturnDate: string;
+  actualReturnDate?: string;
+  reason: string;
+  approvedBy: string;
+  notes?: string;
+  status: GirlLeaveStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface CaseReview {
+  id: string;
+  girlId: string;
+  reviewDate: string;
+  currentSituation?: string;
+  education?: string;
+  health?: string;
+  family?: string;
+  household?: string;
+  progress?: string;
+  challenges?: string;
+  supportRequired?: string;
+  actionPlan?: string;
+  nextReviewDate?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
 }
 
 export interface FamilyFollowUp {
@@ -185,6 +404,7 @@ export interface HouseholdActivity {
   date: string;
   activityName: string;
   activityType: HouseholdActivityType;
+  location?: string;
   participantCount: number;
   participatingGirlIds?: string[];
   description: string;
@@ -616,6 +836,13 @@ export interface AppDatabase {
   earlyYearsRecords?: EarlyYearsRecord[];
   people?: Person[];
   customPersonTypes?: string[];
+  caseActions?: CaseAction[];
+  educationHistory?: EducationHistoryRecord[];
+  academicSupports?: AcademicSupportRecord[];
+  examinationRecords?: ExaminationRecord[];
+  attendanceRecords?: AttendanceRecord[];
+  girlLeaves?: GirlLeaveRecord[];
+  caseReviews?: CaseReview[];
 }
 
 export type ConversationType = 'direct' | 'group' | 'announcement';

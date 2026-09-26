@@ -1,6 +1,7 @@
 import React from 'react';
 import { AppDatabase, Girl, Household } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Users,
   Home,
@@ -26,6 +27,8 @@ interface DashboardProps {
   onNavigateToHousesList: () => void;
   onNavigateToReports: () => void;
   onOpenQuickAdd: () => void;
+  onNavigateToCaseManagement: () => void;
+  safeguardingCount?: number;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -36,7 +39,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToHousesList,
   onNavigateToReports,
   onOpenQuickAdd,
+  onNavigateToCaseManagement,
+  safeguardingCount,
 }) => {
+  const { currentUser, isAdmin, role, canViewHealthRecords, canViewCaseReviews } = useAuth();
   // Girls statistics
   const totalGirls = db.girls.length;
   const activeGirls = db.girls.filter((g) => g.status === 'Active').length;
@@ -128,6 +134,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Total expenditure
   const totalExpenditure = db.expenses.reduce((sum, exp) => sum + exp.totalCost, 0);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const taskItems = db.caseActions || [];
+  const teamTaskAccess = isAdmin || role === 'Manager';
+  const visibleTasks = teamTaskAccess ? taskItems : taskItems.filter((task) => task.assignedStaffId === currentUser?.uid);
+  const openActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status)).length;
+  const overdueActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status) && task.dueDate < todayStr).length;
+  const highPriorityActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status) && ['High', 'Urgent'].includes(task.priority)).length;
+  const upcomingReviewCount = (db.caseReviews || []).filter((review) => review.nextReviewDate && review.nextReviewDate >= todayStr).length;
+  const girlsOnLeaveCount = (db.girlLeaves || []).filter((leave) => leave.status === 'Active').length;
 
   // Recent combined activities stream
   const recentActivities: {
@@ -308,6 +324,32 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
+      {/* Case management indicators */}
+      <section aria-label="Case management indicators" className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase text-stone-600">Case management</h2>
+          <button onClick={onNavigateToCaseManagement} className="text-xs font-bold text-teal-800 hover:text-teal-950">Open workspace</button>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {[
+            { label: 'Open actions', count: openActionCount, tone: 'border-teal-200 bg-teal-50 text-teal-950' },
+            { label: 'Overdue actions', count: overdueActionCount, tone: 'border-rose-200 bg-rose-50 text-rose-950' },
+            { label: 'High priority', count: highPriorityActionCount, tone: 'border-amber-200 bg-amber-50 text-amber-950' },
+            { label: 'Education follow-ups', count: outstandingEdu.length, tone: 'border-sky-200 bg-sky-50 text-sky-950' },
+            ...(canViewHealthRecords ? [{ label: 'Medical follow-ups', count: outstandingHlt.length, tone: 'border-rose-200 bg-white text-rose-950' }] : []),
+            { label: 'Family follow-ups', count: outstandingFam.length, tone: 'border-orange-200 bg-white text-orange-950' },
+            ...(safeguardingCount !== undefined ? [{ label: 'Safeguarding · restricted', count: safeguardingCount, tone: 'border-red-300 bg-red-50 text-red-950' }] : []),
+            { label: 'Girls on leave', count: girlsOnLeaveCount, tone: 'border-blue-200 bg-blue-50 text-blue-950' },
+            ...(canViewCaseReviews ? [{ label: 'Upcoming reviews', count: upcomingReviewCount, tone: 'border-stone-300 bg-white text-stone-950' }] : []),
+          ].map((item) => (
+            <button key={item.label} onClick={onNavigateToCaseManagement} className={`text-left p-3 border rounded-lg ${item.tone} hover:brightness-[0.98]`}>
+              <span className="block text-[10px] font-bold uppercase">{item.label}</span>
+              <span className="block text-xl font-black mt-0.5">{item.count}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* Outstanding Action Alerts Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Educational Issues Requiring Action */}
@@ -329,7 +371,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Medical Issues Requiring Action */}
-        <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5">
+        {canViewHealthRecords && <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-1.5 text-xs font-bold text-rose-900">
               <HeartPulse className="w-4 h-4 text-rose-800" />
@@ -344,7 +386,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ? `${outstandingHlt.length} medical follow-up checks or medicine refills due.`
               : 'All medical cases resolved.'}
           </p>
-        </div>
+        </div>}
 
         {/* Family/Guardian Issues Requiring Action */}
         <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5">

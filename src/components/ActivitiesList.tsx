@@ -169,6 +169,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
                       <p className="text-xs text-stone-500 font-medium">
                         {act.participantCount} Girls Participated
                       </p>
+                      {act.location && <p className="text-[11px] text-stone-500">Location: {act.location}</p>}
                     </div>
                   </div>
 

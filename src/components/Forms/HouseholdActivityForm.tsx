@@ -22,6 +22,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [activityName, setActivityName] = useState('');
   const [activityType, setActivityType] = useState<HouseholdActivityType>('Group activity');
+  const [location, setLocation] = useState('');
   const [selectedGirlIds, setSelectedGirlIds] = useState<string[]>(houseGirls.map((g) => g.id));
   const [description, setDescription] = useState('');
   const [outcome, setOutcome] = useState('');
@@ -67,6 +68,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
         date,
         activityName: activityName.trim(),
         activityType,
+        location: location.trim() || undefined,
         participantCount: selectedGirlIds.length > 0 ? selectedGirlIds.length : houseGirls.length,
         participatingGirlIds: selectedGirlIds,
         description: description.trim(),
@@ -163,6 +165,11 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
             className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-700 focus:outline-none"
             required
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-stone-700 mb-1">Activity location</label>
+          <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Where the activity took place" className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-teal-700 focus:outline-none" />
         </div>
 
         {houseGirls.length > 0 && (

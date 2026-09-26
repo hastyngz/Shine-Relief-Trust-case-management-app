@@ -42,10 +42,71 @@ service cloud.firestore {
       );
     }
 
+    function isManagerOrAdmin() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
+        getStaffDoc(request.auth.uid).data.role == 'Manager' &&
+        getStaffDoc(request.auth.uid).data.status == 'Active'
+      );
+    }
+
+    function canViewHealthRecords() {
+      return isManagerOrAdmin() || (
+        isStaffActive() &&
+        getStaffDoc(request.auth.uid).data.canViewHealthRecords == true
+      );
+    }
+
+    function canViewCaseReviews() {
+      return isManagerOrAdmin() || (
+        isStaffActive() &&
+        getStaffDoc(request.auth.uid).data.canViewCaseReviews == true
+      );
+    }
+
+    function canEditCaseReviews() {
+      return isManagerOrAdmin() || (
+        isManagerOrStaff() &&
+        getStaffDoc(request.auth.uid).data.canEditCaseReviews == true
+      );
+    }
+
+    function canEditHealthRecords() {
+      return isManagerOrAdmin() || (
+        isManagerOrStaff() &&
+        getStaffDoc(request.auth.uid).data.canEditHealthRecords == true
+      );
+    }
+
+    function canReadSafeguarding(caseId) {
+      let caseRecord = get(/databases/$(database)/documents/safeguardingCases/$(caseId));
+      return isAdmin() || (
+        isStaffActive() && (
+          getStaffDoc(request.auth.uid).data.safeguardingPermissions.canView == true ||
+          request.auth.uid in caseRecord.data.authorizedStaffUids
+        )
+      );
+    }
+
+    function canWriteSafeguardingAttachment(caseId) {
+      let caseRecord = get(/databases/$(database)/documents/safeguardingCases/$(caseId));
+      return isAdmin() || (
+        isStaffActive() && (
+          getStaffDoc(request.auth.uid).data.safeguardingPermissions.canEdit == true ||
+          request.auth.uid in caseRecord.data.authorizedStaffUids
+        )
+      );
+    }
+
     // Staff Users Management collection
     match /staffUsers/{userId} {
-      // Authenticated users can view staff profiles (directory lookup, attribution)
-      allow read: if isSignedIn();
+      // Active staff can view the roster; an unregistered user can only look up their own invitation.
+      allow read: if isAdmin() || isStaffActive() || (
+        isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == resource.data.email.lower()
+      );
 
       // Bootstrap rule: Hastings can initialize his own Administrator doc.
       // All other staff creations MUST be performed by an existing Administrator.
@@ -62,7 +123,10 @@ service cloud.firestore {
         isAdmin() ||
         (request.auth.uid == userId &&
          request.resource.data.role == resource.data.role &&
-         request.resource.data.status == resource.data.status)
+         request.resource.data.status == resource.data.status &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'phone', 'departmentOrTitle', 'updatedAt', 'lastLoginAt'
+         ]))
       );
 
       // Only Administrators can delete a staff user, and Hastings' primary account cannot be deleted.
@@ -97,9 +161,9 @@ service cloud.firestore {
     }
 
     match /healthFollowUps/{id} {
-      allow read: if isStaffActive();
-      allow create, update: if isManagerOrStaff();
-      allow delete: if isManagerOrStaff();
+      allow read: if canViewHealthRecords();
+      allow create, update: if canEditHealthRecords();
+      allow delete: if isAdmin() || (isManagerOrStaff() && getStaffDoc(request.auth.uid).data.canEditHealthRecords == true);
     }
 
     match /familyFollowUps/{id} {
@@ -127,16 +191,104 @@ service cloud.firestore {
     }
 
     match /attachments/{id} {
+      allow read: if isStaffActive() && (
+        (resource.data.targetType != 'safeguardingCase' || canReadSafeguarding(resource.data.targetId)) &&
+        (resource.data.targetType != 'healthFollowUp' || canViewHealthRecords())
+      );
+      allow create: if request.resource.data.targetType == 'safeguardingCase'
+        ? canWriteSafeguardingAttachment(request.resource.data.targetId)
+        : request.resource.data.targetType == 'healthFollowUp'
+          ? canEditHealthRecords()
+          : isManagerOrStaff();
+      allow update: if request.resource.data.targetType == 'safeguardingCase'
+        ? canWriteSafeguardingAttachment(request.resource.data.targetId)
+        : request.resource.data.targetType == 'healthFollowUp'
+          ? canEditHealthRecords()
+          : isManagerOrStaff();
+      allow delete: if resource.data.targetType == 'safeguardingCase'
+        ? canWriteSafeguardingAttachment(resource.data.targetId)
+        : resource.data.targetType == 'healthFollowUp'
+          ? canEditHealthRecords()
+          : isAdmin() || (isManagerOrStaff() && resource.data.uploadedBy.uid == request.auth.uid);
+    }
+
+    match /caseActions/{actionId} {
+      allow read: if isManagerOrAdmin() ||
+        (isStaffActive() && resource.data.assignedStaffId == request.auth.uid);
+      allow create: if isManagerOrAdmin() || (
+        isStaffActive() &&
+        resource == null &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.assignedStaffId == request.auth.uid
+      );
+      allow update: if isManagerOrAdmin() || (
+        isStaffActive() && resource.data.assignedStaffId == request.auth.uid &&
+        request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /caseActionAuditLogs/{eventId} {
+      allow read: if isManagerOrAdmin() || (
+        isStaffActive() &&
+        get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.assignedStaffId == request.auth.uid
+      );
+      allow create: if isStaffActive() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /educationHistory/{id} {
       allow read: if isStaffActive();
-      allow create: if isManagerOrStaff();
-      allow update: if isManagerOrStaff();
-      allow delete: if isAdmin() || (isManagerOrStaff() && resource.data.uploadedBy.uid == request.auth.uid);
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /academicSupports/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /examinationRecords/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /attendanceRecords/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /girlLeaves/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /caseReviews/{id} {
+      allow read: if canViewCaseReviews();
+      allow create, update: if canEditCaseReviews();
+      allow delete: if isAdmin();
+    }
+
+    // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
+    match /safeguardingCases/{caseId} {
+      allow read, write: if false;
+    }
+
+    match /safeguardingAuditLogs/{eventId} {
+      allow read, write: if false;
     }
 
     match /aiAuditLogs/{id} {
       allow read: if isAdmin();
-      allow create: if isStaffActive();
-      allow update, delete: if false;
+      // Audit records are written by the trusted server using the Admin SDK.
+      allow create, update, delete: if false;
     }
 
     // Budgets - Financial planning and allocations
@@ -162,7 +314,7 @@ service cloud.firestore {
 
     // Historical Case Records - Non-overwriting historical documents archive
     match /historicalCaseRecords/{id} {
-      allow read: if isStaffActive();
+      allow read: if isStaffActive() && (resource.data.recordType != 'medical' || canViewHealthRecords());
       allow create, update: if isManagerOrStaff();
       allow delete: if isAdmin();
     }
@@ -181,6 +333,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // People directory is separate from staff login accounts.
+    match /people/{personId} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
     // Staff Conversations
     match /staffConversations/{convId} {
       allow read: if isStaffActive() && (
@@ -193,7 +352,10 @@ service cloud.firestore {
       allow update: if isStaffActive() && (
         request.auth.uid in resource.data.participants ||
         isAdmin()
-      );
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'lastMessageText', 'lastMessageAt', 'lastMessageSenderId',
+        'lastMessageSenderName', 'unreadCounts', 'archivedBy', 'updatedAt'
+      ]);
       allow delete: if isAdmin() || (isStaffActive() && request.auth.uid in resource.data.participants);
     }
 
@@ -206,11 +368,16 @@ service cloud.firestore {
       );
       allow create: if isStaffActive() &&
         request.resource.data.senderId == request.auth.uid &&
-        request.auth.uid in request.resource.data.recipientUids;
+        request.auth.uid in request.resource.data.recipientUids &&
+        exists(/databases/$(database)/documents/staffConversations/$(request.resource.data.conversationId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/staffConversations/$(request.resource.data.conversationId)).data.participants &&
+        request.resource.data.recipientUids.hasOnly(
+          get(/databases/$(database)/documents/staffConversations/$(request.resource.data.conversationId)).data.participants
+        );
       allow update: if isStaffActive() && (
         request.auth.uid in resource.data.recipientUids ||
         resource.data.senderId == request.auth.uid
-      );
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'readBy', 'readAt']);
       allow delete: if isAdmin() || (isStaffActive() && resource.data.senderId == request.auth.uid);
     }
 

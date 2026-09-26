@@ -30,6 +30,14 @@ interface AuthContextType {
   allStaff: StaffUser[];
   role: StaffRole | null;
   isAdmin: boolean;
+  canViewHealthRecords: boolean;
+  canEditHealthRecords: boolean;
+  canViewCaseReviews: boolean;
+  canEditCaseReviews: boolean;
+  canViewSafeguarding: boolean;
+  canCreateSafeguarding: boolean;
+  canEditSafeguarding: boolean;
+  canCloseSafeguarding: boolean;
   canEdit: boolean;
   isViewOnly: boolean;
   isSuspended: boolean;
@@ -180,6 +188,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isRegisteredStaff = isHastingsUser || (staffProfile !== null && staffProfile.createdBy !== 'Unregistered User');
   const role: StaffRole | null = staffProfile?.role || (isHastingsUser ? 'Administrator' : null);
   const isAdmin = role === 'Administrator' || isHastingsUser;
+  const canViewHealthRecords = isAdmin || role === 'Manager' || staffProfile?.canViewHealthRecords === true;
+  const canEditHealthRecords = isAdmin || role === 'Manager' || staffProfile?.canEditHealthRecords === true;
+  const canViewCaseReviews = isAdmin || role === 'Manager' || staffProfile?.canViewCaseReviews === true;
+  const canEditCaseReviews = isAdmin || role === 'Manager' || staffProfile?.canEditCaseReviews === true;
+  const safeguardingPermissions = staffProfile?.safeguardingPermissions;
+  const canViewSafeguarding = isAdmin || safeguardingPermissions?.canView === true;
+  const canCreateSafeguarding = isAdmin || safeguardingPermissions?.canCreate === true;
+  const canEditSafeguarding = isAdmin || safeguardingPermissions?.canEdit === true;
+  const canCloseSafeguarding = isAdmin || safeguardingPermissions?.canClose === true;
   const isSuspended = !isHastingsUser && (!staffProfile || staffProfile.status === 'Suspended' || !isRegisteredStaff);
   const canEdit = isRegisteredStaff && !isSuspended && (isAdmin || role === 'Manager' || role === 'Staff');
   const isViewOnly = !canEdit;
@@ -381,6 +398,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         allStaff,
         role,
         isAdmin,
+        canViewHealthRecords,
+        canEditHealthRecords,
+        canViewCaseReviews,
+        canEditCaseReviews,
+        canViewSafeguarding,
+        canCreateSafeguarding,
+        canEditSafeguarding,
+        canCloseSafeguarding,
         canEdit,
         isViewOnly,
         isSuspended,

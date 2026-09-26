@@ -216,6 +216,41 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
     },
   },
   {
+    name: 'getCaseActions',
+    description: 'Read authorized open, overdue, completed, or high-priority case actions. Staff results are limited to their assigned actions.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        girlId: { type: Type.STRING, description: 'Optional girl ID filter.' },
+        householdId: { type: Type.STRING, description: 'Optional household ID filter.' },
+        status: { type: Type.STRING, description: 'Optional status filter.' },
+        overdueOnly: { type: Type.BOOLEAN, description: 'Return actions with due dates before today that are not completed or cancelled.' },
+      },
+    },
+  },
+  {
+    name: 'getGirlEducationHistory',
+    description: 'Summarize documented education history, academic support, and recorded examination results for a girl.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: { girlId: { type: Type.STRING, description: 'Girl ID.' } },
+      required: ['girlId'],
+    },
+  },
+  {
+    name: 'getGirlsOnLeave',
+    description: 'List recorded active temporary leave periods, expected return dates, and recorded reasons.',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: 'getUpcomingCaseReviews',
+    description: 'List case reviews with a recorded upcoming next review date.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: { daysAhead: { type: Type.NUMBER, description: 'How many days ahead to include (default 30).' } },
+    },
+  },
+  {
     name: 'getReportData',
     description: 'Retrieve consolidated case-management figures for a specific month and year to assist with drafting monthly reports.',
     parameters: {
@@ -771,6 +806,11 @@ export async function executeAITool(
       const overdueFamily = db.familyFollowUps.filter(
         (f) => f.nextFollowUpDate && f.nextFollowUpDate < todayStr && f.furtherActionRequired
       ).length;
+      const actions = db.caseActions || [];
+      const openActions = actions.filter((action) => !['Completed', 'Cancelled'].includes(action.status));
+      const overdueActions = openActions.filter((action) => action.dueDate < todayStr).length;
+      const upcomingReviews = (db.caseReviews || []).filter((review) => review.nextReviewDate && review.nextReviewDate >= todayStr).length;
+      const girlsOnLeave = (db.girlLeaves || []).filter((leave) => leave.status === 'Active').length;
 
       return {
         totalGirlsEnrolled: db.girls.length,
@@ -793,7 +833,89 @@ export async function executeAITool(
           total: eduThisMonth + healthThisMonth + familyThisMonth,
         },
         overdueFollowUpsCount: overdueEdu + overdueHealth + overdueFamily,
+        openCaseActions: openActions.length,
+        overdueCaseActions: overdueActions,
+        highPriorityCaseActions: openActions.filter((action) => ['High', 'Urgent'].includes(action.priority)).length,
+        girlsOnLeave,
+        upcomingCaseReviews: upcomingReviews,
       };
+    }
+
+    case 'getCaseActions': {
+      const girlId = String(args.girlId || '').toLowerCase();
+      const householdId = String(args.householdId || '').toLowerCase();
+      const status = String(args.status || '').toLowerCase();
+      const overdueOnly = args.overdueOnly === true;
+      const actions = (db.caseActions || []).filter((action) => {
+        if (girlId && action.girlId?.toLowerCase() !== girlId) return false;
+        if (householdId && action.householdId?.toLowerCase() !== householdId) return false;
+        if (status && action.status.toLowerCase() !== status) return false;
+        if (overdueOnly && (action.dueDate >= todayStr || ['Completed', 'Cancelled'].includes(action.status))) return false;
+        return true;
+      }).map((action) => {
+        accessedRecordIds.add(action.id);
+        return {
+          id: action.id,
+          title: action.title,
+          description: action.description,
+          girlId: action.girlId,
+          householdId: action.householdId,
+          priority: action.priority,
+          status: action.dueDate < todayStr && !['Completed', 'Cancelled'].includes(action.status) ? 'Overdue' : action.status,
+          assignedStaffName: action.assignedStaffName,
+          dueDate: action.dueDate,
+          completedAt: action.completedAt,
+          completionNotes: action.completionNotes,
+        };
+      });
+      return { count: actions.length, actions };
+    }
+
+    case 'getGirlEducationHistory': {
+      const targetGirlId = String(args.girlId || '').toLowerCase();
+      const girl = db.girls.find((record) => record.id.toLowerCase() === targetGirlId || record.fullName.toLowerCase() === targetGirlId);
+      if (!girl) return { error: `No girl found matching "${args.girlId}".` };
+      accessedRecordIds.add(girl.id);
+      const history = (db.educationHistory || []).filter((record) => record.girlId === girl.id).map((record) => {
+        accessedRecordIds.add(record.id);
+        return record;
+      });
+      const support = (db.academicSupports || []).filter((record) => record.girlId === girl.id).map((record) => {
+        accessedRecordIds.add(record.id);
+        return record;
+      });
+      const exams = (db.examinationRecords || []).filter((record) => record.girlId === girl.id).map((record) => {
+        accessedRecordIds.add(record.id);
+        return record;
+      });
+      return {
+        girl: { id: girl.id, fullName: girl.fullName, currentSchool: girl.school, currentClass: girl.classLevel },
+        educationHistory: history,
+        academicSupport: support,
+        examinations: exams,
+      };
+    }
+
+    case 'getGirlsOnLeave': {
+      const records = (db.girlLeaves || []).filter((record) => record.status === 'Active').map((record) => {
+        accessedRecordIds.add(record.id);
+        const girl = db.girls.find((candidate) => candidate.id === record.girlId);
+        if (girl) accessedRecordIds.add(girl.id);
+        return { girlName: girl?.fullName || 'Unknown', girlId: record.girlId, leaveType: record.leaveType, startDate: record.startDate, expectedReturnDate: record.expectedReturnDate, reason: record.reason };
+      });
+      return { count: records.length, leaveRecords: records };
+    }
+
+    case 'getUpcomingCaseReviews': {
+      const daysAhead = Math.max(1, Math.min(365, Number(args.daysAhead) || 30));
+      const endDate = new Date();
+      endDate.setUTCDate(endDate.getUTCDate() + daysAhead);
+      const endDateStr = endDate.toISOString().slice(0, 10);
+      const records = (db.caseReviews || []).filter((review) => review.nextReviewDate && review.nextReviewDate >= todayStr && review.nextReviewDate <= endDateStr).map((review) => {
+        accessedRecordIds.add(review.id);
+        return { id: review.id, girlId: review.girlId, reviewDate: review.reviewDate, nextReviewDate: review.nextReviewDate, progress: review.progress, actionPlan: review.actionPlan };
+      });
+      return { count: records.length, reviews: records };
     }
 
     case 'getReportData': {

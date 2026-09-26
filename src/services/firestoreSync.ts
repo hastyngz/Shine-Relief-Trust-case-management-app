@@ -11,8 +11,10 @@ import {
   where,
   limit,
   Unsubscribe,
+  Query,
 } from 'firebase/firestore';
-import { firestore } from '../firebase';
+import { deleteObject, ref } from 'firebase/storage';
+import { firestore, storage } from '../firebase';
 import {
   AppDatabase,
   Girl,
@@ -31,6 +33,13 @@ import {
   EarlyYearsRecord,
   Person,
   StaffUser,
+  CaseAction,
+  EducationHistoryRecord,
+  AcademicSupportRecord,
+  ExaminationRecord,
+  AttendanceRecord,
+  GirlLeaveRecord,
+  CaseReview,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -87,13 +96,44 @@ export const COLLECTIONS = {
   IMPORT_AUDITS: 'importAudits',
   EARLY_YEARS: 'earlyYearsRecords',
   PEOPLE: 'people',
+  ATTACHMENTS: 'attachments',
   STAFF_USERS: 'staffUsers',
   CONVERSATIONS: 'staffConversations',
   MESSAGES: 'staffMessages',
   NOTIFICATIONS: 'staffNotifications',
   ANNOUNCEMENTS: 'staffAnnouncements',
   PREFERENCES: 'userNotificationPreferences',
+  CASE_ACTIONS: 'caseActions',
+  CASE_ACTION_AUDIT_LOGS: 'caseActionAuditLogs',
+  EDUCATION_HISTORY: 'educationHistory',
+  ACADEMIC_SUPPORTS: 'academicSupports',
+  EXAMINATION_RECORDS: 'examinationRecords',
+  ATTENDANCE_RECORDS: 'attendanceRecords',
+  GIRL_LEAVES: 'girlLeaves',
+  CASE_REVIEWS: 'caseReviews',
+  SAFEGUARDING_CASES: 'safeguardingCases',
+  SAFEGUARDING_AUDIT_LOGS: 'safeguardingAuditLogs',
 } as const;
+
+export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, collectionName, record.id), sanitizeForFirestore(record), { merge: true });
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error(`Firestore persist ${collectionName} error:`, err);
+    updateSyncStatus('error');
+    throw err;
+  }
+}
+
+export async function appendCaseActionAudit(event: Record<string, any>): Promise<void> {
+  const auditId = `caa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await setDoc(doc(firestore, COLLECTIONS.CASE_ACTION_AUDIT_LOGS, auditId), {
+    ...sanitizeForFirestore(event),
+    id: auditId,
+  });
+}
 
 // Staff User management methods
 export async function persistStaffUserToFirestore(staff: StaffUser): Promise<void> {
@@ -534,7 +574,10 @@ export async function deletePersonFromFirestore(id: string): Promise<void> {
 }
 
 // Bulk commit entire database into Firestore (e.g. for backup restore)
-export async function syncEntireDatabaseToFirestore(db: AppDatabase): Promise<void> {
+export async function syncEntireDatabaseToFirestore(
+  db: AppDatabase,
+  replaceExisting = false
+): Promise<void> {
   try {
     updateSyncStatus('saving');
 
@@ -670,25 +713,148 @@ export async function syncEntireDatabaseToFirestore(db: AppDatabase): Promise<vo
       });
     }
 
+    if (db.attachments) {
+      db.attachments.forEach((attachment) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.ATTACHMENTS, attachment.id),
+          data: sanitizeForFirestore(attachment),
+        });
+      });
+    }
+
+    const phase2Collections: Array<[keyof AppDatabase, string]> = [
+      ['caseActions', COLLECTIONS.CASE_ACTIONS],
+      ['educationHistory', COLLECTIONS.EDUCATION_HISTORY],
+      ['academicSupports', COLLECTIONS.ACADEMIC_SUPPORTS],
+      ['examinationRecords', COLLECTIONS.EXAMINATION_RECORDS],
+      ['attendanceRecords', COLLECTIONS.ATTENDANCE_RECORDS],
+      ['girlLeaves', COLLECTIONS.GIRL_LEAVES],
+      ['caseReviews', COLLECTIONS.CASE_REVIEWS],
+    ];
+    for (const [field, collectionName] of phase2Collections) {
+      const records = db[field] as Array<{ id: string }> | undefined;
+      records?.forEach((record) => operations.push({
+        ref: doc(firestore, collectionName, record.id),
+        data: sanitizeForFirestore(record),
+      }));
+    }
+
     await commitInBatches(operations);
+
+    if (replaceExisting) {
+      const collectionNames = [
+        COLLECTIONS.GIRLS,
+        COLLECTIONS.HOUSEHOLDS,
+        COLLECTIONS.EDU_FOLLOW_UPS,
+        COLLECTIONS.HEALTH_FOLLOW_UPS,
+        COLLECTIONS.FAMILY_FOLLOW_UPS,
+        COLLECTIONS.RENT_PAYMENTS,
+        COLLECTIONS.EXPENSES,
+        COLLECTIONS.ACTIVITIES,
+        COLLECTIONS.BUDGETS,
+        COLLECTIONS.WORKPLANS,
+        COLLECTIONS.SCHEDULES,
+        COLLECTIONS.HISTORICAL_RECORDS,
+        COLLECTIONS.IMPORT_AUDITS,
+        COLLECTIONS.EARLY_YEARS,
+        COLLECTIONS.PEOPLE,
+        COLLECTIONS.ATTACHMENTS,
+        COLLECTIONS.CASE_ACTIONS,
+        COLLECTIONS.EDUCATION_HISTORY,
+        COLLECTIONS.ACADEMIC_SUPPORTS,
+        COLLECTIONS.EXAMINATION_RECORDS,
+        COLLECTIONS.ATTENDANCE_RECORDS,
+        COLLECTIONS.GIRL_LEAVES,
+        COLLECTIONS.CASE_REVIEWS,
+      ];
+      const restoredIds = new Map<string, Set<string>>();
+      operations.forEach(({ ref }) => {
+        const ids = restoredIds.get(ref.parent.id) || new Set<string>();
+        ids.add(ref.id);
+        restoredIds.set(ref.parent.id, ids);
+      });
+
+      for (const colName of collectionNames) {
+        const snapshot = await getDocs(collection(firestore, colName));
+        const staleRecords = snapshot.docs.filter(
+          (record) => !restoredIds.get(colName)?.has(record.id)
+        );
+        if (colName === COLLECTIONS.ATTACHMENTS) {
+          for (const record of staleRecords) {
+            const storagePath = record.data().storagePath;
+            if (typeof storagePath === 'string' && storagePath) {
+              try {
+                await deleteObject(ref(storage, storagePath));
+              } catch (err: any) {
+                if (err?.code !== 'storage/object-not-found') throw err;
+              }
+            }
+          }
+        }
+        const staleRefs = staleRecords.map((record) => record.ref);
+        for (let i = 0; i < staleRefs.length; i += 400) {
+          const batch = writeBatch(firestore);
+          staleRefs.slice(i, i + 400).forEach((recordRef) => batch.delete(recordRef));
+          await batch.commit();
+        }
+      }
+    }
+
     updateSyncStatus('synced');
   } catch (err) {
     console.error('syncEntireDatabaseToFirestore error:', err);
     updateSyncStatus('error');
+    throw err;
   }
 }
 
-// Clear all documents from Firestore collections
+// Clear operational records without deleting staff access or message history.
 export async function clearAllFirestoreCollections(): Promise<void> {
   try {
     updateSyncStatus('saving');
-    const collectionKeys = Object.values(COLLECTIONS);
+    const attachmentSnapshot = await getDocs(collection(firestore, COLLECTIONS.ATTACHMENTS));
+    for (const attachmentDoc of attachmentSnapshot.docs) {
+      const storagePath = attachmentDoc.data().storagePath;
+      if (typeof storagePath === 'string' && storagePath) {
+        try {
+          await deleteObject(ref(storage, storagePath));
+        } catch (err: any) {
+          if (err?.code !== 'storage/object-not-found') throw err;
+        }
+      }
+    }
 
-    for (const colName of collectionKeys) {
+    const collectionNames = [
+      COLLECTIONS.GIRLS,
+      COLLECTIONS.HOUSEHOLDS,
+      COLLECTIONS.EDU_FOLLOW_UPS,
+      COLLECTIONS.HEALTH_FOLLOW_UPS,
+      COLLECTIONS.FAMILY_FOLLOW_UPS,
+      COLLECTIONS.RENT_PAYMENTS,
+      COLLECTIONS.EXPENSES,
+      COLLECTIONS.ACTIVITIES,
+      COLLECTIONS.BUDGETS,
+      COLLECTIONS.WORKPLANS,
+      COLLECTIONS.SCHEDULES,
+      COLLECTIONS.HISTORICAL_RECORDS,
+      COLLECTIONS.IMPORT_AUDITS,
+      COLLECTIONS.EARLY_YEARS,
+      COLLECTIONS.PEOPLE,
+      COLLECTIONS.ATTACHMENTS,
+      COLLECTIONS.CASE_ACTIONS,
+      COLLECTIONS.EDUCATION_HISTORY,
+      COLLECTIONS.ACADEMIC_SUPPORTS,
+      COLLECTIONS.EXAMINATION_RECORDS,
+      COLLECTIONS.ATTENDANCE_RECORDS,
+      COLLECTIONS.GIRL_LEAVES,
+      COLLECTIONS.CASE_REVIEWS,
+    ];
+
+    for (const colName of collectionNames) {
       const snap = await getDocs(collection(firestore, colName));
-      if (!snap.empty) {
+      for (let i = 0; i < snap.docs.length; i += 400) {
         const batch = writeBatch(firestore);
-        snap.docs.forEach((d) => batch.delete(d.ref));
+        snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
         await batch.commit();
       }
     }
@@ -696,6 +862,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
   } catch (err) {
     console.error('clearAllFirestoreCollections error:', err);
     updateSyncStatus('error');
+    throw err;
   }
 }
 
@@ -707,7 +874,8 @@ let activeUnsubscribers: Unsubscribe[] = [];
  * Dispatches 'shine_db_updated' whenever Firestore records are loaded or changed.
  */
 export function initFirestoreListeners(
-  onDatabaseSynced: (updatedDb: AppDatabase) => void
+  onDatabaseSynced: (updatedDb: AppDatabase) => void,
+  options: { uid?: string; canViewTeamTasks?: boolean; canReadHealthRecords?: boolean; canReadCaseReviews?: boolean } = {}
 ): () => void {
   // Teardown previous listeners if any
   activeUnsubscribers.forEach((unsub) => unsub());
@@ -732,10 +900,17 @@ export function initFirestoreListeners(
     importAudits: [],
     earlyYearsRecords: [],
     people: [],
+    caseActions: [],
+    educationHistory: [],
+    academicSupports: [],
+    examinationRecords: [],
+    attendanceRecords: [],
+    girlLeaves: [],
+    caseReviews: [],
   };
 
-  let initialLoadsCount = 0;
-  const TOTAL_COLLECTIONS = 15;
+  const initialLoadedCollections = new Set<string>();
+  const TOTAL_COLLECTIONS = 22;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -754,6 +929,13 @@ export function initFirestoreListeners(
       importAudits: [...(liveState.importAudits || [])],
       earlyYearsRecords: [...(liveState.earlyYearsRecords || [])],
       people: [...(liveState.people || [])],
+      caseActions: [...(liveState.caseActions || [])],
+      educationHistory: [...(liveState.educationHistory || [])],
+      academicSupports: [...(liveState.academicSupports || [])],
+      examinationRecords: [...(liveState.examinationRecords || [])],
+      attendanceRecords: [...(liveState.attendanceRecords || [])],
+      girlLeaves: [...(liveState.girlLeaves || [])],
+      caseReviews: [...(liveState.caseReviews || [])],
     });
   };
 
@@ -761,23 +943,35 @@ export function initFirestoreListeners(
     colName: string,
     stateField: keyof AppDatabase
   ) => {
+    if (colName === COLLECTIONS.HEALTH_FOLLOW_UPS && options.canReadHealthRecords === false) {
+      initialLoadedCollections.add(colName);
+      return;
+    }
+    if (colName === COLLECTIONS.CASE_REVIEWS && options.canReadCaseReviews === false) {
+      initialLoadedCollections.add(colName);
+      return;
+    }
     const colRef = collection(firestore, colName);
+    const source: Query = colName === COLLECTIONS.CASE_ACTIONS && options.uid && !options.canViewTeamTasks
+      ? query(colRef, where('assignedStaffId', '==', options.uid))
+      : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
+        ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
+        : colRef;
     const unsub = onSnapshot(
-      colRef,
+      source,
       (snapshot) => {
         const records = snapshot.docs.map((d) => d.data() as T);
         (liveState[stateField] as unknown as T[]) = records;
 
-        if (initialLoadsCount < TOTAL_COLLECTIONS) {
-          initialLoadsCount += 1;
-          if (initialLoadsCount === TOTAL_COLLECTIONS) {
-            updateSyncStatus('synced');
-          }
-        } else {
+        const firstSnapshot = !initialLoadedCollections.has(colName);
+        initialLoadedCollections.add(colName);
+        if (initialLoadedCollections.size === TOTAL_COLLECTIONS) {
           updateSyncStatus('synced');
+          notifyChange();
+        } else if (!firstSnapshot) {
+          updateSyncStatus('synced');
+          notifyChange();
         }
-
-        notifyChange();
       },
       (error) => {
         console.error(`Firestore snapshot error for ${colName}:`, error);
@@ -802,6 +996,13 @@ export function initFirestoreListeners(
   handleCollection<ImportAuditRecord>(COLLECTIONS.IMPORT_AUDITS, 'importAudits');
   handleCollection<EarlyYearsRecord>(COLLECTIONS.EARLY_YEARS, 'earlyYearsRecords');
   handleCollection<Person>(COLLECTIONS.PEOPLE, 'people');
+  handleCollection<CaseAction>(COLLECTIONS.CASE_ACTIONS, 'caseActions');
+  handleCollection<EducationHistoryRecord>(COLLECTIONS.EDUCATION_HISTORY, 'educationHistory');
+  handleCollection<AcademicSupportRecord>(COLLECTIONS.ACADEMIC_SUPPORTS, 'academicSupports');
+  handleCollection<ExaminationRecord>(COLLECTIONS.EXAMINATION_RECORDS, 'examinationRecords');
+  handleCollection<AttendanceRecord>(COLLECTIONS.ATTENDANCE_RECORDS, 'attendanceRecords');
+  handleCollection<GirlLeaveRecord>(COLLECTIONS.GIRL_LEAVES, 'girlLeaves');
+  handleCollection<CaseReview>(COLLECTIONS.CASE_REVIEWS, 'caseReviews');
 
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());
