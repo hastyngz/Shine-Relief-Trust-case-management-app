@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarClock, CheckCircle2, CircleDot, Plus, RefreshCw } from 'lucide-react';
 import { AppDatabase, CaseAction, CaseActionPriority, CaseActionStatus, CaseActionSourceType } from '../types';
 import { addCaseAction, updateCaseAction } from '../utils/storage';
+import { persistPhase2Record } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
 
 interface CaseActionsViewProps {
@@ -114,6 +115,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     }, actor);
 
     try {
+      await persistPhase2Record('caseActions', action);
       const token = await currentUser!.getIdToken();
       await fetch('/api/case-actions/notify', {
         method: 'POST',
@@ -146,8 +148,9 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   const reassign = async (action: CaseAction, nextStaffId: string) => {
     const assignee = allStaff.find((staff) => staff.uid === nextStaffId);
     if (!assignee || nextStaffId === action.assignedStaffId) return;
-    updateCaseAction(action.id, { assignedStaffId: assignee.uid, assignedStaffName: assignee.fullName }, actor);
+    const updatedAction = updateCaseAction(action.id, { assignedStaffId: assignee.uid, assignedStaffName: assignee.fullName }, actor);
     try {
+      if (updatedAction) await persistPhase2Record('caseActions', updatedAction);
       const token = await currentUser!.getIdToken();
       await fetch('/api/case-actions/notify', {
         method: 'POST',

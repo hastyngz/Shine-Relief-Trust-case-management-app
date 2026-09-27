@@ -8,7 +8,9 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:rules": "firebase emulators:exec --only firestore \"tsx scripts/firestore-rules.test.ts\"",
+    "test:phase2": "tsx scripts/phase2-import-ai.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -36,7 +38,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.0",
     "firebase-tools": "^15.31.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",

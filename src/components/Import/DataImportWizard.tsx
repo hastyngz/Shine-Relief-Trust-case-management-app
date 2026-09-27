@@ -147,15 +147,20 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           throw new Error('Spreadsheet contains zero readable data rows or table sheets.');
         }
 
-        const chosenEntity =
-          analysis.suggestedEntity === 'educationalFollowUp' ? 'educationalFollowUp' : 'girl';
+        const supportedEntities = ['girl', 'person', 'educationalFollowUp', 'healthFollowUp'] as const;
+        if (!(supportedEntities as readonly string[]).includes(analysis.suggestedEntity)) {
+          throw new Error(`The spreadsheet appears to contain ${analysis.suggestedEntity} records, which are not supported by this import review yet. No data was imported.`);
+        }
+        const chosenEntity = analysis.suggestedEntity as typeof supportedEntities[number];
         const previews = analyzeImportRows(analysis.rawRows, chosenEntity, db, file.name, activeStaff);
         setPreviewItems(previews);
         setStep('review');
       }
     } catch (err: any) {
       console.error('File parsing error:', err);
-      setParseError('Unable to extract information from this Word document. No data has been imported.');
+      setParseError(ext === 'docx'
+        ? 'Unable to extract information from this Word document. No data has been imported.'
+        : 'Unable to analyze this spreadsheet. No data has been imported.');
       setDiagnosticReason(err.message || 'The parser encountered an unreadable document structure.');
     } finally {
       setIsParsing(false);

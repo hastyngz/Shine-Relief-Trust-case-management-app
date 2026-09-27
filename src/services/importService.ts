@@ -3,6 +3,7 @@ import {
   AppDatabase,
   Girl,
   Household,
+  HealthFollowUp,
   HistoricalCaseRecord,
   HouseholdActivity,
   WorkplanItem,
@@ -375,6 +376,54 @@ export function analyzeImportRows(
         warningOrConflict: !matchedGirl
           ? `Beneficiary "${girlNameRaw || girlIdRaw}" not found in current caseload. Verify mapping before saving.`
           : undefined,
+      });
+    } else if (targetEntity === 'healthFollowUp') {
+      const girlIdRaw = findVal('girlid', 'sgid', 'beneficiaryid');
+      const girlNameRaw = findVal('girlname', 'fullname', 'beneficiary', 'student');
+      const date = findVal('date', 'visitdate', 'medicaldate', 'reportdate');
+      const matchedGirl =
+        (girlIdRaw ? girlById.get(girlIdRaw.toLowerCase()) : undefined) ||
+        (girlNameRaw ? girlByName.get(girlNameRaw.toLowerCase()) : undefined);
+      const actionRequired = findVal('furtherActionRequired', 'followUpRequired', 'followUpNeeded').toLowerCase();
+      const isDateUnknown = !date || isNaN(new Date(date).getTime());
+
+      previewItems.push({
+        tempId,
+        resultType: matchedGirl ? 'NEW_RECORD' : 'IMPORT_ERROR',
+        targetEntity: 'healthFollowUp',
+        classification: 'HEALTH_MEDICAL_FOLLOW_UP',
+        classificationLabel: 'Health / Medical Follow-up',
+        matchedId: matchedGirl?.id,
+        matchedName: matchedGirl?.fullName || girlNameRaw || 'Unmatched Girl',
+        recordDate: date || undefined,
+        isDateUnknown,
+        summary: `Health follow-up: ${matchedGirl?.fullName || girlNameRaw || 'Unmatched Girl'} - ${findVal('reasonForVisit', 'reason', 'visitreason', 'healthissue', 'complaint') || 'Medical information requires review'}`,
+        originalSnippet: JSON.stringify(row),
+        actionProposed: 'Add health follow-up record',
+        extractedData: {
+          girlId: matchedGirl?.id || '',
+          date,
+          reasonForVisit: findVal('reasonForVisit', 'reason', 'visitreason'),
+          healthIssueComplaint: findVal('healthIssueComplaint', 'complaint', 'healthissue', 'issue'),
+          medicalFacility: findVal('medicalFacility', 'facility', 'clinic', 'hospital'),
+          healthProfessional: findVal('healthProfessional', 'professional', 'clinician', 'provider') || undefined,
+          treatmentProvided: findVal('treatmentProvided', 'treatment', 'careprovided'),
+          medication: findVal('medication', 'medicines', 'prescription') || undefined,
+          referral: findVal('referral', 'referredto') || undefined,
+          notes: findVal('notes', 'comments', 'remarks') || undefined,
+          outcome: findVal('outcome', 'result'),
+          furtherActionRequired: ['yes', 'true', '1'].includes(actionRequired),
+          recommendations: findVal('recommendations', 'nextsteps', 'followupaction'),
+          nextFollowUpDate: findVal('nextFollowUpDate', 'followUpDate', 'nextVisitDate') || undefined,
+          recordedBy: currentUser.fullName,
+        },
+        isHistorical: false,
+        selected: Boolean(matchedGirl),
+        warningOrConflict: !matchedGirl
+          ? `Girl "${girlNameRaw || girlIdRaw || 'not identified'}" could not be matched. This row cannot be imported until it is matched to an existing girl.`
+          : isDateUnknown
+            ? 'The source does not contain a reliable visit date. Review before confirming.'
+            : undefined,
       });
     } else if (targetEntity === 'person') {
       const fullName = findVal('name', 'fullname', 'contactname', 'person', 'stakeholder', 'staffname', 'teacher', 'pastor');
@@ -826,6 +875,20 @@ export async function commitImportBatch(
       };
       updatedDb.educationalFollowUps.unshift(newEdu as any);
       await persistEduFollowUpToFirestore(newEdu as any);
+    }
+    // 10. Health Follow-up (only after staff review and confirmation)
+    else if (item.targetEntity === 'healthFollowUp' && item.matchedId) {
+      const newHealth: HealthFollowUp = {
+        ...item.extractedData,
+        girlId: item.matchedId,
+        id: generateFollowUpId('HLT'),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: auditRecord.importedByName,
+        updatedBy: auditRecord.importedByName,
+      } as HealthFollowUp;
+      updatedDb.healthFollowUps.unshift(newHealth);
+      await persistHealthFollowUpToFirestore(newHealth);
     }
 
     processed++;

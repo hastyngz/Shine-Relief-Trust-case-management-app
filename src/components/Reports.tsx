@@ -28,6 +28,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
+import { ManagementReportsPanel } from './Reports/ManagementReportsPanel';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ReportsProps {
@@ -44,10 +45,12 @@ type ReportTab =
   | 'rent'
   | 'expenses'
   | 'caseManagement'
+  | 'management'
   | 'exports';
 
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse }) => {
-  const { canViewHealthRecords, canViewCaseReviews } = useAuth();
+  const { canViewHealthRecords, canViewCaseReviews, isAdmin, role, allStaff } = useAuth();
+  const canViewManagementReports = isAdmin || role === 'Manager';
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
 
@@ -203,6 +206,14 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
             <Calendar className="w-4 h-4" />
             <span>Case Management</span>
           </button>
+
+          {canViewManagementReports && <button
+            onClick={() => setActiveTab('management')}
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${activeTab === 'management' ? 'bg-slate-800 text-white' : 'text-stone-700 hover:bg-stone-200'}`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Management Reports</span>
+          </button>}
 
           <button
             onClick={() => setActiveTab('rent')}
@@ -616,6 +627,10 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                 {(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
               </div>
             </div>
+          )}
+
+          {activeTab === 'management' && canViewManagementReports && (
+            <ManagementReportsPanel db={db} staff={allStaff} />
           )}
 
           {/* TAB 7: CSV EXPORTS CENTRE */}

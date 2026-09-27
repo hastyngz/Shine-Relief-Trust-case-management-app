@@ -121,6 +121,11 @@ service cloud.firestore {
       // and CANNOT modify role, status, or promote themselves.
       allow update: if isSignedIn() && (
         isAdmin() ||
+        (isManagerOrAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'employeeCategory', 'position', 'contractStartDate', 'contractEndDate',
+          'contractType', 'contractDuration', 'contractStatus', 'renewalInformation',
+          'employmentStatus', 'originalContractStartDate', 'employmentPeriods', 'updatedAt'
+        ])) ||
         (request.auth.uid == userId &&
          request.resource.data.role == resource.data.role &&
          request.resource.data.status == resource.data.status &&
@@ -222,7 +227,7 @@ service cloud.firestore {
         request.resource.data.assignedStaffId == request.auth.uid
       );
       allow update: if isManagerOrAdmin() || (
-        isStaffActive() && resource.data.assignedStaffId == request.auth.uid &&
+        isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
         request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
@@ -276,6 +281,23 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Salary and gratuity inputs are restricted to Administrators and Managers.
+    // Salary history is append-only so historical remuneration cannot be silently overwritten.
+    match /employeeSalaryHistory/{recordId} {
+      allow read: if isManagerOrAdmin();
+      allow create: if isManagerOrAdmin() &&
+        request.resource.data.employeeId != null &&
+        request.resource.data.salaryAmount > 0 &&
+        request.resource.data.auditMetadata.createdByUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /employeeAuditLogs/{eventId} {
+      allow read: if isManagerOrAdmin();
+      allow create: if isManagerOrAdmin() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
     match /safeguardingCases/{caseId} {
       allow read, write: if false;
@@ -295,6 +317,24 @@ service cloud.firestore {
     match /budgets/{id} {
       allow read: if isStaffActive();
       allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /annualBudgets/{id} {
+      allow read: if isManagerOrAdmin() || isStaffActive();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /payrollRecords/{id} {
+      allow read: if isAdmin() || isManagerOrAdmin() || (
+        isStaffActive() && resource.data.employeeId == request.auth.uid
+      );
+      allow create: if isManagerOrAdmin() &&
+        request.resource.data.employeeId != null &&
+        request.resource.data.expectedAmount >= 0 &&
+        request.resource.data.createdByUid == request.auth.uid;
+      allow update: if isManagerOrAdmin() && request.resource.data.updatedByUid == request.auth.uid;
       allow delete: if isAdmin();
     }
 

@@ -142,7 +142,7 @@ async function startServer() {
   app.post('/api/safeguarding/cases', async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
-      if (staff.role !== 'Administrator' && !staff.safeguardingPermissions.canCreate) {
+      if (staff.role === 'View Only' || (staff.role !== 'Administrator' && !staff.safeguardingPermissions.canCreate)) {
         return res.status(403).json({ error: 'You are not authorized to create safeguarding records.' });
       }
       const input = req.body || {};
@@ -204,9 +204,9 @@ async function startServer() {
       const isAdmin = staff.role === 'Administrator';
       const updates = req.body || {};
       const closing = updates.status === 'Closed';
-      if (!isAdmin && (closing
+      if (staff.role === 'View Only' || (!isAdmin && (closing
         ? !staff.safeguardingPermissions.canClose
-        : !staff.safeguardingPermissions.canEdit && !assigned)) {
+        : !staff.safeguardingPermissions.canEdit && !assigned))) {
         return res.status(403).json({ error: 'You are not authorized to update this safeguarding record.' });
       }
       const allowedFields = [
@@ -256,7 +256,7 @@ async function startServer() {
       const caseSnapshot = await caseRef.get();
       if (!caseSnapshot.exists) return res.status(404).json({ error: 'Safeguarding record not found.' });
       const caseRecord: any = caseSnapshot.data();
-      if (!canAccessSafeguardingRecord(staff, caseRecord) || (
+      if (staff.role === 'View Only' || !canAccessSafeguardingRecord(staff, caseRecord) || (
         staff.role !== 'Administrator' && !staff.safeguardingPermissions.canEdit &&
         caseRecord.responsibleStaffId !== staff.uid
       )) return res.status(403).json({ error: 'You are not authorized to upload safeguarding documents.' });

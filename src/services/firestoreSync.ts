@@ -33,6 +33,9 @@ import {
   EarlyYearsRecord,
   Person,
   StaffUser,
+  SalaryHistoryRecord,
+  AnnualBudgetPlan,
+  PayrollRecord,
   CaseAction,
   EducationHistoryRecord,
   AcademicSupportRecord,
@@ -90,6 +93,8 @@ export const COLLECTIONS = {
   EXPENSES: 'expenses',
   ACTIVITIES: 'householdActivities',
   BUDGETS: 'budgets',
+  ANNUAL_BUDGETS: 'annualBudgets',
+  PAYROLL_RECORDS: 'payrollRecords',
   WORKPLANS: 'workplans',
   SCHEDULES: 'schedules',
   HISTORICAL_RECORDS: 'historicalCaseRecords',
@@ -113,6 +118,8 @@ export const COLLECTIONS = {
   CASE_REVIEWS: 'caseReviews',
   SAFEGUARDING_CASES: 'safeguardingCases',
   SAFEGUARDING_AUDIT_LOGS: 'safeguardingAuditLogs',
+  EMPLOYEE_SALARY_HISTORY: 'employeeSalaryHistory',
+  EMPLOYEE_AUDIT_LOGS: 'employeeAuditLogs',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -144,6 +151,47 @@ export async function persistStaffUserToFirestore(staff: StaffUser): Promise<voi
     console.error('Firestore persistStaffUser error:', err);
     throw err;
   }
+}
+
+export async function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHistoryRecord[]> {
+  const salaryQuery = query(
+    collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
+    where('employeeId', '==', employeeId)
+  );
+  const snapshot = await getDocs(salaryQuery);
+  return snapshot.docs
+    .map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
+    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+}
+
+export async function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
+  const uniqueIds = [...new Set(employeeIds.filter(Boolean))];
+  const records: SalaryHistoryRecord[] = [];
+  for (let index = 0; index < uniqueIds.length; index += 30) {
+    const batch = uniqueIds.slice(index, index + 30);
+    const salaryQuery = query(
+      collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
+      where('employeeId', 'in', batch)
+    );
+    const snapshot = await getDocs(salaryQuery);
+    records.push(...snapshot.docs.map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord));
+  }
+  return records;
+}
+
+export async function persistEmployeeSalaryHistoryToFirestore(record: SalaryHistoryRecord): Promise<void> {
+  await setDoc(
+    doc(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY, record.id),
+    sanitizeForFirestore(record)
+  );
+}
+
+export async function appendEmployeeAuditLog(event: Record<string, any>): Promise<void> {
+  const auditId = `employee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await setDoc(doc(firestore, COLLECTIONS.EMPLOYEE_AUDIT_LOGS, auditId), {
+    ...sanitizeForFirestore(event),
+    id: auditId,
+  });
 }
 
 export async function getStaffUserDoc(uid: string): Promise<StaffUser | null> {
@@ -447,6 +495,50 @@ export async function deleteBudgetItemFromFirestore(id: string): Promise<void> {
   }
 }
 
+export async function persistAnnualBudgetPlanToFirestore(item: AnnualBudgetPlan): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.ANNUAL_BUDGETS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistAnnualBudgetPlan error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteAnnualBudgetPlanFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.ANNUAL_BUDGETS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteAnnualBudgetPlan error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistPayrollRecordToFirestore(item: PayrollRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.PAYROLL_RECORDS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistPayrollRecord error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deletePayrollRecordFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.PAYROLL_RECORDS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deletePayrollRecord error:', err);
+    updateSyncStatus('error');
+  }
+}
+
 // Workplans persistence
 export async function persistWorkplanItemToFirestore(item: WorkplanItem): Promise<void> {
   try {
@@ -659,6 +751,24 @@ export async function syncEntireDatabaseToFirestore(
       });
     }
 
+    if (db.annualBudgets) {
+      db.annualBudgets.forEach((plan) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.ANNUAL_BUDGETS, plan.id),
+          data: sanitizeForFirestore(plan),
+        });
+      });
+    }
+
+    if (db.payrollRecords) {
+      db.payrollRecords.forEach((record) => {
+        operations.push({
+          ref: doc(firestore, COLLECTIONS.PAYROLL_RECORDS, record.id),
+          data: sanitizeForFirestore(record),
+        });
+      });
+    }
+
     if (db.workplans) {
       db.workplans.forEach((w) => {
         operations.push({
@@ -752,6 +862,8 @@ export async function syncEntireDatabaseToFirestore(
         COLLECTIONS.EXPENSES,
         COLLECTIONS.ACTIVITIES,
         COLLECTIONS.BUDGETS,
+        COLLECTIONS.ANNUAL_BUDGETS,
+        COLLECTIONS.PAYROLL_RECORDS,
         COLLECTIONS.WORKPLANS,
         COLLECTIONS.SCHEDULES,
         COLLECTIONS.HISTORICAL_RECORDS,
@@ -834,6 +946,8 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       COLLECTIONS.EXPENSES,
       COLLECTIONS.ACTIVITIES,
       COLLECTIONS.BUDGETS,
+      COLLECTIONS.ANNUAL_BUDGETS,
+      COLLECTIONS.PAYROLL_RECORDS,
       COLLECTIONS.WORKPLANS,
       COLLECTIONS.SCHEDULES,
       COLLECTIONS.HISTORICAL_RECORDS,
@@ -894,6 +1008,8 @@ export function initFirestoreListeners(
     expenses: [],
     householdActivities: [],
     budgets: [],
+    annualBudgets: [],
+    payrollRecords: [],
     workplans: [],
     schedules: [],
     historicalRecords: [],
@@ -910,7 +1026,7 @@ export function initFirestoreListeners(
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 22;
+  const TOTAL_COLLECTIONS = 24;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -923,6 +1039,8 @@ export function initFirestoreListeners(
       expenses: [...liveState.expenses],
       householdActivities: [...liveState.householdActivities],
       budgets: [...(liveState.budgets || [])],
+      annualBudgets: [...(liveState.annualBudgets || [])],
+      payrollRecords: [...(liveState.payrollRecords || [])],
       workplans: [...(liveState.workplans || [])],
       schedules: [...(liveState.schedules || [])],
       historicalRecords: [...(liveState.historicalRecords || [])],
@@ -990,6 +1108,8 @@ export function initFirestoreListeners(
   handleCollection<HouseholdExpense>(COLLECTIONS.EXPENSES, 'expenses');
   handleCollection<HouseholdActivity>(COLLECTIONS.ACTIVITIES, 'householdActivities');
   handleCollection<BudgetItem>(COLLECTIONS.BUDGETS, 'budgets');
+  handleCollection<AnnualBudgetPlan>(COLLECTIONS.ANNUAL_BUDGETS, 'annualBudgets');
+  handleCollection<PayrollRecord>(COLLECTIONS.PAYROLL_RECORDS, 'payrollRecords');
   handleCollection<WorkplanItem>(COLLECTIONS.WORKPLANS, 'workplans');
   handleCollection<ScheduleItem>(COLLECTIONS.SCHEDULES, 'schedules');
   handleCollection<HistoricalCaseRecord>(COLLECTIONS.HISTORICAL_RECORDS, 'historicalRecords');

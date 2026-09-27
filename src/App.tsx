@@ -49,6 +49,8 @@ import { StaffManagement } from './components/StaffManagement';
 import { Header } from './components/Header';
 import { Navigation, NavTab } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
+import { ManagementDashboard } from './components/ManagementDashboard';
+import { canAccessManagementDashboard } from './services/managementAnalytics';
 import { GirlsList } from './components/GirlsList';
 import { HouseholdsList } from './components/HouseholdsList';
 import { ActivitiesList } from './components/ActivitiesList';
@@ -58,6 +60,7 @@ import { HouseholdProfile } from './components/HouseholdProfile';
 import { AIAssistantView } from './components/AIAssistant/AIAssistantView';
 import { MessagingView } from './components/Messaging/MessagingView';
 import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkplansView';
+import { PayrollDashboard } from './components/PayrollDashboard';
 import { CaseManagementView } from './components/CaseManagementView';
 import { DataImportWizard } from './components/Import/DataImportWizard';
 import {
@@ -92,7 +95,9 @@ type AppView =
   | 'messages'
   | 'planning'
   | 'import'
+  | 'management'
   | 'reports'
+  | 'payroll'
   | 'staff'
   | 'ai-assistant'
   | 'case-management'
@@ -131,8 +136,10 @@ function parseHash(): {
   if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
   if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
   if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
+  if (hash === 'management' || hash === 'executive-overview') return { view: 'management', activeTab: 'management' };
   if (hash === 'import' || hash === 'ingestion') return { view: 'import', activeTab: 'import' };
   if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
+  if (hash === 'payroll') return { view: 'payroll', activeTab: 'payroll' };
   if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
   if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
   if (hash === 'register-girl') return { view: 'form-girl', activeTab: 'girls' };
@@ -336,11 +343,17 @@ function AppContent() {
       case 'planning':
         targetHash = '#/planning';
         break;
+      case 'management':
+        targetHash = '#/management';
+        break;
       case 'import':
         targetHash = '#/import';
         break;
       case 'reports':
         targetHash = '#/reports';
+        break;
+      case 'payroll':
+        targetHash = '#/payroll';
         break;
       case 'staff':
         targetHash = '#/staff';
@@ -1133,6 +1146,10 @@ function AppContent() {
           />
         )}
 
+        {view === 'payroll' && (
+          <PayrollDashboard db={db} onRefresh={reloadData} />
+        )}
+
         {/* VIEW: STAFF MANAGEMENT (ADMINISTRATORS ONLY) */}
         {view === 'staff' && (
           <StaffManagement />
@@ -1179,6 +1196,15 @@ function AppContent() {
         {view === 'planning' && (
           <BudgetsAndWorkplansView db={db} onRefresh={reloadData} />
         )}
+
+        {view === 'management' && (canAccessManagementDashboard(isAdmin, role) ? (
+          <ManagementDashboard db={db} staff={allStaff} onNavigateReports={() => navigateTo('reports', 'reports')} />
+        ) : (
+          <div className="rounded-xl border border-rose-200 bg-white p-8 text-center">
+            <h1 className="text-lg font-bold text-stone-900">Management access restricted</h1>
+            <p className="mt-2 text-sm text-stone-600">Only Administrators and Managers can view this dashboard.</p>
+          </div>
+        ))}
 
         {/* VIEW: DOCUMENT INGESTION WIZARD */}
         {view === 'import' && (

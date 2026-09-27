@@ -554,9 +554,39 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
     );
   }
 
+  if (config.includeSections.photoGallery && data.photos.length > 0) {
+    sections.push(
+      createSectionHeading('9. Relevant Photo / Attachment References'),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              tableCell('File', true, { width: 24 }),
+              tableCell('Record type', true, { width: 20 }),
+              tableCell('Record ID', true, { width: 18 }),
+              tableCell('Category / date', true, { width: 20 }),
+              tableCell('Caption', true, { width: 18 }),
+            ],
+          }),
+          ...data.photos.map((photo) => new TableRow({
+            children: [
+              tableCell(photo.fileName, false),
+              tableCell(photo.targetType, false),
+              tableCell(photo.targetId, false),
+              tableCell(`${photo.category} · ${photo.date}`, false),
+              tableCell(photo.caption || '', false),
+            ],
+          })),
+        ],
+      }),
+      new Paragraph({ spacing: { after: 200 }, children: [] })
+    );
+  }
+
   // Challenges, Recommendations, and Conclusion
   sections.push(
-    createSectionHeading('9. Challenges, Recommendations & Action Items'),
+    createSectionHeading('10. Challenges, Recommendations & Action Items'),
     new Paragraph({
       spacing: { after: 160 },
       children: [

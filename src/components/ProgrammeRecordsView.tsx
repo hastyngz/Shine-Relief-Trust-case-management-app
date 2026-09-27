@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppDatabase, AttendanceStatus, GirlLeaveStatus, LeaveType } from '../types';
-import { addAttendanceRecord, addGirlLeaveRecord, updateGirlLeaveRecord } from '../utils/storage';
+import { addAttendanceRecord, addGirlLeaveRecord, updateAttendanceRecord, updateGirlLeaveRecord } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { CalendarCheck2, Plane, Plus, RotateCcw } from 'lucide-react';
 
@@ -49,7 +49,11 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
     setLocation(activity.location || '');
     setActivityDate(activity.date);
     setSelectedGirlIds(activity.participatingGirlIds || []);
-    setAttendance({});
+    setAttendance(Object.fromEntries(
+      attendanceRecords
+        .filter((record) => record.activityId === activityId)
+        .map((record) => [record.girlId, record.status])
+    ));
   };
 
   const saveAttendance = (event: React.FormEvent) => {
@@ -65,17 +69,22 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
       return;
     }
     const activityId = selectedActivityId || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    selectedGirlIds.forEach((girlId) => addAttendanceRecord({
-      activityId,
-      activityName: activityName.trim(),
-      activityType,
-      location: location.trim() || undefined,
-      date: activityDate,
-      girlId,
-      status: attendance[girlId] as AttendanceStatus,
-      notes: attendanceNotes.trim() || undefined,
-      recordedBy: auditActor,
-    }, auditActor));
+    selectedGirlIds.forEach((girlId) => {
+      const data = {
+        activityId,
+        activityName: activityName.trim(),
+        activityType,
+        location: location.trim() || undefined,
+        date: activityDate,
+        girlId,
+        status: attendance[girlId] as AttendanceStatus,
+        notes: attendanceNotes.trim() || undefined,
+        recordedBy: auditActor,
+      };
+      const existing = attendanceRecords.find((record) => record.activityId === activityId && record.girlId === girlId);
+      if (existing) updateAttendanceRecord(existing.id, data, auditActor);
+      else addAttendanceRecord(data, auditActor);
+    });
     setSelectedActivityId('');
     setActivityName('');
     setActivityType('Training');

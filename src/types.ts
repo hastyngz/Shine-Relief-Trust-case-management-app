@@ -39,6 +39,41 @@ export type StaffRole = 'Administrator' | 'Manager' | 'Staff' | 'View Only';
 
 export type StaffStatus = 'Active' | 'Suspended';
 
+export type EmployeeCategory = 'Ground Worker/Gardener' | 'Other Staff';
+export type ContractStatus = 'Active' | 'Expiring Soon' | 'Expired' | 'Renewed' | 'Completed' | 'Terminated' | 'Resigned';
+export type EmploymentStatus = 'Active' | 'On Leave' | 'Completed' | 'Terminated' | 'Resigned';
+export type SalaryFrequency = 'Monthly' | 'Weekly' | 'Daily' | 'Annual';
+
+export interface EmploymentPeriod {
+  id: string;
+  startDate: string;
+  endDate?: string;
+  contractType?: string;
+  duration?: string;
+  renewalInformation?: string;
+  status: ContractStatus;
+}
+
+export interface SalaryHistoryRecord {
+  id: string;
+  employeeId: string;
+  effectiveDate: string;
+  salaryAmount: number;
+  salaryFrequency: SalaryFrequency;
+  previousSalary?: number;
+  reasonForChange: string;
+  recordedBy: string;
+  recordedDate: string;
+  notes?: string;
+  auditMetadata: {
+    createdAt: string;
+    createdByUid: string;
+    updatedAt?: string;
+    updatedByUid?: string;
+  };
+  employmentPeriodId?: string;
+}
+
 export interface SafeguardingPermissions {
   canView: boolean;
   canCreate: boolean;
@@ -64,6 +99,17 @@ export interface StaffUser {
   canEditHealthRecords?: boolean;
   canViewCaseReviews?: boolean;
   canEditCaseReviews?: boolean;
+  employeeCategory?: EmployeeCategory;
+  position?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
+  contractType?: string;
+  contractDuration?: string;
+  contractStatus?: ContractStatus;
+  renewalInformation?: string;
+  employmentStatus?: EmploymentStatus;
+  originalContractStartDate?: string;
+  employmentPeriods?: EmploymentPeriod[];
 }
 
 export interface Girl {
@@ -379,6 +425,11 @@ export interface HouseholdRentPayment {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+  budgetId?: string;
+  budgetLineId?: string;
+  financialYear?: string;
+  programme?: string;
+  budgetCategory?: string;
 }
 
 export interface HouseholdExpense {
@@ -396,6 +447,14 @@ export interface HouseholdExpense {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+  budgetId?: string;
+  budgetLineId?: string;
+  financialYear?: string;
+  programme?: string;
+  budgetCategory?: string;
+  subcategory?: string;
+  girlId?: string;
+  activityId?: string;
 }
 
 export interface HouseholdActivity {
@@ -473,7 +532,19 @@ export type BudgetPeriodType = 'monthly' | 'quarterly' | 'annual' | 'project';
 
 export type BudgetCategory =
   | 'Staff'
+  | 'Staff/payroll'
+  | 'Gratuity'
   | 'Food'
+  | 'Groceries'
+  | 'Household supplies'
+  | 'Utilities'
+  | 'Health/medical'
+  | 'Clothing/social support'
+  | 'Repairs/maintenance'
+  | 'Training'
+  | 'Group activities'
+  | 'Programme activities'
+  | 'Equipment'
   | 'Education'
   | 'Medical'
   | 'Transport'
@@ -486,8 +557,30 @@ export type BudgetCategory =
   | 'Administration'
   | 'Other';
 
+export type AnnualBudgetStatus = 'Draft' | 'Submitted' | 'Approved' | 'Active' | 'Closed';
+
+export interface AnnualBudgetPlan {
+  id: string;
+  financialYear: string;
+  title: string;
+  programme: string;
+  description?: string;
+  status: AnnualBudgetStatus;
+  approvedAmount: number;
+  approvalDate?: string;
+  approvedBy?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
 export interface BudgetItem {
   id: string;
+  budgetId?: string;
+  financialYear?: string;
+  month?: number;
   period: string; // e.g., "2026-09", "2026-Q3", "Annual 2026", "Project SHINE 2026"
   periodType: BudgetPeriodType;
   programme: string; // e.g., "Girls Education & Support", "Household Operations", "Healthcare", "Administration"
@@ -498,6 +591,7 @@ export interface BudgetItem {
   unit: string; // e.g., "months", "bags", "students", "visits", "lumpsum"
   quantity: number;
   unitCost: number;
+  daysFrequency?: number;
   budgetAmount: number; // Qty * Unit Cost
   actualExpenditure?: number; // Calculated or manually tracked
   notes?: string;
@@ -505,6 +599,42 @@ export interface BudgetItem {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+  responsiblePerson?: string;
+  activityId?: string;
+  girlId?: string;
+  auditMetadata?: { createdByUid?: string; updatedByUid?: string };
+}
+
+export type PayrollPaymentStatus = 'Paid' | 'Partially Paid' | 'Unpaid' | 'Pending';
+export type PayrollPaymentMethod = 'Cash' | 'Bank transfer' | 'Mobile money' | 'Cheque' | 'Other';
+
+export interface PayrollRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  departmentOrProgramme?: string;
+  employeeCategory?: EmployeeCategory;
+  payPeriod: string;
+  payPeriodStartDate: string;
+  payPeriodEndDate: string;
+  applicableSalary: number;
+  salaryHistoryRecordId?: string;
+  salaryHistoryRecordIds: string[];
+  expectedAmount: number;
+  amountPaid: number;
+  datePaid?: string;
+  paymentStatus: PayrollPaymentStatus;
+  paymentMethod?: PayrollPaymentMethod;
+  paymentReference?: string;
+  notes?: string;
+  budgetId?: string;
+  budgetLineId?: string;
+  createdBy: string;
+  createdByUid: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedByUid: string;
+  updatedAt: string;
 }
 
 // --------------------------------------------------
@@ -552,7 +682,13 @@ export type ScheduleType =
   | 'staff_assignment'
   | 'other';
 
-export type ScheduleStatus = 'Upcoming' | 'Completed' | 'Cancelled';
+export type ScheduleStatus =
+  | 'Upcoming'
+  | 'Scheduled'
+  | 'In Progress'
+  | 'Rescheduled'
+  | 'Completed'
+  | 'Cancelled';
 
 export interface ScheduleItem {
   id: string;
@@ -829,6 +965,8 @@ export interface AppDatabase {
   householdActivities: HouseholdActivity[];
   attachments?: PhotoAttachment[];
   budgets?: BudgetItem[];
+  annualBudgets?: AnnualBudgetPlan[];
+  payrollRecords?: PayrollRecord[];
   workplans?: WorkplanItem[];
   schedules?: ScheduleItem[];
   historicalRecords?: HistoricalCaseRecord[];

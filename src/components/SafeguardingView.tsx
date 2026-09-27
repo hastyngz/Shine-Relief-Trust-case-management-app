@@ -24,7 +24,7 @@ const risks: SafeguardingRiskLevel[] = ['Low', 'Medium', 'High', 'Urgent'];
 const statuses: SafeguardingCaseStatus[] = ['Open', 'Under Review', 'Action Required', 'Referred', 'Monitoring', 'Resolved', 'Closed'];
 
 export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => {
-  const { currentUser, staffProfile, allStaff, isAdmin, canCreateSafeguarding, canEditSafeguarding, canCloseSafeguarding } = useAuth();
+  const { currentUser, staffProfile, allStaff, isAdmin, isViewOnly, canCreateSafeguarding, canEditSafeguarding, canCloseSafeguarding } = useAuth();
   const [records, setRecords] = useState<SafeguardingCase[]>([]);
   const [filesByCase, setFilesByCase] = useState<Record<string, SafeguardingFile[]>>({});
   const [loading, setLoading] = useState(true);
@@ -174,7 +174,7 @@ export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => 
   };
 
   const mayEdit = (record: SafeguardingCase) =>
-    isAdmin || canEditSafeguarding || record.authorizedStaffUids?.includes(currentUser?.uid || '');
+    !isViewOnly && (isAdmin || canEditSafeguarding || record.authorizedStaffUids?.includes(currentUser?.uid || ''));
 
   return (
     <section className="space-y-4" aria-label="Safeguarding cases">
@@ -189,7 +189,7 @@ export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => 
             ['Case ID', 'Girl ID', 'Reported', 'Incident Date', 'Category', 'Risk', 'Description', 'Immediate Concern', 'Action Taken', 'Referral Made', 'Referred To', 'Responsible Staff', 'Follow-up Date', 'Outcome', 'Status'],
             ...records.map((record) => [record.id, record.girlId, record.dateReported, record.incidentDate || '', record.category, record.riskLevel, record.description, record.immediateConcern, record.actionTaken, record.referralMade ? 'Yes' : 'No', record.referredTo || '', record.responsibleStaffName, record.followUpDate || '', record.outcome || '', record.status]),
           ])} className="px-3 py-2 border border-rose-300 text-rose-900 rounded-md text-xs font-bold">Export restricted report</button>}
-          {canCreateSafeguarding && <button onClick={() => setShowForm((value) => !value)} className="px-3 py-2 bg-rose-900 text-white rounded-md text-xs font-bold">New safeguarding record</button>}
+          {canCreateSafeguarding && !isViewOnly && <button onClick={() => setShowForm((value) => !value)} className="px-3 py-2 bg-rose-900 text-white rounded-md text-xs font-bold">New safeguarding record</button>}
         </div>
       </div>
 
@@ -200,7 +200,7 @@ export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => 
 
       {error && <p role="alert" className="bg-rose-50 border border-rose-200 rounded-md p-3 text-xs text-rose-800">{error}</p>}
 
-      {showForm && canCreateSafeguarding && (
+      {showForm && canCreateSafeguarding && !isViewOnly && (
         <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-white border border-rose-200 rounded-lg">
           <label className="text-xs font-semibold text-stone-700">Girl *
             <select required value={girlId} onChange={(event) => setGirlId(event.target.value)} className="mt-1 w-full border border-stone-300 rounded-md p-2">
@@ -244,7 +244,7 @@ export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => 
                   <span className="px-2 py-1 rounded-full bg-rose-100 text-rose-900">{record.riskLevel} risk</span>
                   {mayEdit(record) && <select aria-label={`Status for ${record.id}`} value={record.status} onChange={(event) => void updateRecord(record, { status: event.target.value as SafeguardingCaseStatus })} className="border border-stone-300 rounded-md px-2 py-1.5"><option value="">Select status</option>{statuses.filter((item) => item !== 'Closed' || canCloseSafeguarding || isAdmin).map((item) => <option key={item}>{item}</option>)}</select>}
                   {!mayEdit(record) && <span className="px-2 py-1 rounded-full bg-stone-100 text-stone-700">{record.status}</span>}
-                  {!mayEdit(record) && canCloseSafeguarding && record.status !== 'Closed' && <button onClick={() => void updateRecord(record, { status: 'Closed' })} className="px-2 py-1.5 rounded-md bg-stone-900 text-white">Close</button>}
+                  {!isViewOnly && !mayEdit(record) && canCloseSafeguarding && record.status !== 'Closed' && <button onClick={() => void updateRecord(record, { status: 'Closed' })} className="px-2 py-1.5 rounded-md bg-stone-900 text-white">Close</button>}
                 </div>
               </div>
               <p className="text-xs text-stone-800 whitespace-pre-line">{record.description}</p>
@@ -254,9 +254,9 @@ export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => 
               {record.followUpDate && <p className="text-xs text-stone-600">Follow-up: {record.followUpDate}</p>}
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {(filesByCase[record.id] || []).map((file) => <button key={file.id} onClick={() => void downloadFile(record, file)} className="px-2 py-1 border border-rose-200 rounded-md text-rose-900">{file.fileName} · {file.uploadedByName}</button>)}
-                {(record.responsibleStaffId === currentUser?.uid || canEditSafeguarding || isAdmin) && <label className="px-2 py-1 bg-stone-100 rounded-md font-semibold cursor-pointer">Add protected document<input type="file" accept="image/*,application/pdf" className="sr-only" onChange={(event) => { void uploadFile(record, event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>}
+                {!isViewOnly && (record.responsibleStaffId === currentUser?.uid || canEditSafeguarding || isAdmin) && <label className="px-2 py-1 bg-stone-100 rounded-md font-semibold cursor-pointer">Add protected document<input type="file" accept="image/*,application/pdf" className="sr-only" onChange={(event) => { void uploadFile(record, event.target.files?.[0]); event.currentTarget.value = ''; }} /></label>}
               </div>
-              {(canEditSafeguarding || isAdmin) && <label className="block text-xs font-semibold text-stone-700">Outcome
+              {!isViewOnly && (canEditSafeguarding || isAdmin) && <label className="block text-xs font-semibold text-stone-700">Outcome
                 <textarea defaultValue={record.outcome || ''} rows={2} onBlur={(event) => { if (event.target.value !== (record.outcome || '')) void updateRecord(record, { outcome: event.target.value }); }} className="mt-1 w-full border border-stone-300 rounded-md p-2" />
               </label>}
               <p className="text-[10px] text-stone-500 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Created by {record.createdBy} · {record.createdAt.slice(0, 10)} · {record.id}</p>

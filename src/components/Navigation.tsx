@@ -7,10 +7,12 @@ import {
   Sparkles,
   UserCheck,
   Bot,
+  BadgeDollarSign,
   MessageSquare,
   CalendarRange,
   UploadCloud,
   ClipboardList,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
@@ -23,7 +25,9 @@ export type NavTab =
   | 'messages'
   | 'planning'
   | 'import'
+  | 'management'
   | 'reports'
+  | 'payroll'
   | 'ai-assistant'
   | 'staff'
   | 'case-management';
@@ -41,8 +45,9 @@ export const Navigation: React.FC<NavigationProps> = ({
   girlsCount,
   housesCount,
 }) => {
-  const { isAdmin, allStaff } = useAuth();
+  const { isAdmin, role, allStaff } = useAuth();
   const { totalUnreadCount, unreadMessagesCount } = useMessaging();
+  const canViewManagement = isAdmin || role === 'Manager';
 
   const navItems: {
     id: NavTab;
@@ -64,8 +69,10 @@ export const Navigation: React.FC<NavigationProps> = ({
       count: totalUnreadCount > 0 ? totalUnreadCount : undefined,
     },
     { id: 'planning', label: 'Budgets & Workplans', icon: CalendarRange },
+    ...(canViewManagement ? [{ id: 'management' as NavTab, label: 'Management', icon: BarChart3 }] : []),
     { id: 'import', label: 'Document Ingestion', icon: UploadCloud },
     { id: 'reports', label: 'Reports & Export', icon: FileSpreadsheet },
+    { id: 'payroll', label: 'Payroll', icon: BadgeDollarSign },
     { id: 'ai-assistant', label: 'SHINE AI Assistant', icon: Bot, isAi: true },
     ...(isAdmin
       ? [

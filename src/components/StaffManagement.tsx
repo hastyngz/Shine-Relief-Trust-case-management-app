@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
+import { EmployeeContractPanel } from './EmployeeContractPanel';
 import {
   Users,
   UserPlus,
@@ -35,6 +36,7 @@ export const StaffManagement: React.FC = () => {
     deleteStaffAccount,
     sendResetPassword,
   } = useAuth();
+  const [selectedEmployee, setSelectedEmployee] = useState<StaffUser | null>(null);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,7 +58,7 @@ export const StaffManagement: React.FC = () => {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Guard: Admin only
-  if (!isAdmin) {
+  if (!isAdmin && staffProfile?.role !== 'Manager') {
     return (
       <div className="max-w-4xl mx-auto py-12 px-4 text-center">
         <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -259,7 +261,7 @@ export const StaffManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
+        {isAdmin && <button
           type="button"
           onClick={() => {
             setActionError(null);
@@ -270,7 +272,7 @@ export const StaffManagement: React.FC = () => {
         >
           <UserPlus className="w-4 h-4 text-amber-400" />
           Invite Staff Member
-        </button>
+        </button>}
       </div>
 
       {/* Metrics Bar */}
@@ -536,18 +538,26 @@ export const StaffManagement: React.FC = () => {
                       {/* Actions */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Send Reset Email */}
                           <button
+                            type="button"
+                            onClick={() => setSelectedEmployee(staff)}
+                            title="Open contract, salary history and gratuity"
+                            className="px-2 py-1 text-[10px] font-bold text-teal-900 bg-teal-50 hover:bg-teal-100 rounded-lg"
+                          >
+                            Contract & gratuity
+                          </button>
+                          {/* Send Reset Email */}
+                          {isAdmin && <button
                             type="button"
                             onClick={() => handleSendResetLink(staff)}
                             title="Send Password Reset Email"
                             className="p-1.5 text-stone-500 hover:text-teal-900 hover:bg-stone-100 rounded-lg transition-colors"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
-                          </button>
+                          </button>}
 
                           {/* Toggle Active / Suspended */}
-                          {!isPrimaryAdmin && (
+                          {isAdmin && !isPrimaryAdmin && (
                             <button
                               type="button"
                               onClick={() => handleStatusToggle(staff)}
@@ -563,7 +573,7 @@ export const StaffManagement: React.FC = () => {
                           )}
 
                           {/* Delete Account */}
-                          {!isPrimaryAdmin && (
+                          {isAdmin && !isPrimaryAdmin && (
                             <button
                               type="button"
                               onClick={() => handleDeleteStaff(staff)}
@@ -724,6 +734,19 @@ export const StaffManagement: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+      {selectedEmployee && staffProfile && (
+        <EmployeeContractPanel
+          staff={selectedEmployee}
+          actorUid={staffProfile.uid}
+          actorName={staffProfile.fullName}
+          canEdit={isAdmin || staffProfile.role === 'Manager'}
+          onUpdate={async (staffId, updates) => {
+            await updateStaffAccount(staffId, updates);
+            setSelectedEmployee((current) => current ? { ...current, ...updates } : current);
+          }}
+          onClose={() => setSelectedEmployee(null)}
+        />
       )}
     </div>
   );

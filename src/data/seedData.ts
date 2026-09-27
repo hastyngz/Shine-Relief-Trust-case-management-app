@@ -15,6 +15,8 @@ export const INITIAL_DATABASE: AppDatabase = {
   householdActivities: [],
   attachments: [],
   budgets: [],
+  annualBudgets: [],
+  payrollRecords: [],
   workplans: [],
   schedules: [],
   historicalRecords: [],

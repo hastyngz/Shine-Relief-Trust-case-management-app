@@ -9,6 +9,8 @@ import {
   HouseholdExpense,
   HouseholdActivity,
   BudgetItem,
+  AnnualBudgetPlan,
+  PayrollRecord,
   WorkplanItem,
   ScheduleItem,
   HistoricalCaseRecord,
@@ -37,6 +39,10 @@ import {
   deleteHouseholdActivityFromFirestore,
   persistBudgetItemToFirestore,
   deleteBudgetItemFromFirestore,
+  persistAnnualBudgetPlanToFirestore,
+  deleteAnnualBudgetPlanFromFirestore,
+  persistPayrollRecordToFirestore,
+  deletePayrollRecordFromFirestore,
   persistWorkplanItemToFirestore,
   deleteWorkplanItemFromFirestore,
   persistScheduleItemToFirestore,
@@ -89,6 +95,8 @@ export function getDatabase(): AppDatabase {
       householdActivities: parsed.householdActivities || [],
       attachments: parsed.attachments || [],
       budgets: parsed.budgets || [],
+      annualBudgets: parsed.annualBudgets || [],
+      payrollRecords: parsed.payrollRecords || [],
       workplans: parsed.workplans || [],
       schedules: parsed.schedules || [],
       historicalRecords: parsed.historicalRecords || [],
@@ -154,6 +162,8 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       householdActivities: Array.isArray(parsed.householdActivities) ? parsed.householdActivities : [],
       attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
       budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
+      annualBudgets: Array.isArray(parsed.annualBudgets) ? parsed.annualBudgets : [],
+      payrollRecords: Array.isArray(parsed.payrollRecords) ? parsed.payrollRecords : [],
       workplans: Array.isArray(parsed.workplans) ? parsed.workplans : [],
       schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
       historicalRecords: Array.isArray(parsed.historicalRecords) ? parsed.historicalRecords : [],
@@ -683,6 +693,23 @@ export function addAttendanceRecord(
   return addPhase2Record<AttendanceRecord>('attendanceRecords', 'attendanceRecords', 'ATT', data, actorName);
 }
 
+export function updateAttendanceRecord(
+  id: string,
+  updates: Partial<AttendanceRecord>,
+  actorName: string
+): AttendanceRecord | null {
+  const db = getDatabase();
+  const records = db.attendanceRecords || [];
+  const index = records.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  records[index] = updated;
+  db.attendanceRecords = records;
+  saveDatabase(db);
+  persistPhase2Record('attendanceRecords', updated).catch((err) => console.error('Failed to update attendance record:', err));
+  return updated;
+}
+
 export function addGirlLeaveRecord(
   data: Omit<GirlLeaveRecord, keyof Phase2TrackedRecord>, actorName: string
 ): GirlLeaveRecord {
@@ -770,6 +797,122 @@ export function deleteBudgetItem(id: string): boolean {
   saveDatabase(db);
   deleteBudgetItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete budget item from Firestore:', err)
+  );
+  return true;
+}
+
+export function addAnnualBudgetPlan(
+  plan: Omit<AnnualBudgetPlan, 'id' | 'createdAt' | 'updatedAt'>,
+  auditActor?: string
+): AnnualBudgetPlan {
+  const db = getDatabase();
+  if (!db.annualBudgets) db.annualBudgets = [];
+  const now = new Date().toISOString();
+  const newPlan: AnnualBudgetPlan = {
+    ...plan,
+    id: generateFollowUpId('ABG'),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: auditActor || plan.createdBy || 'SHINE Staff',
+    updatedBy: auditActor || plan.updatedBy || 'SHINE Staff',
+  };
+  db.annualBudgets.unshift(newPlan);
+  saveDatabase(db);
+  persistAnnualBudgetPlanToFirestore(newPlan).catch((err) =>
+    console.error('Failed to persist annual budget plan to Firestore:', err)
+  );
+  return newPlan;
+}
+
+export function updateAnnualBudgetPlan(
+  id: string,
+  updates: Partial<AnnualBudgetPlan>,
+  auditActor?: string
+): AnnualBudgetPlan | null {
+  const db = getDatabase();
+  if (!db.annualBudgets) db.annualBudgets = [];
+  const index = db.annualBudgets.findIndex((plan) => plan.id === id);
+  if (index === -1) return null;
+  const updated: AnnualBudgetPlan = {
+    ...db.annualBudgets[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: auditActor || db.annualBudgets[index].updatedBy || 'SHINE Staff',
+  };
+  db.annualBudgets[index] = updated;
+  saveDatabase(db);
+  persistAnnualBudgetPlanToFirestore(updated).catch((err) =>
+    console.error('Failed to update annual budget plan in Firestore:', err)
+  );
+  return updated;
+}
+
+export function addPayrollRecord(
+  record: Omit<PayrollRecord, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy' | 'createdByUid' | 'updatedByUid'> & {
+    id?: string;
+    createdBy?: string;
+    updatedBy?: string;
+    createdByUid?: string;
+    updatedByUid?: string;
+  },
+  auditActor?: string,
+  auditActorUid?: string
+): PayrollRecord {
+  const db = getDatabase();
+  if (!db.payrollRecords) db.payrollRecords = [];
+  const now = new Date().toISOString();
+  const newRecord: PayrollRecord = {
+    ...record,
+    id: record.id || generateFollowUpId('PAY'),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: record.createdBy || auditActor || 'SHINE Staff',
+    updatedBy: record.updatedBy || auditActor || 'SHINE Staff',
+    createdByUid: record.createdByUid || auditActorUid || 'system',
+    updatedByUid: record.updatedByUid || auditActorUid || 'system',
+  };
+  db.payrollRecords.unshift(newRecord);
+  saveDatabase(db);
+  persistPayrollRecordToFirestore(newRecord).catch((err) =>
+    console.error('Failed to persist payroll record to Firestore:', err)
+  );
+  return newRecord;
+}
+
+export function updatePayrollRecord(
+  id: string,
+  updates: Partial<PayrollRecord>,
+  auditActor?: string,
+  auditActorUid?: string
+): PayrollRecord | null {
+  const db = getDatabase();
+  if (!db.payrollRecords) db.payrollRecords = [];
+  const index = db.payrollRecords.findIndex((record) => record.id === id);
+  if (index === -1) return null;
+  const updated: PayrollRecord = {
+    ...db.payrollRecords[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: updates.updatedBy || auditActor || db.payrollRecords[index].updatedBy || 'SHINE Staff',
+    updatedByUid: updates.updatedByUid || auditActorUid || db.payrollRecords[index].updatedByUid || 'system',
+  };
+  db.payrollRecords[index] = updated;
+  saveDatabase(db);
+  persistPayrollRecordToFirestore(updated).catch((err) =>
+    console.error('Failed to update payroll record in Firestore:', err)
+  );
+  return updated;
+}
+
+export function deletePayrollRecord(id: string): boolean {
+  const db = getDatabase();
+  if (!db.payrollRecords) return false;
+  const index = db.payrollRecords.findIndex((record) => record.id === id);
+  if (index === -1) return false;
+  db.payrollRecords.splice(index, 1);
+  saveDatabase(db);
+  deletePayrollRecordFromFirestore(id).catch((err) =>
+    console.error('Failed to delete payroll record from Firestore:', err)
   );
   return true;
 }

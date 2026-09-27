@@ -11,11 +11,15 @@ import {
   WorkplanStatus,
   ScheduleType,
   ScheduleStatus,
+  AnnualBudgetPlan,
+  AnnualBudgetStatus,
 } from '../../types';
 import {
   addBudgetItem,
   updateBudgetItem,
   deleteBudgetItem,
+  addAnnualBudgetPlan,
+  updateAnnualBudgetPlan,
   addWorkplanItem,
   updateWorkplanItem,
   deleteWorkplanItem,
@@ -41,6 +45,7 @@ import {
   AlertTriangle,
   ChevronRight,
 } from 'lucide-react';
+import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
 
 interface BudgetsAndWorkplansViewProps {
   db: AppDatabase;
@@ -64,6 +69,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
   const [editingBudget, setEditingBudget] = useState<BudgetItem | null>(null);
 
+  const [showAnnualBudgetModal, setShowAnnualBudgetModal] = useState<boolean>(false);
+  const [editingAnnualBudget, setEditingAnnualBudget] = useState<AnnualBudgetPlan | null>(null);
+
   const [showWorkplanModal, setShowWorkplanModal] = useState<boolean>(false);
   const [editingWorkplan, setEditingWorkplan] = useState<WorkplanItem | null>(null);
 
@@ -71,6 +79,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [editingSchedule, setEditingSchedule] = useState<ScheduleItem | null>(null);
 
   const budgets = db.budgets || [];
+  const annualBudgets = db.annualBudgets || [];
   const workplans = db.workplans || [];
   const schedules = db.schedules || [];
 
@@ -81,21 +90,71 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     return true;
   });
 
+  const approvedAnnualBudgetTotal = annualBudgets.reduce((sum, plan) => sum + (plan.approvedAmount || 0), 0);
+
   // Budget Calculations
   const totalBudgeted = filteredBudgets.reduce((s, b) => s + (b.budgetAmount || 0), 0);
   const totalActual = filteredBudgets.reduce((s, b) => s + (b.actualExpenditure || 0), 0);
   const totalVariance = totalBudgeted - totalActual;
   const executionPercent = totalBudgeted > 0 ? Math.round((totalActual / totalBudgeted) * 100) : 0;
 
+  const workloadSummary = buildWorkloadSummary(workplans);
+  const workplanHealthSummary = summarizeWorkplanHealth(workplans);
+  const activityOverview = buildActivityOverview(workplans, schedules);
+
+  const upcomingActivityItems = [
+    ...workplans
+      .filter((plan) => normalizeWorkplanStatus(plan.status) !== 'Completed' && normalizeWorkplanStatus(plan.status) !== 'Cancelled')
+      .map((plan) => ({
+        id: plan.id,
+        label: plan.activity,
+        when: plan.endDate || plan.startDate || 'TBD',
+        owner: plan.responsibleStaffName || 'Unassigned',
+        kind: 'workplan' as const,
+      })),
+    ...schedules
+      .filter((item) => item.status !== 'Completed' && item.status !== 'Cancelled')
+      .map((item) => ({
+        id: item.id,
+        label: item.title,
+        when: item.scheduledDate,
+        owner: item.assignedStaffName || 'Unassigned',
+        kind: 'schedule' as const,
+      })),
+  ].sort((a, b) => a.when.localeCompare(b.when));
+
   // Filtered Workplans
   const filteredWorkplans = workplans.filter((w) => {
-    if (workplanStatusFilter !== 'ALL' && w.status !== workplanStatusFilter) return false;
+    if (workplanStatusFilter !== 'ALL' && normalizeWorkplanStatus(w.status) !== workplanStatusFilter) return false;
     return true;
   });
 
   // Unique Periods and Categories
   const uniquePeriods = Array.from(new Set(budgets.map((b) => b.period).filter(Boolean)));
   const uniqueCategories = Array.from(new Set(budgets.map((b) => b.category).filter(Boolean)));
+
+  const monthlyBudgetSummary = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const monthLines = budgets.filter((b) => b.month === month);
+    const budgeted = monthLines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
+    const actual = monthLines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
+    const variance = budgeted - actual;
+    return { month, budgeted, actual, variance };
+  });
+
+  const categoryBudgetSummary = uniqueCategories.map((category) => {
+    const lines = budgets.filter((line) => line.category === category);
+    const budgeted = lines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
+    const actual = lines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
+    return { category, budgeted, actual, variance: budgeted - actual };
+  });
+
+  const programmeBudgetSummary = Array.from(new Set(budgets.map((line) => line.programme).filter(Boolean))).map((programme) => {
+    const lines = budgets.filter((line) => line.programme === programme);
+    const budgeted = lines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
+    const actual = lines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
+    return { programme, budgeted, actual, variance: budgeted - actual };
+  });
 
   // Handle Budget Form Submit
   const handleSaveBudget = (e: React.FormEvent<HTMLFormElement>) => {
@@ -155,6 +214,60 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   };
 
   // Handle Workplan Form Submit
+  const handleSaveAnnualBudget = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const financialYear = (fd.get('financialYear') as string).trim();
+    const title = (fd.get('title') as string).trim();
+    const programme = (fd.get('programme') as string).trim() || 'General programme';
+    const description = (fd.get('description') as string).trim();
+    const status = (fd.get('status') as AnnualBudgetStatus) || 'Draft';
+    const approvedAmount = Number(fd.get('approvedAmount') as string) || 0;
+    const approvalDate = (fd.get('approvalDate') as string) || '';
+    const notes = (fd.get('notes') as string).trim();
+
+    if (!financialYear || !title) {
+      return;
+    }
+
+    if (editingAnnualBudget) {
+      updateAnnualBudgetPlan(
+        editingAnnualBudget.id,
+        {
+          financialYear,
+          title,
+          programme,
+          description,
+          status,
+          approvedAmount,
+          approvalDate,
+          notes,
+        },
+        actorName
+      );
+    } else {
+      addAnnualBudgetPlan(
+        {
+          financialYear,
+          title,
+          programme,
+          description,
+          status,
+          approvedAmount,
+          approvalDate,
+          notes,
+          createdBy: actorName,
+          updatedBy: actorName,
+        },
+        actorName
+      );
+    }
+
+    setShowAnnualBudgetModal(false);
+    setEditingAnnualBudget(null);
+    onRefresh();
+  };
+
   const handleSaveWorkplan = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -165,8 +278,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const targetCount = parseInt(fd.get('targetCount') as string, 10) || 1;
     const unit = (fd.get('unit') as string).trim() || 'Sessions';
     const completedCount = parseInt(fd.get('completedCount') as string, 10) || 0;
+    const rawStatus = (fd.get('status') as string) || 'In Progress';
+    const normalizedStatus = normalizeWorkplanStatus(rawStatus) as WorkplanStatus;
     const progress = Math.min(100, Math.round((completedCount / targetCount) * 100));
-    const status = (fd.get('status') as WorkplanStatus) || 'In Progress';
     const responsibleStaffName = (fd.get('responsibleStaffName') as string).trim();
     const responsibleStaffId = staffProfile?.id || staffProfile?.uid || 'staff-1';
     const startDate = (fd.get('startDate') as string);
@@ -187,7 +301,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           unit,
           completedCount,
           progress,
-          status,
+          status: normalizedStatus,
           responsibleStaffId,
           responsibleStaffName,
           startDate,
@@ -209,7 +323,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           unit,
           completedCount,
           progress,
-          status,
+          status: normalizedStatus,
           responsibleStaffId,
           responsibleStaffName,
           startDate,
@@ -241,6 +355,11 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const status = (fd.get('status') as ScheduleStatus) || 'Upcoming';
     const notes = (fd.get('notes') as string).trim();
 
+    const normalizedScheduleStatus: ScheduleStatus =
+      status === 'Scheduled' || status === 'Upcoming' || status === 'In Progress' || status === 'Rescheduled' || status === 'Completed' || status === 'Cancelled'
+        ? status
+        : 'Upcoming';
+
     if (editingSchedule) {
       updateScheduleItem(
         editingSchedule.id,
@@ -253,7 +372,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           location,
           assignedStaffId,
           assignedStaffName,
-          status,
+          status: normalizedScheduleStatus,
           notes,
         },
         actorName
@@ -269,7 +388,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           location,
           assignedStaffId,
           assignedStaffName,
-          status,
+          status: normalizedScheduleStatus,
           notes,
         },
         actorName
@@ -391,6 +510,123 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                   <Plus className="w-4 h-4" /> Add Line
                 </button>
               )}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Annual budget plans</p>
+                <p className="text-lg font-black text-stone-900 mt-1">MWK {approvedAnnualBudgetTotal.toLocaleString()}</p>
+              </div>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAnnualBudget(null);
+                    setShowAnnualBudgetModal(true);
+                  }}
+                  className="px-3 py-2 bg-teal-800 text-white rounded-lg text-xs font-bold hover:bg-teal-900 transition-all flex items-center gap-1 shadow-xs"
+                >
+                  <Plus className="w-4 h-4" /> Add annual plan
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {annualBudgets.length === 0 ? (
+                <div className="md:col-span-2 xl:col-span-3 border border-dashed border-stone-300 rounded-xl p-4 text-sm text-stone-500">
+                  No annual budget plans recorded yet. Add the first annual budget to begin planning.
+                </div>
+              ) : (
+                annualBudgets.map((plan) => (
+                  <div key={plan.id} className="border border-stone-200 rounded-xl p-3 bg-stone-50">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-bold text-stone-900">{plan.title}</div>
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-teal-100 text-teal-800 px-2 py-1 rounded-full">
+                        {plan.status}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-stone-600">{plan.programme}</div>
+                    <div className="mt-2 text-xs text-stone-500">{plan.financialYear}</div>
+                    <div className="mt-3 text-sm font-black text-stone-900">MWK {plan.approvedAmount.toLocaleString()}</div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAnnualBudget(plan);
+                          setShowAnnualBudgetModal(true);
+                        }}
+                        className="mt-3 text-xs font-semibold text-teal-700 hover:text-teal-900"
+                      >
+                        Edit plan
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Monthly budget monitoring</p>
+                <h3 className="text-base font-black text-stone-900">Budget vs Actual by month</h3>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {monthlyBudgetSummary.map(({ month, budgeted, actual, variance }) => (
+                <div key={month} className="border border-stone-200 rounded-xl p-3 bg-stone-50">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-stone-500">
+                    <span>{new Date(2026, month - 1, 1).toLocaleString('en-US', { month: 'short' })}</span>
+                    <span className={variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>{variance >= 0 ? 'Surplus' : 'Shortfall'}</span>
+                  </div>
+                  <div className="mt-2 text-sm font-black text-stone-900">MWK {budgeted.toLocaleString()}</div>
+                  <div className="mt-1 text-xs text-stone-500">Actual: MWK {actual.toLocaleString()}</div>
+                  <div className={`mt-2 text-xs font-bold ${variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {variance >= 0 ? '+' : '-'}MWK {Math.abs(variance).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+            <div className="mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Budget vs actual summary</p>
+              <h3 className="text-base font-black text-stone-900">Category and programme variance</h3>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="border border-stone-200 rounded-xl overflow-hidden">
+                <div className="bg-stone-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-stone-600">By category</div>
+                <div className="divide-y divide-stone-200">
+                  {categoryBudgetSummary.map(({ category, budgeted, actual, variance }) => (
+                    <div key={category} className="px-3 py-2 flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium text-stone-700">{category}</span>
+                      <div className="text-right">
+                        <div className="font-bold text-stone-900">MWK {budgeted.toLocaleString()}</div>
+                        <div className="text-stone-500">Actual {actual.toLocaleString()} • {variance >= 0 ? 'Surplus' : 'Over'} {Math.abs(variance).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border border-stone-200 rounded-xl overflow-hidden">
+                <div className="bg-stone-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-stone-600">By programme</div>
+                <div className="divide-y divide-stone-200">
+                  {programmeBudgetSummary.map(({ programme, budgeted, actual, variance }) => (
+                    <div key={programme} className="px-3 py-2 flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium text-stone-700">{programme}</span>
+                      <div className="text-right">
+                        <div className="font-bold text-stone-900">MWK {budgeted.toLocaleString()}</div>
+                        <div className="text-stone-500">Actual {actual.toLocaleString()} • {variance >= 0 ? 'Surplus' : 'Over'} {Math.abs(variance).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -547,6 +783,96 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'workplans' && (
         <div className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Active plans</p>
+              <p className="mt-2 text-2xl font-black text-stone-900">{workloadSummary.activePlans}</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Completed</p>
+              <p className="mt-2 text-2xl font-black text-emerald-700">{workplanHealthSummary.completedCount}</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Delayed</p>
+              <p className="mt-2 text-2xl font-black text-amber-700">{workloadSummary.delayedCount}</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Overdue</p>
+              <p className="mt-2 text-2xl font-black text-rose-700">{workplanHealthSummary.overdueCount}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Upcoming activities</p>
+              <p className="mt-2 text-2xl font-black text-teal-800">{activityOverview.upcomingCount}</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Today</p>
+              <p className="mt-2 text-2xl font-black text-blue-700">{activityOverview.todayCount}</p>
+            </div>
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Overdue activities</p>
+              <p className="mt-2 text-2xl font-black text-rose-700">{activityOverview.overdueCount}</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Workload watchlist</p>
+                <h3 className="text-base font-black text-stone-900">Upcoming workplans and field activities</h3>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {upcomingActivityItems.length === 0 ? (
+                <div className="text-sm text-stone-500 italic">No active work or field activity is pending.</div>
+              ) : (
+                upcomingActivityItems.slice(0, 6).map((item) => (
+                  <div key={`${item.kind}-${item.id}`} className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs">
+                    <div>
+                      <div className="font-bold text-stone-900">{item.label}</div>
+                      <div className="text-stone-500">{item.owner}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold text-stone-700">{formatDate(item.when)}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-stone-500">{item.kind}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
+            <div className="mb-3">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-stone-500">Staff workload summary</p>
+              <h3 className="text-base font-black text-stone-900">Responsibility load by staff member</h3>
+            </div>
+            <div className="space-y-3">
+              {Object.values(workloadSummary.byStaff).length === 0 ? (
+                <div className="text-sm text-stone-500 italic">No assigned workplan activity yet.</div>
+              ) : (
+                Object.values(workloadSummary.byStaff)
+                  .sort((a, b) => b.plannedCount - a.plannedCount)
+                  .map((staff) => (
+                    <div key={staff.id} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-bold text-stone-900">{staff.name}</div>
+                          <div className="text-[11px] text-stone-500">{staff.plannedCount} planned • {staff.activeCount} active • {staff.delayedCount} delayed</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs font-bold text-teal-800">{staff.averageProgress}% avg</div>
+                          <div className="text-[10px] text-stone-500">{staff.completedCount} completed</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
             <div className="flex items-center gap-2">
               <span className="text-xs text-stone-600 font-semibold flex items-center gap-1">
@@ -558,10 +884,11 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 className="text-xs border border-stone-300 rounded-lg px-2.5 py-1.5 bg-stone-50 focus:ring-1 focus:ring-teal-700 outline-hidden"
               >
                 <option value="ALL">All Statuses ({workplans.length})</option>
-                <option value="Not Started">Not Started</option>
+                <option value="Planned">Planned</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Completed">Completed</option>
-                <option value="On Hold">On Hold</option>
+                <option value="Delayed">Delayed</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
             </div>
 
@@ -585,81 +912,86 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 No workplan items found. Click "Add Workplan Objective" to record key activity targets.
               </div>
             ) : (
-              filteredWorkplans.map((w) => (
-                <div key={w.id} className="bg-white rounded-xl border border-stone-200 p-4 shadow-xs hover:border-teal-700 transition-all">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                        {w.period}
-                      </span>
-                      <h3 className="text-sm font-bold text-stone-900 mt-1.5">{w.activity}</h3>
-                      <p className="text-xs text-stone-600 mt-0.5">{w.objective}</p>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
-                        w.status === 'Completed'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : w.status === 'In Progress'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                          : 'bg-stone-100 text-stone-700 border border-stone-300'
-                      }`}
-                    >
-                      {w.status}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 bg-stone-50 p-2.5 rounded-lg border border-stone-200 text-xs space-y-1">
-                    <div className="flex justify-between text-stone-700">
-                      <span>Target Milestone:</span>
-                      <span className="font-bold">
-                        {w.completedCount || 0} / {w.targetCount} {w.unit}
+              filteredWorkplans.map((w) => {
+                const status = normalizeWorkplanStatus(w.status);
+                return (
+                  <div key={w.id} className="bg-white rounded-xl border border-stone-200 p-4 shadow-xs hover:border-teal-700 transition-all">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                          {w.period}
+                        </span>
+                        <h3 className="text-sm font-bold text-stone-900 mt-1.5">{w.activity}</h3>
+                        <p className="text-xs text-stone-600 mt-0.5">{w.objective}</p>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
+                          status === 'Completed'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : status === 'In Progress'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                            : status === 'Delayed'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-stone-100 text-stone-700 border border-stone-300'
+                        }`}
+                      >
+                        {status}
                       </span>
                     </div>
-                    <div className="w-full bg-stone-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="bg-teal-700 h-2 rounded-full transition-all"
-                        style={{ width: `${w.progress}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[11px] text-stone-500 pt-1">
-                      <span>Responsible: <strong>{w.responsibleStaffName}</strong></span>
-                      <span>{w.progress}% Complete</span>
-                    </div>
-                  </div>
 
-                  <div className="mt-3 flex items-center justify-between text-[11px] text-stone-500 pt-2 border-t border-stone-100">
-                    <span>
-                      Timeline: {w.startDate ? formatDate(w.startDate) : 'TBD'} - {w.endDate ? formatDate(w.endDate) : 'Ongoing'}
-                    </span>
-                    {canEdit && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingWorkplan(w);
-                            setShowWorkplanModal(true);
-                          }}
-                          className="text-teal-800 hover:underline font-semibold"
-                        >
-                          Edit
-                        </button>
-                        {isAdmin && (
+                    <div className="mt-3 bg-stone-50 p-2.5 rounded-lg border border-stone-200 text-xs space-y-1">
+                      <div className="flex justify-between text-stone-700">
+                        <span>Target Milestone:</span>
+                        <span className="font-bold">
+                          {w.completedCount || 0} / {w.targetCount} {w.unit}
+                        </span>
+                      </div>
+                      <div className="w-full bg-stone-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-teal-700 h-2 rounded-full transition-all"
+                          style={{ width: `${Math.max(0, Math.min(100, Number(w.progress) || 0))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[11px] text-stone-500 pt-1">
+                        <span>Responsible: <strong>{w.responsibleStaffName}</strong></span>
+                        <span>{Math.max(0, Math.min(100, Number(w.progress) || 0))}% Complete</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between text-[11px] text-stone-500 pt-2 border-t border-stone-100">
+                      <span>
+                        Timeline: {w.startDate ? formatDate(w.startDate) : 'TBD'} - {w.endDate ? formatDate(w.endDate) : 'Ongoing'}
+                      </span>
+                      {canEdit && (
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
-                              if (confirm(`Delete workplan "${w.activity}"?`)) {
-                                deleteWorkplanItem(w.id);
-                                onRefresh();
-                              }
+                              setEditingWorkplan(w);
+                              setShowWorkplanModal(true);
                             }}
-                            className="text-rose-600 hover:underline font-semibold"
+                            className="text-teal-800 hover:underline font-semibold"
                           >
-                            Delete
+                            Edit
                           </button>
-                        )}
-                      </div>
-                    )}
+                          {isAdmin && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete workplan "${w.activity}"?`)) {
+                                  deleteWorkplanItem(w.id);
+                                  onRefresh();
+                                }
+                              }}
+                              className="text-rose-600 hover:underline font-semibold"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -756,6 +1088,123 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* ANNUAL BUDGET MODAL */}
+      {/* ------------------------------------------------------------- */}
+      {showAnnualBudgetModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
+            <h3 className="text-lg font-bold text-stone-900 mb-4">
+              {editingAnnualBudget ? 'Edit Annual Budget Plan' : 'New Annual Budget Plan'}
+            </h3>
+            <form onSubmit={handleSaveAnnualBudget} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Financial year</label>
+                  <input
+                    name="financialYear"
+                    required
+                    defaultValue={editingAnnualBudget?.financialYear || '2026'}
+                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Status</label>
+                  <select
+                    name="status"
+                    defaultValue={editingAnnualBudget?.status || 'Draft'}
+                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Submitted">Submitted</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Active">Active</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">Plan title</label>
+                <input
+                  name="title"
+                  required
+                  defaultValue={editingAnnualBudget?.title || ''}
+                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Programme</label>
+                  <input
+                    name="programme"
+                    defaultValue={editingAnnualBudget?.programme || 'General programme'}
+                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Approved amount (MWK)</label>
+                  <input
+                    name="approvedAmount"
+                    type="number"
+                    step="any"
+                    defaultValue={editingAnnualBudget?.approvedAmount || 0}
+                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">Approval date</label>
+                <input
+                  name="approvalDate"
+                  type="date"
+                  defaultValue={editingAnnualBudget?.approvalDate || ''}
+                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">Description</label>
+                <textarea
+                  name="description"
+                  rows={2}
+                  defaultValue={editingAnnualBudget?.description || ''}
+                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">Notes</label>
+                <textarea
+                  name="notes"
+                  rows={2}
+                  defaultValue={editingAnnualBudget?.notes || ''}
+                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAnnualBudgetModal(false)}
+                  className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900"
+                >
+                  {editingAnnualBudget ? 'Save plan' : 'Add plan'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -921,13 +1370,14 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                   <label className="block text-xs font-semibold text-stone-700 mb-1">Status</label>
                   <select
                     name="status"
-                    defaultValue={editingWorkplan?.status || 'In Progress'}
+                    defaultValue={normalizeWorkplanStatus(editingWorkplan?.status || 'In Progress')}
                     className="w-full text-xs border border-stone-300 rounded-lg p-2"
                   >
-                    <option value="Not Started">Not Started</option>
+                    <option value="Planned">Planned</option>
                     <option value="In Progress">In Progress</option>
                     <option value="Completed">Completed</option>
-                    <option value="On Hold">On Hold</option>
+                    <option value="Delayed">Delayed</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
               </div>
@@ -1099,9 +1549,10 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                   <label className="block text-xs font-semibold text-stone-700 mb-1">Status</label>
                   <select
                     name="status"
-                    defaultValue={editingSchedule?.status || 'Scheduled'}
+                    defaultValue={editingSchedule?.status || 'Upcoming'}
                     className="w-full text-xs border border-stone-300 rounded-lg p-2"
                   >
+                    <option value="Upcoming">Upcoming</option>
                     <option value="Scheduled">Scheduled</option>
                     <option value="In Progress">In Progress</option>
                     <option value="Completed">Completed</option>
