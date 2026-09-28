@@ -198,21 +198,25 @@ service cloud.firestore {
     match /attachments/{id} {
       allow read: if isStaffActive() && (
         (resource.data.targetType != 'safeguardingCase' || canReadSafeguarding(resource.data.targetId)) &&
-        (resource.data.targetType != 'healthFollowUp' || canViewHealthRecords())
+        ((resource.data.targetType != 'healthFollowUp' &&
+          !(resource.data.get('category', '') in ['Medical Document', 'Prescription'])) || canViewHealthRecords())
       );
       allow create: if request.resource.data.targetType == 'safeguardingCase'
         ? canWriteSafeguardingAttachment(request.resource.data.targetId)
-        : request.resource.data.targetType == 'healthFollowUp'
+        : (request.resource.data.targetType == 'healthFollowUp' ||
+           request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
           ? canEditHealthRecords()
           : isManagerOrStaff();
       allow update: if request.resource.data.targetType == 'safeguardingCase'
         ? canWriteSafeguardingAttachment(request.resource.data.targetId)
-        : request.resource.data.targetType == 'healthFollowUp'
+        : (request.resource.data.targetType == 'healthFollowUp' ||
+           request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
           ? canEditHealthRecords()
           : isManagerOrStaff();
       allow delete: if resource.data.targetType == 'safeguardingCase'
         ? canWriteSafeguardingAttachment(resource.data.targetId)
-        : resource.data.targetType == 'healthFollowUp'
+        : (resource.data.targetType == 'healthFollowUp' ||
+           resource.data.get('category', '') in ['Medical Document', 'Prescription'])
           ? canEditHealthRecords()
           : isAdmin() || (isManagerOrStaff() && resource.data.uploadedBy.uid == request.auth.uid);
     }
@@ -295,6 +299,26 @@ service cloud.firestore {
     match /employeeAuditLogs/{eventId} {
       allow read: if isManagerOrAdmin();
       allow create: if isManagerOrAdmin() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /reportHistory/{reportId} {
+      allow read: if isManagerOrAdmin() || (
+        isStaffActive() && resource.data.generatedByUid == request.auth.uid
+      );
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.id == reportId &&
+        request.resource.data.generatedByUid == request.auth.uid &&
+        request.resource.data.status == 'Generated' &&
+        request.resource.data.fileType in ['docx', 'xlsx', 'pdf', 'csv'] &&
+        (!('storagePath' in request.resource.data.keys()) ||
+          (request.resource.data.storagePath is string &&
+           request.resource.data.storagePath.matches('reports/' + request.auth.uid + '/' + reportId + '/.*'))) &&
+        request.resource.data.keys().hasOnly([
+          'id', 'reportType', 'title', 'reportingPeriod', 'dateRange', 'filters',
+          'generatedBy', 'generatedByUid', 'generatedAt', 'fileType', 'fileName', 'storagePath',
+          'dataSourceReferences', 'recordCount', 'photoCount', 'tableCount', 'status'
+        ]);
       allow update, delete: if false;
     }
 

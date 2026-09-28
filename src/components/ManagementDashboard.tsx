@@ -47,7 +47,7 @@ function getPresetRange(preset: DatePreset, start: string, end: string, today: D
 const currency = (amount: number | null) => amount === null ? 'Not available' : formatMWK(amount);
 
 export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, staff, onNavigateReports }) => {
-  const { isAdmin, role, canViewHealthRecords, canViewSafeguarding } = useAuth();
+  const { isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding } = useAuth();
   const [preset, setPreset] = useState<DatePreset>('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -86,7 +86,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     status: taskStatus === 'ALL' ? undefined : taskStatus,
     priority: taskPriority === 'ALL' ? undefined : taskPriority,
   };
-  const permittedDb = projectManagementDatabase(db, { canViewHealthRecords, canViewSafeguarding });
+  const permittedDb = projectManagementDatabase(db, { canViewHealthRecords, canViewCaseReviews, canViewSafeguarding });
   const gratuityByEmployee = useMemo(() => {
     if (!salaryHistory || salaryHistoryError) return undefined;
     const totals: Record<string, number> = {};

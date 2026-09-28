@@ -2,6 +2,7 @@ import {
   ref,
   uploadBytes,
   getDownloadURL,
+  getBlob,
   deleteObject,
 } from 'firebase/storage';
 import {
@@ -26,6 +27,72 @@ import { compressImage } from '../utils/imageOptimizer';
 import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
+
+export async function archiveGeneratedReport(
+  blob: Blob,
+  ownerUid: string,
+  reportId: string,
+  fileName: string,
+  fileType: 'docx' | 'xlsx' | 'pdf' | 'csv'
+): Promise<string> {
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `reports/${ownerUid}/${reportId}/${safeFileName}`;
+  await uploadBytes(ref(storage, storagePath), blob, {
+    contentType: fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : fileType === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv',
+    customMetadata: { ownerUid, reportId, fileType },
+  });
+  return storagePath;
+}
+
+export async function getArchivedReport(storagePath: string): Promise<Blob> {
+  return getBlob(ref(storage, storagePath), 50 * 1024 * 1024);
+}
+
+export async function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  const targetTypes: AttachmentTargetType[] = [
+    'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
+    'householdActivity', 'rentPayment', 'expense',
+    ...(canViewHealthRecords ? ['healthFollowUp' as const] : []),
+  ];
+  const snapshots = await Promise.all(targetTypes.map((targetType) => {
+    const constraints = [
+      where('targetType', '==', targetType),
+      ...(!canViewHealthRecords ? [where('category', 'not-in', ['Medical Document', 'Prescription'])] : []),
+    ];
+    return getDocs(query(collection(firestore, ATTACHMENTS_COLLECTION), ...constraints));
+  }));
+
+  return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
+    .filter((attachment) => canViewHealthRecords || (
+      attachment.targetType !== 'healthFollowUp' &&
+      attachment.category !== 'Medical Document' &&
+      attachment.category !== 'Prescription'
+    ))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export async function getAuthorizedReportImage(
+  attachment: PhotoAttachment,
+  canViewHealthRecords: boolean
+): Promise<Uint8Array> {
+  if (!attachment.contentType.match(/^image\/(jpeg|png)$/i)) {
+    throw new Error('Only JPEG and PNG attachments can be embedded in Word reports.');
+  }
+  if (!canViewHealthRecords && (
+    attachment.targetType === 'healthFollowUp' ||
+    attachment.category === 'Medical Document' ||
+    attachment.category === 'Prescription'
+  )) {
+    throw new Error('Your account cannot include this health attachment in a report.');
+  }
+
+  const image = await getBlob(ref(storage, attachment.storagePath), 15 * 1024 * 1024);
+  return new Uint8Array(await image.arrayBuffer());
+}
 
 export async function getAllAttachmentMetadata(): Promise<PhotoAttachment[]> {
   const snapshot = await getDocs(collection(firestore, ATTACHMENTS_COLLECTION));

@@ -983,6 +983,26 @@ export interface AppDatabase {
   caseReviews?: CaseReview[];
 }
 
+export interface ReportHistoryRecord {
+  id: string;
+  reportType: string;
+  title: string;
+  reportingPeriod: string;
+  dateRange?: { start?: string; end?: string };
+  filters: Record<string, string>;
+  generatedBy: string;
+  generatedByUid: string;
+  generatedAt: string;
+  fileType: 'docx' | 'xlsx' | 'pdf' | 'csv';
+  fileName: string;
+  storagePath?: string;
+  dataSourceReferences: string[];
+  recordCount: number;
+  photoCount: number;
+  tableCount: number;
+  status: 'Generated';
+}
+
 export type ConversationType = 'direct' | 'group' | 'announcement';
 
 export interface ParticipantDetail {

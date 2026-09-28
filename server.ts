@@ -1,4 +1,5 @@
 import express from 'express';
+import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { processAIChat, AIChatRequest } from './src/server/aiService';
@@ -90,12 +91,12 @@ async function startServer() {
         ? await casesCollection.limit(250).get()
         : await casesCollection.where('authorizedStaffUids', 'array-contains', staff.uid).limit(250).get();
       const search = String(req.query.search || '').trim().toLowerCase();
-      const records = snapshot.docs.map((record) => ({ id: record.id, ...record.data() } as any));
+      const records = snapshot.docs.map((record: QueryDocumentSnapshot) => ({ id: record.id, ...record.data() } as any));
       const matchingRecords = search
-        ? records.filter((record) => [record.id, record.girlId, record.category, record.description, record.immediateConcern, record.actionTaken, record.referredTo, record.status]
+        ? records.filter((record: Record<string, any>) => [record.id, record.girlId, record.category, record.description, record.immediateConcern, record.actionTaken, record.referredTo, record.status]
             .some((value) => String(value || '').toLowerCase().includes(search)))
         : records;
-      await Promise.all(matchingRecords.map((record) => writeSafeguardingAudit({
+      await Promise.all(matchingRecords.map((record: Record<string, any>) => writeSafeguardingAudit({
         userId: staff.uid,
         userName: staff.fullName,
         action: 'read',
@@ -242,7 +243,7 @@ async function startServer() {
       }
       const snapshot = await caseSnapshot.ref.collection('files').get();
       await writeSafeguardingAudit({ userId: staff.uid, userName: staff.fullName, action: 'read', recordId: caseSnapshot.id });
-      res.json({ files: snapshot.docs.map((file) => ({ id: file.id, ...file.data() })) });
+      res.json({ files: snapshot.docs.map((file: QueryDocumentSnapshot) => ({ id: file.id, ...file.data() })) });
     } catch (err: any) {
       const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
       res.status(status).json({ error: err.message || 'Could not load safeguarding documents.' });

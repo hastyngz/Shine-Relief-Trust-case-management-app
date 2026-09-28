@@ -9,6 +9,7 @@ import {
   getDocs,
   query,
   where,
+  orderBy,
   limit,
   Unsubscribe,
   Query,
@@ -43,6 +44,7 @@ import {
   AttendanceRecord,
   GirlLeaveRecord,
   CaseReview,
+  ReportHistoryRecord,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -120,6 +122,7 @@ export const COLLECTIONS = {
   SAFEGUARDING_AUDIT_LOGS: 'safeguardingAuditLogs',
   EMPLOYEE_SALARY_HISTORY: 'employeeSalaryHistory',
   EMPLOYEE_AUDIT_LOGS: 'employeeAuditLogs',
+  REPORT_HISTORY: 'reportHistory',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -192,6 +195,20 @@ export async function appendEmployeeAuditLog(event: Record<string, any>): Promis
     ...sanitizeForFirestore(event),
     id: auditId,
   });
+}
+
+export async function appendReportHistory(record: ReportHistoryRecord): Promise<void> {
+  await setDoc(doc(firestore, COLLECTIONS.REPORT_HISTORY, record.id), sanitizeForFirestore(record));
+}
+
+export async function getReportHistory(uid: string, canReadAll: boolean): Promise<ReportHistoryRecord[]> {
+  const reportQuery = canReadAll
+    ? query(collection(firestore, COLLECTIONS.REPORT_HISTORY), orderBy('generatedAt', 'desc'), limit(100))
+    : query(collection(firestore, COLLECTIONS.REPORT_HISTORY), where('generatedByUid', '==', uid), orderBy('generatedAt', 'desc'), limit(50));
+  const snapshot = await getDocs(reportQuery);
+  return snapshot.docs
+    .map((report) => report.data() as ReportHistoryRecord)
+    .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
 }
 
 export async function getStaffUserDoc(uid: string): Promise<StaffUser | null> {

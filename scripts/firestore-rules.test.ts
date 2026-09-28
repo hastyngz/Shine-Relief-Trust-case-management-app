@@ -4,7 +4,8 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import assert from 'node:assert/strict';
+import { collection, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -61,6 +62,10 @@ async function seedData() {
       girlId: 'girl-1',
       date: '2026-09-26',
     });
+    await setDoc(doc(firestore, 'attachments/medical-photo'), {
+      id: 'medical-photo', targetType: 'girl', targetId: 'girl-1', category: 'Medical Document',
+      fileName: 'medical.png', storagePath: 'attachments/girl/girl-1/medical.png',
+    });
     await setDoc(doc(firestore, 'safeguardingCases/case-1'), {
       id: 'case-1',
       girlId: 'girl-1',
@@ -101,6 +106,10 @@ async function run() {
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));
     await assertFails(getDoc(doc(viewer, 'healthFollowUps/health-1')));
     await assertSucceeds(getDoc(doc(manager, 'healthFollowUps/health-1')));
+    await assertFails(getDoc(doc(viewer, 'attachments/medical-photo')));
+    await assertSucceeds(getDoc(doc(manager, 'attachments/medical-photo')));
+    const safeAttachmentTypes = ['girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity', 'rentPayment', 'expense'];
+    await Promise.all(safeAttachmentTypes.map((targetType) => assertSucceeds(getDocs(query(collection(viewer, 'attachments'), where('targetType', '==', targetType), where('category', 'not-in', ['Medical Document', 'Prescription']))))));
     await assertFails(getDoc(doc(admin, 'safeguardingCases/case-1')));
     await assertFails(getDoc(doc(viewer, 'employeeSalaryHistory/salary-1')));
     await assertFails(getDoc(doc(worker, 'employeeSalaryHistory/salary-1')));
@@ -120,6 +129,18 @@ async function run() {
     }));
     await assertSucceeds(setDoc(doc(manager, 'employeeAuditLogs/report-event'), { employeeId: 'management-report', action: 'report_export', actorUid: 'manager' }));
     await assertFails(setDoc(doc(worker, 'employeeAuditLogs/report-event-worker'), { employeeId: 'management-report', action: 'report_export', actorUid: 'worker' }));
+    await assertSucceeds(setDoc(doc(worker, 'reportHistory/report-worker'), { id: 'report-worker', reportType: 'comprehensive', title: 'Worker report', reportingPeriod: '2026-01', filters: {}, generatedBy: 'worker', generatedByUid: 'worker', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'docx', fileName: 'report.docx', storagePath: 'reports/worker/report-worker/report.docx', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
+    await assertSucceeds(getDoc(doc(manager, 'reportHistory/report-worker')));
+    const ownReportHistory = await getDoc(doc(worker, 'reportHistory/report-worker'));
+    await assertSucceeds(Promise.resolve(ownReportHistory));
+    assert.equal(ownReportHistory.data()?.storagePath, 'reports/worker/report-worker/report.docx');
+    await assertSucceeds(getDocs(query(collection(worker, 'reportHistory'), where('generatedByUid', '==', 'worker'), orderBy('generatedAt', 'desc'))));
+    await assertSucceeds(getDocs(query(collection(manager, 'reportHistory'), orderBy('generatedAt', 'desc'))));
+    await assertFails(getDoc(doc(viewer, 'reportHistory/report-worker')));
+    await assertFails(setDoc(doc(worker, 'reportHistory/report-forged'), { id: 'report-forged', generatedByUid: 'manager', status: 'Generated', fileType: 'docx' }));
+    await assertFails(setDoc(doc(worker, 'reportHistory/report-bad-path'), { id: 'report-bad-path', reportType: 'comprehensive', title: 'Bad path', reportingPeriod: '2026-01', filters: {}, generatedBy: 'worker', generatedByUid: 'worker', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'docx', fileName: 'report.docx', storagePath: 'reports/manager/report-bad-path/report.docx', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
+    await assertFails(updateDoc(doc(worker, 'reportHistory/report-worker'), { title: 'Changed' }));
+    await assertFails(setDoc(doc(viewer, 'reportHistory/report-viewer'), { id: 'report-viewer', reportType: 'comprehensive', title: 'Viewer report', reportingPeriod: '2026-01', filters: {}, generatedBy: 'viewer', generatedByUid: 'viewer', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'pdf', fileName: 'report.pdf', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
     await assertFails(setDoc(doc(manager, 'employeeSalaryHistory/salary-2'), { salaryAmount: 130000 }));
 
     console.log('Firestore rules tests passed.');

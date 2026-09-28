@@ -13,6 +13,8 @@ export interface ManagementFilters {
   staffId?: string;
   status?: string;
   priority?: string;
+  school?: string;
+  classLevel?: string;
 }
 
 export function canAccessManagementDashboard(isAdmin: boolean, role?: string | null): boolean {
@@ -21,7 +23,7 @@ export function canAccessManagementDashboard(isAdmin: boolean, role?: string | n
 
 export function projectManagementDatabase(
   db: AppDatabase,
-  permissions: { canViewHealthRecords: boolean; canViewSafeguarding: boolean }
+  permissions: { canViewHealthRecords: boolean; canViewSafeguarding: boolean; canViewCaseReviews?: boolean }
 ): AppDatabase {
   return {
     ...db,
@@ -30,8 +32,12 @@ export function projectManagementDatabase(
     attachments: (db.attachments || []).filter((attachment) => {
       const targetType = String(attachment.targetType);
       return (targetType !== 'healthFollowUp' || permissions.canViewHealthRecords) &&
-        (targetType !== 'safeguardingCase' || permissions.canViewSafeguarding);
+        (targetType !== 'safeguardingCase' || permissions.canViewSafeguarding) &&
+        (permissions.canViewHealthRecords || !['Medical Document', 'Prescription'].includes(attachment.category));
     }),
+    caseReviews: !permissions.canViewCaseReviews ? [] : permissions.canViewHealthRecords
+      ? db.caseReviews || []
+      : (db.caseReviews || []).map(({ health: _health, ...review }) => review),
   };
 }
 
@@ -182,10 +188,10 @@ const isInRange = (date: string | undefined, filters: ManagementFilters): boolea
 };
 
 const matchesPeriod = (date: string | undefined, filters: ManagementFilters): boolean => {
-  if (!date) return !filters.financialYear && !filters.month;
+  if (!date) return !filters.financialYear && !filters.month && !filters.startDate && !filters.endDate;
   if (filters.financialYear && !date.startsWith(filters.financialYear)) return false;
   if (filters.month && Number(date.slice(5, 7)) !== filters.month) return false;
-  return true;
+  return isInRange(date, filters);
 };
 
 const sum = (values: number[]) => values.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0);
@@ -199,7 +205,7 @@ export function buildManagementAnalytics(
   today = new Date().toISOString().slice(0, 10),
   gratuityByEmployee?: Record<string, number>
 ): ManagementAnalytics {
-  const girls = (db.girls || []).filter((girl) => matchesManagementProgramme(db, filters.programme, { girlId: girl.id }) && (!filters.householdId || girl.householdId === filters.householdId));
+  const girls = (db.girls || []).filter((girl) => matchesManagementProgramme(db, filters.programme, { girlId: girl.id }) && (!filters.householdId || girl.householdId === filters.householdId) && (!filters.school || girl.school === filters.school) && (!filters.classLevel || girl.classLevel === filters.classLevel));
   const households = (db.households || []).filter((house) => (!filters.householdId || house.id === filters.householdId) && matchesManagementProgramme(db, filters.programme, { householdId: house.id }));
   const householdIds = new Set(households.map((house) => house.id));
   const girlIds = new Set(girls.filter((girl) => !filters.householdId || householdIds.has(girl.householdId)).map((girl) => girl.id));
@@ -213,17 +219,26 @@ export function buildManagementAnalytics(
   const health = (db.healthFollowUps || []).filter((item) => girlIds.has(item.girlId) && isInRange(item.date, filters) && inProgramme({ id: item.id, girlId: item.girlId }));
   const family = (db.familyFollowUps || []).filter((item) => girlIds.has(item.girlId) && isInRange(item.date, filters) && inProgramme({ id: item.id, girlId: item.girlId }));
   const activities = (db.householdActivities || []).filter((item) => householdIds.has(item.householdId) && isInRange(item.date, filters) && inProgramme({ id: item.id, householdId: item.householdId }));
-  const expenses = (db.expenses || []).filter((item) => householdIds.has(item.householdId) && matchesPeriod(item.financialYear ? `${item.financialYear}-${item.date.slice(5, 7)}` : item.date, filters) && inProgramme(item));
-  const rentPeriods = filters.financialYear
-    ? filters.month ? [`${filters.financialYear}-${String(filters.month).padStart(2, '0')}`] : Array.from({ length: 12 }, (_, index) => `${filters.financialYear}-${String(index + 1).padStart(2, '0')}`)
-    : filters.month ? [`${today.slice(0, 4)}-${String(filters.month).padStart(2, '0')}`] : [today.slice(0, 7)];
+  const expenses = (db.expenses || []).filter((item) => householdIds.has(item.householdId) && isInRange(item.date, filters) && (!filters.financialYear || item.financialYear === filters.financialYear || item.date.startsWith(filters.financialYear)) && (!filters.month || Number(item.date.slice(5, 7)) === filters.month) && inProgramme(item));
+  const monthOverlapsRange = (monthKey: string) => {
+    if (!filters.startDate && !filters.endDate) return true;
+    const [year, month] = monthKey.split('-').map(Number);
+    const firstDay = `${monthKey}-01`;
+    const lastDay = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    return (!filters.endDate || firstDay <= filters.endDate) && (!filters.startDate || lastDay >= filters.startDate);
+  };
   const monthCoveredKey = (value: string, fallbackDate: string) => {
     const parts = value.match(/^([A-Za-z]+)\s+(\d{4})$/);
     if (!parts) return fallbackDate.slice(0, 7);
     const monthIndex = new Date(`${parts[1]} 1, ${parts[2]}`).getMonth() + 1;
     return `${parts[2]}-${String(monthIndex).padStart(2, '0')}`;
   };
-  const rents = (db.rentPayments || []).filter((item) => householdIds.has(item.householdId) && rentPeriods.includes(monthCoveredKey(item.monthCovered, item.datePaid)) && inProgramme(item));
+  const rentPeriods = filters.financialYear
+    ? filters.month ? [`${filters.financialYear}-${String(filters.month).padStart(2, '0')}`] : Array.from({ length: 12 }, (_, index) => `${filters.financialYear}-${String(index + 1).padStart(2, '0')}`)
+    : filters.month ? [`${(filters.startDate || today).slice(0, 4)}-${String(filters.month).padStart(2, '0')}`]
+      : filters.startDate || filters.endDate ? Array.from(new Set((db.rentPayments || []).map((item) => monthCoveredKey(item.monthCovered, item.datePaid)))).filter(monthOverlapsRange)
+        : [today.slice(0, 7)];
+  const rents = (db.rentPayments || []).filter((item) => householdIds.has(item.householdId) && rentPeriods.includes(monthCoveredKey(item.monthCovered, item.datePaid)) && ((filters.financialYear || filters.month) || monthOverlapsRange(monthCoveredKey(item.monthCovered, item.datePaid))) && inProgramme(item));
   const actions = (db.caseActions || []).filter((item) => inHouse(item.girlId, item.householdId) && isInRange(item.dueDate, filters) && inProgramme({ id: item.id, girlId: item.girlId, householdId: item.householdId, sourceId: item.sourceId }) && (!filters.staffId || item.assignedStaffId === filters.staffId) && (!filters.status || item.status === filters.status) && (!filters.priority || item.priority === filters.priority));
   const reviews = (db.caseReviews || []).filter((item) => girlIds.has(item.girlId) && isInRange(item.nextReviewDate || item.reviewDate, filters) && inProgramme({ girlId: item.girlId }));
   const academicSupports = (db.academicSupports || []).filter((item) => girlIds.has(item.girlId) && isInRange(item.date, filters) && inProgramme({ girlId: item.girlId }));
@@ -231,7 +246,12 @@ export function buildManagementAnalytics(
     return isInRange(item.startDate, filters) && inProgramme({ id: item.id, activityIds: item.linkedActivityIds || [] }) && (!filters.staffId || item.responsibleStaffId === filters.staffId) && (!filters.status || normalizeWorkplanStatus(item.status) === filters.status);
   });
   const schedules = (db.schedules || []).filter((item) => isInRange(item.scheduledDate, filters) && inHouse(item.targetType === 'girl' ? item.targetId : undefined, item.targetType === 'household' ? item.targetId : undefined) && inProgramme({ id: item.id, activityId: item.targetType === 'workplan' ? item.targetId : undefined, girlId: item.targetType === 'girl' ? item.targetId : undefined, householdId: item.targetType === 'household' ? item.targetId : undefined }) && (!filters.staffId || item.assignedStaffId === filters.staffId) && (!filters.status || item.status === filters.status));
-  const budgets = (db.budgets || []).filter((item) => matchesPeriod(item.period?.match(/^\d{4}-\d{2}/)?.[0] || (item.financialYear ? `${item.financialYear}-${String(item.month || 1).padStart(2, '0')}` : undefined), filters) && (!filters.householdId || item.householdId === filters.householdId) && inProgramme(item));
+  const budgets = (db.budgets || []).filter((item) => {
+    const periodMonth = item.period?.match(/^\d{4}-\d{2}/)?.[0] || (item.financialYear ? `${item.financialYear}-${String(item.month || 1).padStart(2, '0')}` : undefined);
+    const periodDate = periodMonth ? `${periodMonth}-01` : undefined;
+    const inSelectedDates = !filters.startDate && !filters.endDate || !!periodDate && isInRange(periodDate, filters);
+    return matchesPeriod(periodMonth, { ...filters, startDate: undefined, endDate: undefined }) && inSelectedDates && (!filters.householdId || item.householdId === filters.householdId) && inProgramme(item);
+  });
   const annualBudgets = (db.annualBudgets || []).filter((item) => (!filters.financialYear || item.financialYear === filters.financialYear) && (!filters.programme || item.programme === filters.programme));
   const payroll = (db.payrollRecords || []).filter((item) => matchesPeriod(item.payPeriodStartDate, filters) && (!filters.programme || item.departmentOrProgramme === filters.programme) && (!filters.staffId || item.employeeId === filters.staffId));
 

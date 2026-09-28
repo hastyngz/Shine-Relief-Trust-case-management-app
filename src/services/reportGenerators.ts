@@ -9,12 +9,15 @@ import {
   WidthType,
   AlignmentType,
   HeadingLevel,
+  Header,
+  Footer,
+  PageNumber,
   BorderStyle,
   ShadingType,
   ImageRun,
 } from 'docx';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   AppDatabase,
@@ -32,6 +35,8 @@ import {
   PhotoAttachment,
 } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
+import { calculateBudgetVariance } from './financialCalculations';
+import { matchesManagementProgramme } from './managementAnalytics';
 
 // Color Palette for SHINE Relief Trust Malawi
 const SHINE_COLORS = {
@@ -47,11 +52,24 @@ const SHINE_COLORS = {
 };
 
 export interface ReportConfig {
+  reportType?: string;
   title: string;
+  brandLogoData?: Uint8Array;
+  structuredTables?: Array<{ title: string; headers: string[]; rows: Array<Array<string | number>> }>;
   subtitle?: string;
   periodLabel: string;
   generatedBy: string;
   dateRange?: { start?: string; end?: string };
+  filters?: {
+    programme?: string;
+    school?: string;
+    classLevel?: string;
+    staffId?: string;
+    activityId?: string;
+    followUpType?: 'education' | 'health' | 'family';
+    status?: string;
+    category?: string;
+  };
   selectedHouseholdId?: string;
   selectedGirlId?: string;
   executiveSummary?: string;
@@ -71,8 +89,12 @@ export interface ReportConfig {
     workplans: boolean;
     schedules: boolean;
     photoGallery: boolean;
+    caseActions?: boolean;
+    caseReviews?: boolean;
   };
   selectedPhotoIds?: string[];
+  maxPhotos?: number;
+  photoImageData?: Record<string, Uint8Array>;
 }
 
 /**
@@ -88,9 +110,17 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
   let expenses = [...db.expenses];
   let rent = [...db.rentPayments];
   let budgets = [...(db.budgets || [])];
+  let annualBudgets = [...(db.annualBudgets || [])];
+  let payroll = [...(db.payrollRecords || [])];
   let workplans = [...(db.workplans || [])];
   let schedules = [...(db.schedules || [])];
   let photos = [...(db.attachments || [])];
+  let caseActions = [...(db.caseActions || [])];
+  let caseReviews = [...(db.caseReviews || [])];
+  let attendance = [...(db.attendanceRecords || [])];
+  let educationHistory = [...(db.educationHistory || [])];
+  let examinations = [...(db.examinationRecords || [])];
+  let girlLeaves = [...(db.girlLeaves || [])];
 
   // Filter by Household if selected
   if (config.selectedHouseholdId && config.selectedHouseholdId !== 'ALL') {
@@ -99,6 +129,13 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
     activities = activities.filter((a) => a.householdId === config.selectedHouseholdId);
     expenses = expenses.filter((e) => e.householdId === config.selectedHouseholdId);
     rent = rent.filter((r) => r.householdId === config.selectedHouseholdId);
+    const householdGirlIds = new Set(girls.map((girl) => girl.id));
+    caseActions = caseActions.filter((item) => item.householdId === config.selectedHouseholdId || (!!item.girlId && householdGirlIds.has(item.girlId)));
+    caseReviews = caseReviews.filter((item) => householdGirlIds.has(item.girlId));
+    attendance = attendance.filter((item) => householdGirlIds.has(item.girlId));
+    educationHistory = educationHistory.filter((item) => householdGirlIds.has(item.girlId));
+    examinations = examinations.filter((item) => householdGirlIds.has(item.girlId));
+    girlLeaves = girlLeaves.filter((item) => householdGirlIds.has(item.girlId));
   }
 
   // Filter by Girl if selected
@@ -107,6 +144,12 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
     edu = edu.filter((e) => e.girlId === config.selectedGirlId);
     health = health.filter((h) => h.girlId === config.selectedGirlId);
     family = family.filter((f) => f.girlId === config.selectedGirlId);
+    caseActions = caseActions.filter((item) => item.girlId === config.selectedGirlId);
+    caseReviews = caseReviews.filter((item) => item.girlId === config.selectedGirlId);
+    attendance = attendance.filter((item) => item.girlId === config.selectedGirlId);
+    educationHistory = educationHistory.filter((item) => item.girlId === config.selectedGirlId);
+    examinations = examinations.filter((item) => item.girlId === config.selectedGirlId);
+    girlLeaves = girlLeaves.filter((item) => item.girlId === config.selectedGirlId);
   }
 
   // Filter by Date Range
@@ -126,12 +169,103 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
   expenses = expenses.filter((e) => inRange(e.date));
   rent = rent.filter((r) => inRange(r.datePaid));
   schedules = schedules.filter((s) => inRange(s.scheduledDate));
+  caseActions = caseActions.filter((item) => inRange(item.dueDate));
+  caseReviews = caseReviews.filter((item) => inRange(item.reviewDate));
+  attendance = attendance.filter((item) => inRange(item.date));
+  educationHistory = educationHistory.filter((item) => inRange(item.startDate || `${item.academicYear}-01-01`));
+  examinations = examinations.filter((item) => inRange(`${item.examinationYear}-01-01`));
+  girlLeaves = girlLeaves.filter((item) => inRange(item.startDate));
+
+  const filters = config.filters || {};
+  if (filters.school || filters.classLevel) {
+    girls = girls.filter((girl) => (!filters.school || girl.school === filters.school) && (!filters.classLevel || girl.classLevel === filters.classLevel));
+    const matchingGirls = new Set(girls.map((girl) => girl.id));
+    edu = edu.filter((item) => matchingGirls.has(item.girlId) && (!filters.school || item.school === filters.school) && (!filters.classLevel || item.classLevel === filters.classLevel));
+    health = health.filter((item) => matchingGirls.has(item.girlId));
+    family = family.filter((item) => matchingGirls.has(item.girlId));
+    const householdIds = new Set(girls.map((girl) => girl.householdId));
+    caseActions = caseActions.filter((item) => (!!item.girlId && matchingGirls.has(item.girlId)) || (!!item.householdId && householdIds.has(item.householdId)));
+    caseReviews = caseReviews.filter((item) => matchingGirls.has(item.girlId));
+    attendance = attendance.filter((item) => matchingGirls.has(item.girlId));
+    educationHistory = educationHistory.filter((item) => matchingGirls.has(item.girlId));
+    examinations = examinations.filter((item) => matchingGirls.has(item.girlId));
+    girlLeaves = girlLeaves.filter((item) => matchingGirls.has(item.girlId));
+    households = households.filter((household) => householdIds.has(household.id));
+    activities = activities.filter((item) => householdIds.has(item.householdId));
+    expenses = expenses.filter((item) => householdIds.has(item.householdId));
+    rent = rent.filter((item) => householdIds.has(item.householdId));
+  }
+  if (filters.programme) {
+    girls = girls.filter((girl) => matchesManagementProgramme(db, filters.programme, { id: girl.id, girlId: girl.id, householdId: girl.householdId }));
+    households = households.filter((household) => matchesManagementProgramme(db, filters.programme, { id: household.id, householdId: household.id }));
+    edu = edu.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    health = health.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    family = family.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    activities = activities.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, householdId: item.householdId }));
+    expenses = expenses.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, householdId: item.householdId, programme: item.programme, budgetLineId: item.budgetLineId }));
+    rent = rent.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, householdId: item.householdId, programme: item.programme, budgetLineId: item.budgetLineId }));
+    workplans = workplans.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, activityIds: item.linkedActivityIds }));
+    schedules = schedules.filter((item) => matchesManagementProgramme(db, filters.programme, {
+      id: item.id,
+      activityId: item.targetType === 'workplan' ? item.targetId : undefined,
+      girlId: item.targetType === 'girl' ? item.targetId : undefined,
+      householdId: item.targetType === 'household' ? item.targetId : undefined,
+    }));
+    caseActions = caseActions.filter((item) => matchesManagementProgramme(db, filters.programme, {
+      id: item.id, girlId: item.girlId, householdId: item.householdId, sourceId: item.sourceId,
+    }));
+    caseReviews = caseReviews.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    attendance = attendance.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId, activityId: item.activityId }));
+    educationHistory = educationHistory.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    examinations = examinations.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    girlLeaves = girlLeaves.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, girlId: item.girlId }));
+    budgets = budgets.filter((item) => matchesManagementProgramme(db, filters.programme, { id: item.id, programme: item.programme, householdId: item.householdId, girlId: item.girlId, activityId: item.activityId }));
+    annualBudgets = annualBudgets.filter((item) => item.programme === filters.programme);
+    payroll = payroll.filter((item) => item.departmentOrProgramme === filters.programme);
+  }
+  if (filters.followUpType === 'education') { health = []; family = []; }
+  if (filters.followUpType === 'health') { edu = []; family = []; }
+  if (filters.followUpType === 'family') { edu = []; health = []; }
+  if (filters.category) {
+    expenses = expenses.filter((item) => item.category === filters.category || item.budgetCategory === filters.category);
+    budgets = budgets.filter((item) => item.category === filters.category);
+    activities = activities.filter((item) => item.activityType === filters.category);
+  }
+  if (filters.status) {
+    girls = girls.filter((item) => item.status === filters.status);
+    households = households.filter((item) => item.status === filters.status);
+    workplans = workplans.filter((item) => item.status === filters.status);
+    schedules = schedules.filter((item) => item.status === filters.status);
+    caseActions = caseActions.filter((item) => item.status === filters.status);
+    annualBudgets = annualBudgets.filter((item) => item.status === filters.status);
+    payroll = payroll.filter((item) => item.paymentStatus === filters.status);
+  }
+  if (filters.staffId) {
+    workplans = workplans.filter((item) => item.responsibleStaffId === filters.staffId);
+    schedules = schedules.filter((item) => item.assignedStaffId === filters.staffId);
+    caseActions = caseActions.filter((item) => item.assignedStaffId === filters.staffId);
+    payroll = payroll.filter((item) => item.employeeId === filters.staffId);
+  }
+  if (filters.activityId) {
+    activities = activities.filter((item) => item.id === filters.activityId);
+    expenses = expenses.filter((item) => item.activityId === filters.activityId);
+    budgets = budgets.filter((item) => item.activityId === filters.activityId);
+    workplans = workplans.filter((item) => item.id === filters.activityId || item.linkedActivityIds?.includes(filters.activityId || '') === true);
+    schedules = schedules.filter((item) => item.targetId === filters.activityId);
+    caseActions = caseActions.filter((item) => item.sourceId === filters.activityId);
+  }
+  if (filters.category) photos = photos.filter((item) => item.category === filters.category);
 
   // Selected Photos
-  if (config.selectedPhotoIds && config.selectedPhotoIds.length > 0) {
+  if (config.selectedPhotoIds) {
     const idSet = new Set(config.selectedPhotoIds);
     photos = photos.filter((p) => idSet.has(p.id));
   }
+  if (config.maxPhotos !== undefined) {
+    photos = photos.slice(0, Math.max(0, config.maxPhotos));
+  }
+  if (config.filters?.category) photos = photos.filter((photo) => photo.category === config.filters?.category);
+  if (config.filters?.activityId) photos = photos.filter((photo) => photo.targetId === config.filters?.activityId);
 
   return {
     girls,
@@ -146,7 +280,39 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
     workplans,
     schedules,
     photos,
+    caseActions,
+    caseReviews,
+    attendance,
+    educationHistory,
+    examinations,
+    girlLeaves,
   };
+}
+
+export function buildFactualReportNarrative(db: AppDatabase, config: ReportConfig): string {
+  const data = filterDataForReport(db, config);
+  const expenseTotal = data.expenses.reduce((sum, expense) => sum + (expense.totalCost || 0), 0);
+  const rentTotal = data.rent.reduce((sum, payment) => sum + (payment.amountPaid || 0), 0);
+
+  return [
+    `For ${config.periodLabel}, the selected records contain ${data.girls.length} girl profile(s), ${data.households.length} household profile(s), ${data.edu.length} education follow-up(s), ${data.health.length} health follow-up(s), ${data.family.length} family follow-up(s), and ${data.activities.length} household activit(y/ies).`,
+    `Recorded household expenses total ${formatMWK(expenseTotal)} and recorded rent payments total ${formatMWK(rentTotal)}.`,
+  ].join(' ');
+}
+
+export function buildRecordedRecommendations(db: AppDatabase, config: ReportConfig): string {
+  const data = filterDataForReport(db, config);
+  const recommendations = [
+    ...data.edu.map((item) => item.recommendations),
+    ...data.health.map((item) => item.recommendations),
+    ...data.family.map((item) => item.recommendations),
+    ...data.activities.map((item) => item.recommendations),
+  ].filter((value): value is string => !!value?.trim());
+  const uniqueRecommendations = [...new Set(recommendations.map((value) => value.trim()))];
+
+  return uniqueRecommendations.length
+    ? uniqueRecommendations.map((recommendation) => `• ${recommendation}`).join('\n')
+    : 'No recommendations were recorded in the selected records.';
 }
 
 // ============================================================================
@@ -206,6 +372,14 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
         }),
       ],
     });
+
+  if (config.brandLogoData) {
+    sections.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 120 },
+      children: [new ImageRun({ data: config.brandLogoData, type: 'png', transformation: { width: 72, height: 72 } })],
+    }));
+  }
 
   // Document Title and Organization Header
   sections.push(
@@ -267,7 +441,7 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
           new TextRun({
             text:
               config.executiveSummary ||
-              `During the reporting period (${config.periodLabel}), SHINE Relief Trust continued to deliver comprehensive community and family-centred care in Zomba District. This report details progress across our core pillars: residential and household care, secondary and primary school education tracking, medical check-ups, and holistic family reintegration support. Staff conducted active case management across all monitored households to ensure safety, health, and academic progress for all supported girls.`,
+              buildFactualReportNarrative(db, config),
             size: 20,
             color: SHINE_COLORS.grayText,
           }),
@@ -486,6 +660,40 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
     );
   }
 
+  if (config.includeSections.caseActions && data.caseActions.length > 0) {
+    sections.push(
+      createSectionHeading('Case Actions & Follow-up Tasks'),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({ tableHeader: true, children: ['Due date', 'Action', 'Responsible staff', 'Priority', 'Status', 'Completion'].map((header) => tableCell(header, true)) }),
+          ...data.caseActions.map((action) => new TableRow({ children: [
+            tableCell(formatDate(action.dueDate)), tableCell(action.title), tableCell(action.assignedStaffName),
+            tableCell(action.priority), tableCell(action.status), tableCell(action.completionNotes || '—'),
+          ] })),
+        ],
+      })
+    );
+  }
+
+  if (config.includeSections.caseReviews && data.caseReviews.length > 0) {
+    sections.push(
+      createSectionHeading('Case Reviews'),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({ tableHeader: true, children: ['Review date', 'Girl', 'Education', 'Health', 'Family', 'Progress', 'Challenges', 'Action plan', 'Next review'].map((header) => tableCell(header, true)) }),
+          ...data.caseReviews.map((review) => new TableRow({ children: [
+            tableCell(formatDate(review.reviewDate)), tableCell(girlMap.get(review.girlId) || review.girlId),
+            tableCell(review.education || '—'), tableCell(review.health || '—'), tableCell(review.family || '—'),
+            tableCell(review.progress || '—'), tableCell(review.challenges || '—'), tableCell(review.actionPlan || '—'),
+            tableCell(formatDate(review.nextReviewDate)),
+          ] })),
+        ],
+      })
+    );
+  }
+
   // Budgets & Expenditure
   if (config.includeSections.budgets && data.budgets.length > 0) {
     sections.push(
@@ -554,9 +762,63 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
     );
   }
 
-  if (config.includeSections.photoGallery && data.photos.length > 0) {
+  config.structuredTables?.forEach((reportTable, index) => {
+    if (reportTable.headers.length === 0) return;
     sections.push(
-      createSectionHeading('9. Relevant Photo / Attachment References'),
+      createSectionHeading(`${index + 1}. ${reportTable.title}`),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            tableHeader: true,
+            children: reportTable.headers.map((header) => tableCell(header, true)),
+          }),
+          ...reportTable.rows.map((row) => new TableRow({
+            children: reportTable.headers.map((header, column) => {
+              const value = row[column] ?? '';
+              const displayValue = typeof value === 'number' && /MWK|amount|salary|gratuity|budget|actual|variance|expenditure/i.test(header)
+                ? formatMWK(value)
+                : String(value);
+              return tableCell(displayValue);
+            }),
+          })),
+        ],
+      }),
+      new Paragraph({ spacing: { after: 200 }, children: [] })
+    );
+  });
+
+  if (config.includeSections.photoGallery && data.photos.length > 0) {
+    const photoSections: any[] = [createSectionHeading('9. Authorized Photos & Attachment References')];
+    data.photos.forEach((photo) => {
+      const image = config.photoImageData?.[photo.id];
+      if (image) {
+        photoSections.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 180, after: 60 },
+          children: [new ImageRun({
+            data: image,
+            type: photo.contentType === 'image/png' ? 'png' : 'jpg',
+            transformation: { width: 390, height: 260 },
+          })],
+        }));
+        const context = photo.targetType === 'girl'
+          ? girlMap.get(photo.targetId)
+          : photo.targetType === 'household'
+            ? houseMap.get(photo.targetId)
+            : data.activities.find((activity) => activity.id === photo.targetId)?.activityName;
+        photoSections.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 160 },
+          children: [new TextRun({
+            text: [photo.caption?.trim() || `${photo.category} photo`, context, photo.date].filter(Boolean).join(' | '),
+            size: 18,
+            color: SHINE_COLORS.grayText,
+          })],
+        }));
+      }
+    });
+    photoSections.push(
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows: [
@@ -582,6 +844,7 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
       }),
       new Paragraph({ spacing: { after: 200 }, children: [] })
     );
+    sections.push(...photoSections);
   }
 
   // Challenges, Recommendations, and Conclusion
@@ -593,7 +856,7 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
         new TextRun({
           text:
             config.recommendationsNotes ||
-            '• School Fees & Exam Fees: Ensure timely term disbursements to prevent any classroom disruption for candidates taking MSCE and JCE examinations.\n• Health Clinic Logistics: Continue active partnerships with Zomba Central Hospital and local health centres for timely preventative health interventions.\n• Reintegration Support: Expand vocational skills linkages and caregiver counseling for households nearing transition readiness.',
+            buildRecordedRecommendations(db, config),
           size: 20,
           color: SHINE_COLORS.grayText,
         }),
@@ -626,7 +889,26 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
   const doc = new Document({
     sections: [
       {
-        properties: {},
+        properties: { page: { margin: { top: 900, right: 900, bottom: 900, left: 900 } } },
+        headers: {
+          default: new Header({
+            children: [new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [new TextRun({ text: 'SHINE RELIEF TRUST', bold: true, size: 16, color: SHINE_COLORS.primaryDark })],
+            })],
+          }),
+        },
+        footers: {
+          default: new Footer({
+            children: [new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              children: [
+                new TextRun({ text: `${config.title} | Page `, size: 16, color: '6B7280' }),
+                new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '6B7280' }),
+              ],
+            })],
+          }),
+        },
         children: sections,
       },
     ],
@@ -676,7 +958,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive Summary');
 
   // 2. Girls Roster
-  if (data.girls.length > 0) {
+  if (config.includeSections.girlsList && data.girls.length > 0) {
     const girlsData = data.girls.map((g) => ({
       'Girl ID': g.id,
       'Full Name': g.fullName,
@@ -698,7 +980,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
   }
 
   // 3. Households
-  if (data.households.length > 0) {
+  if (config.includeSections.householdsList && data.households.length > 0) {
     const houseData = data.households.map((h) => ({
       'House ID': h.id,
       'House Name': h.name,
@@ -714,8 +996,30 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
     XLSX.utils.book_append_sheet(wb, wsHouse, 'Households');
   }
 
+  if (config.includeSections.householdActivities && data.activities.length > 0) {
+    const activityData = data.activities.map((item) => ({
+      'Activity ID': item.id,
+      Date: item.date,
+      Household: houseMap.get(item.householdId) || item.householdId,
+      Activity: item.activityName,
+      Type: item.activityType,
+      Location: item.location || '',
+      Participants: item.participantCount,
+      Description: item.description,
+      Outcome: item.outcome || '',
+      Challenges: item.challenges || '',
+      'Support provided': item.supportProvided || '',
+      Recommendations: item.recommendations || '',
+      'Further action required': item.furtherActionRequired ? 'Yes' : 'No',
+      'Next follow-up': item.nextFollowUpDate || '',
+    }));
+    const sheet = XLSX.utils.json_to_sheet(activityData);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 30 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 36 }, { wch: 36 }, { wch: 36 }, { wch: 36 }, { wch: 20 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Household Activities');
+  }
+
   // 4. Educational Follow-ups
-  if (data.edu.length > 0) {
+  if (config.includeSections.educationalFollowUps && data.edu.length > 0) {
     const eduData = data.edu.map((e) => ({
       'Follow-up ID': e.id,
       Date: e.date,
@@ -737,8 +1041,77 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
     XLSX.utils.book_append_sheet(wb, wsEdu, 'Education Follow-ups');
   }
 
+  if (config.includeSections.educationalFollowUps && data.educationHistory.length > 0) {
+    const historyData = data.educationHistory.map((item) => ({
+      'Record ID': item.id,
+      'Girl ID': item.girlId,
+      'Academic year': item.academicYear,
+      School: item.school,
+      'Class / form': item.classLevel,
+      'Start date': item.startDate || '',
+      'End date': item.endDate || '',
+      Status: item.status,
+      'Reason for change': item.reasonForChange || '',
+      Notes: item.notes || '',
+    }));
+    const sheet = XLSX.utils.json_to_sheet(historyData);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 32 }, { wch: 36 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Education History');
+  }
+
+  if (config.includeSections.educationalFollowUps && data.examinations.length > 0) {
+    const examData = data.examinations.map((item) => ({
+      'Record ID': item.id,
+      'Girl ID': item.girlId,
+      Examination: item.examinationType,
+      Year: item.examinationYear,
+      Subjects: (item.subjects || []).map((subject) => `${subject.subject}: ${subject.result || ''}`).join('; '),
+      Outcome: item.overallOutcome || '',
+      'Support required': item.supportRequired || '',
+      Notes: item.notes || '',
+    }));
+    const sheet = XLSX.utils.json_to_sheet(examData);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 44 }, { wch: 28 }, { wch: 32 }, { wch: 36 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Examinations');
+  }
+
+  if (config.includeSections.educationalFollowUps && data.attendance.length > 0) {
+    const attendanceData = data.attendance.map((item) => ({
+      'Record ID': item.id,
+      Date: item.date,
+      'Girl ID': item.girlId,
+      Activity: item.activityName,
+      'Activity type': item.activityType,
+      Location: item.location || '',
+      Status: item.status,
+      Notes: item.notes || '',
+      'Recorded by': item.recordedBy,
+    }));
+    const sheet = XLSX.utils.json_to_sheet(attendanceData);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 36 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Attendance');
+  }
+
+  if (config.includeSections.educationalFollowUps && data.girlLeaves.length > 0) {
+    const leaveData = data.girlLeaves.map((item) => ({
+      'Record ID': item.id,
+      'Girl ID': item.girlId,
+      'Leave type': item.leaveType,
+      'Start date': item.startDate,
+      'Expected return': item.expectedReturnDate,
+      'Actual return': item.actualReturnDate || '',
+      Reason: item.reason,
+      Status: item.status,
+      'Approved by': item.approvedBy,
+      Notes: item.notes || '',
+    }));
+    const sheet = XLSX.utils.json_to_sheet(leaveData);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 22 }, { wch: 36 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Leave and Absence');
+  }
+
   // 5. Health Follow-ups
-  if (data.health.length > 0) {
+  if (config.includeSections.healthFollowUps && data.health.length > 0) {
     const healthData = data.health.map((h) => ({
       'Follow-up ID': h.id,
       Date: h.date,
@@ -758,7 +1131,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
   }
 
   // 6. Family Follow-ups
-  if (data.family.length > 0) {
+  if (config.includeSections.familyFollowUps && data.family.length > 0) {
     const famData = data.family.map((f) => ({
       'Follow-up ID': f.id,
       Date: f.date,
@@ -775,8 +1148,32 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
     XLSX.utils.book_append_sheet(wb, wsFam, 'Family Follow-ups');
   }
 
+  if (config.includeSections.caseActions && data.caseActions.length > 0) {
+    const caseActionRows = data.caseActions.map((action) => ({
+      'Action ID': action.id, 'Due Date': action.dueDate, Action: action.title,
+      'Girl ID': action.girlId || '', 'Household ID': action.householdId || '',
+      'Assigned Staff': action.assignedStaffName, Priority: action.priority, Status: action.status,
+      'Completion Notes': action.completionNotes || '',
+    }));
+    const sheet = XLSX.utils.json_to_sheet(caseActionRows);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 32 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Case Actions');
+  }
+
+  if (config.includeSections.caseReviews && data.caseReviews.length > 0) {
+    const caseReviewRows = data.caseReviews.map((review) => ({
+      'Review ID': review.id, 'Review Date': review.reviewDate, Girl: girlMap.get(review.girlId) || review.girlId,
+      Education: review.education || '', Health: review.health || '', Family: review.family || '',
+      Progress: review.progress || '', Challenges: review.challenges || '', 'Action Plan': review.actionPlan || '',
+      'Next Review': review.nextReviewDate || '',
+    }));
+    const sheet = XLSX.utils.json_to_sheet(caseReviewRows);
+    sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 32 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, sheet, 'Case Reviews');
+  }
+
   // 7. Household Expenses
-  if (data.expenses.length > 0) {
+  if (config.includeSections.expenditure && data.expenses.length > 0) {
     const expData = data.expenses.map((e) => ({
       'Expense ID': e.id,
       Date: e.date,
@@ -796,7 +1193,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
   }
 
   // 8. Rent Payments
-  if (data.rent.length > 0) {
+  if (config.includeSections.rentPayments && data.rent.length > 0) {
     const rentData = data.rent.map((r) => ({
       'Payment ID': r.id,
       'Payment Date': r.datePaid,
@@ -813,11 +1210,9 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
     XLSX.utils.book_append_sheet(wb, wsRent, 'Rent Payments');
   }
 
-  // 9. Budgets & Variance with Excel Formulas
-  if (data.budgets.length > 0) {
-    // Build rows with formulas:
-    // Columns: A: Period, B: Programme, C: Category, D: Description, E: Unit, F: Qty, G: Unit Cost, H: Budget Amount, I: Actual Spent, J: Variance (Budget - Actual), K: % Spent
-    const budgetRows: (string | number | { f: string })[][] = [
+  // 9. Budgets & Variance
+  if (config.includeSections.budgets && data.budgets.length > 0) {
+    const budgetRows: (string | number)[][] = [
       [
         'Period',
         'Programme',
@@ -829,13 +1224,17 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
         'Budget (MWK)',
         'Actual Spent (MWK)',
         'Variance (MWK)',
-        '% Spent',
+        'Variance %',
         'Notes',
       ],
     ];
 
-    data.budgets.forEach((b, idx) => {
-      const rowNum = idx + 2;
+    let totalBudget = 0;
+    let totalActual = 0;
+    data.budgets.forEach((b) => {
+      const variance = calculateBudgetVariance(b.budgetAmount, b.actualExpenditure || 0);
+      totalBudget += variance.budgeted;
+      totalActual += variance.actual;
       budgetRows.push([
         b.period,
         b.programme,
@@ -846,14 +1245,13 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
         b.unitCost,
         b.budgetAmount,
         b.actualExpenditure || 0,
-        { f: `H${rowNum}-I${rowNum}` }, // Variance formula
-        { f: `IF(H${rowNum}>0, I${rowNum}/H${rowNum}, 0)` }, // % Spent formula
+        variance.variance,
+        variance.variancePercent === null ? 'N/A' : variance.variancePercent / 100,
         b.notes || '',
       ]);
     });
 
-    // Add Grand Total row
-    const totalRow = data.budgets.length + 2;
+    const totalVariance = calculateBudgetVariance(totalBudget, totalActual);
     budgetRows.push([
       'GRAND TOTAL',
       '',
@@ -862,10 +1260,10 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       '',
       '',
       '',
-      { f: `SUM(H2:H${totalRow - 1})` },
-      { f: `SUM(I2:I${totalRow - 1})` },
-      { f: `SUM(J2:J${totalRow - 1})` },
-      { f: `IF(H${totalRow}>0, I${totalRow}/H${totalRow}, 0)` },
+      totalVariance.budgeted,
+      totalVariance.actual,
+      totalVariance.variance,
+      totalVariance.variancePercent === null ? 'N/A' : totalVariance.variancePercent / 100,
       'Summary Total',
     ]);
 
@@ -888,7 +1286,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
   }
 
   // 10. Workplans
-  if (data.workplans.length > 0) {
+  if (config.includeSections.workplans && data.workplans.length > 0) {
     const wkpData = data.workplans.map((w) => ({
       'Plan ID': w.id,
       Period: w.period,
@@ -926,7 +1324,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
   }
 
   // 11. Schedules
-  if (data.schedules.length > 0) {
+  if (config.includeSections.schedules && data.schedules.length > 0) {
     const schData = data.schedules.map((s) => ({
       'Schedule ID': s.id,
       Date: s.scheduledDate,
@@ -942,6 +1340,26 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
     const wsSch = XLSX.utils.json_to_sheet(schData);
     wsSch['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 25 }, { wch: 20 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 25 }];
     XLSX.utils.book_append_sheet(wb, wsSch, 'Schedules');
+  }
+
+  for (const sheetName of wb.SheetNames.filter((name) => name !== 'Executive Summary')) {
+    const sheet = wb.Sheets[sheetName];
+    if (!sheet['!ref']) continue;
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    sheet['!autofilter'] = { ref: XLSX.utils.encode_range(range) };
+    for (let column = range.s.c; column <= range.e.c; column += 1) {
+      const header = String(sheet[XLSX.utils.encode_cell({ r: range.s.r, c: column })]?.v || '');
+      const numberFormat = /%|percent|achievement/i.test(header)
+        ? '0.0%'
+        : /MWK|budget|actual|variance|expenditure|amount|salary|gratuity|cost/i.test(header)
+          ? '"MWK" #,##0;[Red]-"MWK" #,##0'
+          : undefined;
+      if (!numberFormat) continue;
+      for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
+        const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
+        if (cell && typeof cell.v === 'number') cell.z = numberFormat;
+      }
+    }
   }
 
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -967,6 +1385,7 @@ export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
   // Header Banner
   doc.setFillColor(15, 76, 58); // Forest Teal #0F4C3A
   doc.rect(0, 0, pageWidth, 75, 'F');
+  if (config.brandLogoData) doc.addImage(config.brandLogoData, 'PNG', pageWidth - 92, 12, 48, 48);
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
@@ -1004,9 +1423,7 @@ export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
     doc.setTextColor(55, 65, 81);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    const summaryText =
-      config.executiveSummary ||
-      `During this reporting period (${config.periodLabel}), SHINE Relief Trust delivered holistic case management across Zomba District, covering secondary school sponsorships, primary school monitoring, clinical treatments, and family assessments.`;
+    const summaryText = config.executiveSummary || buildFactualReportNarrative(db, config);
     const splitSummary = doc.splitTextToSize(summaryText, pageWidth - 80);
     doc.text(splitSummary, 40, currentY);
     currentY += splitSummary.length * 12 + 15;
@@ -1133,6 +1550,73 @@ export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
     });
 
     currentY = (doc as any).lastAutoTable.finalY + 20;
+  }
+
+  if (config.includeSections.caseActions && data.caseActions.length > 0) {
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Due date', 'Action', 'Assigned staff', 'Priority', 'Status']],
+      body: data.caseActions.map((action) => [formatDate(action.dueDate), action.title, action.assignedStaffName, action.priority, action.status]),
+      theme: 'striped',
+      headStyles: { fillColor: [15, 76, 58], textColor: [255, 255, 255], fontSize: 8 },
+      bodyStyles: { fontSize: 7.5 },
+      margin: { left: 40, right: 40 },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 20;
+  }
+
+  if (config.includeSections.caseReviews && data.caseReviews.length > 0) {
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Review date', 'Girl', 'Education', 'Family', 'Progress', 'Challenges', 'Action plan']],
+      body: data.caseReviews.map((review) => [formatDate(review.reviewDate), girlMap.get(review.girlId) || review.girlId, review.education || '', review.family || '', review.progress || '', review.challenges || '', review.actionPlan || '']),
+      theme: 'striped',
+      headStyles: { fillColor: [15, 76, 58], textColor: [255, 255, 255], fontSize: 8 },
+      bodyStyles: { fontSize: 7.5 },
+      margin: { left: 40, right: 40 },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 20;
+  }
+
+  if (config.includeSections.photoGallery && config.photoImageData) {
+    const selectedPhotos = data.photos.filter((photo) => !!config.photoImageData?.[photo.id]);
+    if (selectedPhotos.length > 0) {
+      doc.addPage();
+      currentY = 48;
+      doc.setTextColor(15, 76, 58);
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Authorized Photo Highlights', 40, currentY);
+      currentY += 20;
+
+      for (const photo of selectedPhotos) {
+        const image = config.photoImageData[photo.id];
+        const imageFormat = photo.contentType === 'image/png' ? 'PNG' : 'JPEG';
+        const dimensions = doc.getImageProperties(image);
+        const scale = Math.min((pageWidth - 80) / dimensions.width, 300 / dimensions.height);
+        const imageWidth = dimensions.width * scale;
+        const imageHeight = dimensions.height * scale;
+        const caption = [
+          photo.caption?.trim() || `${photo.category} photo`,
+          photo.targetType === 'girl' ? girlMap.get(photo.targetId) : undefined,
+          photo.targetType === 'household' ? houseMap.get(photo.targetId) : undefined,
+          data.activities.find((activity) => activity.id === photo.targetId)?.activityName,
+          photo.date,
+        ].filter(Boolean).join(' | ');
+        const captionLines = doc.splitTextToSize(caption, pageWidth - 80);
+        if (currentY + imageHeight + captionLines.length * 12 + 20 > 790) {
+          doc.addPage();
+          currentY = 48;
+        }
+        doc.addImage(image, imageFormat, (pageWidth - imageWidth) / 2, currentY, imageWidth, imageHeight);
+        currentY += imageHeight + 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(55, 65, 81);
+        doc.text(captionLines, 40, currentY);
+        currentY += captionLines.length * 12 + 20;
+      }
+    }
   }
 
   // Footer on all pages

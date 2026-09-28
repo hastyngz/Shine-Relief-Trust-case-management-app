@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
+import type { SalaryHistoryRecord } from '../src/types';
 import { buildManagementAnalytics, canAccessManagementDashboard, projectManagementDatabase } from '../src/services/managementAnalytics';
-import { buildManagementReportRows, MANAGEMENT_REPORTS } from '../src/services/managementReports';
-import { generateExcelWorkbook, generateWordReport, ReportConfig } from '../src/services/reportGenerators';
+import { buildManagementReportRows, generateManagementReportWorkbook, MANAGEMENT_REPORTS } from '../src/services/managementReports';
+import { buildFactualReportNarrative, buildRecordedRecommendations, filterDataForReport, generateExcelWorkbook, generatePdfReport, generateWordReport, ReportConfig } from '../src/services/reportGenerators';
 import { downloadCSV } from '../src/utils/export';
 
 const db = {
@@ -41,7 +45,7 @@ assert.equal(canAccessManagementDashboard(true, 'Administrator'), true);
 assert.equal(canAccessManagementDashboard(false, 'Manager'), true);
 assert.equal(canAccessManagementDashboard(false, 'Staff'), false);
 assert.equal(canAccessManagementDashboard(false, 'View Only'), false);
-assert.equal(MANAGEMENT_REPORTS.length, 16);
+assert.equal(MANAGEMENT_REPORTS.length, 28);
 
 const analytics = buildManagementAnalytics({
   ...db,
@@ -93,15 +97,21 @@ const protectedProjection = projectManagementDatabase({
   ...db,
   healthFollowUps: [{ id: 'restricted-health' }],
   caseActions: [{ id: 'restricted-safeguarding', sourceType: 'safeguarding' }, { id: 'visible-action', sourceType: 'manual' }],
+  caseReviews: [{ id: 'restricted-review', health: 'restricted' }],
   attachments: [
     { id: 'health-photo', targetType: 'healthFollowUp' },
+    { id: 'medical-doc', targetType: 'girl', category: 'Medical Document' },
     { id: 'safeguarding-photo', targetType: 'safeguardingCase' },
     { id: 'house-photo', targetType: 'household' },
   ],
-} as any, { canViewHealthRecords: false, canViewSafeguarding: false });
+} as any, { canViewHealthRecords: false, canViewSafeguarding: false, canViewCaseReviews: false });
 assert.equal(protectedProjection.healthFollowUps.length, 0);
 assert.deepEqual(protectedProjection.caseActions?.map((item) => item.id), ['visible-action']);
 assert.deepEqual(protectedProjection.attachments?.map((item) => item.id), ['house-photo']);
+assert.deepEqual(protectedProjection.caseReviews, []);
+const caseReviewWithoutHealth = projectManagementDatabase({ ...db, caseReviews: [{ id: 'review-1', health: 'restricted', education: 'Progress' }] } as any, { canViewHealthRecords: false, canViewSafeguarding: false, canViewCaseReviews: true });
+assert.equal(caseReviewWithoutHealth.caseReviews?.[0].health, undefined);
+assert.equal(caseReviewWithoutHealth.caseReviews?.[0].education, 'Progress');
 
 const filteredPeriods = buildManagementAnalytics({
   ...db,
@@ -109,7 +119,26 @@ const filteredPeriods = buildManagementAnalytics({
   payrollRecords: [{ id: 'p-period', employeeId: 's1', employeeName: 'Amina', expectedAmount: 200, amountPaid: 100, paymentStatus: 'Partially Paid', payPeriodStartDate: '2026-01-01' }],
 } as any, { startDate: '2026-06-01', endDate: '2026-06-30', financialYear: '2026', month: 1 }, [], '2026-06-15');
 assert.equal(filteredPeriods.education.outstandingFollowUps, 0);
-assert.equal(filteredPeriods.finance.payrollExpected, 200);
+assert.equal(filteredPeriods.finance.payrollExpected, 0);
+const quarterFinance = buildManagementAnalytics({
+  ...db,
+  households: [{ id: 'h1', status: 'Active', monthlyRentCost: 100 }],
+  expenses: [
+    { id: 'q2-expense', householdId: 'h1', date: '2026-05-10', category: 'Food', totalCost: 30 },
+    { id: 'q3-expense', householdId: 'h1', date: '2026-07-10', category: 'Food', totalCost: 90 },
+  ],
+  rentPayments: [
+    { id: 'q2-rent', householdId: 'h1', monthCovered: 'May 2026', datePaid: '2026-07-02', amountPaid: 40, paymentStatus: 'Paid' },
+    { id: 'q3-rent', householdId: 'h1', monthCovered: 'July 2026', datePaid: '2026-07-03', amountPaid: 90, paymentStatus: 'Paid' },
+  ],
+  payrollRecords: [
+    { id: 'q2-payroll', employeeId: 's1', employeeName: 'Amina', expectedAmount: 70, amountPaid: 70, paymentStatus: 'Paid', payPeriodStartDate: '2026-05-01' },
+    { id: 'q3-payroll', employeeId: 's1', employeeName: 'Amina', expectedAmount: 90, amountPaid: 90, paymentStatus: 'Paid', payPeriodStartDate: '2026-07-01' },
+  ],
+} as any, { startDate: '2026-04-01', endDate: '2026-06-30' }, [], '2026-09-28');
+assert.equal(quarterFinance.finance.householdExpenditure, 30);
+assert.equal(quarterFinance.finance.payrollExpected, 70);
+assert.equal(quarterFinance.finance.rent, 40);
 
 const budgetReport = buildManagementReportRows('budget-actual', {
   ...db,
@@ -118,11 +147,61 @@ const budgetReport = buildManagementReportRows('budget-actual', {
 assert.equal(budgetReport.rows[0][8], -20);
 assert.equal(budgetReport.rows[0][9], 20);
 assert.equal(budgetReport.rows[0][11], 'Over budget');
+const monthlyBudgetReport = buildManagementReportRows('monthly-budget', {
+  ...db,
+  budgets: [{ id: 'monthly-line', financialYear: '2026', month: 2, programme: 'Education', category: 'Education', itemDescription: 'Books', budgetAmount: 100, actualExpenditure: 80 }],
+} as any, { financialYear: '2026', month: 2 });
+assert.equal(monthlyBudgetReport.rows[0][8], 20);
+const categoryExpenseReport = buildManagementReportRows('expenditure-category', {
+  ...db,
+  households: [{ id: 'h1', status: 'Active' }],
+  expenses: [
+    { id: 'food-1', householdId: 'h1', date: '2026-01-01', category: 'Food', totalCost: 100 },
+    { id: 'food-2', householdId: 'h1', date: '2026-01-02', category: 'Food', totalCost: 50 },
+    { id: 'repair-1', householdId: 'h1', date: '2026-01-03', category: 'Repairs', totalCost: 25 },
+  ],
+} as any, {});
+assert.deepEqual(categoryExpenseReport.rows, [['Food', 2, 150], ['Repairs', 1, 25]]);
+const managementWorkbook = XLSX.read(generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
+assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data']);
+assert.equal(managementWorkbook.Sheets['Report Data']['J2']?.v, 20);
+assert.ok(managementWorkbook.Sheets['Report Data']['!autofilter']);
 
 for (const reportType of MANAGEMENT_REPORTS) {
   const reportData = buildManagementReportRows(reportType.id, db as any, {}, [], []);
   assert.ok(reportData.headers.length > 0, `${reportType.id} should provide report columns`);
 }
+
+const employeeFixture = {
+  uid: 'employee-1', id: 'employee-1', fullName: 'Fixture Employee', email: 'employee@example.test',
+  role: 'Staff', status: 'Active', employeeCategory: 'Other Staff', contractStartDate: '2026-01-01',
+} as any;
+const salaryFixture: SalaryHistoryRecord[] = [
+  { id: 'salary-1', employeeId: 'employee-1', effectiveDate: '2026-01-01', salaryAmount: 200000, salaryFrequency: 'Monthly', reasonForChange: 'Start', recordedBy: 'Admin', recordedDate: '2026-01-01', auditMetadata: { createdAt: '2026-01-01', createdByUid: 'admin' } },
+  { id: 'salary-2', employeeId: 'employee-1', effectiveDate: '2026-07-01', salaryAmount: 250000, salaryFrequency: 'Monthly', reasonForChange: 'Increase', recordedBy: 'Admin', recordedDate: '2026-07-01', auditMetadata: { createdAt: '2026-07-01', createdByUid: 'admin' } },
+];
+const salaryHistoryRows = buildManagementReportRows('salary-history', db as any, {}, [employeeFixture], salaryFixture);
+assert.equal(salaryHistoryRows.rows.length, 2);
+const gratuityPeriodRows = buildManagementReportRows('gratuity', db as any, {}, [employeeFixture], salaryFixture, '2027-01-01');
+assert.equal(gratuityPeriodRows.rows.length, 2);
+assert.equal(gratuityPeriodRows.rows[0][10], 120000);
+assert.equal(gratuityPeriodRows.rows[1][10], 150000);
+assert.equal(gratuityPeriodRows.rows[0][11], 270000);
+assert.equal(gratuityPeriodRows.rows[1][11], 270000);
+const employeeRows = buildManagementReportRows('employee', db as any, {}, [employeeFixture]);
+assert.equal(employeeRows.rows[0][1], 'Fixture Employee');
+const indicatorRows = buildManagementReportRows('programme-indicators', {
+  ...db,
+  workplans: [{ id: 'indicator-1', objective: 'Improve school attendance', activity: 'School visits', period: '2026-Q1', startDate: '2026-01-01', endDate: '2026-03-31', targetCount: 20, completedCount: 15, status: 'In Progress', responsibleStaffId: 'staff-1', linkedActivityIds: [] }],
+} as any, { startDate: '2026-01-01', endDate: '2026-03-31' });
+assert.equal(indicatorRows.rows[0][5], 15);
+assert.equal(indicatorRows.rows[0][6], 75);
+const attendanceRows = buildManagementReportRows('attendance', {
+  ...db,
+  girls: [{ id: 'g1', fullName: 'Fixture Girl', householdId: 'h1' }],
+  attendanceRecords: [{ id: 'att-1', date: '2026-01-10', girlId: 'g1', activityName: 'Class', activityType: 'Education', status: 'Present' }],
+} as any, {});
+assert.equal(attendanceRows.rows.length, 1);
 
 const activityReport = buildManagementReportRows('programme-activity', {
   ...db,
@@ -155,6 +234,7 @@ const reportConfig: ReportConfig = {
   title: 'Management Summary Test',
   periodLabel: 'Test period',
   generatedBy: 'Phase 3D test',
+  structuredTables: [{ title: 'Recorded fixture values', headers: ['Measure', 'Value'], rows: [['Girl profiles', 3]] }],
   executiveSummary: 'Recorded summary metrics only.',
   includeSections: {
     executiveSummary: true,
@@ -173,7 +253,69 @@ const reportConfig: ReportConfig = {
     photoGallery: false,
   },
 };
+const scopedReport = filterDataForReport({
+  ...reportDb,
+  girls: [
+    { id: 'g1', school: 'School A', classLevel: 'Form 1', householdId: 'h1' },
+    { id: 'g2', school: 'School B', classLevel: 'Form 2', householdId: 'h2' },
+  ],
+  households: [{ id: 'h1' }, { id: 'h2' }],
+  educationalFollowUps: [
+    { id: 'edu-1', girlId: 'g1', school: 'School A', classLevel: 'Form 1', date: '2026-01-01' },
+    { id: 'edu-2', girlId: 'g2', school: 'School B', classLevel: 'Form 2', date: '2026-01-01' },
+  ],
+  healthFollowUps: [{ id: 'health-1', girlId: 'g1', date: '2026-01-01' }],
+  familyFollowUps: [{ id: 'family-1', girlId: 'g1', date: '2026-01-01' }],
+  caseActions: [
+    { id: 'action-1', girlId: 'g1', status: 'Open', dueDate: '2026-01-01', assignedStaffId: 'staff-1' },
+    { id: 'action-2', girlId: 'g2', status: 'Open', dueDate: '2026-01-01', assignedStaffId: 'staff-2' },
+  ],
+  caseReviews: [{ id: 'review-1', girlId: 'g1', reviewDate: '2026-01-01' }, { id: 'review-2', girlId: 'g2', reviewDate: '2026-01-01' }],
+} as any, { ...reportConfig, filters: { school: 'School A', classLevel: 'Form 1', followUpType: 'education' } });
+assert.deepEqual(scopedReport.girls.map((girl) => girl.id), ['g1']);
+assert.deepEqual(scopedReport.edu.map((item) => item.id), ['edu-1']);
+assert.equal(scopedReport.health.length + scopedReport.family.length, 0);
+assert.deepEqual(scopedReport.caseActions.map((item) => item.id), ['action-1']);
+assert.deepEqual(scopedReport.caseReviews.map((item) => item.id), ['review-1']);
+assert.match(buildFactualReportNarrative(reportDb, reportConfig), /3 girl profile\(s\)/);
+assert.doesNotMatch(buildFactualReportNarrative(reportDb, reportConfig), /continued to deliver|conducted active case management/i);
+assert.equal(buildRecordedRecommendations(reportDb, reportConfig), 'No recommendations were recorded in the selected records.');
 const wordReport = await generateWordReport(reportDb, reportConfig);
+const extractedWordText = await mammoth.extractRawText({ buffer: Buffer.from(await wordReport.arrayBuffer()) } as any);
+assert.match(extractedWordText.value, /Recorded fixture values/);
+assert.match(extractedWordText.value, /Girl profiles/);
+const caseReportDb = {
+  ...reportDb,
+  girls: [{ id: 'g1', fullName: 'Fixture Girl', householdId: 'h1' }],
+  caseActions: [{ id: 'action-report-1', title: 'School follow-up', description: 'Visit school', girlId: 'g1', assignedStaffId: 'staff-1', assignedStaffName: 'Case worker', sourceType: 'manual', priority: 'Medium', status: 'Open', dueDate: '2026-01-20', createdBy: 'Test', createdByUid: 'staff-1', updatedBy: 'Test', updatedByUid: 'staff-1', createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
+  caseReviews: [{ id: 'review-report-1', girlId: 'g1', reviewDate: '2026-01-15', education: 'Attendance improved', health: 'Check-up recorded', progress: 'On track', challenges: 'Transport', actionPlan: 'Follow up', createdBy: 'Test', createdAt: '2026-01-15', updatedBy: 'Test', updatedAt: '2026-01-15' }],
+} as any;
+const caseReportConfig: ReportConfig = {
+  ...reportConfig,
+  includeSections: { ...reportConfig.includeSections, caseActions: true, caseReviews: true },
+};
+const caseDocx = await generateWordReport(caseReportDb, caseReportConfig);
+const caseDocxText = await mammoth.extractRawText({ buffer: Buffer.from(await caseDocx.arrayBuffer()) } as any);
+assert.match(caseDocxText.value, /School follow-up/);
+assert.match(caseDocxText.value, /Attendance improved/);
+const caseWorkbook = XLSX.read(generateExcelWorkbook(caseReportDb, caseReportConfig), { type: 'array' });
+assert.ok(caseWorkbook.SheetNames.includes('Case Actions'));
+assert.ok(caseWorkbook.SheetNames.includes('Case Reviews'));
+const completeCaseWorkbook = XLSX.read(generateExcelWorkbook({
+  ...caseReportDb,
+  educationalFollowUps: [{ id: 'edu-x', girlId: 'g1', date: '2026-01-10', school: 'School A', classLevel: 'Form 1', academicIssue: 'Attendance', problemsExperienced: '', supportProvided: 'Visit', progressOutcome: 'Improved', recommendations: '', furtherActionRequired: false }],
+  educationHistory: [{ id: 'history-x', girlId: 'g1', academicYear: '2026', school: 'School A', classLevel: 'Form 1', status: 'Current' }],
+  examinationRecords: [{ id: 'exam-x', girlId: 'g1', examinationType: 'MSCE', examinationYear: '2026', subjects: [{ subject: 'English', result: 'A' }], overallOutcome: 'Passed' }],
+  attendanceRecords: [{ id: 'attendance-x', girlId: 'g1', date: '2026-01-10', activityName: 'Class', activityType: 'Education', status: 'Present', recordedBy: 'Staff' }],
+  girlLeaves: [{ id: 'leave-x', girlId: 'g1', leaveType: 'School Leave', startDate: '2026-01-10', expectedReturnDate: '2026-01-11', reason: 'Exam', approvedBy: 'Manager', status: 'Returned' }],
+  householdActivities: [{ id: 'activity-x', householdId: 'h1', date: '2026-01-10', activityName: 'House meeting', activityType: 'Household meeting', participantCount: 1, description: 'Meeting', furtherActionRequired: false }],
+} as any, {
+  ...caseReportConfig,
+  includeSections: { ...caseReportConfig.includeSections, educationalFollowUps: true, householdActivities: true },
+}), { type: 'array' });
+for (const sheetName of ['Education History', 'Examinations', 'Attendance', 'Leave and Absence', 'Household Activities']) {
+  assert.ok(completeCaseWorkbook.SheetNames.includes(sheetName), `${sheetName} worksheet should be exported`);
+}
 const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
@@ -181,8 +323,48 @@ const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, att
 });
 const excelReport = generateExcelWorkbook(reportDb, reportConfig);
 assert.ok(wordReport.size > 0);
+const wordBytes = new Uint8Array(await wordReport.arrayBuffer());
+assert.deepEqual(Array.from(wordBytes.slice(0, 2)), [0x50, 0x4b]);
 assert.ok(wordWithAttachmentReferences.size > 0);
 assert.ok(excelReport.byteLength > 0 || excelReport.length > 0);
+const selectedWorkbook = XLSX.read(excelReport, { type: 'array' });
+assert.deepEqual(selectedWorkbook.SheetNames, ['Executive Summary']);
+
+const budgetWorkbookBytes = generateExcelWorkbook(reportDb, {
+  ...reportConfig,
+  includeSections: { ...reportConfig.includeSections, budgets: true },
+});
+const budgetWorkbook = XLSX.read(budgetWorkbookBytes, { type: 'array', cellNF: true });
+assert.ok(budgetWorkbook.SheetNames.includes('Budgets & Variance'));
+const budgetSheet = budgetWorkbook.Sheets['Budgets & Variance'];
+assert.equal(budgetSheet['J2']?.v, -150000);
+assert.equal(budgetSheet['J2']?.z, '"MWK" #,##0;[Red]-"MWK" #,##0');
+assert.equal(budgetSheet['K2']?.z, '0.0%');
+assert.ok(budgetSheet['!autofilter']);
+
+const reportImageFixture = new Uint8Array(readFileSync(new URL('../public/logo.png', import.meta.url)));
+const wordWithEmbeddedPhoto = await generateWordReport({
+  ...reportDb,
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+} as any, {
+  ...reportConfig,
+  selectedPhotoIds: ['photo-1'],
+  photoImageData: { 'photo-1': reportImageFixture },
+  includeSections: { ...reportConfig.includeSections, photoGallery: true },
+});
+assert.ok(wordWithEmbeddedPhoto.size > wordReport.size);
+const pdfWithEmbeddedPhoto = generatePdfReport({
+  ...reportDb,
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+} as any, {
+  ...reportConfig,
+  selectedPhotoIds: ['photo-1'],
+  photoImageData: { 'photo-1': reportImageFixture },
+  includeSections: { ...reportConfig.includeSections, photoGallery: true },
+});
+const pdfBytes = new Uint8Array(await pdfWithEmbeddedPhoto.arrayBuffer());
+assert.equal(new TextDecoder().decode(pdfBytes.slice(0, 8)), '%PDF-1.3');
+assert.ok(new TextDecoder('latin1').decode(pdfBytes).includes('/Subtype /Image'));
 
 const originalDocument = globalThis.document;
 let csvDownloaded = false;

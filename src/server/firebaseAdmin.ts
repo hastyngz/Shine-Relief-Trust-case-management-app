@@ -1,6 +1,6 @@
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AppDatabase, StaffRole } from '../types';
@@ -80,7 +80,7 @@ export async function authenticateAIRequest(authorization?: string) {
 
 async function readRecords<T extends { id: string }>(collectionName: string): Promise<T[]> {
   const snapshot = await adminFirestore.collection(collectionName).get();
-  return snapshot.docs.map((record) => ({ ...record.data(), id: record.id }) as T);
+  return snapshot.docs.map((record: QueryDocumentSnapshot) => ({ ...record.data(), id: record.id }) as T);
 }
 
 export async function loadAIRecords(
@@ -116,7 +116,7 @@ export async function loadAIRecords(
   const caseActionSnapshot = canViewTeamTasks
     ? await caseActionQuery.get()
     : await caseActionQuery.where('assignedStaffId', '==', staffUid).get();
-  const caseActions = caseActionSnapshot.docs.map((record) => ({ ...record.data(), id: record.id })) as NonNullable<AppDatabase['caseActions']>;
+  const caseActions = caseActionSnapshot.docs.map((record: QueryDocumentSnapshot) => ({ ...record.data(), id: record.id })) as NonNullable<AppDatabase['caseActions']>;
 
   return {
     girls,
