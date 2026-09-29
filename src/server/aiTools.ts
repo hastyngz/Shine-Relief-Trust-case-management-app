@@ -10,6 +10,7 @@ import {
   HouseholdExpense,
   HouseholdActivity,
 } from '../types';
+import { searchOperationalRecords } from '../services/intelligenceService';
 
 /**
  * Controlled, read-only tools exposed to the Gemini model.
@@ -251,6 +252,15 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
     },
   },
   {
+    name: 'searchOperationalRecords',
+    description: 'Search authorized SHINE operational records including meetings, schedules, workplans, market prices, feeding logs, girls, and households.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: { query: { type: Type.STRING, description: 'Natural-language search terms.' } },
+      required: ['query'],
+    },
+  },
+  {
     name: 'getReportData',
     description: 'Retrieve consolidated case-management figures for a specific month and year to assist with drafting monthly reports.',
     parameters: {
@@ -282,6 +292,11 @@ export async function executeAITool(
   const todayStr = new Date().toISOString().split('T')[0];
 
   switch (name) {
+    case 'searchOperationalRecords': {
+      const results = searchOperationalRecords(db, String(args.query || ''));
+      results.forEach((result) => accessedRecordIds.add(result.recordId));
+      return results;
+    }
     case 'searchGirls': {
       const q = (args.query || '').toLowerCase().trim();
       const status = args.status;

@@ -9,11 +9,13 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Users,
+  Sparkles,
 } from 'lucide-react';
 import { AppDatabase } from '../types';
 import { buildManagementAnalytics, canAccessManagementDashboard, ManagementFilters, projectManagementDatabase } from '../services/managementAnalytics';
 import { getEmployeeSalaryHistoryForStaff } from '../services/firestoreSync';
 import { calculateGratuity } from '../services/gratuityService';
+import { calculateBudgetForecast, calculateFeedingCostInsight } from '../services/intelligenceService';
 import { formatMWK } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
 import type { SalaryHistoryRecord, StaffUser } from '../types';
@@ -135,6 +137,8 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     if (staffSort === 'completed') return b.completedTasks - a.completedTasks;
     return b.overdueTasks - a.overdueTasks;
   });
+  const phase5Feeding = calculateFeedingCostInsight(permittedDb.feedingProgramLogs || [], range.startDate, range.endDate);
+  const phase5Forecast = calculateBudgetForecast(permittedDb.budgets || [], 1 + ((permittedDb.forecastSettings?.[0]?.inflationPercent || 0) / 100));
 
   if (!canAccessManagementDashboard(isAdmin, role)) {
     return <div className="rounded-xl border border-rose-200 bg-white p-8 text-center"><h1 className="text-lg font-bold text-stone-900">Management access restricted</h1><p className="mt-2 text-sm text-stone-600">Only Administrators and Managers can view this dashboard.</p></div>;
@@ -257,6 +261,16 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
           <div className="text-[11px] text-stone-500">{analytics.finance.variance > 0 ? 'Over budget' : 'Remaining'} · actual {formatMWK(analytics.finance.actualExpenditure)}</div>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-teal-200 bg-teal-50/60 p-4 shadow-sm" aria-label="Phase 5 intelligence metrics">
+        <div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-black text-teal-950">Operational intelligence</h2><p className="text-[11px] text-teal-800">Recorded Phase 5 data and clearly labelled forecast values.</p></div><Sparkles className="h-5 w-5 text-amber-600" /></div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl bg-white p-3"><div className="text-[10px] font-bold uppercase text-stone-500">Meetings</div><div className="mt-1 text-xl font-black text-stone-900">{(permittedDb.meetings || []).filter((item) => !range.startDate || item.dateTime.slice(0, 10) >= range.startDate).filter((item) => !range.endDate || item.dateTime.slice(0, 10) <= range.endDate).length}</div></div>
+          <div className="rounded-xl bg-white p-3"><div className="text-[10px] font-bold uppercase text-stone-500">Feeding cost</div><div className="mt-1 text-xl font-black text-stone-900">{formatMWK(phase5Feeding.actualCost)}</div><div className="text-[10px] text-stone-500">{phase5Feeding.mealsServed} meals recorded</div></div>
+          <div className="rounded-xl bg-white p-3"><div className="text-[10px] font-bold uppercase text-stone-500">Market prices</div><div className="mt-1 text-xl font-black text-stone-900">{(permittedDb.marketPrices || []).length}</div><div className="text-[10px] text-stone-500">price observations</div></div>
+          <div className="rounded-xl bg-white p-3"><div className="text-[10px] font-bold uppercase text-stone-500">Forecast</div><div className="mt-1 text-xl font-black text-amber-700">{formatMWK(phase5Forecast.forecast)}</div><div className="text-[10px] text-stone-500">estimate, not actual expenditure</div></div>
+        </div>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm">

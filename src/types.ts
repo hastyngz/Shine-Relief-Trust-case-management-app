@@ -594,6 +594,11 @@ export interface BudgetItem {
   daysFrequency?: number;
   budgetAmount: number; // Qty * Unit Cost
   actualExpenditure?: number; // Calculated or manually tracked
+  currentMarketPrice?: number;
+  historicalAveragePrice?: number;
+  forecastUnitPrice?: number;
+  forecastAmount?: number;
+  financialValueStatus?: 'Approved' | 'Actual' | 'Forecast' | 'Scenario';
   notes?: string;
   createdAt: string;
   updatedAt?: string;
@@ -711,6 +716,134 @@ export interface ScheduleItem {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+}
+
+export type MeetingStatus = 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
+
+export interface MeetingRecord {
+  id: string;
+  title: string;
+  dateTime: string;
+  endDateTime?: string;
+  attendees: string[];
+  location?: string;
+  status: MeetingStatus;
+  minutesText: string;
+  transcriptionText?: string;
+  summaryAndOutcomes: string;
+  decisions?: string;
+  audioRecordingUrl?: string;
+  attachedReports?: string[];
+  extractedActionIds?: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type Phase5LinkedModule = 'general' | 'early_years' | 'feeding_program' | 'budgeting';
+
+export interface FeedingProgramLog {
+  id: string;
+  date: string;
+  studentsPresent: number;
+  mealsServed: number;
+  foodItems: string[];
+  quantities: Record<string, number>;
+  estimatedCost: number;
+  actualCost?: number;
+  notes?: string;
+  earlyYearsGroup?: string;
+  audioUrl?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type MarketPriceSource = 'manual' | 'receipt_ocr' | 'shelf_photo_ocr' | 'audio_entry';
+
+export interface MarketPriceRecord {
+  id: string;
+  itemName: string;
+  category: string;
+  unit?: string;
+  price: number;
+  currency: string;
+  dateRecorded: string;
+  sourceType: MarketPriceSource;
+  locationOrShop?: string;
+  imageUrl?: string;
+  audioUrl?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ForecastSettings {
+  id: string;
+  inflationPercent: number;
+  fuelPricePercent: number;
+  transportMultiplierPercent: number;
+  seasonalFoodPercent: number;
+  authorizedBy: string;
+  updatedAt: string;
+}
+
+export interface WhatIfScenario {
+  id: string;
+  name: string;
+  foodPricePercent: number;
+  fuelPricePercent: number;
+  transportPercent: number;
+  studentPopulationPercent: number;
+  feedingDaysChange: number;
+  increasedEnrollmentPercent: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+export type IntelligenceReviewStatus = 'suggested' | 'accepted' | 'edited' | 'dismissed';
+export type IntelligenceSuggestionType = 'follow_up' | 'workplan' | 'calendar' | 'missing_information' | 'duplicate_review';
+
+export interface IntelligenceSuggestion {
+  id: string;
+  type: IntelligenceSuggestionType;
+  title: string;
+  explanation: string;
+  sourceRecordIds: string[];
+  suggestedAction?: string;
+  suggestedDueDate?: string;
+  assignedStaffId?: string;
+  reviewStatus: IntelligenceReviewStatus;
+  confidence: 'high' | 'review_recommended' | 'low';
+  createdAt: string;
+  createdBy: 'SHINE Intelligence';
+  reviewedByUid?: string;
+  reviewedAt?: string;
+}
+
+export type DataQualityIssueType = 'missing_required_information' | 'duplicate_candidate' | 'contradictory_dates' | 'invalid_value' | 'unresolved_record';
+
+export interface DataQualityIssue {
+  id: string;
+  type: DataQualityIssueType;
+  title: string;
+  detail: string;
+  recordType: string;
+  recordId: string;
+  relatedRecordIds?: string[];
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface AISettings {
+  id: string;
+  enabled: boolean;
+  speechToText: boolean;
+  textToSpeech: boolean;
+  documentAnalysis: boolean;
+  naturalLanguageSearch: boolean;
+  dailyUsageLimit: number;
+  updatedByUid: string;
+  updatedAt: string;
 }
 
 // --------------------------------------------------
@@ -873,6 +1006,16 @@ export interface EarlyYearsRecord {
   sourceDocument: string;
   createdAt: string;
   createdBy?: string;
+  studentId?: string;
+  studentName?: string;
+  dateOfBirth?: string;
+  guardianName?: string;
+  enrollmentDate?: string;
+  classGroup?: string;
+  attendanceStatus?: 'Present' | 'Absent' | 'Late' | 'Excused';
+  studentStatus?: 'Active' | 'Completed' | 'Transferred' | 'Inactive';
+  teacherName?: string;
+  teacherContact?: string;
 }
 
 export type DocxClassification =
@@ -969,6 +1112,13 @@ export interface AppDatabase {
   payrollRecords?: PayrollRecord[];
   workplans?: WorkplanItem[];
   schedules?: ScheduleItem[];
+  meetings?: MeetingRecord[];
+  feedingProgramLogs?: FeedingProgramLog[];
+  marketPrices?: MarketPriceRecord[];
+  forecastSettings?: ForecastSettings[];
+  whatIfScenarios?: WhatIfScenario[];
+  intelligenceSuggestions?: IntelligenceSuggestion[];
+  aiSettings?: AISettings[];
   historicalRecords?: HistoricalCaseRecord[];
   importAudits?: ImportAuditRecord[];
   earlyYearsRecords?: EarlyYearsRecord[];

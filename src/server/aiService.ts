@@ -57,6 +57,45 @@ export interface AIChatResponse {
   errorMessage?: string;
 }
 
+export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<{ transcription: string; reviewRequired: boolean; extractedData: Record<string, unknown> }> {
+  if (!audioBase64 || audioBase64.length > 20_000_000) throw new Error('Audio payload is missing or too large.');
+  const allowedMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/m4a', 'audio/webm'];
+  if (!allowedMimeTypes.includes(mimeType)) throw new Error('Unsupported audio type.');
+  const ai = getGenAI();
+  const response = await ai.models.generateContent({
+    model: CANDIDATE_MODELS[0],
+    contents: [{ role: 'user', parts: [
+      { text: 'Transcribe this SHINE Relief Trust recording accurately. Return only the transcription. Preserve names, dates, numbers, and uncertainty. Do not invent missing words.' },
+      { inlineData: { mimeType, data: audioBase64 } },
+    ] }],
+    config: { temperature: 0.1 },
+  });
+  const transcription = response.text?.trim() || '';
+  return { transcription, reviewRequired: true, extractedData: {} };
+}
+
+export async function analyzeDocument(audioBase64: string, mimeType: string): Promise<{ extractedData: Record<string, unknown>; reviewRequired: true }> {
+  if (!audioBase64 || audioBase64.length > 25_000_000) throw new Error('Document payload is missing or too large.');
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+  if (!allowedMimeTypes.includes(mimeType)) throw new Error('Only JPEG, PNG, WebP, and PDF documents are supported.');
+  const ai = getGenAI();
+  const response = await ai.models.generateContent({
+    model: CANDIDATE_MODELS[0],
+    contents: [{ role: 'user', parts: [
+      { text: 'Analyze this SHINE Relief Trust document. Return valid JSON only with these keys: classification, names, dates, financialFigures, recommendations, actionItems, summary, potentialModule, confidence. Extract only visible/recorded information; use empty arrays or strings when unavailable. This is a review draft, not an official record.' },
+      { inlineData: { mimeType, data: audioBase64 } },
+    ] }],
+    config: { temperature: 0.1, responseMimeType: 'application/json' },
+  });
+  let extractedData: Record<string, unknown> = {};
+  try {
+    extractedData = JSON.parse(response.text || '{}');
+  } catch {
+    extractedData = { summary: response.text || '', confidence: 'review_recommended' };
+  }
+  return { extractedData, reviewRequired: true };
+}
+
 const SYSTEM_INSTRUCTION = `You are the SHINE AI Assistant, a specialized, confidential case-management assistant for the SHINE Relief Trust in Malawi.
 You assist authorized SHINE staff members (Administrators, Managers, and Social Workers) in reviewing, summarizing, and understanding records already stored in the SHINE case-management database.
 

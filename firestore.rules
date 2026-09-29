@@ -376,6 +376,49 @@ service cloud.firestore {
       allow delete: if isManagerOrStaff();
     }
 
+    match /meetings/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrAdmin();
+    }
+
+    match /feedingProgramLogs/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrStaff();
+    }
+
+    match /marketPrices/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isManagerOrAdmin();
+    }
+
+    match /forecastSettings/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /whatIfScenarios/{id} {
+      allow read: if isManagerOrAdmin();
+      allow create: if isManagerOrAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /intelligenceSuggestions/{id} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() && request.resource.data.createdBy == 'SHINE Intelligence';
+      allow update: if isStaffActive() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewStatus', 'suggestedAction', 'suggestedDueDate', 'assignedStaffId', 'reviewedByUid', 'reviewedAt']);
+      allow delete: if isManagerOrAdmin();
+    }
+
+    match /aiSettings/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     // Historical Case Records - Non-overwriting historical documents archive
     match /historicalCaseRecords/{id} {
       allow read: if isStaffActive() && (resource.data.recordType != 'medical' || canViewHealthRecords());

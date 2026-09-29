@@ -91,7 +91,8 @@ export async function loadAIRecords(
 ): Promise<AppDatabase> {
   const [girls, households, educationalFollowUps, healthFollowUps, familyFollowUps,
     rentPayments, expenses, householdActivities, educationHistory, academicSupports,
-    examinationRecords, attendanceRecords, girlLeaves, caseReviews] = await Promise.all([
+    examinationRecords, attendanceRecords, girlLeaves, caseReviews, meetings, schedules,
+    workplans, feedingProgramLogs, marketPrices] = await Promise.all([
     readRecords<AppDatabase['girls'][number]>('girls'),
     readRecords<AppDatabase['households'][number]>('households'),
     readRecords<AppDatabase['educationalFollowUps'][number]>('educationalFollowUps'),
@@ -110,6 +111,11 @@ export async function loadAIRecords(
     canViewCaseReviews
       ? readRecords<NonNullable<AppDatabase['caseReviews']>[number]>('caseReviews')
       : Promise.resolve([]),
+    readRecords<NonNullable<AppDatabase['meetings']>[number]>('meetings'),
+    readRecords<NonNullable<AppDatabase['schedules']>[number]>('schedules'),
+    readRecords<NonNullable<AppDatabase['workplans']>[number]>('workplans'),
+    readRecords<NonNullable<AppDatabase['feedingProgramLogs']>[number]>('feedingProgramLogs'),
+    readRecords<NonNullable<AppDatabase['marketPrices']>[number]>('marketPrices'),
   ]);
 
   const caseActionQuery = adminFirestore.collection('caseActions');
@@ -134,11 +140,21 @@ export async function loadAIRecords(
     attendanceRecords,
     girlLeaves,
     caseReviews,
+    meetings,
+    schedules,
+    workplans,
+    feedingProgramLogs,
+    marketPrices,
   };
 }
 
 export async function writeAIAudit(entry: Record<string, unknown>): Promise<void> {
   await adminFirestore.collection('aiAuditLogs').add({ ...entry, createdAt: new Date().toISOString() });
+}
+
+export async function getAISettings(): Promise<Record<string, any>> {
+  const snapshot = await adminFirestore.collection('aiSettings').doc('default').get();
+  return snapshot.exists ? snapshot.data() || {} : { enabled: true, speechToText: true, documentAnalysis: true, naturalLanguageSearch: true };
 }
 
 export async function writeSafeguardingAudit(entry: Record<string, unknown>): Promise<void> {

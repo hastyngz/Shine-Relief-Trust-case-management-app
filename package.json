@@ -10,6 +10,9 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:rules": "firebase emulators:exec --only firestore \"tsx scripts/firestore-rules.test.ts\"",
+    "test:phase5-rules": "firebase emulators:exec --project demo-shine-phase5-rules --only firestore \"tsx scripts/phase5-rules.test.ts\"",
+    "test:phase5": "tsx scripts/phase5-intelligence.test.ts && tsx scripts/phase5-case-intelligence.test.ts",
+    "test:phase5-e2e": "tsx scripts/phase5-e2e.test.ts",
     "test:storage-rules": "firebase emulators:exec --project demo-shine-storage-rules --only firestore,storage \"tsx scripts/storage-rules.test.ts\"",
     "test:phase2": "tsx scripts/phase2-import-ai.test.ts"
   },

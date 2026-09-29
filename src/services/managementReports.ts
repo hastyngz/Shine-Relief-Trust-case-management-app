@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { calculateBudgetVariance } from './financialCalculations';
 import { buildManagementAnalytics, ManagementFilters, matchesManagementProgramme } from './managementAnalytics';
 import { calculateGratuity } from './gratuityService';
+import { calculateBudgetForecast, calculateFeedingCostInsight, calculateMarketPriceInsight } from './intelligenceService';
 
 export const MANAGEMENT_REPORTS = [
   { id: 'management-summary', label: 'Management Summary' },
@@ -33,6 +34,9 @@ export const MANAGEMENT_REPORTS = [
   { id: 'contract-expiry', label: 'Contract Expiry Report' },
   { id: 'household-expenditure', label: 'Household Expenditure Report' },
   { id: 'outstanding-actions', label: 'Outstanding Actions Report' },
+  { id: 'feeding-program', label: 'Feeding Programme Report' },
+  { id: 'market-prices', label: 'Market Price Intelligence Report' },
+  { id: 'budget-forecast', label: 'Budget Forecast Report' },
 ] as const;
 
 export type ManagementReportId = (typeof MANAGEMENT_REPORTS)[number]['id'];
@@ -227,6 +231,25 @@ export function buildManagementReportRows(
       return headersAndRows(['Expense ID', 'Household ID', 'Date', 'Category', 'Description', 'Quantity', 'Unit cost', 'Total cost', 'Programme', 'Budget line ID'], expenseRecords.map((item) => [item.id, item.householdId, item.date, item.category, item.itemDescription, item.quantity, item.unitCost, item.totalCost, item.programme || '', item.budgetLineId || '']));
     case 'outstanding-actions':
       return headersAndRows(['Action ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned staff', 'Priority', 'Due date', 'Status'], actionRecords.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status]));
+    case 'feeding-program': {
+      const logs = (db.feedingProgramLogs || []).filter((item) => inRange(item.date, filters));
+      const insight = calculateFeedingCostInsight(logs);
+      return headersAndRows(['Date', 'Students present', 'Meals served', 'Estimated cost', 'Actual cost', 'Cost per meal', 'Food items', 'Recorded by'], [
+        ...logs.map((item) => [item.date, item.studentsPresent, item.mealsServed, item.estimatedCost, item.actualCost ?? item.estimatedCost, item.mealsServed ? (item.actualCost ?? item.estimatedCost) / item.mealsServed : 0, item.foodItems.join(', '), item.createdBy]),
+        ['TOTAL', insight.studentsPresent, insight.mealsServed, '', insight.actualCost, insight.costPerMeal, `${insight.days} feeding days`, ''],
+      ]);
+    }
+    case 'market-prices': {
+      const records = (db.marketPrices || []).filter((item) => inRange(item.dateRecorded, filters));
+      return headersAndRows(['Item', 'Category', 'Unit', 'Price', 'Currency', 'Date', 'Source', 'Location', 'Trend', 'Change %'], records.map((item) => {
+        const insight = calculateMarketPriceInsight(records, item.itemName, item.locationOrShop);
+        return [item.itemName, item.category, item.unit || '', item.price, item.currency, item.dateRecorded, item.sourceType, item.locationOrShop || '', insight?.trend || 'stable', insight?.percentageChange ?? ''];
+      }));
+    }
+    case 'budget-forecast': {
+      const forecast = calculateBudgetForecast(db.budgets || [], 1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100));
+      return headersAndRows(['Measure', 'Value', 'Status'], [['Approved budget', forecast.approved, 'Approved'], ['Actual expenditure', forecast.actual, 'Actual'], ['Forecast expenditure', forecast.forecast, 'Forecast'], ['Remaining approved', forecast.remainingApproved, forecast.status], ['Burn rate', forecast.burnRate, 'Calculated']]);
+    }
     default:
       return headersAndRows([], []);
   }

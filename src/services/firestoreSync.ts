@@ -45,6 +45,13 @@ import {
   GirlLeaveRecord,
   CaseReview,
   ReportHistoryRecord,
+  MeetingRecord,
+  FeedingProgramLog,
+  MarketPriceRecord,
+  ForecastSettings,
+  WhatIfScenario,
+  IntelligenceSuggestion,
+  AISettings,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -99,6 +106,13 @@ export const COLLECTIONS = {
   PAYROLL_RECORDS: 'payrollRecords',
   WORKPLANS: 'workplans',
   SCHEDULES: 'schedules',
+  MEETINGS: 'meetings',
+  FEEDING_LOGS: 'feedingProgramLogs',
+  MARKET_PRICES: 'marketPrices',
+  FORECAST_SETTINGS: 'forecastSettings',
+  WHAT_IF_SCENARIOS: 'whatIfScenarios',
+  INTELLIGENCE_SUGGESTIONS: 'intelligenceSuggestions',
+  AI_SETTINGS: 'aiSettings',
   HISTORICAL_RECORDS: 'historicalCaseRecords',
   IMPORT_AUDITS: 'importAudits',
   EARLY_YEARS: 'earlyYearsRecords',
@@ -602,6 +616,116 @@ export async function deleteScheduleItemFromFirestore(id: string): Promise<void>
   }
 }
 
+export async function persistMeetingToFirestore(item: MeetingRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.MEETINGS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistMeeting error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteMeetingFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.MEETINGS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteMeeting error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistFeedingProgramLogToFirestore(item: FeedingProgramLog): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.FEEDING_LOGS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistFeedingProgramLog error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteFeedingProgramLogFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.FEEDING_LOGS, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteFeedingProgramLog error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistMarketPriceToFirestore(item: MarketPriceRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.MARKET_PRICES, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistMarketPrice error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function deleteMarketPriceFromFirestore(id: string): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await deleteDoc(doc(firestore, COLLECTIONS.MARKET_PRICES, id));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore deleteMarketPrice error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistForecastSettingsToFirestore(item: ForecastSettings): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.FORECAST_SETTINGS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistForecastSettings error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistWhatIfScenarioToFirestore(item: WhatIfScenario): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.WHAT_IF_SCENARIOS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistWhatIfScenario error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistIntelligenceSuggestionToFirestore(item: IntelligenceSuggestion): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.INTELLIGENCE_SUGGESTIONS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistIntelligenceSuggestion error:', err);
+    updateSyncStatus('error');
+  }
+}
+
+export async function persistAISettingsToFirestore(item: AISettings): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.AI_SETTINGS, item.id), sanitizeForFirestore(item));
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistAISettings error:', err);
+    updateSyncStatus('error');
+  }
+}
+
 // Historical Case Records persistence
 export async function persistHistoricalCaseRecordToFirestore(item: HistoricalCaseRecord): Promise<void> {
   try {
@@ -1029,6 +1153,13 @@ export function initFirestoreListeners(
     payrollRecords: [],
     workplans: [],
     schedules: [],
+    meetings: [],
+    feedingProgramLogs: [],
+    marketPrices: [],
+    forecastSettings: [],
+    whatIfScenarios: [],
+    intelligenceSuggestions: [],
+    aiSettings: [],
     historicalRecords: [],
     importAudits: [],
     earlyYearsRecords: [],
@@ -1043,7 +1174,7 @@ export function initFirestoreListeners(
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 24;
+  const TOTAL_COLLECTIONS = 31;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -1060,6 +1191,13 @@ export function initFirestoreListeners(
       payrollRecords: [...(liveState.payrollRecords || [])],
       workplans: [...(liveState.workplans || [])],
       schedules: [...(liveState.schedules || [])],
+      meetings: [...(liveState.meetings || [])],
+      feedingProgramLogs: [...(liveState.feedingProgramLogs || [])],
+      marketPrices: [...(liveState.marketPrices || [])],
+      forecastSettings: [...(liveState.forecastSettings || [])],
+      whatIfScenarios: [...(liveState.whatIfScenarios || [])],
+      intelligenceSuggestions: [...(liveState.intelligenceSuggestions || [])],
+      aiSettings: [...(liveState.aiSettings || [])],
       historicalRecords: [...(liveState.historicalRecords || [])],
       importAudits: [...(liveState.importAudits || [])],
       earlyYearsRecords: [...(liveState.earlyYearsRecords || [])],
@@ -1129,6 +1267,13 @@ export function initFirestoreListeners(
   handleCollection<PayrollRecord>(COLLECTIONS.PAYROLL_RECORDS, 'payrollRecords');
   handleCollection<WorkplanItem>(COLLECTIONS.WORKPLANS, 'workplans');
   handleCollection<ScheduleItem>(COLLECTIONS.SCHEDULES, 'schedules');
+  handleCollection<MeetingRecord>(COLLECTIONS.MEETINGS, 'meetings');
+  handleCollection<FeedingProgramLog>(COLLECTIONS.FEEDING_LOGS, 'feedingProgramLogs');
+  handleCollection<MarketPriceRecord>(COLLECTIONS.MARKET_PRICES, 'marketPrices');
+  handleCollection<ForecastSettings>(COLLECTIONS.FORECAST_SETTINGS, 'forecastSettings');
+  handleCollection<WhatIfScenario>(COLLECTIONS.WHAT_IF_SCENARIOS, 'whatIfScenarios');
+  handleCollection<IntelligenceSuggestion>(COLLECTIONS.INTELLIGENCE_SUGGESTIONS, 'intelligenceSuggestions');
+  handleCollection<AISettings>(COLLECTIONS.AI_SETTINGS, 'aiSettings');
   handleCollection<HistoricalCaseRecord>(COLLECTIONS.HISTORICAL_RECORDS, 'historicalRecords');
   handleCollection<ImportAuditRecord>(COLLECTIONS.IMPORT_AUDITS, 'importAudits');
   handleCollection<EarlyYearsRecord>(COLLECTIONS.EARLY_YEARS, 'earlyYearsRecords');

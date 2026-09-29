@@ -63,6 +63,7 @@ import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkpla
 import { PayrollDashboard } from './components/PayrollDashboard';
 import { CaseManagementView } from './components/CaseManagementView';
 import { DataImportWizard } from './components/Import/DataImportWizard';
+import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
 import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
@@ -101,6 +102,7 @@ type AppView =
   | 'staff'
   | 'ai-assistant'
   | 'case-management'
+  | 'operations'
   | 'girl-profile'
   | 'house-profile'
   | 'form-girl'
@@ -134,6 +136,7 @@ function parseHash(): {
   if (hash === 'houses') return { view: 'houses', activeTab: 'houses' };
   if (hash === 'activities') return { view: 'activities', activeTab: 'activities' };
   if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
+  if (hash === 'operations' || hash === 'intelligence' || hash === 'calendar') return { view: 'operations', activeTab: 'operations' };
   if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
   if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
   if (hash === 'management' || hash === 'executive-overview') return { view: 'management', activeTab: 'management' };
@@ -1126,6 +1129,8 @@ function AppContent() {
             onOpenHousehold={handleOpenHouseProfile}
           />
         )}
+
+        {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} />}
 
         {/* VIEW 5: REPORTS */}
         {view === 'reports' && (

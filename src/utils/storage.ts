@@ -17,6 +17,13 @@ import {
   ImportAuditRecord,
   EarlyYearsRecord,
   Person,
+  MeetingRecord,
+  FeedingProgramLog,
+  MarketPriceRecord,
+  ForecastSettings,
+  WhatIfScenario,
+  IntelligenceSuggestion,
+  AISettings,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
@@ -56,6 +63,18 @@ import {
   syncEntireDatabaseToFirestore,
   persistPhase2Record,
   appendCaseActionAudit,
+  persistMeetingToFirestore,
+  deleteMeetingFromFirestore,
+  persistFeedingProgramLogToFirestore,
+  deleteFeedingProgramLogFromFirestore,
+  persistMarketPriceToFirestore,
+  deleteMarketPriceFromFirestore,
+  persistForecastSettingsToFirestore,
+  persistWhatIfScenarioToFirestore,
+  persistIntelligenceSuggestionToFirestore,
+  persistAISettingsToFirestore,
+  persistEarlyYearsRecordToFirestore,
+  deleteEarlyYearsRecordFromFirestore,
 } from '../services/firestoreSync';
 import {
   CaseAction,
@@ -99,6 +118,13 @@ export function getDatabase(): AppDatabase {
       payrollRecords: parsed.payrollRecords || [],
       workplans: parsed.workplans || [],
       schedules: parsed.schedules || [],
+      meetings: parsed.meetings || [],
+      feedingProgramLogs: parsed.feedingProgramLogs || [],
+      marketPrices: parsed.marketPrices || [],
+      forecastSettings: parsed.forecastSettings || [],
+      whatIfScenarios: parsed.whatIfScenarios || [],
+      intelligenceSuggestions: parsed.intelligenceSuggestions || [],
+      aiSettings: parsed.aiSettings || [],
       historicalRecords: parsed.historicalRecords || [],
       importAudits: parsed.importAudits || [],
       earlyYearsRecords: parsed.earlyYearsRecords || [],
@@ -166,6 +192,13 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       payrollRecords: Array.isArray(parsed.payrollRecords) ? parsed.payrollRecords : [],
       workplans: Array.isArray(parsed.workplans) ? parsed.workplans : [],
       schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+      meetings: Array.isArray(parsed.meetings) ? parsed.meetings : [],
+      feedingProgramLogs: Array.isArray(parsed.feedingProgramLogs) ? parsed.feedingProgramLogs : [],
+      marketPrices: Array.isArray(parsed.marketPrices) ? parsed.marketPrices : [],
+      forecastSettings: Array.isArray(parsed.forecastSettings) ? parsed.forecastSettings : [],
+      whatIfScenarios: Array.isArray(parsed.whatIfScenarios) ? parsed.whatIfScenarios : [],
+      intelligenceSuggestions: Array.isArray(parsed.intelligenceSuggestions) ? parsed.intelligenceSuggestions : [],
+      aiSettings: Array.isArray(parsed.aiSettings) ? parsed.aiSettings : [],
       historicalRecords: Array.isArray(parsed.historicalRecords) ? parsed.historicalRecords : [],
       importAudits: Array.isArray(parsed.importAudits) ? parsed.importAudits : [],
       earlyYearsRecords: Array.isArray(parsed.earlyYearsRecords) ? parsed.earlyYearsRecords : [],
@@ -1038,6 +1071,140 @@ export function deleteScheduleItem(id: string): boolean {
   deleteScheduleItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete schedule item from Firestore:', err)
   );
+  return true;
+}
+
+export function addMeetingRecord(item: Omit<MeetingRecord, 'id' | 'createdAt' | 'updatedAt'>, auditActor?: string): MeetingRecord {
+  const db = getDatabase();
+  if (!db.meetings) db.meetings = [];
+  const now = new Date().toISOString();
+  const meeting: MeetingRecord = { ...item, id: generateFollowUpId('MTG'), createdAt: now, updatedAt: now, createdBy: auditActor || item.createdBy };
+  db.meetings.unshift(meeting);
+  saveDatabase(db);
+  persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to persist meeting:', err));
+  return meeting;
+}
+
+export function updateMeetingRecord(id: string, updates: Partial<MeetingRecord>): MeetingRecord | null {
+  const db = getDatabase();
+  if (!db.meetings) return null;
+  const index = db.meetings.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const meeting = { ...db.meetings[index], ...updates, updatedAt: new Date().toISOString() };
+  db.meetings[index] = meeting;
+  saveDatabase(db);
+  persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to update meeting:', err));
+  return meeting;
+}
+
+export function deleteMeetingRecord(id: string): boolean {
+  const db = getDatabase();
+  if (!db.meetings) return false;
+  const index = db.meetings.findIndex((item) => item.id === id);
+  if (index < 0) return false;
+  db.meetings.splice(index, 1);
+  saveDatabase(db);
+  deleteMeetingFromFirestore(id).catch((err) => console.error('Failed to delete meeting:', err));
+  return true;
+}
+
+export function addFeedingProgramLog(item: Omit<FeedingProgramLog, 'id' | 'createdAt'>): FeedingProgramLog {
+  const db = getDatabase();
+  if (!db.feedingProgramLogs) db.feedingProgramLogs = [];
+  const log: FeedingProgramLog = { ...item, id: generateFollowUpId('FEED'), createdAt: new Date().toISOString() };
+  db.feedingProgramLogs.unshift(log);
+  saveDatabase(db);
+  persistFeedingProgramLogToFirestore(log).catch((err) => console.error('Failed to persist feeding log:', err));
+  return log;
+}
+
+export function deleteFeedingProgramLog(id: string): boolean {
+  const db = getDatabase();
+  if (!db.feedingProgramLogs) return false;
+  const index = db.feedingProgramLogs.findIndex((item) => item.id === id);
+  if (index < 0) return false;
+  db.feedingProgramLogs.splice(index, 1);
+  saveDatabase(db);
+  deleteFeedingProgramLogFromFirestore(id).catch((err) => console.error('Failed to delete feeding log:', err));
+  return true;
+}
+
+export function addMarketPrice(item: Omit<MarketPriceRecord, 'id' | 'createdAt'>): MarketPriceRecord {
+  const db = getDatabase();
+  if (!db.marketPrices) db.marketPrices = [];
+  const record: MarketPriceRecord = { ...item, id: generateFollowUpId('PRICE'), createdAt: new Date().toISOString() };
+  db.marketPrices.unshift(record);
+  saveDatabase(db);
+  persistMarketPriceToFirestore(record).catch((err) => console.error('Failed to persist market price:', err));
+  return record;
+}
+
+export function deleteMarketPrice(id: string): boolean {
+  const db = getDatabase();
+  if (!db.marketPrices) return false;
+  const index = db.marketPrices.findIndex((item) => item.id === id);
+  if (index < 0) return false;
+  db.marketPrices.splice(index, 1);
+  saveDatabase(db);
+  deleteMarketPriceFromFirestore(id).catch((err) => console.error('Failed to delete market price:', err));
+  return true;
+}
+
+export function saveForecastSettings(item: ForecastSettings): ForecastSettings {
+  const db = getDatabase();
+  db.forecastSettings = [item];
+  saveDatabase(db);
+  persistForecastSettingsToFirestore(item).catch((err) => console.error('Failed to persist forecast settings:', err));
+  return item;
+}
+
+export function addWhatIfScenario(item: Omit<WhatIfScenario, 'id' | 'createdAt'>): WhatIfScenario {
+  const db = getDatabase();
+  if (!db.whatIfScenarios) db.whatIfScenarios = [];
+  const scenario: WhatIfScenario = { ...item, id: generateFollowUpId('SCN'), createdAt: new Date().toISOString() };
+  db.whatIfScenarios.unshift(scenario);
+  saveDatabase(db);
+  persistWhatIfScenarioToFirestore(scenario).catch((err) => console.error('Failed to persist scenario:', err));
+  return scenario;
+}
+
+export function saveIntelligenceSuggestion(item: IntelligenceSuggestion): IntelligenceSuggestion {
+  const db = getDatabase();
+  if (!db.intelligenceSuggestions) db.intelligenceSuggestions = [];
+  const existingIndex = db.intelligenceSuggestions.findIndex((suggestion) => suggestion.id === item.id);
+  if (existingIndex >= 0) db.intelligenceSuggestions[existingIndex] = item;
+  else db.intelligenceSuggestions.unshift(item);
+  saveDatabase(db);
+  persistIntelligenceSuggestionToFirestore(item).catch((err) => console.error('Failed to persist intelligence suggestion:', err));
+  return item;
+}
+
+export function saveAISettings(item: AISettings): AISettings {
+  const db = getDatabase();
+  db.aiSettings = [item];
+  saveDatabase(db);
+  persistAISettingsToFirestore(item).catch((err) => console.error('Failed to persist AI settings:', err));
+  return item;
+}
+
+export function addEarlyYearsRecord(item: Omit<EarlyYearsRecord, 'id' | 'createdAt'>): EarlyYearsRecord {
+  const db = getDatabase();
+  if (!db.earlyYearsRecords) db.earlyYearsRecords = [];
+  const record: EarlyYearsRecord = { ...item, id: generateFollowUpId('ECD'), createdAt: new Date().toISOString() };
+  db.earlyYearsRecords.unshift(record);
+  saveDatabase(db);
+  persistEarlyYearsRecordToFirestore(record).catch((err) => console.error('Failed to persist early-years record:', err));
+  return record;
+}
+
+export function deleteEarlyYearsRecord(id: string): boolean {
+  const db = getDatabase();
+  if (!db.earlyYearsRecords) return false;
+  const index = db.earlyYearsRecords.findIndex((item) => item.id === id);
+  if (index < 0) return false;
+  db.earlyYearsRecords.splice(index, 1);
+  saveDatabase(db);
+  deleteEarlyYearsRecordFromFirestore(id).catch((err) => console.error('Failed to delete early-years record:', err));
   return true;
 }
 

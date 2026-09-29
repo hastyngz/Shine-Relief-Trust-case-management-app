@@ -15,6 +15,28 @@
         { "fieldPath": "generatedByUid", "order": "ASCENDING" },
         { "fieldPath": "generatedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "meetings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "dateTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "feedingProgramLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "marketPrices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "itemName", "order": "ASCENDING" },
+        { "fieldPath": "dateRecorded", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -19,9 +19,12 @@ import {
   User,
   ArrowRight,
   Database,
+  Volume2,
+  StopCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AppDatabase, Girl, Household } from '../../types';
+import { AudioDataInput } from '../Intelligence/AudioDataInput';
 
 export interface ChatMessage {
   id: string;
@@ -166,6 +169,16 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const speakResponse = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  };
+
+  const stopSpeaking = () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   };
 
   const handleSubmit = async (queryToSend?: string) => {
@@ -661,6 +674,10 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                             </>
                           )}
                         </button>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => speakResponse(msg.content)} title="Read response aloud" className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] hover:bg-stone-50 hover:text-stone-700"><Volume2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Replay</span></button>
+                          <button type="button" onClick={stopSpeaking} title="Stop speaking" className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] hover:bg-stone-50 hover:text-stone-700"><StopCircle className="h-3.5 w-3.5" /><span className="hidden sm:inline">Stop</span></button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -732,6 +749,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
             }}
             className="flex items-end gap-2"
           >
+            <AudioDataInput label="Voice question" onTranscriptionChange={setInputQuery} disabled={loading} />
             <div className="flex-1 relative">
               <textarea
                 ref={textareaRef}

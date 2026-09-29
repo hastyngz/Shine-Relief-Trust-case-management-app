@@ -2,8 +2,8 @@ import express from 'express';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { processAIChat, AIChatRequest } from './src/server/aiService';
-import { AIRequestAuthError, adminFirestore, adminStorageBucket, authenticateAIRequest, loadAIRecords, notifyCaseAction, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
+import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
+import { AIRequestAuthError, adminFirestore, adminStorageBucket, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 
 function canAccessSafeguardingRecord(staff: any, record: any): boolean {
   return staff.role === 'Administrator' || staff.safeguardingPermissions.canView ||
@@ -15,7 +15,7 @@ async function startServer() {
   const PORT = 3000;
 
   // JSON payload parser for requests
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: '25mb' }));
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
@@ -26,6 +26,8 @@ async function startServer() {
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const staffUser = await authenticateAIRequest(req.headers.authorization);
+      const aiSettings = await getAISettings();
+      if (aiSettings.enabled === false || aiSettings.naturalLanguageSearch === false) return res.status(403).json({ success: false, reply: 'Natural-language AI search is disabled by an Administrator.', errorMessage: 'AI search disabled.' });
       if (typeof req.body?.message !== 'string' || !req.body.message.trim() || req.body.message.length > 4000) {
         return res.status(400).json({
           success: false,
@@ -80,6 +82,48 @@ async function startServer() {
         isUnavailable: true,
         errorMessage: String(err?.message || err),
       });
+    }
+  });
+
+  app.post('/api/ai/transcribe', async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
+      const aiSettings = await getAISettings();
+      if (aiSettings.enabled === false || aiSettings.speechToText === false) return res.status(403).json({ error: 'Speech-to-text is disabled by an Administrator.' });
+      if (typeof req.body?.audioBase64 !== 'string' || typeof req.body?.mimeType !== 'string') {
+        return res.status(400).json({ error: 'Audio data and MIME type are required.' });
+      }
+      const result = await transcribeAudio(req.body.audioBase64, req.body.mimeType);
+      await writeAIAudit({
+        userId: staff.uid,
+        userEmail: staff.email,
+        userRole: staff.role,
+        timestamp: new Date().toISOString(),
+        aiFunction: 'transcription',
+        status: 'success',
+        recordIdsAccessed: [],
+      });
+      res.json(result);
+    } catch (err: any) {
+      const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not transcribe audio.' });
+    }
+  });
+
+  app.post('/api/ai/analyze-document', async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
+      const aiSettings = await getAISettings();
+      if (aiSettings.enabled === false || aiSettings.documentAnalysis === false) return res.status(403).json({ error: 'Document analysis is disabled by an Administrator.' });
+      if (typeof req.body?.documentBase64 !== 'string' || typeof req.body?.mimeType !== 'string') return res.status(400).json({ error: 'Document data and MIME type are required.' });
+      const result = await analyzeDocument(req.body.documentBase64, req.body.mimeType);
+      await writeAIAudit({ userId: staff.uid, userEmail: staff.email, userRole: staff.role, timestamp: new Date().toISOString(), aiFunction: 'document_analysis', status: 'success', recordIdsAccessed: [], reviewStatus: 'review_required' });
+      res.json(result);
+    } catch (err: any) {
+      const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not analyze document.' });
     }
   });
 

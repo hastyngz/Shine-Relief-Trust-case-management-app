@@ -45,7 +45,7 @@ assert.equal(canAccessManagementDashboard(true, 'Administrator'), true);
 assert.equal(canAccessManagementDashboard(false, 'Manager'), true);
 assert.equal(canAccessManagementDashboard(false, 'Staff'), false);
 assert.equal(canAccessManagementDashboard(false, 'View Only'), false);
-assert.equal(MANAGEMENT_REPORTS.length, 28);
+assert.equal(MANAGEMENT_REPORTS.length, 31);
 
 const analytics = buildManagementAnalytics({
   ...db,

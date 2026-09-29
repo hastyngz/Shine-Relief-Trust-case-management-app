@@ -13,6 +13,7 @@ import {
   UploadCloud,
   ClipboardList,
   BarChart3,
+  BrainCircuit,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
@@ -30,7 +31,8 @@ export type NavTab =
   | 'payroll'
   | 'ai-assistant'
   | 'staff'
-  | 'case-management';
+  | 'case-management'
+  | 'operations';
 
 interface NavigationProps {
   activeTab: NavTab;
@@ -62,6 +64,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'houses', label: 'Households', icon: Home, count: housesCount },
     { id: 'activities', label: 'Group Activities', icon: Sparkles },
     { id: 'case-management', label: 'Case Management', icon: ClipboardList },
+    { id: 'operations', label: 'Operations & Intelligence', icon: BrainCircuit },
     {
       id: 'messages',
       label: 'Messages',
