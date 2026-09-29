@@ -15,10 +15,14 @@ import {
   ChevronDown,
   UserCheck,
   MessageSquare,
-  Bell,
+  Palette,
+  Check,
+  Smartphone,
+  Waves,
 } from 'lucide-react';
 import { SyncStatus } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
+import { themes, useVisualSettings } from '../contexts/VisualSettingsContext';
 import { StaffRole } from '../types';
 import { NotificationBellDropdown } from './Notifications/NotificationBellDropdown';
 
@@ -44,15 +48,21 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'synced',
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
+  const { mobileView, setMobileView, theme, setTheme, animatedGlass, setAnimatedGlass } = useVisualSettings();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const visualSettingsRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (visualSettingsRef.current && !visualSettingsRef.current.contains(e.target as Node)) {
+        setVisualSettingsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -194,6 +204,83 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>Record New</span>
               </button>
             )}
+
+            <div className="relative" ref={visualSettingsRef}>
+              <button
+                type="button"
+                onClick={() => setVisualSettingsOpen((open) => !open)}
+                aria-label="Open visual settings"
+                aria-expanded={visualSettingsOpen}
+                aria-controls="visual-settings-panel"
+                title="App theme and mobile view"
+                className="p-2 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-white border border-teal-800 transition-colors"
+              >
+                <Palette className="w-4 h-4 text-amber-300" />
+              </button>
+              {visualSettingsOpen && (
+                <section
+                  id="visual-settings-panel"
+                  aria-label="App theme and mobile view"
+                  className="absolute right-0 top-full mt-2 w-[min(19rem,calc(100vw-1rem))] max-h-[min(75vh,36rem)] overflow-y-auto rounded-xl border border-stone-200 bg-white p-3 text-stone-900 shadow-xl z-50"
+                >
+                  <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-4 h-4 text-stone-500" />
+                      <span className="text-sm font-semibold">Mobile view</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label="Mobile view"
+                      aria-checked={mobileView}
+                      onClick={() => setMobileView(!mobileView)}
+                      data-enabled={mobileView}
+                      className="visual-switch"
+                    >
+                      <span />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b border-stone-100 py-3">
+                    <div className="flex items-center gap-2">
+                      <Waves className="w-4 h-4 text-stone-500" />
+                      <span className="text-sm font-semibold">Animated glass</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label="Animated glass"
+                      aria-checked={animatedGlass}
+                      onClick={() => setAnimatedGlass(!animatedGlass)}
+                      data-enabled={animatedGlass}
+                      className="visual-switch"
+                    >
+                      <span />
+                    </button>
+                  </div>
+                  <h2 className="px-1 pb-2 pt-3 text-xs font-bold uppercase text-stone-500">App theme</h2>
+                  <div className="space-y-1">
+                    {themes.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setTheme(option.id)}
+                        aria-pressed={theme === option.id}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-xs transition-colors ${
+                          theme === option.id ? 'bg-stone-100 font-bold ring-1 ring-stone-300' : 'hover:bg-stone-50'
+                        }`}
+                      >
+                        <span className="flex shrink-0 items-center gap-1" aria-hidden="true">
+                          <span className="h-4 w-4 rounded-full border border-black/10" style={{ backgroundColor: option.primary }} />
+                          <span className="h-4 w-4 rounded-full border border-black/10" style={{ backgroundColor: option.accent }} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{option.name}</span>
+                        {theme === option.id && <Check className="h-4 w-4 shrink-0 text-stone-800" aria-label="Active theme" />}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
 
             {/* User Profile & Session Dropdown */}
             <div className="relative" ref={menuRef}>

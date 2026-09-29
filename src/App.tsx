@@ -43,6 +43,7 @@ import {
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { MessagingProvider } from './contexts/MessagingContext';
+import { useVisualSettings, VisualSettingsProvider } from './contexts/VisualSettingsContext';
 import { StaffLoginView } from './components/StaffLoginView';
 import { StaffManagement } from './components/StaffManagement';
 
@@ -152,6 +153,7 @@ function parseHash(): {
 }
 
 function AppContent() {
+  const { mobileView, theme, animatedGlass } = useVisualSettings();
   const {
     currentUser,
     staffProfile,
@@ -1008,7 +1010,13 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans">
+    <div
+      id="app-shell"
+      data-theme={theme}
+      data-mobile-view={mobileView}
+      data-animated-glass={animatedGlass}
+      className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans"
+    >
       {/* Top Application Header */}
       <Header
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
@@ -1430,9 +1438,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <MessagingProvider>
-        <AppContent />
-      </MessagingProvider>
+      <VisualSettingsProvider>
+        <MessagingProvider>
+          <AppContent />
+        </MessagingProvider>
+      </VisualSettingsProvider>
     </AuthProvider>
   );
 }

@@ -1,1 +1,553 @@
 @import "tailwindcss";
+
+:root {
+	--theme-primary: #0b3d33;
+	--theme-primary-ink: #0b3d33;
+	--theme-primary-secondary: #14584b;
+	--theme-primary-gradient: #0b3d33;
+	--theme-accent: #f5a623;
+	--theme-accent-foreground: #26351f;
+	--theme-accent-ink: #5c3c0a;
+	--theme-success: #16a34a;
+	--theme-text-on-primary: #ffffff;
+	--theme-progress-gradient: linear-gradient(90deg, #0b3d33, #f5a623);
+	--theme-page-background: #f5f5f4;
+}
+
+#app-shell[data-theme="shine"] {
+	--theme-primary: #0b3d33;
+	--theme-primary-ink: #0b3d33;
+	--theme-primary-secondary: #14584b;
+	--theme-primary-gradient: #0b3d33;
+	--theme-accent: #f5a623;
+	--theme-accent-foreground: #26351f;
+	--theme-accent-ink: #5c3c0a;
+	--theme-success: #16a34a;
+	--theme-text-on-primary: #ffffff;
+	--theme-progress-gradient: linear-gradient(90deg, #0b3d33, #f5a623);
+}
+
+#app-shell[data-theme="electric-coral"] {
+	--theme-primary: #ff5a4e;
+	--theme-primary-ink: #b33128;
+	--theme-primary-secondary: #d9433b;
+	--theme-primary-gradient: #ff5a4e;
+	--theme-accent: #0f766e;
+	--theme-accent-foreground: #ffffff;
+	--theme-accent-ink: #064e49;
+	--theme-success: #15803d;
+	--theme-text-on-primary: #351613;
+	--theme-progress-gradient: linear-gradient(90deg, #ff5a4e, #0f766e);
+}
+
+#app-shell[data-theme="tropical-punch"] {
+	--theme-primary: #e6317a;
+	--theme-primary-ink: #ad1d58;
+	--theme-primary-secondary: #bd2463;
+	--theme-primary-gradient: #e6317a;
+	--theme-accent: #1fc7d4;
+	--theme-accent-foreground: #12353b;
+	--theme-accent-ink: #07545a;
+	--theme-success: #15803d;
+	--theme-text-on-primary: #33091d;
+	--theme-progress-gradient: linear-gradient(90deg, #e6317a, #1fc7d4);
+}
+
+#app-shell[data-theme="sunset-pop"] {
+	--theme-primary: #ff7a1a;
+	--theme-primary-ink: #a63c16;
+	--theme-primary-secondary: #ff3d7f;
+	--theme-primary-gradient: linear-gradient(135deg, #ff7a1a, #ff3d7f);
+	--theme-accent: #5b2a86;
+	--theme-accent-foreground: #ffffff;
+	--theme-accent-ink: #3e1b5e;
+	--theme-success: #16834a;
+	--theme-text-on-primary: #351222;
+	--theme-progress-gradient: linear-gradient(90deg, #ff7a1a, #ff3d7f);
+}
+
+#app-shell[data-theme="kelly-gold"] {
+	--theme-primary: #0c3b2e;
+	--theme-primary-ink: #0c3b2e;
+	--theme-primary-secondary: #1a6b4a;
+	--theme-primary-gradient: linear-gradient(135deg, #0c3b2e, #1a6b4a);
+	--theme-accent: #f5b700;
+	--theme-accent-foreground: #29300e;
+	--theme-accent-ink: #5b4300;
+	--theme-success: #22a559;
+	--theme-text-on-primary: #ffffff;
+	--theme-progress-gradient: linear-gradient(90deg, #0c3b2e, #1a6b4a);
+}
+
+#app-shell[data-theme="cobalt-citrus"] {
+	--theme-primary: #1857d6;
+	--theme-primary-ink: #1857d6;
+	--theme-primary-secondary: #1045b3;
+	--theme-primary-gradient: linear-gradient(135deg, #1857d6, #3278ed);
+	--theme-accent: #ffe14d;
+	--theme-accent-foreground: #28270d;
+	--theme-accent-ink: #5a4b00;
+	--theme-success: #16834a;
+	--theme-text-on-primary: #ffffff;
+	--theme-progress-gradient: linear-gradient(90deg, #1857d6, #3278ed);
+}
+
+#app-shell[data-theme="berry-mint"] {
+	--theme-primary: #d6266b;
+	--theme-primary-ink: #a81950;
+	--theme-primary-secondary: #b51e58;
+	--theme-primary-gradient: linear-gradient(135deg, #d6266b, #ed4982);
+	--theme-accent: #2de6a6;
+	--theme-accent-foreground: #12352a;
+	--theme-accent-ink: #075438;
+	--theme-success: #16834a;
+	--theme-text-on-primary: #330b1e;
+	--theme-progress-gradient: linear-gradient(90deg, #d6266b, #ed4982);
+}
+
+#app-shell[data-theme="fire-violet"] {
+	--theme-primary: #ef4131;
+	--theme-primary-ink: #bd2b20;
+	--theme-primary-secondary: #d12d25;
+	--theme-primary-gradient: linear-gradient(135deg, #ef4131, #ff6448);
+	--theme-accent: #6d28d9;
+	--theme-accent-foreground: #ffffff;
+	--theme-accent-ink: #4c1d95;
+	--theme-success: #16834a;
+	--theme-text-on-primary: #300d0b;
+	--theme-progress-gradient: linear-gradient(90deg, #ef4131, #ff6448);
+}
+
+#app-shell[data-theme="vibrant-shine"] {
+	--theme-primary: #0e8f6d;
+	--theme-primary-ink: #087657;
+	--theme-primary-secondary: #087657;
+	--theme-primary-gradient: linear-gradient(135deg, #0e8f6d, #18aa7d);
+	--theme-accent: #ff9d0f;
+	--theme-accent-foreground: #3a270a;
+	--theme-accent-ink: #573000;
+	--theme-success: #16834a;
+	--theme-text-on-primary: #ffffff;
+	--theme-progress-gradient: linear-gradient(90deg, #0e8f6d, #18aa7d);
+}
+
+#app-shell {
+	background-color: var(--theme-page-background);
+}
+
+#app-shell #app-header {
+	background: var(--theme-primary-gradient) !important;
+	border-color: color-mix(in srgb, var(--theme-primary) 78%, black) !important;
+}
+
+#app-shell[data-theme] .bg-teal-950,
+#app-shell[data-theme] .bg-teal-900,
+#app-shell[data-theme] .bg-teal-800,
+#app-shell[data-theme] .bg-teal-700,
+#app-shell[data-theme] .bg-teal-600,
+#app-shell[data-theme] [class~="bg-teal-900/90"],
+#app-shell[data-theme] [class~="bg-teal-900/80"],
+#app-shell[data-theme] [class~="bg-teal-950/80"] {
+	background: var(--theme-primary-gradient) !important;
+}
+
+#app-shell[data-theme] [class~="bg-teal-50"],
+#app-shell[data-theme] [class~="bg-teal-100"] {
+	background-color: color-mix(in srgb, var(--theme-primary) 10%, white) !important;
+}
+
+#app-shell[data-theme] [class~="text-teal-950"],
+#app-shell[data-theme] [class~="text-teal-900"],
+#app-shell[data-theme] [class~="text-teal-800"],
+#app-shell[data-theme] [class~="text-teal-700"],
+#app-shell[data-theme] [class~="text-teal-600"] {
+	color: var(--theme-primary-ink) !important;
+}
+
+#app-shell[data-theme] [class~="text-teal-100"],
+#app-shell[data-theme] [class~="text-teal-200"] {
+	color: var(--theme-text-on-primary) !important;
+}
+
+#app-shell[data-theme] #app-header [class~="text-white"],
+#app-shell[data-theme] #dashboard-view > div:first-child [class~="text-white"],
+#app-shell[data-theme] [class~="bg-teal-950"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-teal-900"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-teal-800"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-teal-700"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-teal-600"][class~="text-white"] {
+	color: var(--theme-text-on-primary) !important;
+}
+
+#app-shell[data-theme] [class~="border-teal-900"],
+#app-shell[data-theme] [class~="border-teal-800"],
+#app-shell[data-theme] [class~="border-teal-700"],
+#app-shell[data-theme] [class~="border-teal-300"],
+#app-shell[data-theme] [class~="border-teal-200"] {
+	border-color: color-mix(in srgb, var(--theme-primary) 38%, white) !important;
+}
+
+#app-shell[data-theme] .bg-amber-400,
+#app-shell[data-theme] .bg-amber-500,
+#app-shell[data-theme] .bg-amber-600,
+#app-shell[data-theme] .bg-amber-700 {
+	background-color: var(--theme-accent) !important;
+}
+
+#app-shell[data-theme] [class~="bg-amber-400"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-amber-500"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-amber-600"][class~="text-white"],
+#app-shell[data-theme] [class~="bg-amber-700"][class~="text-white"] {
+	color: var(--theme-accent-foreground) !important;
+}
+
+#app-shell[data-theme] [class~="bg-amber-50"],
+#app-shell[data-theme] [class~="bg-amber-100"] {
+	background-color: color-mix(in srgb, var(--theme-accent) 14%, white) !important;
+}
+
+#app-shell[data-theme] [class~="border-amber-200"],
+#app-shell[data-theme] [class~="border-amber-300"] {
+	border-color: color-mix(in srgb, var(--theme-accent) 42%, white) !important;
+}
+
+#app-shell[data-theme] [class~="text-amber-300"],
+#app-shell[data-theme] [class~="text-amber-400"],
+#app-shell[data-theme] [class~="text-amber-500"],
+#app-shell[data-theme] [class~="text-amber-600"],
+#app-shell[data-theme] [class~="text-amber-700"],
+#app-shell[data-theme] [class~="text-amber-800"],
+#app-shell[data-theme] [class~="text-amber-900"],
+#app-shell[data-theme] [class~="text-amber-950"] {
+	color: var(--theme-accent-ink) !important;
+}
+
+#app-shell[data-theme] #app-header [class~="text-amber-300"],
+#app-shell[data-theme] #app-header [class~="text-amber-400"],
+#app-shell[data-theme] #dashboard-view > div:first-child [class~="text-amber-300"],
+#app-shell[data-theme] #dashboard-view > div:first-child [class~="text-amber-400"],
+#app-shell[data-theme] [class~="from-teal-950"][class~="via-teal-900"] [class~="text-amber-300"],
+#app-shell[data-theme] [class~="from-teal-950"][class~="via-teal-900"] [class~="text-amber-400"] {
+	color: var(--theme-text-on-primary) !important;
+}
+
+#app-shell[data-theme] [class~="text-teal-950"][class~="bg-amber-400"],
+#app-shell[data-theme] [class~="text-teal-950"][class~="bg-amber-500"],
+#app-shell[data-theme] [class~="text-teal-950"][class~="bg-amber-600"],
+#app-shell[data-theme] [class~="text-teal-950"][class~="bg-amber-700"],
+#app-shell[data-theme] [class~="text-amber-950"][class~="bg-amber-400"],
+#app-shell[data-theme] [class~="text-amber-950"][class~="bg-amber-500"],
+#app-shell[data-theme] [class~="text-amber-950"][class~="bg-amber-600"],
+#app-shell[data-theme] [class~="text-amber-950"][class~="bg-amber-700"] {
+	color: var(--theme-accent-foreground) !important;
+}
+
+#app-shell[data-theme] [class~="text-teal-950"][class~="bg-amber-100"],
+#app-shell[data-theme] [class~="text-teal-950"][class~="bg-amber-50"] {
+	color: var(--theme-accent-ink) !important;
+}
+
+#app-shell[data-theme] [class~="from-teal-950"][class~="via-teal-900"] {
+	background: var(--theme-primary-gradient) !important;
+}
+
+#app-shell[data-theme] [class~="bg-teal-600"][style*="width"] {
+	background: var(--theme-progress-gradient) !important;
+}
+
+#app-shell[data-theme] [class~="bg-emerald-600"] {
+	background-color: var(--theme-success) !important;
+}
+
+#app-shell[data-theme] [class~="text-emerald-700"],
+#app-shell[data-theme] [class~="text-emerald-800"],
+#app-shell[data-theme] [class~="text-emerald-900"] {
+	color: var(--theme-success) !important;
+}
+
+#app-shell #dashboard-view > div:first-child {
+	background: var(--theme-primary-gradient) !important;
+	border-color: color-mix(in srgb, var(--theme-primary) 78%, black) !important;
+}
+
+#app-shell .visual-switch-button {
+	display: inline-flex;
+	min-height: 38px;
+	align-items: center;
+	gap: 0.5rem;
+	border: 1px solid color-mix(in srgb, var(--theme-text-on-primary) 36%, transparent);
+	border-radius: 0.5rem;
+	padding: 0.3rem 0.5rem;
+	color: var(--theme-text-on-primary);
+	font-size: 0.7rem;
+	font-weight: 700;
+}
+
+#app-shell .visual-switch {
+	position: relative;
+	display: inline-flex;
+	width: 2.5rem;
+	height: 1.4rem;
+	flex: 0 0 auto;
+	align-items: center;
+	border: 1px solid #a8a29e;
+	border-radius: 999px;
+	background: #d6d3d1;
+	padding: 2px;
+	transition: background-color 150ms ease;
+}
+
+#app-shell .visual-switch > span {
+	display: block;
+	width: 1rem;
+	height: 1rem;
+	border-radius: 999px;
+	background: white;
+	box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+	transition: transform 150ms ease;
+}
+
+#app-shell .visual-switch[data-enabled="true"],
+#app-shell button[data-enabled="true"] .visual-switch {
+	border-color: var(--theme-primary);
+	background: var(--theme-primary);
+}
+
+#app-shell .visual-switch[data-enabled="true"] > span,
+#app-shell button[data-enabled="true"] .visual-switch > span {
+	transform: translateX(1.1rem);
+}
+
+#app-shell[data-mobile-view="true"] #desktop-nav {
+	display: none !important;
+}
+
+#app-shell[data-mobile-view="true"] #mobile-bottom-nav {
+	display: flex !important;
+}
+
+#app-shell[data-mobile-view="true"] main {
+	width: 100%;
+	max-width: min(100%, 38rem);
+	margin-inline: auto;
+	padding: 0.75rem 0.75rem 5.5rem;
+}
+
+#app-shell[data-mobile-view="true"] main [class~="lg:grid-cols-4"] {
+	grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+#app-shell[data-mobile-view="true"] main :is(h1, h2, h3, p, span, td, th, dd, dt) {
+	overflow-wrap: anywhere;
+}
+
+#app-shell[data-mobile-view="true"] button:not(:disabled):active {
+	transform: scale(0.98);
+	transition: transform 150ms ease;
+}
+
+@keyframes shine-gradient-shift {
+	0% { background-position: 0% 50%; }
+	50% { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
+}
+
+#app-shell[data-animated-glass="true"] {
+	background-image: linear-gradient(
+		120deg,
+		color-mix(in srgb, var(--theme-primary) 72%, black),
+		color-mix(in srgb, color-mix(in srgb, var(--theme-accent) 55%, var(--theme-primary)), black 38%),
+		color-mix(in srgb, var(--theme-primary) 72%, black)
+	);
+	background-size: 300% 300%;
+	animation: shine-gradient-shift 12s ease infinite;
+}
+
+#app-shell[data-animated-glass="true"] #app-header,
+#app-shell[data-animated-glass="true"] #desktop-nav,
+#app-shell[data-animated-glass="true"] #mobile-bottom-nav {
+	background: rgb(255 255 255 / 14%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 28%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main {
+	background: transparent;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	.bg-white,
+	.bg-stone-50,
+	[class~="bg-stone-100"],
+	[class~="bg-slate-50"],
+	[class~="bg-slate-100"],
+	[class~="bg-teal-50"],
+	[class~="bg-teal-100"],
+	[class~="bg-amber-50"],
+	[class~="bg-amber-100"],
+	[class~="bg-emerald-50"],
+	[class~="bg-emerald-100"]
+) {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 28%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main button {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 30%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class~="text-stone-900"],
+	[class~="text-stone-800"],
+	[class~="text-stone-700"],
+	[class~="text-stone-600"],
+	[class~="text-stone-500"],
+	[class~="text-stone-400"],
+	[class~="text-teal-950"],
+	[class~="text-teal-900"],
+	[class~="text-teal-800"],
+	[class~="text-teal-700"],
+	[class~="text-teal-600"],
+	[class~="text-amber-950"],
+	[class~="text-amber-900"],
+	[class~="text-amber-800"],
+	[class~="text-amber-700"],
+	[class~="text-amber-600"],
+	[class~="text-amber-500"],
+	[class~="text-amber-400"],
+	[class~="text-amber-300"],
+	[class~="text-emerald-950"],
+	[class~="text-emerald-900"],
+	[class~="text-emerald-800"],
+	[class~="text-emerald-700"],
+	[class~="text-blue-900"],
+	[class~="text-blue-800"],
+	[class~="text-blue-700"]
+) {
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class~="text-red-950"],
+	[class~="text-red-900"],
+	[class~="text-red-800"],
+	[class~="text-red-700"],
+	[class~="text-red-600"],
+	[class~="text-rose-900"],
+	[class~="text-rose-800"],
+	[class~="text-rose-700"],
+	[class~="text-rose-600"]
+) {
+	color: #ffb4a8 !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(input, textarea, select) {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 35%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(input, textarea, select)::placeholder {
+	color: rgb(255 255 255 / 72%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main select option {
+	background: #ffffff;
+	color: #1c1917;
+}
+
+#app-shell[data-animated-glass="true"] *[class*="bg-"]:not([class*="bg-gradient"]):not([style*="width"]) {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 28%) !important;
+}
+
+#app-shell[data-animated-glass="true"] button {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 30%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] :is(input, textarea, select) {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 35%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] :is(input, textarea, select)::placeholder {
+	color: rgb(255 255 255 / 72%) !important;
+}
+
+#app-shell[data-animated-glass="true"] :is(input, textarea, select) option {
+	background: #ffffff;
+	color: #1c1917;
+}
+
+#app-shell[data-animated-glass="true"] :is([class*="text-"], svg) {
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] [class*="from-teal-950"][class*="via-teal-900"],
+#app-shell[data-animated-glass="true"] #dashboard-view > div:first-child {
+	background: rgb(255 255 255 / 14%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 28%) !important;
+}
+
+#app-shell[data-animated-glass="true"] [class*="text-red-"],
+#app-shell[data-animated-glass="true"] [class*="text-rose-"] {
+	color: #ffb4a8 !important;
+}
+
+#app-shell[data-animated-glass="true"] #visual-settings-panel {
+	background: rgb(20 25 29 / 88%) !important;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border-color: rgb(255 255 255 / 35%) !important;
+	color: rgb(255 255 255 / 96%) !important;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	#app-shell[data-animated-glass="true"] #app-header,
+	#app-shell[data-animated-glass="true"] #desktop-nav,
+	#app-shell[data-animated-glass="true"] #mobile-bottom-nav,
+	#app-shell[data-animated-glass="true"] *[class*="bg-"],
+	#app-shell[data-animated-glass="true"] button,
+	#app-shell[data-animated-glass="true"] :is(input, textarea, select) {
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
+}
+
+@media (max-width: 640px) {
+	#app-shell[data-animated-glass="true"] *[class*="bg-"],
+	#app-shell[data-animated-glass="true"] button,
+	#app-shell[data-animated-glass="true"] :is(input, textarea, select) {
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	#app-shell[data-animated-glass="true"] {
+		animation: none;
+		background-position: 50% 50%;
+	}
+}

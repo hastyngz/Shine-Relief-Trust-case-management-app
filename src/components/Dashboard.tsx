@@ -2,6 +2,7 @@ import React from 'react';
 import { AppDatabase, Girl, Household } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { useVisualSettings } from '../contexts/VisualSettingsContext';
 import {
   Users,
   Home,
@@ -43,6 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   safeguardingCount,
 }) => {
   const { currentUser, isAdmin, role, canViewHealthRecords, canViewCaseReviews } = useAuth();
+  const { mobileView, setMobileView } = useVisualSettings();
   // Girls statistics
   const totalGirls = db.girls.length;
   const activeGirls = db.girls.filter((g) => g.status === 'Active').length;
@@ -215,6 +217,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              role="switch"
+              aria-label="Mobile view"
+              aria-checked={mobileView}
+              onClick={() => setMobileView(!mobileView)}
+              data-enabled={mobileView}
+              className="visual-switch-button"
+            >
+              <span>Mobile view</span>
+              <span className="visual-switch" aria-hidden="true"><span /></span>
+            </button>
             <button
               onClick={onOpenQuickAdd}
               className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-teal-950 text-xs font-black rounded-xl shadow-md flex items-center gap-2 transition-transform active:scale-95"
