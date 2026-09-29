@@ -49,6 +49,41 @@ function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+function daysInMonth(date: Date): number {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
+function daysInYear(date: Date): number {
+  return (Date.UTC(date.getUTCFullYear() + 1, 0, 1) - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000;
+}
+
+function monthlySalary(amount: number, frequency: SalaryFrequency, date: Date): number {
+  const monthDays = daysInMonth(date);
+  if (frequency === 'Weekly') return amount * monthDays / 7;
+  if (frequency === 'Daily') return amount * monthDays;
+  if (frequency === 'Annual') return amount * monthDays / daysInYear(date);
+  return amount;
+}
+
+function calculateSalaryPeriodMonths(start: Date, end: Date, amount: number, frequency: SalaryFrequency, rate: number): { months: number; gratuity: number } {
+  let cursor = start;
+  let months = 0;
+  let gratuity = 0;
+
+  while (cursor < end) {
+    const nextMonth = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    const segmentEnd = nextMonth < end ? nextMonth : end;
+    const segmentDays = (segmentEnd.getTime() - cursor.getTime()) / 86400000;
+    const monthDays = daysInMonth(cursor);
+    const monthFraction = segmentDays / monthDays;
+    months += monthFraction;
+    gratuity += monthlySalary(amount, frequency, cursor) * monthFraction * rate;
+    cursor = segmentEnd;
+  }
+
+  return { months, gratuity };
+}
+
 export function calculateGratuity(
   employee: GratuityEmployee,
   calculationEndDate: string,
@@ -65,6 +100,10 @@ export function calculateGratuity(
     .filter((record) => record.date <= end)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
+  if (validRecords.length > 0 && validRecords[0].date > start) {
+    throw new Error('Salary history must include a record effective on or before the contract start date');
+  }
+
   if (validRecords.some((record) => record.salaryAmount <= 0)) {
     throw new Error('Salary amount must be greater than zero');
   }
@@ -75,15 +114,15 @@ export function calculateGratuity(
     const periodStart = record.date < start ? start : record.date;
     const nextEffectiveDate = validRecords[index + 1]?.date;
     const periodEnd = nextEffectiveDate && nextEffectiveDate < end ? nextEffectiveDate : end;
-    const months = fullMonthsBetween(periodStart, periodEnd);
-    if (periodEnd > periodStart && months > 0) {
+    if (periodEnd > periodStart) {
+      const accrued = calculateSalaryPeriodMonths(periodStart, periodEnd, record.salaryAmount, record.salaryFrequency, rate);
       periods.push({
         startDate: formatDate(periodStart),
         endDate: formatDate(periodEnd),
         salary: record.salaryAmount,
-        months,
+        months: accrued.months,
         rate,
-        gratuity: record.salaryAmount * rate * months,
+        gratuity: accrued.gratuity,
       });
     }
   }

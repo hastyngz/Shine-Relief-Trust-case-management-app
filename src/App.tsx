@@ -271,6 +271,16 @@ function AppContent() {
     }, 4000);
   };
 
+  const notifyDataChange = (change: Omit<Parameters<typeof triggerDataChangeNotification>[0], 'actor' | 'allStaff' | 'currentDb'>) => {
+    if (!currentUser) return;
+    triggerDataChangeNotification({
+      ...change,
+      actor: { uid: currentUser.uid, name: staffProfile?.fullName || auditActor },
+      allStaff,
+      currentDb: db,
+    }).catch((error) => console.warn('Could not dispatch data change notification:', error));
+  };
+
   // Sync state when storage emits changes locally or across tabs
   const reloadData = useCallback(() => {
     setDb(getDatabase());
@@ -648,6 +658,7 @@ function AppContent() {
         }, auditActor);
       }
       updateGirl(editingGirl.id, girlData, auditActor);
+      notifyDataChange({ type: 'record_updated', entityId: editingGirl.id, entityTitle: girlData.fullName, girlId: editingGirl.id, detail: 'girl profile' });
       showToast(`Profile updated for ${girlData.fullName}`);
       navigateTo('girl-profile', 'girls', editingGirl.id);
     } else {
@@ -657,17 +668,7 @@ function AppContent() {
       navigateTo('girl-profile', 'girls', newGirl.id);
 
       // Notify staff of new registration
-      if (currentUser) {
-        triggerDataChangeNotification({
-          type: 'new_girl',
-          actor: { uid: currentUser.uid, name: staffProfile?.fullName || auditActor },
-          entityId: newGirl.id,
-          entityTitle: newGirl.fullName,
-          girlId: newGirl.id,
-          allStaff,
-          currentDb: db,
-        }).catch((e) => console.warn('Could not dispatch notification:', e));
-      }
+      notifyDataChange({ type: 'new_girl', entityId: newGirl.id, entityTitle: newGirl.fullName, girlId: newGirl.id });
     }
 
     if (pendingPhotos && pendingPhotos.length > 0) {
@@ -700,6 +701,7 @@ function AppContent() {
       showToast(`Added household ${newHouse.name}`);
       navigateTo('house-profile', 'houses', undefined, newHouse.id);
     }
+    notifyDataChange({ type: 'house_updated', entityId: targetId, entityTitle: houseData.name, houseId: targetId });
 
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('household', targetId, pendingPhotos, (url) => {
@@ -730,17 +732,7 @@ function AppContent() {
       processPendingPhotos('educationalFollowUp', created.id, pendingPhotos);
     }
 
-    if (currentUser) {
-      triggerDataChangeNotification({
-        type: 'edu_followup',
-        actor: { uid: currentUser.uid, name: staffProfile?.fullName || auditActor },
-        entityId: created.id,
-        entityTitle: girl?.fullName || 'SHINE Girl',
-        girlId: data.girlId,
-        allStaff,
-        currentDb: db,
-      }).catch((e) => console.warn('Could not dispatch edu notification:', e));
-    }
+    notifyDataChange({ type: 'edu_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
 
     navigateTo('girl-profile', 'girls', data.girlId);
   };
@@ -760,17 +752,7 @@ function AppContent() {
       processPendingPhotos('healthFollowUp', created.id, pendingPhotos);
     }
 
-    if (currentUser) {
-      triggerDataChangeNotification({
-        type: 'health_followup',
-        actor: { uid: currentUser.uid, name: staffProfile?.fullName || auditActor },
-        entityId: created.id,
-        entityTitle: girl?.fullName || 'SHINE Girl',
-        girlId: data.girlId,
-        allStaff,
-        currentDb: db,
-      }).catch((e) => console.warn('Could not dispatch health notification:', e));
-    }
+    notifyDataChange({ type: 'health_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
 
     navigateTo('girl-profile', 'girls', data.girlId);
   };
@@ -781,7 +763,9 @@ function AppContent() {
   ) => {
     if (isViewOnly) return;
     const created = addFamilyFollowUp(data, auditActor);
+    const girl = db.girls.find((item) => item.id === data.girlId);
     showToast('Family / guardian follow-up recorded successfully.');
+    notifyDataChange({ type: 'family_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('familyFollowUp', created.id, pendingPhotos);
     }
@@ -795,6 +779,8 @@ function AppContent() {
     if (isViewOnly) return;
     const created = addRentPayment(data, auditActor);
     showToast('Rent payment record saved.');
+    const household = db.households.find((item) => item.id === data.householdId);
+    notifyDataChange({ type: 'rent_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('rentPayment', created.id, pendingPhotos);
     }
@@ -808,6 +794,8 @@ function AppContent() {
     if (isViewOnly) return;
     const created = addExpense(data, auditActor);
     showToast('Household expense recorded.');
+    const household = db.households.find((item) => item.id === data.householdId);
+    notifyDataChange({ type: 'expense_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('expense', created.id, pendingPhotos);
     }
@@ -821,6 +809,8 @@ function AppContent() {
     if (isViewOnly) return;
     const created = addHouseholdActivity(data, auditActor);
     showToast('Household group activity recorded.');
+    const household = db.households.find((item) => item.id === data.householdId);
+    notifyDataChange({ type: 'activity_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('householdActivity', created.id, pendingPhotos);
     }

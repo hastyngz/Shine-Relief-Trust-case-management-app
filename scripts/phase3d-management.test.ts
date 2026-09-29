@@ -366,6 +366,23 @@ const pdfBytes = new Uint8Array(await pdfWithEmbeddedPhoto.arrayBuffer());
 assert.equal(new TextDecoder().decode(pdfBytes.slice(0, 8)), '%PDF-1.3');
 assert.ok(new TextDecoder('latin1').decode(pdfBytes).includes('/Subtype /Image'));
 
+const longReportDb = {
+  ...reportDb,
+  girls: [{ id: 'g1', fullName: 'Fixture Girl', householdId: 'h1' }],
+  educationalFollowUps: Array.from({ length: 35 }, (_, index) => ({ id: `edu-long-${index}`, girlId: 'g1', date: '2026-01-01', school: 'School A', classLevel: 'Form 1', supportProvided: `Support ${index}`, progressOutcome: 'Recorded' })),
+  healthFollowUps: Array.from({ length: 35 }, (_, index) => ({ id: `health-long-${index}`, girlId: 'g1', date: '2026-01-01', reasonForVisit: `Visit ${index}`, medicalFacility: 'Clinic', treatmentProvided: 'Recorded' })),
+  familyFollowUps: [{ id: 'family-pdf', girlId: 'g1', date: '2026-01-01', contactType: 'Home visit', familySituation: 'Recorded family situation', supportProvided: 'Recorded support' }],
+} as any;
+const longPdf = generatePdfReport(longReportDb, {
+  ...reportConfig,
+  includeSections: { ...reportConfig.includeSections, educationalFollowUps: true, healthFollowUps: true, familyFollowUps: true },
+});
+const emptyTextPdf = generatePdfReport(reportDb, {
+  ...reportConfig,
+  includeSections: { ...reportConfig.includeSections, educationalFollowUps: true, healthFollowUps: true, familyFollowUps: true },
+});
+assert.ok((await longPdf.arrayBuffer()).byteLength > (await emptyTextPdf.arrayBuffer()).byteLength);
+
 const originalDocument = globalThis.document;
 let csvDownloaded = false;
 let csvHref = '';

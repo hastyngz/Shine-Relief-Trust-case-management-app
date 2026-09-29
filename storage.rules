@@ -17,6 +17,14 @@ service firebase.storage {
       );
     }
 
+    function isAdmin() {
+      return isActiveStaff() && (
+        (request.auth.token.email != null &&
+         request.auth.token.email.lower() == 'hastingszidanamot@gmail.com') ||
+        staffProfile().data.role == 'Administrator'
+      );
+    }
+
     function canWriteAttachments() {
       return isActiveStaff() && (
         request.auth.token.email.lower() == 'hastingszidanamot@gmail.com' ||

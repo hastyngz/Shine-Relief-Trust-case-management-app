@@ -576,7 +576,7 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
               tableCell('Outcome / Next Steps', true, { width: 20 }),
             ],
           }),
-          ...data.edu.slice(0, 30).map(
+          ...data.edu.map(
             (e) =>
               new TableRow({
                 children: [
@@ -610,7 +610,7 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
               tableCell('Treatment & Outcome', true, { width: 20 }),
             ],
           }),
-          ...data.health.slice(0, 30).map(
+          ...data.health.map(
             (h) =>
               new TableRow({
                 children: [
@@ -643,7 +643,7 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
               tableCell('Family Situation & Challenges', true, { width: 40 }),
             ],
           }),
-          ...data.family.slice(0, 25).map(
+          ...data.family.map(
             (f) =>
               new TableRow({
                 children: [
@@ -1505,7 +1505,7 @@ export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
     autoTable(doc, {
       startY: currentY,
       head: [['Date', 'Girl Name', 'School & Class', 'Support Provided', 'Outcome']],
-      body: data.edu.slice(0, 25).map((e) => [
+      body: data.edu.map((e) => [
         formatDate(e.date),
         girlMap.get(e.girlId) || e.girlId,
         `${e.school} (${e.classLevel})`,
@@ -1536,12 +1536,42 @@ export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
     autoTable(doc, {
       startY: currentY,
       head: [['Date', 'Girl Name', 'Complaint / Reason', 'Facility', 'Treatment & Outcome']],
-      body: data.health.slice(0, 25).map((h) => [
+      body: data.health.map((h) => [
         formatDate(h.date),
         girlMap.get(h.girlId) || h.girlId,
         h.healthIssueComplaint || h.reasonForVisit || '—',
         h.medicalFacility || '—',
         `${h.treatmentProvided || ''} (${h.outcome || ''})`,
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [15, 76, 58], textColor: [255, 255, 255], fontSize: 8 },
+      bodyStyles: { fontSize: 7.5 },
+      margin: { left: 40, right: 40 },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 20;
+  }
+
+  // Family Follow-ups
+  if (config.includeSections.familyFollowUps && data.family.length > 0) {
+    if (currentY > 650) {
+      doc.addPage();
+      currentY = 40;
+    }
+    doc.setTextColor(15, 76, 58);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('5. Family & Guardian Follow-ups', 40, currentY);
+    currentY += 10;
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Date', 'Girl Name', 'Contact Type', 'Family Situation & Support']],
+      body: data.family.map((f) => [
+        formatDate(f.date),
+        girlMap.get(f.girlId) || f.girlId,
+        f.contactType,
+        `${f.familySituation || ''}. Support: ${f.supportProvided || 'None recorded'}`,
       ]),
       theme: 'striped',
       headStyles: { fillColor: [15, 76, 58], textColor: [255, 255, 255], fontSize: 8 },

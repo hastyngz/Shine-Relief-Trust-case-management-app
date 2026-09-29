@@ -99,6 +99,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
           id: person.uid || person.id,
           employeeCategory: person.employeeCategory!,
           contractStartDate: person.contractStartDate!,
+          employmentPeriodId: person.employmentPeriods?.[0]?.id,
         }, today, employeeHistory).totalGratuity;
       } catch {
         return undefined;

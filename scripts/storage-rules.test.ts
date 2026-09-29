@@ -28,10 +28,17 @@ async function run() {
       });
       if (!response.ok) throw new Error(`Could not seed ${role} test profile: ${await response.text()}`);
     }
+    const adminSeed = await fetch(`http://127.0.0.1:8080/v1/projects/${projectId}/databases/${databaseId}/documents/staffUsers/admin`, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { role: { stringValue: 'Administrator' }, status: { stringValue: 'Active' } } }),
+    });
+    if (!adminSeed.ok) throw new Error(`Could not seed Administrator test profile: ${await adminSeed.text()}`);
 
     const staffStorage = testEnvironment.authenticatedContext('staff', { email: 'staff@example.test' }).storage();
     const managerStorage = testEnvironment.authenticatedContext('manager', { email: 'manager@example.test' }).storage();
     const viewerStorage = testEnvironment.authenticatedContext('viewer', { email: 'viewer@example.test' }).storage();
+    const adminStorage = testEnvironment.authenticatedContext('admin', { email: 'admin@example.test' }).storage();
     const payload = new Uint8Array([137, 80, 78, 71]);
     const medicalPath = 'attachments/girl/girl-1/medical.png';
     const medicalMetadata = { contentType: 'image/png', customMetadata: { category: 'Medical Document' } };
@@ -54,6 +61,13 @@ async function run() {
     await assertSucceeds(staffStorage.ref(reportPath).getDownloadURL());
     await assertFails(viewerStorage.ref(reportPath).getDownloadURL());
     await assertSucceeds(managerStorage.ref(reportPath).getDownloadURL());
+    await assertFails(staffStorage.ref(reportPath).delete());
+    const managerReportPath = 'reports/manager/report-2/report.pdf';
+    await assertSucceeds(upload(managerStorage.ref(managerReportPath).put(payload, reportMetadata)));
+    await assertSucceeds(managerStorage.ref(managerReportPath).delete());
+    const adminReportPath = 'reports/admin/report-3/report.pdf';
+    await assertSucceeds(upload(adminStorage.ref(adminReportPath).put(payload, { ...reportMetadata, customMetadata: { ownerUid: 'admin', reportId: 'report-3', fileType: 'pdf' } })));
+    await assertSucceeds(adminStorage.ref(adminReportPath).delete());
     await assertFails(upload(viewerStorage.ref('reports/viewer/report-2/report.pdf').put(payload, {
       contentType: 'application/pdf',
       customMetadata: { ownerUid: 'viewer', reportId: 'report-2', fileType: 'pdf' },

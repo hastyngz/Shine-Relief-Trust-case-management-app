@@ -98,7 +98,7 @@ export function buildManagementReportRows(
           break;
         }
         try {
-          accruedGratuity += calculateGratuity({ id: person.uid, employeeCategory: person.employeeCategory!, contractStartDate: person.contractStartDate! }, gratuityCalculationDate, history).totalGratuity;
+          accruedGratuity += calculateGratuity({ id: person.uid, employeeCategory: person.employeeCategory!, contractStartDate: person.contractStartDate!, employmentPeriodId: person.employmentPeriods?.[0]?.id }, gratuityCalculationDate, history).totalGratuity;
         } catch {
           gratuityAvailable = false;
           break;
@@ -207,10 +207,10 @@ export function buildManagementReportRows(
       if (!salaryHistory) return headersAndRows(['Status'], [['Salary-history data is unavailable']]);
       const gratuityCalculationDate = filters.endDate || today;
       const rows: ReportCell[][] = staff.filter((person) => (!filters.staffId || person.uid === filters.staffId || person.id === filters.staffId) && person.contractStartDate && person.employeeCategory).flatMap((person) => {
-        const history = salaryHistory.filter((item) => item.employeeId === person.uid || item.employeeId === person.id);
+        const history = salaryHistory.filter((item) => (item.employeeId === person.uid || item.employeeId === person.id) && (!person.employmentPeriods?.[0]?.id || !item.employmentPeriodId || item.employmentPeriodId === person.employmentPeriods[0].id));
         if (!history.length) return [[person.uid, person.fullName, person.employeeCategory || '', person.contractStartDate || '', '', '', '', '', '', '', 'Salary history missing']];
         try {
-          const gratuity = calculateGratuity({ id: person.uid, employeeCategory: person.employeeCategory!, contractStartDate: person.contractStartDate! }, gratuityCalculationDate, history);
+          const gratuity = calculateGratuity({ id: person.uid, employeeCategory: person.employeeCategory!, contractStartDate: person.contractStartDate!, employmentPeriodId: person.employmentPeriods?.[0]?.id }, gratuityCalculationDate, history);
           return gratuity.salaryPeriods.map((period) => {
             const activeSalary = history.filter((record) => record.effectiveDate <= period.startDate).sort((left, right) => left.effectiveDate.localeCompare(right.effectiveDate)).at(-1);
             return [person.uid, person.fullName, person.employeeCategory || '', person.contractStartDate || '', gratuityCalculationDate, activeSalary?.effectiveDate || '', period.startDate, period.endDate, period.months, period.rate, period.gratuity, gratuity.totalGratuity, 'Calculated'];
