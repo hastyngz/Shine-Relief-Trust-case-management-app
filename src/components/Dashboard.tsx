@@ -202,7 +202,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-teal-950 uppercase tracking-wider">
+              <span className="hero-location-pill px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-teal-950 uppercase tracking-wider">
                 Malawi Field Operations
               </span>
               <span className="text-xs text-teal-200">Zomba & Shire Highlands</span>
@@ -231,14 +231,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
             <button
               onClick={onOpenQuickAdd}
-              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-teal-950 text-xs font-black rounded-xl shadow-md flex items-center gap-2 transition-transform active:scale-95"
+              className="hero-primary-action px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-teal-950 text-xs font-black rounded-xl shadow-md flex items-center gap-2 transition-transform active:scale-95"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Record New Entry</span>
             </button>
             <button
               onClick={onNavigateToReports}
-              className="px-3.5 py-2.5 bg-teal-900/90 hover:bg-teal-800 text-teal-100 text-xs font-bold rounded-xl border border-teal-700/80 transition-colors"
+              className="hero-secondary-action px-3.5 py-2.5 bg-teal-900/90 hover:bg-teal-800 text-teal-100 text-xs font-bold rounded-xl border border-teal-700/80 transition-colors"
             >
               Export CSV / Reports
             </button>
@@ -254,14 +254,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
               Total SHINE Girls
             </span>
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-800 flex items-center justify-center group-hover:bg-teal-800 group-hover:text-white transition-colors">
+            <div className="dashboard-stat-icon dashboard-stat-icon--primary w-8 h-8 rounded-lg bg-teal-50 text-teal-800 flex items-center justify-center group-hover:bg-teal-800 group-hover:text-white transition-colors">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-2">
+          <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
             {totalGirls}
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
@@ -277,14 +277,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
               Outcomes / Status
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center group-hover:bg-blue-800 group-hover:text-white transition-colors">
+            <div className="dashboard-stat-icon dashboard-stat-icon--secondary w-8 h-8 rounded-lg bg-blue-50 text-blue-800 flex items-center justify-center group-hover:bg-blue-800 group-hover:text-white transition-colors">
               <GraduationCap className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-blue-900 mt-2">
+          <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-blue-900 mt-2">
             {completedGirls}
           </div>
           <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
@@ -299,14 +299,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
               SHINE Houses
             </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center group-hover:bg-amber-800 group-hover:text-white transition-colors">
+            <div className="dashboard-stat-icon dashboard-stat-icon--accent w-8 h-8 rounded-lg bg-amber-50 text-amber-800 flex items-center justify-center group-hover:bg-amber-800 group-hover:text-white transition-colors">
               <Home className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-2">
+          <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
             {totalHouses}
           </div>
           <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
@@ -321,14 +321,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+            <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
               Household Spend
             </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center group-hover:bg-emerald-800 group-hover:text-white transition-colors">
+            <div className="dashboard-stat-icon dashboard-stat-icon--success w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center group-hover:bg-emerald-800 group-hover:text-white transition-colors">
               <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg sm:text-xl font-black text-emerald-950 mt-2 truncate">
+          <div className="dashboard-stat-number text-lg sm:text-xl font-black text-emerald-950 mt-2 truncate">
             {formatMWK(totalExpenditure)}
           </div>
           <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">

@@ -449,20 +449,22 @@
 }
 
 #app-shell[data-animated-glass="true"] {
-	background-image: linear-gradient(
-		120deg,
-		var(--theme-primary),
-		var(--theme-accent),
-		var(--theme-primary)
-	);
-	background-size: 300% 300%;
+	background-image:
+		linear-gradient(rgb(32 24 39 / 26%), rgb(32 24 39 / 26%)),
+		linear-gradient(
+			120deg,
+			color-mix(in srgb, var(--theme-primary) 72%, #302635),
+			color-mix(in srgb, var(--theme-accent) 70%, #302635),
+			color-mix(in srgb, var(--theme-primary) 72%, #302635)
+		);
+	background-size: 100% 100%, 300% 300%;
 	animation: shine-glass-background 12s ease infinite;
 }
 
 @keyframes shine-glass-background {
-	0% { background-position: 0% 50%; }
-	50% { background-position: 100% 50%; }
-	100% { background-position: 0% 50%; }
+	0% { background-position: center, 0% 50%; }
+	50% { background-position: center, 100% 50%; }
+	100% { background-position: center, 0% 50%; }
 }
 
 #app-shell[data-animated-glass="true"] #app-header,
@@ -472,16 +474,119 @@
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
 	border-color: rgb(255 255 255 / 28%) !important;
-	color: rgb(255 255 255 / 96%) !important;
+	color: rgb(255 255 255 / 100%) !important;
 }
 
-#app-shell[data-animated-glass="true"] #app-header :is([class*="text-"], svg):not(#visual-settings-panel *):not(#user-profile-menu *):not(#notification-dropdown-panel *),
+#app-shell[data-animated-glass="true"] #app-header :is([class*="text-"]):not(svg):not(#visual-settings-panel):not(#visual-settings-panel *):not(#user-profile-menu):not(#user-profile-menu *):not(#notification-dropdown-panel):not(#notification-dropdown-panel *),
 #app-shell[data-animated-glass="true"] :is(#desktop-nav, #mobile-bottom-nav) :is([class*="text-"], svg) {
-	color: rgb(255 255 255 / 96%) !important;
+	color: rgb(255 255 255 / 100%) !important;
+}
+
+#app-shell[data-animated-glass="true"] #desktop-nav button[class~="bg-teal-800"] svg,
+#app-shell[data-animated-glass="true"] #mobile-bottom-nav button.text-teal-900 svg {
+	color: #ffb347 !important;
+}
+
+#app-shell[data-animated-glass="true"] #app-header [class*="text-amber-"]:not(#visual-settings-panel):not(#visual-settings-panel *):not(#user-profile-menu):not(#user-profile-menu *):not(#notification-dropdown-panel):not(#notification-dropdown-panel *) {
+	color: color-mix(in srgb, var(--theme-accent) 14%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #search-btn svg {
+	color: color-mix(in srgb, var(--theme-primary) 12%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #notification-bell-btn svg,
+#app-shell[data-animated-glass="true"] #app-header [aria-label="Open visual settings"] svg {
+	color: color-mix(in srgb, var(--theme-accent) 12%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #data-backup-btn svg {
+	color: color-mix(in srgb, var(--theme-primary-secondary) 12%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #app-header svg[class*="text-sky-"] {
+	color: color-mix(in srgb, var(--theme-primary-secondary) 12%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #app-header svg[class*="text-emerald-"] {
+	color: color-mix(in srgb, var(--theme-success) 12%, white) !important;
 }
 
 #app-shell[data-animated-glass="true"] main {
 	background: transparent;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .shine-hero {
+	background: rgb(255 255 255 / 16%) !important;
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	border-color: rgb(255 255 255 / 30%) !important;
+	color: rgb(255 255 255 / 100%) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .hero-location-pill {
+	background: color-mix(in srgb, var(--theme-accent) 40%, transparent) !important;
+	border: 1px solid color-mix(in srgb, var(--theme-accent) 52%, white);
+	color: rgb(255 255 255 / 100%) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .hero-primary-action,
+#app-shell[data-animated-glass="true"] #dashboard-view .hero-secondary-action {
+	border: 1px solid rgb(255 255 255 / 32%) !important;
+	color: rgb(255 255 255 / 100%) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .hero-primary-action {
+	background: color-mix(in srgb, var(--theme-accent) 42%, transparent) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .hero-secondary-action {
+	background: color-mix(in srgb, var(--theme-primary-secondary) 34%, transparent) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .visual-switch-button {
+	background: rgb(255 255 255 / 10%) !important;
+	border-color: rgb(255 255 255 / 38%);
+	color: rgb(255 255 255 / 100%) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .visual-switch {
+	background: rgb(32 24 39 / 28%);
+	border-color: rgb(255 255 255 / 48%);
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-icon {
+	background: color-mix(in srgb, var(--stat-icon-tint) 30%, transparent) !important;
+	border: 1px solid color-mix(in srgb, var(--stat-icon-tint) 48%, white);
+	color: color-mix(in srgb, var(--stat-icon-tint) 8%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-icon svg {
+	color: color-mix(in srgb, var(--stat-icon-tint) 8%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-icon--primary {
+	--stat-icon-tint: var(--theme-primary);
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-icon--secondary {
+	--stat-icon-tint: var(--theme-primary-secondary);
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-icon--accent {
+	--stat-icon-tint: var(--theme-accent);
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-icon--success {
+	--stat-icon-tint: var(--theme-success);
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-label {
+	color: color-mix(in srgb, var(--theme-primary-secondary) 4%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] #dashboard-view .dashboard-stat-number {
+	color: color-mix(in srgb, var(--theme-accent) 8%, white) !important;
 }
 
 #app-shell[data-animated-glass="true"] main :is(input, textarea, select) {
@@ -489,7 +594,7 @@
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
 	border-color: rgb(255 255 255 / 30%) !important;
-	color: rgb(255 255 255 / 96%) !important;
+	color: rgb(255 255 255 / 100%) !important;
 }
 
 #app-shell[data-animated-glass="true"] main :is(input, textarea, select)::placeholder {
@@ -508,7 +613,7 @@
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
 	border-color: rgb(255 255 255 / 28%) !important;
-	color: rgb(255 255 255 / 96%) !important;
+	color: rgb(255 255 255 / 100%) !important;
 }
 
 #app-shell[data-animated-glass="true"] main button {
@@ -516,17 +621,117 @@
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
 	border-color: rgb(255 255 255 / 28%) !important;
-	color: rgb(255 255 255 / 96%) !important;
+	color: rgb(255 255 255 / 100%) !important;
 }
 
 #app-shell[data-animated-glass="true"] main :is([class*="text-"], svg) {
-	color: rgb(255 255 255 / 96%) !important;
+	color: rgb(255 255 255 / 100%) !important;
 }
 
 #app-shell[data-animated-glass="true"] #app-header,
 #app-shell[data-animated-glass="true"] #desktop-nav,
 #app-shell[data-animated-glass="true"] #mobile-bottom-nav {
 	color: rgb(255 255 255 / 96%) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-amber-50"], [class*="bg-amber-100"], [class*="bg-amber-200"],
+	[class*="bg-yellow-50"], [class*="bg-yellow-100"], [class*="bg-yellow-200"],
+	[class*="bg-orange-50"], [class*="bg-orange-100"], [class*="bg-orange-200"]
+) {
+	background: color-mix(in srgb, var(--theme-accent) 18%, rgb(255 255 255 / 16%)) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-teal-50"], [class*="bg-teal-100"], [class*="bg-teal-200"],
+	[class*="bg-cyan-50"], [class*="bg-cyan-100"], [class*="bg-cyan-200"],
+	[class*="bg-sky-50"], [class*="bg-sky-100"], [class*="bg-sky-200"],
+	[class*="bg-blue-50"], [class*="bg-blue-100"], [class*="bg-blue-200"],
+	[class*="bg-indigo-50"], [class*="bg-indigo-100"], [class*="bg-indigo-200"]
+) {
+	background: color-mix(in srgb, var(--theme-primary-secondary) 18%, rgb(255 255 255 / 16%)) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-rose-50"], [class*="bg-rose-100"], [class*="bg-rose-200"],
+	[class*="bg-red-50"], [class*="bg-red-100"], [class*="bg-red-200"],
+	[class*="bg-pink-50"], [class*="bg-pink-100"], [class*="bg-pink-200"]
+) {
+	background: color-mix(in srgb, var(--theme-primary) 18%, rgb(255 255 255 / 16%)) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-emerald-50"], [class*="bg-emerald-100"], [class*="bg-emerald-200"],
+	[class*="bg-green-50"], [class*="bg-green-100"], [class*="bg-green-200"],
+	[class*="bg-lime-50"], [class*="bg-lime-100"], [class*="bg-lime-200"]
+) {
+	background: color-mix(in srgb, var(--theme-success) 18%, rgb(255 255 255 / 16%)) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-amber-"], [class*="bg-yellow-"], [class*="bg-orange-"]
+):not([class*="bg-amber-50"]):not([class*="bg-amber-100"]):not([class*="bg-amber-200"]):not([class*="bg-yellow-50"]):not([class*="bg-yellow-100"]):not([class*="bg-yellow-200"]):not([class*="bg-orange-50"]):not([class*="bg-orange-100"]):not([class*="bg-orange-200"]) {
+	background: color-mix(in srgb, var(--theme-accent) 28%, transparent) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-teal-"], [class*="bg-cyan-"], [class*="bg-sky-"],
+	[class*="bg-blue-"], [class*="bg-indigo-"]
+):not([class*="bg-teal-50"]):not([class*="bg-teal-100"]):not([class*="bg-teal-200"]):not([class*="bg-cyan-50"]):not([class*="bg-cyan-100"]):not([class*="bg-cyan-200"]):not([class*="bg-sky-50"]):not([class*="bg-sky-100"]):not([class*="bg-sky-200"]):not([class*="bg-blue-50"]):not([class*="bg-blue-100"]):not([class*="bg-blue-200"]):not([class*="bg-indigo-50"]):not([class*="bg-indigo-100"]):not([class*="bg-indigo-200"]) {
+	background: color-mix(in srgb, var(--theme-primary-secondary) 28%, transparent) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-rose-"], [class*="bg-red-"], [class*="bg-pink-"]
+):not([class*="bg-rose-50"]):not([class*="bg-rose-100"]):not([class*="bg-rose-200"]):not([class*="bg-red-50"]):not([class*="bg-red-100"]):not([class*="bg-red-200"]):not([class*="bg-pink-50"]):not([class*="bg-pink-100"]):not([class*="bg-pink-200"]) {
+	background: color-mix(in srgb, var(--theme-primary) 28%, transparent) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	[class*="bg-emerald-"], [class*="bg-green-"], [class*="bg-lime-"]
+):not([class*="bg-emerald-50"]):not([class*="bg-emerald-100"]):not([class*="bg-emerald-200"]):not([class*="bg-green-50"]):not([class*="bg-green-100"]):not([class*="bg-green-200"]):not([class*="bg-lime-50"]):not([class*="bg-lime-100"]):not([class*="bg-lime-200"]) {
+	background: color-mix(in srgb, var(--theme-success) 28%, transparent) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	svg[class*="text-amber-"], [class*="text-amber-"] svg,
+	svg[class*="text-yellow-"], [class*="text-yellow-"] svg,
+	svg[class*="text-orange-"], [class*="text-orange-"] svg
+) {
+	color: color-mix(in srgb, var(--theme-accent) 10%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	svg[class*="text-teal-"], [class*="text-teal-"] svg,
+	svg[class*="text-cyan-"], [class*="text-cyan-"] svg,
+	svg[class*="text-sky-"], [class*="text-sky-"] svg,
+	svg[class*="text-blue-"], [class*="text-blue-"] svg,
+	svg[class*="text-indigo-"], [class*="text-indigo-"] svg
+) {
+	color: color-mix(in srgb, var(--theme-primary-secondary) 12%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	svg[class*="text-rose-"], [class*="text-rose-"] svg,
+	svg[class*="text-red-"], [class*="text-red-"] svg,
+	svg[class*="text-pink-"], [class*="text-pink-"] svg
+) {
+	color: color-mix(in srgb, var(--theme-primary) 12%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	svg[class*="text-emerald-"], [class*="text-emerald-"] svg,
+	svg[class*="text-green-"], [class*="text-green-"] svg,
+	svg[class*="text-lime-"], [class*="text-lime-"] svg
+) {
+	color: color-mix(in srgb, var(--theme-success) 10%, white) !important;
+}
+
+#app-shell[data-animated-glass="true"] main :is(
+	svg[class*="text-violet-"], [class*="text-violet-"] svg,
+	svg[class*="text-purple-"], [class*="text-purple-"] svg
+) {
+	color: color-mix(in srgb, var(--theme-accent) 10%, white) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

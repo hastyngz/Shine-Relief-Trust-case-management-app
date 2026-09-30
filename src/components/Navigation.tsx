@@ -157,7 +157,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 }`}
               >
                 <div className={`p-1 rounded-lg relative ${isActive ? 'bg-teal-100 text-teal-900' : ''}`}>
-                  <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-teal-900' : 'text-stone-500'}`} />
+                  <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
                   {item.isAi && (
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full" />
                   )}
