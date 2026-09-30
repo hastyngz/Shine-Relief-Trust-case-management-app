@@ -3,7 +3,7 @@ service firebase.storage {
   match /b/{bucket}/o {
     function staffProfile() {
       return firestore.get(
-        /databases/ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291/documents/staffUsers/$(request.auth.uid)
+        /databases/(default)/documents/staffUsers/$(request.auth.uid)
       );
     }
 
@@ -12,7 +12,7 @@ service firebase.storage {
         (request.auth.token.email != null &&
          request.auth.token.email.lower() == 'hastingszidanamot@gmail.com') ||
         (firestore.exists(
-          /databases/ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291/documents/staffUsers/$(request.auth.uid)
+          /databases/(default)/documents/staffUsers/$(request.auth.uid)
         ) && staffProfile().data.status == 'Active')
       );
     }
@@ -50,7 +50,7 @@ service firebase.storage {
 
     function canReadSafeguardingFiles(caseId) {
       let caseRecord = firestore.get(
-        /databases/ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291/documents/safeguardingCases/$(caseId)
+        /databases/(default)/documents/safeguardingCases/$(caseId)
       );
       return isActiveStaff() && (
         request.auth.token.email.lower() == 'hastingszidanamot@gmail.com' ||
@@ -61,7 +61,7 @@ service firebase.storage {
 
     function canWriteSafeguardingFiles(caseId) {
       let caseRecord = firestore.get(
-        /databases/ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291/documents/safeguardingCases/$(caseId)
+        /databases/(default)/documents/safeguardingCases/$(caseId)
       );
       return isActiveStaff() && (
         request.auth.token.email.lower() == 'hastingszidanamot@gmail.com' ||

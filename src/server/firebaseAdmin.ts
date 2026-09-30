@@ -15,10 +15,7 @@ const adminApp = getApps().find((app) => app.name === '[DEFAULT]') || initialize
   projectId: firebaseConfig.projectId,
 });
 
-export const adminFirestore = getFirestore(
-  adminApp,
-  firebaseConfig.firestoreDatabaseId || '(default)'
-);
+export const adminFirestore = getFirestore(adminApp);
 export const adminStorageBucket = getStorage(adminApp).bucket(firebaseConfig.storageBucket);
 
 export class AIRequestAuthError extends Error {

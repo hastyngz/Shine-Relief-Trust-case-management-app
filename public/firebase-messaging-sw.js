@@ -5,11 +5,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // Initialize the Firebase app in the service worker
 firebase.initializeApp({
-  projectId: 'wise-cabinet-6mn89',
-  appId: '1:552589784282:web:454531bcbe3b7adcfd61e3',
-  apiKey: 'AIzaSyBiqMyhHhOJBwnJQEq1TDCLC4jV2OyMb5c',
-  authDomain: 'wise-cabinet-6mn89.firebaseapp.com',
-  messagingSenderId: '552589784282',
+  projectId: 'shine-relief-trust-cms',
+  appId: '1:866167287276:web:df7ade4723d464ec2e64c9',
+  apiKey: 'AIzaSyBSovgPDgjHokLIQd4kv8FGBe1vcdzpnGU',
+  authDomain: 'shine-relief-trust-cms.firebaseapp.com',
+  storageBucket: 'shine-relief-trust-cms.firebasestorage.app',
+  messagingSenderId: '866167287276',
+  measurementId: 'G-F8VFCH6X8C',
 });
 
 // Retrieve an instance of Firebase Messaging

@@ -1,7 +1,7 @@
 {
   "firestore": [
     {
-      "database": "ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291",
+      "database": "(default)",
       "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     }

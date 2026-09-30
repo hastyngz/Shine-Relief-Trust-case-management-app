@@ -1,12 +1,9 @@
 {
-  "projectId": "wise-cabinet-6mn89",
-  "appId": "1:552589784282:web:454531bcbe3b7adcfd61e3",
-  "apiKey": "AIzaSyBiqMyhHhOJBwnJQEq1TDCLC4jV2OyMb5c",
-  "authDomain": "wise-cabinet-6mn89.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291",
-  "storageBucket": "wise-cabinet-6mn89.firebasestorage.app",
-  "messagingSenderId": "552589784282",
-  "measurementId": "",
-  "oAuthClientId": "552589784282-b8mv67rb848b42gh753fri1cqobt44qu.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "apiKey": "AIzaSyBSovgPDgjHokLIQd4kv8FGBe1vcdzpnGU",
+  "authDomain": "shine-relief-trust-cms.firebaseapp.com",
+  "projectId": "shine-relief-trust-cms",
+  "storageBucket": "shine-relief-trust-cms.firebasestorage.app",
+  "messagingSenderId": "866167287276",
+  "appId": "1:866167287276:web:df7ade4723d464ec2e64c9",
+  "measurementId": "G-F8VFCH6X8C"
 }

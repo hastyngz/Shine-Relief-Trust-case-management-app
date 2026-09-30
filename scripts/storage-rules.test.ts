@@ -9,7 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 
 const projectId = 'demo-shine-storage-rules';
-const databaseId = 'ai-studio-shinerelieftrust-3031a4c1-ab6c-4458-95a6-63205996e291';
+const databaseId = '(default)';
 let testEnvironment: RulesTestEnvironment;
 
 async function run() {
