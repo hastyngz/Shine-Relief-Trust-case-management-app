@@ -14,6 +14,7 @@ import {
   ClipboardList,
   BarChart3,
   BrainCircuit,
+  UserRound,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
@@ -23,6 +24,7 @@ export type NavTab =
   | 'girls'
   | 'houses'
   | 'activities'
+  | 'contacts'
   | 'messages'
   | 'planning'
   | 'import'
@@ -63,6 +65,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'girls', label: 'SHINE Girls', icon: Users, count: girlsCount },
     { id: 'houses', label: 'Households', icon: Home, count: housesCount },
     { id: 'activities', label: 'Group Activities', icon: Sparkles },
+    { id: 'contacts', label: 'Contacts', icon: UserRound },
     { id: 'case-management', label: 'Case Management', icon: ClipboardList },
     { id: 'operations', label: 'Operations & Intelligence', icon: BrainCircuit },
     {
@@ -182,6 +185,8 @@ export const Navigation: React.FC<NavigationProps> = ({
                     ? 'Activities'
                     : item.label === 'Messages'
                     ? 'Messages'
+                    : item.label === 'Contacts'
+                    ? 'Contacts'
                     : item.label === 'Budgets & Workplans'
                     ? 'Planning'
                     : item.label === 'Document Ingestion'

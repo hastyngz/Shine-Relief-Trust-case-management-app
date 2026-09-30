@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'synced',
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
-  const { mobileView, setMobileView, theme, setTheme, animatedGlass, setAnimatedGlass } = useVisualSettings();
+  const { mobileView, setMobileView, theme, setTheme, glassEffect, setGlassEffect, animatedGlass, setAnimatedGlass } = useVisualSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
@@ -254,15 +254,19 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="flex items-center justify-between gap-3 border-b border-stone-100 py-3">
                     <div className="flex items-center gap-2">
                       <Waves className="w-4 h-4 text-stone-500" />
-                      <span className="text-sm font-semibold">Animated glass</span>
+                      <span className="text-sm font-semibold">Glass effect</span>
                     </div>
                     <button
                       type="button"
                       role="switch"
-                      aria-label="Animated glass"
-                      aria-checked={animatedGlass}
-                      onClick={() => setAnimatedGlass(!animatedGlass)}
-                      data-enabled={animatedGlass}
+                      aria-label="Glass effect"
+                      aria-checked={glassEffect || animatedGlass}
+                      onClick={() => {
+                        const next = !(glassEffect || animatedGlass);
+                        setGlassEffect(next);
+                        setAnimatedGlass(next);
+                      }}
+                      data-enabled={glassEffect || animatedGlass}
                       className="visual-switch"
                     >
                       <span />

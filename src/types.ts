@@ -950,6 +950,59 @@ export interface Person {
   isLoginUser?: false;
 }
 
+export type ContactEntityType = 'person' | 'organisation';
+export type ContactCategory =
+  | 'school'
+  | 'church'
+  | 'partner NGO'
+  | 'government'
+  | 'donor'
+  | 'supplier'
+  | 'volunteer'
+  | 'guest speaker'
+  | 'health facility'
+  | 'other';
+export type ContactSource = 'manual' | 'import';
+
+export interface ContactInteraction {
+  id: string;
+  date: string;
+  type: string;
+  summary: string;
+  sourceReportId?: string;
+  sourceRecordId?: string;
+  programme?: string;
+}
+
+export interface ContactRecord {
+  id: string;
+  type: ContactEntityType;
+  name: string;
+  aliases: string[];
+  organisationId?: string;
+  affiliation?: string;
+  roleTitle?: string;
+  category: ContactCategory;
+  phone: string[];
+  email: string[];
+  address?: string;
+  district?: string;
+  notes: string;
+  programmes: string[];
+  firstSeen: string;
+  lastSeen: string;
+  createdBy: string;
+  createdByUid: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByUid: string;
+  updatedByName: string;
+  source: ContactSource;
+  archived: boolean;
+  interactions: ContactInteraction[];
+  mergedInto?: string;
+}
+
 // --------------------------------------------------
 // 5. IMPORT AUDIT & PREVIEW TYPES
 // --------------------------------------------------
@@ -1033,6 +1086,7 @@ export type DocxClassification =
   | 'BUDGET_FINANCIAL'
   | 'GENERAL_REPORT_INFO'
   | 'PHOTO_HIGHLIGHT'
+  | 'CONTACT_DIRECTORY_RECORD'
   | 'UNCLASSIFIED_REVIEW';
 
 export interface ImportPreviewItem {
@@ -1053,6 +1107,7 @@ export interface ImportPreviewItem {
     | 'schedule'
     | 'earlyYears'
     | 'attachment'
+    | 'contact'
     | 'general';
   classification?: DocxClassification;
   classificationLabel?: string;
@@ -1079,6 +1134,8 @@ export interface ImportPreviewItem {
   photoBase64?: string;
   photoContentType?: string;
   photoCaption?: string;
+  contactMatchStatus?: 'linked' | 'possible' | 'new';
+  contactMatchCandidates?: Array<{ id: string; name: string; category: ContactCategory }>;
   // Detected Person specific details
   detectedRole?: string;
   detectedOrganisation?: string;
@@ -1106,6 +1163,7 @@ export interface AppDatabase {
   rentPayments: HouseholdRentPayment[];
   expenses: HouseholdExpense[];
   householdActivities: HouseholdActivity[];
+  contacts?: ContactRecord[];
   attachments?: PhotoAttachment[];
   budgets?: BudgetItem[];
   annualBudgets?: AnnualBudgetPlan[];

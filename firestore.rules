@@ -447,6 +447,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Contacts contain staff-managed personal data; never expose them publicly or hard-delete them.
+    match /contacts/{contactId} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.archived == false;
+      allow update: if isManagerOrStaff() &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.updatedByName is string &&
+        request.resource.data.archived is bool &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'type', 'aliases', 'organisationId', 'affiliation', 'roleTitle',
+          'category', 'phone', 'email', 'address', 'district', 'notes', 'programmes',
+          'firstSeen', 'lastSeen', 'updatedAt', 'updatedByUid', 'updatedByName',
+          'source', 'archived', 'interactions', 'mergedInto'
+        ]);
+      allow delete: if false;
+
+      match /interactions/{interactionId} {
+        allow read: if isStaffActive();
+        allow create: if isManagerOrStaff() &&
+          request.resource.data.createdByUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
     // Staff Conversations
     match /staffConversations/{convId} {
       allow read: if isStaffActive() && (

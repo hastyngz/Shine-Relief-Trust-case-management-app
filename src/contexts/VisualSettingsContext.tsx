@@ -13,7 +13,8 @@ export type ThemeId =
   | 'vibrant-shine';
 
 const DEFAULT_THEME: ThemeId = 'sunset-pop';
-const DEFAULT_ANIMATED_GLASS = true;
+const DEFAULT_GLASS_EFFECT = false;
+const DEFAULT_ANIMATED_GLASS = false;
 
 export interface ThemeOption {
   id: ThemeId;
@@ -39,6 +40,8 @@ interface VisualSettingsContextValue {
   setMobileView: (enabled: boolean) => void;
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
+  glassEffect: boolean;
+  setGlassEffect: (enabled: boolean) => void;
   animatedGlass: boolean;
   setAnimatedGlass: (enabled: boolean) => void;
 }
@@ -49,13 +52,19 @@ export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
   const { currentUser } = useAuth();
   const [mobileView, setMobileView] = useState(false);
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
+  const [glassEffect, setGlassEffect] = useState(DEFAULT_GLASS_EFFECT);
   const [animatedGlass, setAnimatedGlass] = useState(DEFAULT_ANIMATED_GLASS);
 
   useEffect(() => {
     setMobileView(false);
     setTheme(DEFAULT_THEME);
+    setGlassEffect(DEFAULT_GLASS_EFFECT);
     setAnimatedGlass(DEFAULT_ANIMATED_GLASS);
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    setAnimatedGlass(glassEffect);
+  }, [glassEffect]);
 
   return (
     <VisualSettingsContext.Provider value={{
@@ -63,6 +72,8 @@ export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
       setMobileView,
       theme,
       setTheme,
+      glassEffect,
+      setGlassEffect,
       animatedGlass,
       setAnimatedGlass,
     }}>

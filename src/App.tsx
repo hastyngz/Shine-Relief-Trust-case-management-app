@@ -64,6 +64,7 @@ import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkpla
 import { PayrollDashboard } from './components/PayrollDashboard';
 import { CaseManagementView } from './components/CaseManagementView';
 import { DataImportWizard } from './components/Import/DataImportWizard';
+import { ContactsView } from './components/Contacts/ContactsView';
 import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
 import {
   triggerDataChangeNotification,
@@ -94,6 +95,7 @@ type AppView =
   | 'girls'
   | 'houses'
   | 'activities'
+  | 'contacts'
   | 'messages'
   | 'planning'
   | 'import'
@@ -136,6 +138,7 @@ function parseHash(): {
   if (hash === 'girls') return { view: 'girls', activeTab: 'girls' };
   if (hash === 'houses') return { view: 'houses', activeTab: 'houses' };
   if (hash === 'activities') return { view: 'activities', activeTab: 'activities' };
+  if (hash === 'contacts') return { view: 'contacts', activeTab: 'contacts' };
   if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
   if (hash === 'operations' || hash === 'intelligence' || hash === 'calendar') return { view: 'operations', activeTab: 'operations' };
   if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
@@ -153,7 +156,7 @@ function parseHash(): {
 }
 
 function AppContent() {
-  const { mobileView, theme, animatedGlass } = useVisualSettings();
+  const { mobileView, theme, glassEffect, animatedGlass } = useVisualSettings();
   const {
     currentUser,
     staffProfile,
@@ -348,6 +351,9 @@ function AppContent() {
         break;
       case 'activities':
         targetHash = '#/activities';
+        break;
+      case 'contacts':
+        targetHash = '#/contacts';
         break;
       case 'case-management':
         targetHash = '#/case-management';
@@ -1014,7 +1020,8 @@ function AppContent() {
       id="app-shell"
       data-theme={theme}
       data-mobile-view={mobileView}
-      data-animated-glass={animatedGlass}
+      data-glass-effect={glassEffect}
+      data-animated-glass={animatedGlass || glassEffect}
       className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans"
     >
       {/* Top Application Header */}
@@ -1128,6 +1135,10 @@ function AppContent() {
             onSelectHouse={handleOpenHouseProfile}
             onAddActivity={() => handleStartActivity()}
           />
+        )}
+
+        {view === 'contacts' && (
+          <ContactsView db={db} onBack={() => navigateTo('dashboard', 'dashboard')} />
         )}
 
         {view === 'case-management' && (

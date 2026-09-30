@@ -55,6 +55,34 @@ interface DataImportWizardProps {
 
 type WizardStep = 'upload' | 'review' | 'importing' | 'completed';
 
+const PhotoPreview: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        role="img"
+        aria-label={`${alt}. Preview unavailable`}
+        className="w-full max-w-[400px] aspect-[4/3] flex items-center justify-center bg-stone-100 text-stone-500 text-xs border border-stone-200 rounded-lg"
+      >
+        Preview unavailable
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => {
+        console.warn('Embedded DOCX photo preview failed to load.', alt);
+        setFailed(true);
+      }}
+      className="w-full max-w-[400px] aspect-[4/3] object-cover rounded-lg border border-indigo-200 shadow-2xs shrink-0"
+    />
+  );
+};
+
 const CLASSIFICATION_OPTIONS: Array<{ value: DocxClassification; label: string }> = [
   { value: 'INDIVIDUAL_GIRL_HISTORICAL', label: 'A. Individual Girl Historical Record' },
   { value: 'HOUSEHOLD_RECORD', label: 'B. Household Record' },
@@ -392,10 +420,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   });
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl border border-stone-200 overflow-hidden max-w-6xl mx-auto my-4">
+    <div className="w-full max-w-full sm:max-w-6xl min-w-0 box-border overflow-x-hidden bg-white rounded-2xl shadow-xl border border-stone-200 mx-auto my-4">
       {/* Header Banner */}
-      <div className="bg-teal-900 text-white p-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="bg-teal-900 text-white p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="p-2.5 bg-teal-800 rounded-xl border border-teal-700">
             <FileUp className="w-6 h-6 text-amber-300" />
           </div>
@@ -418,8 +446,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       </div>
 
       {/* Wizard Steps Navigation */}
-      <div className="bg-stone-50 px-6 py-3 border-b border-stone-200 flex flex-wrap items-center justify-between text-xs font-semibold gap-2">
-        <div className="flex items-center gap-4">
+      <div className="bg-stone-50 px-3 sm:px-6 py-3 border-b border-stone-200 flex flex-wrap items-center justify-between text-xs font-semibold gap-2 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
           <span
             className={`flex items-center gap-1.5 ${
               step === 'upload' ? 'text-teal-900 font-bold' : 'text-stone-500'
@@ -447,7 +475,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             >
               2
             </span>
-            Review & Historical Protection ({totalCount} Detected)
+            Review & Historical Protection ({countHistoricalGirls} Girls Detected)
           </span>
           <span className="text-stone-300">/</span>
           <span
@@ -574,7 +602,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       {/* STEP 2: REVIEW & HUMAN-IN-THE-LOOP INSPECTION */}
       {/* ------------------------------------------------------------------ */}
       {step === 'review' && (
-        <div className="p-6 space-y-5">
+        <div className="w-full max-w-full min-w-0 box-border p-4 sm:p-6 space-y-5">
           {/* Metadata Banner */}
           {reportMetadata && (
             <div className="bg-stone-900 text-white p-4 rounded-xl shadow-xs border border-stone-800 flex flex-wrap items-center justify-between gap-4">
@@ -700,9 +728,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           </div>
 
           {/* Action Bar & Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-stone-200">
-            <div className="flex items-center gap-3 text-xs">
-              <div className="relative w-64">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-stone-200 min-w-0">
+            <div className="flex flex-wrap items-center gap-3 text-xs min-w-0 w-full">
+              <div className="relative w-full sm:w-64 min-w-0">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-stone-400" />
                 <input
                   type="text"
@@ -729,7 +757,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               <span className="text-stone-500 font-medium">({selectedCount} approved for ingest)</span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
               <button
                 onClick={() => {
                   setSelectedFile(null);
@@ -743,7 +771,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               <button
                 onClick={handleExecuteImport}
                 disabled={selectedCount === 0 || !canEdit}
-                className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
+                className={`min-w-0 max-w-full whitespace-normal text-left px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
                   selectedCount > 0 && canEdit
                     ? 'bg-teal-800 text-white hover:bg-teal-900 cursor-pointer'
                     : 'bg-stone-200 text-stone-400 cursor-not-allowed'
@@ -770,7 +798,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           )}
 
           {/* Detected Item Cards List */}
-          <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
+          <div className="w-full max-w-full min-w-0 space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1">
             {filteredItems.length === 0 ? (
               <div className="p-10 text-center text-stone-500 italic bg-stone-50 rounded-xl border border-stone-200">
                 No detected items in this category matching your search.
@@ -787,15 +815,15 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 return (
                   <div
                     key={item.tempId}
-                    className={`border rounded-xl p-4 transition-all ${
+                    className={`w-full max-w-full min-w-0 box-border border rounded-xl p-4 transition-all ${
                       item.selected
                         ? 'border-teal-700/60 bg-teal-50/15 shadow-xs'
                         : 'border-stone-200 bg-white opacity-70'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-3 min-w-0">
                       {/* Left: Checkbox + Content */}
-                      <div className="flex items-start gap-3 flex-1">
+                      <div className="flex items-start gap-3 min-w-0 w-full sm:flex-1">
                         <input
                           type="checkbox"
                           checked={item.selected}
@@ -803,12 +831,12 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                           className="mt-1 h-4 w-4 rounded-sm text-teal-800 focus:ring-teal-700 cursor-pointer"
                         />
 
-                        <div className="space-y-2 flex-1">
+                        <div className="space-y-2 min-w-0 flex-1">
                           {/* Badges row */}
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                             {/* Classification Badge */}
                             <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                              className={`inline-flex max-w-full items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-normal break-words ${
                                 isHist
                                   ? 'bg-amber-100 text-amber-900 border-amber-300'
                                   : isAct
@@ -835,27 +863,31 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                             {/* Match Confidence Badge */}
                             {item.matchConfidence && (
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-md whitespace-normal break-words ${
                                   item.matchConfidence === 'exact' || item.matchConfidence === 'high'
                                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : item.matchConfidence === 'none'
+                                    ? 'bg-sky-50 text-sky-800 border border-sky-200'
                                     : 'bg-amber-50 text-amber-800 border border-amber-200'
                                 }`}
                               >
                                 {item.matchConfidence === 'exact' || item.matchConfidence === 'high'
                                   ? 'Existing Match [High]'
+                                  : item.matchConfidence === 'none'
+                                  ? 'New Girl [No Existing Match]'
                                   : 'Possible Match [Review Required]'}
                               </span>
                             )}
 
                             {/* Date / Reporting Period Badge */}
-                            <span className="text-[10px] text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md border border-stone-200 flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-stone-500" />
+                            <span className="text-[11px] text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md border border-stone-200 flex items-center gap-1 whitespace-normal break-words max-w-full">
+                              <Calendar className="w-3 h-3 text-stone-500 shrink-0" />
                               {item.reportingPeriod || (item.isDateUnknown ? 'Date Unknown (Period Preserved)' : item.recordDate)}
                             </span>
 
                             {/* Action Proposed Pill */}
                             {item.actionProposed && (
-                              <span className="text-[10px] font-medium text-teal-900 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                              <span className="text-[11px] font-medium text-teal-900 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 whitespace-normal break-words max-w-full">
                                 Action: {item.actionProposed}
                               </span>
                             )}
@@ -891,10 +923,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                                 )}
                               </div>
 
-                              <p className="text-[11px] text-amber-900">
+                              <p className="text-xs text-amber-900">
                                 <strong>Historical Event:</strong> {item.extractedData.description || item.summary}
                               </p>
-                              <p className="text-[10px] text-stone-600 italic">
+                              <p className="text-[11px] text-stone-600 italic">
                                 Guaranteed Profile Protection: Active school/class level in profile remains untouched. This transition is archived in Historical Case Records.
                               </p>
                             </div>
@@ -902,20 +934,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
                           {/* Photo Thumbnail Render */}
                           {isPhoto && item.photoBase64 && (
-                            <div className="flex items-start gap-3 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200">
-                              <img
-                                src={item.photoBase64}
-                                alt={item.photoCaption || 'Report photo'}
-                                className="w-24 h-24 object-cover rounded-lg border border-indigo-200 shadow-2xs shrink-0"
-                              />
-                              <div className="text-xs space-y-1">
+                            <div className="flex flex-col sm:flex-row items-start gap-3 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-200 min-w-0 w-full">
+                              <PhotoPreview src={item.photoBase64} alt={item.photoCaption || 'Report photo'} />
+                              <div className="text-xs space-y-1 min-w-0 w-full sm:flex-1 [overflow-wrap:anywhere]">
                                 <p className="font-bold text-indigo-950">
                                   {item.photoCaption || item.summary}
                                 </p>
-                                <p className="text-[11px] text-stone-600">
+                                <p className="text-xs text-stone-600">
                                   Embedded photographic highlight extracted directly from report document.
                                 </p>
-                                <p className="text-[10px] text-indigo-800 font-semibold">
+                                <p className="text-[11px] text-indigo-800 font-semibold">
                                   Target: Linked to Household Activity / Communal Programme Record
                                 </p>
                               </div>
@@ -924,7 +952,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
                           {/* Summary text */}
                           {!isHist && !isPhoto && (
-                            <p className="text-xs text-stone-800 font-medium">{item.summary}</p>
+                            <p className="text-xs text-stone-800 font-medium [overflow-wrap:anywhere]">{item.summary}</p>
                           )}
 
                           {/* Missing Fields Indicators */}
@@ -933,7 +961,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                               {item.missingFields.map((mf, mfIdx) => (
                                 <span
                                   key={mfIdx}
-                                  className="text-[10px] font-bold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-300 flex items-center gap-1"
+                                  className="text-[11px] font-bold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-300 flex items-center gap-1"
                                 >
                                   <AlertCircle className="w-3 h-3 text-stone-500" />
                                   {mf}
@@ -944,7 +972,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
                           {/* Original Text Snippet */}
                           {item.originalSnippet && (
-                            <p className="text-[11px] text-stone-500 bg-stone-50 p-2 rounded-md border border-stone-200 font-mono">
+                            <p className="text-xs text-stone-500 bg-stone-50 p-2 rounded-md border border-stone-200 font-mono [overflow-wrap:anywhere]">
                               "{item.originalSnippet}"
                             </p>
                           )}
@@ -952,10 +980,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                       </div>
 
                       {/* Right: Actions */}
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className="flex flex-wrap sm:flex-col items-center sm:items-end justify-start sm:justify-start gap-1.5 min-w-0 w-full sm:w-auto sm:shrink-0">
                         <button
                           onClick={() => setEditingItem(item)}
-                          className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-2xs cursor-pointer"
+                          className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs cursor-pointer"
                         >
                           <Edit2 className="w-3 h-3 text-stone-500" /> Edit
                         </button>
@@ -964,7 +992,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                         <select
                           value={item.classification || 'UNCLASSIFIED_REVIEW'}
                           onChange={(e) => handleReclassifyItem(item.tempId, e.target.value as DocxClassification)}
-                          className="text-[10px] bg-white border border-stone-200 rounded-lg px-2 py-1 text-stone-700 font-medium focus:outline-teal-800 cursor-pointer"
+                          className="text-[11px] bg-white border border-stone-200 rounded-lg px-2 py-1 text-stone-700 font-medium focus:outline-teal-800 cursor-pointer max-w-full w-full sm:w-auto"
                         >
                           {CLASSIFICATION_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>

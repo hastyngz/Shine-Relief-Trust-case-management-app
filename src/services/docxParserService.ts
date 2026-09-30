@@ -1,4 +1,5 @@
 import mammoth from 'mammoth';
+import JSZip from 'jszip';
 import {
   AppDatabase,
   DocxClassification,
@@ -54,6 +55,157 @@ export interface ParsedDocxReportResult {
  */
 function cleanText(str: string): string {
   return str.replace(/\s+/g, ' ').trim();
+}
+
+function decodeXmlText(text: string): string {
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function xmlRunsToPlainText(xml: string): string {
+  return Array.from(xml.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g))
+    .map((match) => decodeXmlText(match[1]))
+    .join('');
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+export interface DocxImageParagraph {
+  relationshipIds: string[];
+  text: string;
+}
+
+export function extractDocxParagraphData(
+  documentXml: string,
+  imageRelationshipIds: Iterable<string>
+): DocxImageParagraph[] {
+  const knownImageRelationships = new Set(imageRelationshipIds);
+  return Array.from(documentXml.matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g)).map((match) => ({
+    relationshipIds: Array.from(
+      new Set(Array.from(match[1].matchAll(/r:embed="(rId[^"]+)"/g)).map((imageMatch) => imageMatch[1]))
+    ).filter((relationshipId) => knownImageRelationships.has(relationshipId)),
+    text: xmlRunsToPlainText(match[1]),
+  }));
+}
+
+export function pairDocxImageCaptions(
+  paragraphs: DocxImageParagraph[]
+): Array<{ relationshipId: string; caption: string }> {
+  const paired: Array<{ relationshipId: string; caption: string }> = [];
+  const seen = new Set<string>();
+
+  paragraphs.forEach((paragraph, index) => {
+    const relationshipIds = Array.from(new Set(paragraph.relationshipIds));
+    if (relationshipIds.length === 0) return;
+    let caption = '';
+    for (const followingParagraph of paragraphs.slice(index + 1)) {
+      if (followingParagraph.relationshipIds.length > 0) break;
+      if (followingParagraph.text.trim()) {
+        caption = followingParagraph.text.trim();
+        break;
+      }
+    }
+
+    relationshipIds.forEach((relationshipId) => {
+      if (seen.has(relationshipId)) return;
+      seen.add(relationshipId);
+      paired.push({ relationshipId, caption });
+    });
+  });
+
+  return paired;
+}
+
+async function createImagePreview(bytes: Uint8Array, contentType: string): Promise<string> {
+  const original = `data:${contentType};base64,${uint8ArrayToBase64(bytes)}`;
+  if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') return original;
+
+  try {
+    const imageBytes = new Uint8Array(bytes).buffer as ArrayBuffer;
+    const bitmap = await createImageBitmap(new Blob([imageBytes], { type: contentType }));
+    if (bitmap.width <= 400) {
+      bitmap.close();
+      return original;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = Math.max(1, Math.round((bitmap.height * canvas.width) / bitmap.width));
+    const context = canvas.getContext('2d');
+    if (!context) {
+      bitmap.close();
+      return original;
+    }
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return canvas.toDataURL(contentType === 'image/png' ? 'image/png' : 'image/jpeg', 0.84);
+  } catch (error) {
+    console.warn('Could not resize embedded DOCX image; using original image bytes.', error);
+    return original;
+  }
+}
+
+
+async function extractDocumentFromZip(buffer: ArrayBuffer): Promise<{
+  rawText: string;
+  rawHtml: string;
+  extractedImages: ExtractedImageItem[];
+}> {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentXml = await zip.file('word/document.xml')?.async('string') ?? '';
+  const relsXml = await zip.file('word/_rels/document.xml.rels')?.async('string') ?? '';
+
+  const textParagraphs = Array.from(documentXml.matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g));
+  const rawText = textParagraphs.map((match) => xmlRunsToPlainText(match[1])).filter(Boolean).join('\n');
+  const htmlParagraphs = textParagraphs.map((match) => `<p>${xmlRunsToPlainText(match[1])}</p>`).join('');
+
+  const relMap = new Map<string, string>();
+  Array.from(relsXml.matchAll(/<Relationship\b([^>]*)\/?\s*>/gi)).forEach((match) => {
+    const attributes = Object.fromEntries(
+      Array.from(match[1].matchAll(/([\w:]+)="([^"]*)"/g)).map((attribute) => [attribute[1], decodeXmlText(attribute[2])])
+    );
+    if (/\/image$/i.test(attributes.Type || '') && attributes.Id && attributes.Target) {
+      relMap.set(attributes.Id, attributes.Target);
+    }
+  });
+
+  const paragraphData = extractDocxParagraphData(documentXml, relMap.keys());
+  const pairedCaptions = pairDocxImageCaptions(paragraphData);
+
+  const extractedImages: ExtractedImageItem[] = [];
+  for (const { relationshipId, caption } of pairedCaptions) {
+    const targetPath = relMap.get(relationshipId);
+    if (!targetPath) continue;
+    const pathParts = targetPath.startsWith('/') ? [] : ['word'];
+    targetPath.replace(/^\//, '').split('/').forEach((part) => {
+      if (part === '..') pathParts.pop();
+      else if (part && part !== '.') pathParts.push(part);
+    });
+    const zipFile = zip.file(pathParts.join('/'));
+    if (!zipFile) continue;
+    const bytes = await zipFile.async('uint8array');
+    const extension = targetPath.split('.').pop()?.toLowerCase();
+    const mime = extension === 'png' ? 'image/png' : extension === 'gif' ? 'image/gif' : extension === 'webp' ? 'image/webp' : 'image/jpeg';
+    extractedImages.push({
+      id: `zip_img_${relationshipId}`,
+      base64: await createImagePreview(bytes, mime),
+      contentType: mime,
+      caption: caption || `Embedded image from ${targetPath}`,
+      altText: caption || `Embedded image from ${targetPath}`,
+      sectionHeading: 'Pictorial Highlights',
+    });
+  }
+
+  return { rawText, rawHtml: htmlParagraphs || rawText, extractedImages };
 }
 
 /**
@@ -316,6 +468,125 @@ function isValidPersonName(name: string): boolean {
   return /^[A-Z][a-zA-Z'\-.]+(?:\s+[A-Z][a-zA-Z'\-.]+)*$/.test(clean);
 }
 
+export function extractHistoricalTransitionsFromText(text: string): Array<{
+  rawName: string;
+  actionPhrase: string;
+  details: string;
+  originalMatch: string;
+}> {
+  const items: Array<{ rawName: string; actionPhrase: string; details: string; originalMatch: string }> = [];
+  const pattern =
+    /(?:^|[\n•\-*]\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(returned\s+to|advanced\s+to|promoted\s+to|transitioned\s+to|enrolled\s+at|resumed\s+vocational\s+training|resumed|started\s+vocational\s+training|started|admitted\s+to)\s+([^.\n]+)/gi;
+
+  for (const match of text.matchAll(pattern)) {
+    const rawName = cleanText(match[1]);
+    const actionPhrase = cleanText(match[2]);
+    const details = cleanText(match[3]);
+    if (!rawName || !isValidPersonName(rawName)) continue;
+    if (
+      /^(SHINE|The|Our|This|Early|Primary|Secondary|Malawi|Staff|Teacher|Caregiver|Children|Girls|Learners|Village|Trust|All|Each|September|August|July)$/i.test(
+        rawName
+      )
+    ) {
+      continue;
+    }
+    items.push({ rawName, actionPhrase, details, originalMatch: cleanText(match[0]) });
+  }
+
+  return items;
+}
+
+export function extractChildHouseGirlLines(text: string): Array<{
+  rawName: string;
+  actionPhrase: string;
+  details: string;
+  originalMatch: string;
+}> {
+  return text.split(/\n+/).flatMap((line) => {
+    const normalizedLine = cleanText(line).replace(/^(?:[•●▪◦*]\s*|-\s+)/, '');
+    const match = normalizedLine.match(/^([A-Z][a-z]+)\s*[–—-]\s*(.+)$/);
+    if (!match || !isValidPersonName(match[1])) return [];
+
+    const status = cleanText(match[2]);
+    const actionMatch = status.match(/^(returned\s+to|resumed\s+vocational\s+training|started\s+vocational\s+training|resumed|started|advanced\s+to|promoted\s+to|transitioned\s+to|enrolled\s+at|admitted\s+to)\b\s*(.*)$/i);
+    return [{
+      rawName: match[1],
+      actionPhrase: actionMatch?.[1] || 'reported status',
+      details: cleanText(actionMatch?.[2] || status),
+      originalMatch: normalizedLine,
+    }];
+  });
+}
+
+export function extractEarlyYearsMetrics(text: string): {
+  previousEnrolment?: number;
+  graduates?: number;
+  targetEnrolment?: number;
+  teacherCaregiverRatio?: string;
+  teachersRequired?: number;
+  communityVolunteers?: number;
+  programmeStartDate?: string;
+  feedingProgrammeStartDate?: string;
+  notes?: string;
+} {
+  const prevEnrolment = text.match(/previous\s+(?:enrolment|enrollment)\s*(?:was|:)?\s*(\d+)/i)?.[1];
+  const graduates = text.match(/(\d+)\s*(?:learners?|children)?\s*(?:graduated|graduates)/i)?.[1] ||
+    text.match(/(\d+)\s*(?:graduated|graduates)/i)?.[1];
+  const targetEnrolment = text.match(/(?:target\s+(?:enrolment|enrollment)|enrol\s+at\s+least|enrolment\s+for\s+the\s+upcoming\s+intake)\s*(?:is\s+at\s+least\s+)?(\d+)/i)?.[1];
+  const ratio = text.match(/(\d+:\d+)\s*(?:teacher\/caregiver|teacher\/care giver|teacher\s*\/\s*caregiver)\s*ratio/i)?.[1] ||
+    text.match(/ratio\s*(?:of)?\s*(\d+:\d+)/i)?.[1];
+  const teachersReq = text.match(/(\d+)\s*(?:qualified\s+)?(?:teachers?|caregivers?)\s*(?:required|needed)/i)?.[1];
+  const volunteers = text.match(/(\d+)\s*(?:dedicated\s+)?community\s+volunteers/i)?.[1];
+  const programmeStart = text.match(/(?:programme|program)\s+start\s+(?:date\s+)?(?:is\s+)?(?:scheduled\s+for\s+)?([A-Za-z0-9,\s]+\d{4})/i)?.[1];
+  const feedingStart = text.match(/feeding\s+(?:programme|program)\s+start\s+(?:date\s+)?(?:is\s+)?(?:scheduled\s+for\s+)?([A-Za-z0-9,\s]+\d{4})/i)?.[1];
+
+  const normalizeDateValue = (value?: string): string | undefined => {
+    if (!value) return undefined;
+    return cleanText(value)
+      .replace(/^(?:is\s+)?(?:scheduled\s+for\s+|set\s+for\s+|scheduled\s+on\s+|starts?\s+on\s+|is\s+scheduled\s+for\s+)?/i, '')
+      .split(/\s*,\s*(?:and\s+the\b|for\b)/i)[0]
+      .trim();
+  };
+
+  return {
+    previousEnrolment: prevEnrolment ? parseInt(prevEnrolment, 10) : undefined,
+    graduates: graduates ? parseInt(graduates, 10) : undefined,
+    targetEnrolment: targetEnrolment ? parseInt(targetEnrolment, 10) : undefined,
+    teacherCaregiverRatio: ratio || undefined,
+    teachersRequired: teachersReq ? parseInt(teachersReq, 10) : undefined,
+    communityVolunteers: volunteers ? parseInt(volunteers, 10) : undefined,
+    programmeStartDate: normalizeDateValue(programmeStart),
+    feedingProgrammeStartDate: normalizeDateValue(feedingStart),
+    notes: cleanText(text),
+  };
+}
+
+export function extractPriorityEntriesFromText(text: string): Array<{ idx: number; text: string }> {
+  const items: Array<{ idx: number; text: string }> = [];
+  const lines = text.split(/\n+/).map((line) => cleanText(line));
+
+  lines.forEach((line, index) => {
+    if (!line) return;
+    if (/^priorit/i.test(line)) return;
+
+    const match = line.match(/^(?:\d+[\.)]|[•\-*])\s*(.+)$/);
+    const candidate = match ? cleanText(match[1]) : cleanText(line);
+    if (!candidate) return;
+    if (
+      /^(support|monitor|enrol|enroll|work toward|work towards|engage|continue|maximise|maximize|strengthen|improve|develop|prioritise|prioritize)/i.test(
+        candidate
+      ) ||
+      /^(?:\d+[\.)]|[•\-*])\s*(support|monitor|enrol|enroll|work toward|work towards|engage|continue|maximise|maximize|strengthen|improve|develop)/i.test(
+        line
+      )
+    ) {
+      items.push({ idx: index + 1, text: candidate });
+    }
+  });
+
+  return items;
+}
+
 /**
  * Parses full Word (.docx) narrative progress report into classified SHINE items
  */
@@ -325,37 +596,32 @@ export async function parseDocxProgressReport(
   currentUser: StaffUser
 ): Promise<ParsedDocxReportResult> {
   const buffer = await file.arrayBuffer();
+  const archiveContent = await extractDocumentFromZip(buffer);
+  const extractedImages = archiveContent.extractedImages;
 
-  const extractedImages: ExtractedImageItem[] = [];
+  let rawHtml = '';
+  let rawText = '';
+  const mammothBuffer = typeof Buffer !== 'undefined' ? Buffer.from(buffer) : new Uint8Array(buffer);
+  const mammothInput = { arrayBuffer: buffer, buffer: mammothBuffer };
 
-  // Configure mammoth with image extraction safely typed
-  const mammothAny = mammoth as any;
-  const imageOptions = mammothAny.images?.imgElement
-    ? {
-        convertImage: mammothAny.images.imgElement((image: any) => {
-          return image.read('base64').then((imageBuffer: string) => {
-            const id = `photo_${Date.now()}_${extractedImages.length + 1}`;
-            const dataUri = `data:${image.contentType};base64,${imageBuffer}`;
-            extractedImages.push({
-              id,
-              base64: dataUri,
-              contentType: image.contentType || 'image/jpeg',
-              altText: image.altText || 'Embedded photograph',
-            });
-            return {
-              src: dataUri,
-              alt: image.altText || '',
-            };
-          });
-        }),
-      }
-    : undefined;
+  try {
+    const htmlResult = await (mammoth as any).convertToHtml(mammothInput);
+    const rawTextResult = await (mammoth as any).extractRawText(mammothInput);
+    rawHtml = htmlResult.value;
+    rawText = rawTextResult.value;
+  } catch (error: any) {
+    if (/(CRC|BadZipFile|zip)/i.test(String(error))) {
+      rawHtml = archiveContent.rawHtml;
+      rawText = archiveContent.rawText;
+    } else {
+      throw error;
+    }
+  }
 
-  const htmlResult = await (mammoth as any).convertToHtml({ arrayBuffer: buffer }, imageOptions);
-  const rawTextResult = await mammoth.extractRawText({ arrayBuffer: buffer });
-
-  const rawHtml = htmlResult.value;
-  const rawText = rawTextResult.value;
+  if (!rawHtml || rawHtml.trim().length === 0) {
+    rawHtml = archiveContent.rawHtml;
+    rawText = archiveContent.rawText;
+  }
 
   if (!rawHtml || rawHtml.trim().length === 0) {
     throw new Error(
@@ -416,8 +682,10 @@ export async function parseDocxProgressReport(
   // Track sections and context
   let currentSection = 'Introduction';
 
-  // Walk through document elements
-  const bodyNodes = Array.from(doc.body.childNodes);
+  // Process list items individually so a complete bullet list is not flattened into one string.
+  const bodyNodes = Array.from(doc.body.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li')).filter(
+    (element) => !(element.tagName.toLowerCase() === 'p' && element.closest('li'))
+  );
 
   // Helper to test if a paragraph is a section heading
   const getHeadingText = (node: Node): string | null => {
@@ -438,12 +706,12 @@ export async function parseDocxProgressReport(
     return null;
   };
 
-  // Associate captions with images
-  let lastImageIndex = -1;
+  const pairedImageCaptionKeys = new Set(
+    extractedImages.map((image) => cleanText(image.caption || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
+  );
 
   for (let idx = 0; idx < bodyNodes.length; idx++) {
     const node = bodyNodes[idx];
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const el = node as HTMLElement;
     const textContent = cleanText(el.textContent || '');
 
@@ -454,71 +722,43 @@ export async function parseDocxProgressReport(
       continue;
     }
 
-    // 2. Check for embedded images
-    const imgEl = el.querySelector('img') || (el.tagName.toLowerCase() === 'img' ? (el as HTMLImageElement) : null);
-    if (imgEl) {
-      const src = imgEl.getAttribute('src');
-      const foundImage = extractedImages.find((img) => img.base64 === src);
-      if (foundImage) {
-        lastImageIndex = extractedImages.indexOf(foundImage);
-        foundImage.sectionHeading = currentSection;
-
-        // Check next paragraph for caption
-        const nextNode = bodyNodes[idx + 1] as HTMLElement | undefined;
-        if (nextNode && nextNode.textContent && nextNode.textContent.trim().length > 0) {
-          const captionCandidate = cleanText(nextNode.textContent);
-          if (
-            captionCandidate.length < 200 &&
-            (/photo|image|highlight|girls|learners|garden|village/i.test(captionCandidate) ||
-              nextNode.querySelector('em, i'))
-          ) {
-            foundImage.caption = captionCandidate;
-          }
-        }
-      }
+    if (/^(?:\d+[.)]\s*)?child house\b/i.test(textContent)) {
+      currentSection = 'Child House';
+      continue;
+    }
+    if (currentSection === 'Child House' && /^\d+[.)]\s+/.test(textContent) && !/[–—-]/.test(textContent)) {
+      currentSection = textContent;
+      continue;
     }
 
     if (textContent.length === 0) continue;
 
     // -------------------------------------------------------------
     // A. DETECT INDIVIDUAL GIRL HISTORICAL RECORDS & TRANSITIONS
-    // E.g., "Margaret returned to Lilongwe Girls Secondary School."
-    // "Bridget advanced to Form 3 at St. Mary's Secondary."
-    // "Emily advanced to Standard 8."
-    // "Monica advanced to Grade 7."
-    // "Memory resumed vocational training in tailoring."
-    // "Aisha resumed vocational training in catering."
+    // Capture all named people in the paragraph/list instead of stopping at the
+    // first match. This prevents the parser from silently dropping later girls.
     // -------------------------------------------------------------
-    const girlTransitionPatterns = [
-      // Pattern 1: Name + action verb (returned to, advanced to, promoted to, etc.)
-      /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(returned\s+to|advanced\s+to|promoted\s+to|transitioned\s+to|enrolled\s+at|resumed\s+vocational\s+training|resumed|started\s+vocational\s+training|started|admitted\s+to)\s+([^.]+)/i,
-      // Pattern 2: Name : Form / Standard / Vocational
-      /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*[:\-]\s*(Form\s+\d|Standard\s+\d|Grade\s+\d|Vocational\s+Training[^.]+)/i,
-    ];
+    const transitionMatches = extractHistoricalTransitionsFromText(textContent);
+    const childHouseTransitions = /child house/i.test(currentSection)
+      ? extractChildHouseGirlLines(textContent)
+      : [];
+    if (/child house/i.test(currentSection)) {
+      const existingNames = new Set(transitionMatches.map((transition) => transition.rawName.toLowerCase()));
+      transitionMatches.push(
+        ...childHouseTransitions.filter(
+          (transition) => !existingNames.has(transition.rawName.toLowerCase())
+        )
+      );
+    }
+    const childHouseGirlNames = new Set(childHouseTransitions.map((transition) => transition.rawName.toLowerCase()));
+    if (transitionMatches.length > 0) {
+      for (const transition of transitionMatches) {
+        const { rawName, actionPhrase, details } = transition;
 
-    let matchedTransition = false;
-
-    for (const pat of girlTransitionPatterns) {
-      const match = textContent.match(pat);
-      if (match) {
-        const rawName = cleanText(match[1]);
-
-        // Filter out false positive names that are common nouns or programme words
-        if (
-          /^(SHINE|The|Our|This|Early|Primary|Secondary|Malawi|Staff|Teacher|Caregiver|Children|Girls|Learners|Village|Trust|All|Each|September|August|July)$/i.test(
-            rawName
-          )
-        ) {
-          continue;
-        }
-
-        const actionPhrase = match[2] ? match[2].toLowerCase() : '';
-        const details = match[3] ? cleanText(match[3]) : '';
-
-        // Extract class and school if present
         let historicalSchool = 'Lilongwe Girls Secondary School';
         let historicalClass = 'Standard / Form';
 
+        const classLevelMatch = details.match(/\b(?:form|standard|grade)\s+\d+\b/i);
         if (/vocational/i.test(actionPhrase) || /vocational/i.test(details)) {
           historicalSchool = 'Vocational Training Centre';
           historicalClass = details.includes('tailoring')
@@ -526,35 +766,32 @@ export async function parseDocxProgressReport(
             : details.includes('catering')
             ? 'Vocational Training (Catering)'
             : 'Vocational Training';
+        } else if (classLevelMatch) {
+          historicalClass = classLevelMatch[0].replace(/^\w/, (letter) => letter.toUpperCase());
+          const schoolDetails = details
+            .replace(/\s+(?:after\s+)?advancing\s+to\s+(?:form|standard|grade)\s+\d+.*$/i, '')
+            .replace(/[.,;]+$/, '')
+            .trim();
+          if (/school|secondary/i.test(schoolDetails)) historicalSchool = schoolDetails;
         } else if (/secondary/i.test(details) || /school/i.test(details)) {
-          historicalSchool = details;
-          if (/form\s+\d/i.test(details)) {
-            const cm = details.match(/form\s+\d/i);
-            if (cm) historicalClass = cm[0];
-          }
-        } else if (/form\s+\d/i.test(details)) {
-          historicalClass = details.match(/form\s+\d/i)![0];
-        } else if (/standard\s+\d/i.test(details)) {
-          historicalClass = details.match(/standard\s+\d/i)![0];
-        } else if (/grade\s+\d/i.test(details)) {
-          historicalClass = details.match(/grade\s+\d/i)![0];
+          historicalSchool = details.replace(/[.,;]+$/, '').trim();
         }
 
-        // Match against existing database caseload
         const { matchedGirl, confidence, candidates } = matchGirlInCaseload(rawName, db.girls);
-
+        const isNewChildHouseGirl = !matchedGirl && childHouseGirlNames.has(rawName.toLowerCase());
+        const matchStatus = isNewChildHouseGirl ? 'none' : confidence;
         const tempId = `hist_${Date.now()}_${previewItems.length}`;
-        const summary = `${rawName}: ${cleanText(match[0])}`;
+        const summary = `${rawName}: ${transition.originalMatch}`;
 
         previewItems.push({
           tempId,
-          resultType: 'HISTORICAL_RECORD',
+          resultType: isNewChildHouseGirl ? 'NEW_RECORD' : 'HISTORICAL_RECORD',
           targetEntity: 'girl',
           classification: 'INDIVIDUAL_GIRL_HISTORICAL',
           classificationLabel: 'Individual Girl Historical Record',
           matchedId: matchedGirl?.id,
           matchedName: matchedGirl?.fullName || rawName,
-          matchConfidence: confidence,
+          matchConfidence: matchStatus,
           candidateGirls: candidates,
           recordDate: undefined,
           reportingPeriod: metadata.reportingPeriod,
@@ -566,7 +803,9 @@ export async function parseDocxProgressReport(
           isHistorical: true,
           selected: true,
           warningOrConflict:
-            confidence === 'possible_match'
+            matchStatus === 'none'
+              ? `New girl detected: no existing caseload record matched "${rawName}". Review before importing.`
+              : matchStatus === 'possible_match'
               ? `Beneficiary "${rawName}" has multiple or partial matches in the caseload. Please verify selected girl.`
               : undefined,
           extractedData: {
@@ -580,7 +819,7 @@ export async function parseDocxProgressReport(
             historicalSchool: historicalSchool || undefined,
             historicalClass: historicalClass || undefined,
             historicalSupport: 'Education support & fee sponsorship',
-            outcome: cleanText(match[0]),
+            outcome: transition.originalMatch,
             source: {
               originalFileName: file.name,
               fileType: 'docx',
@@ -602,10 +841,8 @@ export async function parseDocxProgressReport(
             section: currentSection,
           });
         }
-
-        matchedTransition = true;
-        break;
       }
+      continue;
     }
 
     // Scan paragraph text for mentions of people (Pastors, Teachers, Caregivers, Guardians, Facilitators)
@@ -673,8 +910,6 @@ export async function parseDocxProgressReport(
       }
     }
 
-    if (matchedTransition) continue;
-
     // -------------------------------------------------------------
     // B. DETECT EARLY YEARS PROGRAMME MONITORING RECORDS
     // Previous enrolment, graduates, target enrolment, teacher/caregiver ratio,
@@ -686,16 +921,7 @@ export async function parseDocxProgressReport(
       ) ||
       /early years/i.test(currentSection)
     ) {
-      // Extract numbers
-      const prevEnrolment = textContent.match(/previous enrolment\s*(?:was|:)?\s*(\d+)/i)?.[1];
-      const graduates = textContent.match(/(\d+)\s*(?:graduated|graduates)/i)?.[1];
-      const targetEnrolment = textContent.match(/(?:target|enrol|enrolment)\s*(?:at least)?\s*(\d+)/i)?.[1];
-      const ratio = textContent.match(/(\d+:\d+)\s*teacher\/caregiver ratio/i)?.[1] ||
-                    textContent.match(/ratio\s*(?:of)?\s*(\d+:\d+)/i)?.[1];
-      const teachersReq = textContent.match(/(\d+)\s*(?:teachers?|caregivers?)\s*(?:required|needed)/i)?.[1];
-      const volunteers = textContent.match(/(\d+)\s*community volunteers/i)?.[1];
-      const progStart = textContent.match(/programme start date\s*(?:is|:)?\s*([A-Za-z0-9\s,]+(?:2026|2027)?)/i)?.[1];
-      const feedStart = textContent.match(/feeding programme start date\s*(?:is|:)?\s*([A-Za-z0-9\s,]+(?:2026|2027)?)/i)?.[1];
+      const earlyYearsMetrics = extractEarlyYearsMetrics(`${currentSection} ${textContent}`);
 
       previewItems.push({
         tempId: `ey_${Date.now()}_${previewItems.length}`,
@@ -704,22 +930,22 @@ export async function parseDocxProgressReport(
         classification: 'EARLY_YEARS_RECORD',
         classificationLabel: 'Early Years Programme Record',
         summary: `Early Years Programme: ${textContent.slice(0, 120)}...`,
-        recordDate: progStart ? cleanText(progStart) : undefined,
+        recordDate: earlyYearsMetrics.programmeStartDate || undefined,
         reportingPeriod: metadata.reportingPeriod,
-        isDateUnknown: !progStart,
+        isDateUnknown: !earlyYearsMetrics.programmeStartDate,
         title: 'Early Years ECD Operational Monitoring',
         originalSnippet: textContent,
         actionProposed: 'Record Early Years Programme Monitoring Metric',
         extractedData: {
           reportingPeriod: metadata.reportingPeriod,
-          previousEnrolment: prevEnrolment ? parseInt(prevEnrolment, 10) : undefined,
-          graduates: graduates ? parseInt(graduates, 10) : undefined,
-          targetEnrolment: targetEnrolment ? parseInt(targetEnrolment, 10) : 100,
-          teacherCaregiverRatio: ratio || '1:25',
-          teachersRequired: teachersReq ? parseInt(teachersReq, 10) : 4,
-          communityVolunteers: volunteers ? parseInt(volunteers, 10) : 6,
-          programmeStartDate: progStart ? cleanText(progStart) : '2026-10-05',
-          feedingProgrammeStartDate: feedStart ? cleanText(feedStart) : '2026-10-12',
+          previousEnrolment: earlyYearsMetrics.previousEnrolment,
+          graduates: earlyYearsMetrics.graduates,
+          targetEnrolment: earlyYearsMetrics.targetEnrolment ?? 100,
+          teacherCaregiverRatio: earlyYearsMetrics.teacherCaregiverRatio || '1:25',
+          teachersRequired: earlyYearsMetrics.teachersRequired ?? 4,
+          communityVolunteers: earlyYearsMetrics.communityVolunteers ?? 6,
+          programmeStartDate: earlyYearsMetrics.programmeStartDate || '2026-10-05',
+          feedingProgrammeStartDate: earlyYearsMetrics.feedingProgrammeStartDate || '2026-10-12',
           notes: textContent,
           sourceDocument: file.name,
         },
@@ -734,50 +960,57 @@ export async function parseDocxProgressReport(
     // C. DETECT WORKPLAN PRIORITIES & OBJECTIVES
     // E.g., "Priorities for the new programme year:", "Workplan:", etc.
     // -------------------------------------------------------------
-    if (
-      /priorities for (?:the )?new programme year|workplan|strategic priorities|objectives for/i.test(
-        currentSection
-      ) ||
-      /^(?:priority|objective)\s*\d*\s*[:\-]/i.test(textContent) ||
-      (el.tagName.toLowerCase() === 'li' && /priorit/i.test(currentSection))
-    ) {
-      previewItems.push({
-        tempId: `wp_${Date.now()}_${previewItems.length}`,
-        resultType: 'NEW_RECORD',
-        targetEntity: 'workplan',
-        classification: 'WORKPLAN_PRIORITY',
-        classificationLabel: 'Workplan / Strategic Priority',
-        summary: `Priority: ${textContent}`,
-        recordDate: undefined,
-        reportingPeriod: metadata.reportingPeriod,
-        isDateUnknown: true,
-        title: `Workplan Priority: ${textContent.slice(0, 60)}...`,
-        originalSnippet: textContent,
-        actionProposed: 'Add Workplan Priority Item',
-        missingFields: [
-          'Responsible Staff: NOT PROVIDED IN SOURCE - REQUIRES REVIEW',
-          'Target Date: NOT PROVIDED IN SOURCE',
-          'Budget: NOT PROVIDED IN SOURCE',
-        ],
-        extractedData: {
-          activity: textContent.slice(0, 80),
-          objective: textContent,
-          description: `Extracted from progress report "${file.name}" section: ${currentSection}.`,
-          period: 'Annual 2026/2027',
-          periodType: 'annual',
-          status: 'Planned',
-          progress: 0,
-          responsibleStaffName: 'NOT PROVIDED IN SOURCE - REQUIRES REVIEW',
-          budget: undefined,
-          startDate: undefined,
-          endDate: undefined,
-          targetCount: /100/.test(textContent) ? 100 : /25/.test(textContent) ? 25 : 1,
-          unit: /learners|children/.test(textContent) ? 'learners' : 'initiatives',
-          location: metadata.location,
-        },
-        isHistorical: false,
-        selected: true,
-      });
+    const prioritySection = /priorit|key priorities|workplan|strategic priorities|objectives?/i.test(currentSection);
+    const priorityTextCandidate =
+      /^(?:\d+[\.)]|[•\-])\s*(?:support|monitor|enrol|enroll|work toward|work towards|engage|continue|maximise|maximize|strengthen|improve|develop)/i.test(
+        textContent
+      );
+
+    if (prioritySection || priorityTextCandidate) {
+      const priorityEntries = extractPriorityEntriesFromText(`${currentSection}\n${textContent}`);
+      const entriesToAdd = priorityEntries.length > 0 ? priorityEntries : [{ idx: 1, text: cleanText(textContent) }];
+
+      for (const priority of entriesToAdd) {
+        const cleaned = priority.text.replace(/^(?:\d+[\.)]|[•\-])\s*/, '');
+        if (!cleaned) continue;
+        previewItems.push({
+          tempId: `wp_${Date.now()}_${previewItems.length}`,
+          resultType: 'NEW_RECORD',
+          targetEntity: 'workplan',
+          classification: 'WORKPLAN_PRIORITY',
+          classificationLabel: 'Workplan / Strategic Priority',
+          summary: `Priority: ${cleaned}`,
+          recordDate: undefined,
+          reportingPeriod: metadata.reportingPeriod,
+          isDateUnknown: true,
+          title: `Workplan Priority: ${cleaned.slice(0, 60)}...`,
+          originalSnippet: textContent,
+          actionProposed: 'Add Workplan Priority Item',
+          missingFields: [
+            'Responsible Staff: NOT PROVIDED IN SOURCE - REQUIRES REVIEW',
+            'Target Date: NOT PROVIDED IN SOURCE',
+            'Budget: NOT PROVIDED IN SOURCE',
+          ],
+          extractedData: {
+            activity: cleaned.slice(0, 80),
+            objective: cleaned,
+            description: `Extracted from progress report "${file.name}" section: ${currentSection}.`,
+            period: 'Annual 2026/2027',
+            periodType: 'annual',
+            status: 'Planned',
+            progress: 0,
+            responsibleStaffName: 'NOT PROVIDED IN SOURCE - REQUIRES REVIEW',
+            budget: undefined,
+            startDate: undefined,
+            endDate: undefined,
+            targetCount: /100/.test(cleaned) ? 100 : /25/.test(cleaned) ? 25 : 1,
+            unit: /learners|children/.test(cleaned) ? 'learners' : 'initiatives',
+            location: metadata.location,
+          },
+          isHistorical: false,
+          selected: true,
+        });
+      }
 
       continue;
     }
@@ -823,7 +1056,49 @@ export async function parseDocxProgressReport(
     }
 
     // -------------------------------------------------------------
-    // E. DETECT GROUP & PROGRAMME ACTIVITIES
+    // E. DETECT PICTORIAL HIGHLIGHT CAPTIONS / PHOTO HIGHLIGHTS
+    // -------------------------------------------------------------
+    if (
+      /pictorial highlights?|photo highlights?|gallery|image highlights?/i.test(currentSection) ||
+      /pictorial|photo caption|highlighted/i.test(textContent)
+    ) {
+      const caption = cleanText(textContent.replace(/^(?:\d+[\.)]|[•\-])\s*/, ''));
+      if (caption.length > 10 && !/^(report|summary|programme|activities)$/i.test(caption)) {
+        const captionKey = caption.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (pairedImageCaptionKeys.has(captionKey)) continue;
+        previewItems.push({
+          tempId: `img_text_${Date.now()}_${previewItems.length}`,
+          resultType: 'NEW_RECORD',
+          targetEntity: 'attachment',
+          classification: 'PHOTO_HIGHLIGHT',
+          classificationLabel: 'Pictorial Highlight (Photo Caption)',
+          summary: `Photo caption: ${caption}`,
+          recordDate: undefined,
+          reportingPeriod: metadata.reportingPeriod,
+          isDateUnknown: true,
+          title: `Pictorial Highlight: ${caption.slice(0, 60)}...`,
+          originalSnippet: textContent,
+          actionProposed: 'Import Photographic Highlight to Storage / Attachments',
+          photoCaption: caption,
+          extractedData: {
+            fileName: `${file.name.replace(/\.docx$/i, '')}_caption_${previewItems.length + 1}.txt`,
+            fileSize: caption.length,
+            contentType: 'text/plain',
+            caption,
+            category: 'Photo caption',
+            targetType: 'householdActivity',
+            targetId: db.households[0]?.id || 'SH-01',
+            date: new Date().toISOString().slice(0, 10),
+          },
+          isHistorical: false,
+          selected: true,
+        });
+      }
+      continue;
+    }
+
+    // -------------------------------------------------------------
+    // F. DETECT GROUP & PROGRAMME ACTIVITIES
     // Church celebrations, counselling sessions, retreats, camps, mentorship,
     // public speaking, instrument training, leadership, drama/skits,
     // community outreach, church cleaning, charity drives, visiting the sick,
@@ -903,7 +1178,7 @@ export async function parseDocxProgressReport(
     }
 
     // -------------------------------------------------------------
-    // F. UNCLASSIFIED NARRATIVE PARAGRAPHS
+    // G. UNCLASSIFIED NARRATIVE PARAGRAPHS
     // If paragraph has substantive text but didn't match specific rules
     // -------------------------------------------------------------
     if (textContent.length > 50 && !/^(table of contents|contents|acknowledgement)/i.test(textContent)) {
@@ -931,7 +1206,7 @@ export async function parseDocxProgressReport(
   }
 
   // -------------------------------------------------------------
-  // G. CONVERT DETECTED PEOPLE INTO PREVIEW ITEMS
+  // H. CONVERT DETECTED PEOPLE INTO PREVIEW ITEMS
   // Match against caseload (girls) and People Directory
   // -------------------------------------------------------------
   const peoplePreviewItems: ImportPreviewItem[] = [];
@@ -1067,7 +1342,7 @@ export async function parseDocxProgressReport(
   previewItems.splice(1, 0, ...peoplePreviewItems);
 
   // -------------------------------------------------------------
-  // H. PROCESS EMBEDDED PHOTOGRAPHS / PICTORIAL HIGHLIGHTS
+  // I. PROCESS EMBEDDED PHOTOGRAPHS / PICTORIAL HIGHLIGHTS
   // -------------------------------------------------------------
   extractedImages.forEach((img, i) => {
     previewItems.push({
@@ -1075,7 +1350,7 @@ export async function parseDocxProgressReport(
       resultType: 'NEW_RECORD',
       targetEntity: 'attachment',
       classification: 'PHOTO_HIGHLIGHT',
-      classificationLabel: 'Pictorial Highlight (Photo)',
+      classificationLabel: 'Pictorial Highlight (Photo Caption)',
       summary: `Embedded Image ${i + 1}: ${img.caption || img.altText || 'Photographic highlight from report'}`,
       recordDate: undefined,
       reportingPeriod: metadata.reportingPeriod,

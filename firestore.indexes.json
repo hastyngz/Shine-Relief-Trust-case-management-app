@@ -37,6 +37,23 @@
         { "fieldPath": "itemName", "order": "ASCENDING" },
         { "fieldPath": "dateRecorded", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "contacts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "contacts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "lastSeen", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -278,6 +278,37 @@
         "updatedAt": { "type": "string", "description": "Last modified timestamp" }
       }
     },
+    "contacts": {
+      "title": "Contacts",
+      "description": "Private directory of people and organisations SHINE works with",
+      "fields": {
+        "id": { "type": "string", "description": "Firestore document identifier" },
+        "type": { "type": "string", "description": "person or organisation" },
+        "name": { "type": "string", "description": "Display name" },
+        "aliases": { "type": "array", "description": "Alternate and previous names" },
+        "organisationId": { "type": "string", "description": "Linked organisation contact ID" },
+        "affiliation": { "type": "string", "description": "Organisation or workplace affiliation" },
+        "roleTitle": { "type": "string", "description": "Role or title" },
+        "category": { "type": "string", "description": "School, church, partner NGO, government, donor, supplier, volunteer, guest speaker, health facility, or other" },
+        "phone": { "type": "array", "description": "Phone numbers" },
+        "email": { "type": "array", "description": "Email addresses" },
+        "address": { "type": "string", "description": "Street or physical address" },
+        "district": { "type": "string", "description": "District" },
+        "notes": { "type": "string", "description": "Staff notes" },
+        "programmes": { "type": "array", "description": "Programmes including Child House, Early Years, and Agriculture" },
+        "firstSeen": { "type": "string", "description": "First known contact date" },
+        "lastSeen": { "type": "string", "description": "Most recent interaction date" },
+        "createdBy": { "type": "string", "description": "Creator UID" },
+        "createdByUid": { "type": "string", "description": "Creator UID for security audit" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update timestamp" },
+        "updatedByUid": { "type": "string", "description": "Last editor UID" },
+        "updatedByName": { "type": "string", "description": "Last editor name" },
+        "source": { "type": "string", "description": "manual or import" },
+        "archived": { "type": "boolean", "description": "Soft-delete marker" },
+        "interactions": { "type": "array", "description": "Contact timeline records with links to source reports and records" }
+      }
+    },
     "earlyYearsRecords": {
       "title": "Early Years Records",
       "description": "Pre-school and Early Childhood Development programme monitoring metrics",
