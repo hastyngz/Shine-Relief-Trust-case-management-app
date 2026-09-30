@@ -188,8 +188,8 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
       </div>
 
       {/* Household Header Card */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-teal-950 via-teal-900 to-teal-950 text-white p-5">
+      <div className="overflow-hidden">
+        <div className="shine-hero rounded-xl p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-4">
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-teal-950 flex items-center justify-center font-black text-xl sm:text-2xl shadow-md shrink-0 overflow-hidden group border-2 border-white/20">

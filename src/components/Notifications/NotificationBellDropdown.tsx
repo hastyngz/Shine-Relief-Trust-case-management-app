@@ -20,12 +20,16 @@ interface NotificationBellDropdownProps {
   onOpenInbox: () => void;
   onOpenRecord: (type: string, id: string) => void;
   onOpenSettings: () => void;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> = ({
   onOpenInbox,
   onOpenRecord,
   onOpenSettings,
+  isOpen,
+  onOpenChange,
 }) => {
   const {
     notifications,
@@ -35,7 +39,6 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
     deleteNotification,
   } = useMessaging();
 
-  const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'messages' | 'reminders'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +46,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+        onOpenChange(false);
       }
     }
     if (isOpen) {
@@ -52,7 +55,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, onOpenChange]);
 
   // Filtered notifications
   const filteredNotifications = notifications.filter((notif) => {
@@ -84,10 +87,10 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
       await markNotificationRead(notif.id);
     }
     if (notif.relatedRecordType && notif.relatedRecordId) {
-      setIsOpen(false);
+      onOpenChange(false);
       onOpenRecord(notif.relatedRecordType, notif.relatedRecordId);
     } else if (notif.type === 'direct_message' || notif.conversationId) {
-      setIsOpen(false);
+      onOpenChange(false);
       onOpenInbox();
     }
   };
@@ -114,7 +117,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
       <button
         id="notification-bell-btn"
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => onOpenChange(!isOpen)}
         className="relative p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium flex items-center gap-1.5 border border-teal-800 transition-colors"
         title="Notifications & Alerts"
         aria-label="Staff Notifications"
@@ -164,7 +167,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
               )}
               <button
                 onClick={() => {
-                  setIsOpen(false);
+                  onOpenChange(false);
                   onOpenSettings();
                 }}
                 className="p-1 text-teal-300 hover:text-white hover:bg-teal-900 rounded-md transition-colors"
@@ -292,7 +295,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
           <div className="p-2.5 bg-stone-100 border-t border-stone-200 flex items-center justify-between text-xs">
             <button
               onClick={() => {
-                setIsOpen(false);
+                onOpenChange(false);
                 onOpenInbox();
               }}
               className="text-teal-800 font-bold hover:text-teal-950 flex items-center gap-1 transition-colors text-[11px]"
@@ -302,7 +305,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
             </button>
             <button
               onClick={() => {
-                setIsOpen(false);
+                onOpenChange(false);
                 onOpenSettings();
               }}
               className="text-stone-500 hover:text-stone-800 text-[11px] font-medium"

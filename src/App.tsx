@@ -1019,6 +1019,7 @@ function AppContent() {
     >
       {/* Top Application Header */}
       <Header
+        onNavigateDashboard={() => navigateTo('dashboard', 'dashboard')}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenDataModal={() => setIsDataModalOpen(true)}

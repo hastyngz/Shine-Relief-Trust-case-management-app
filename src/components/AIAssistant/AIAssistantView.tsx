@@ -21,10 +21,14 @@ import {
   Database,
   Volume2,
   StopCircle,
+  Mic,
+  MicOff,
+  Languages,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AppDatabase, Girl, Household } from '../../types';
 import { AudioDataInput } from '../Intelligence/AudioDataInput';
+import { cleanTextForSpeech } from '../../utils/speech';
 
 export interface ChatMessage {
   id: string;
@@ -35,6 +39,37 @@ export interface ChatMessage {
   accessedRecordIds?: string[];
   isUnavailable?: boolean;
 }
+
+interface SpeechRecognitionResultLike {
+  0: { transcript: string };
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface BrowserSpeechRecognition {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+const getSpeechRecognition = (): BrowserSpeechRecognitionConstructor | undefined => {
+  const speechWindow = window as Window & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  };
+  return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+};
 
 interface AIAssistantViewProps {
   db: AppDatabase;
@@ -127,9 +162,19 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showPromptPicker, setShowPromptPicker] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [voiceConversation, setVoiceConversation] = useState(false);
+  const [voiceLanguage, setVoiceLanguage] = useState('en-GB');
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [recognitionCycle, setRecognitionCycle] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const voiceConversationRef = useRef(voiceConversation);
+  const submitVoiceQueryRef = useRef<(query: string) => void>(() => {});
+  voiceConversationRef.current = voiceConversation;
 
   // Sync to sessionStorage
   useEffect(() => {
@@ -174,11 +219,17 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const speakResponse = (text: string) => {
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    const utterance = new SpeechSynthesisUtterance(cleanTextForSpeech(text));
+    utterance.lang = voiceLanguage;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
   };
 
   const stopSpeaking = () => {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
   };
 
   const handleSubmit = async (queryToSend?: string) => {
@@ -248,6 +299,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           isUnavailable: true,
         };
         setMessages([...newMessages, assistantMsg]);
+        if (voiceConversationRef.current) speakResponse(assistantMsg.content);
         return;
       }
 
@@ -261,6 +313,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       };
 
       setMessages([...newMessages, assistantMsg]);
+      if (voiceConversationRef.current) speakResponse(assistantMsg.content);
 
     } catch (err: any) {
       console.error('AI chat error:', err);
@@ -273,10 +326,176 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         isUnavailable: true,
       };
       setMessages([...newMessages, assistantMsg]);
+      if (voiceConversationRef.current) speakResponse(assistantMsg.content);
     } finally {
       setLoading(false);
     }
   };
+
+  submitVoiceQueryRef.current = (query) => { void handleSubmit(query); };
+
+  useEffect(() => {
+    if (!voiceConversation || loading || isSpeaking) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognition();
+    if (!SpeechRecognition) {
+      setVoiceError('Voice conversation is not supported in this browser.');
+      setVoiceConversation(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = voiceLanguage;
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .slice(event.resultIndex)
+        .filter((result) => result.isFinal)
+        .map((result) => result[0].transcript)
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      setInputQuery(transcript);
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      recognition.stop();
+      submitVoiceQueryRef.current(transcript);
+    };
+    recognition.onerror = (event) => {
+      setVoiceError(`Voice input stopped: ${event.error}.`);
+      setVoiceConversation(false);
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setVoiceListening(false);
+      window.setTimeout(() => {
+        if (voiceConversationRef.current) {
+          setRecognitionCycle((cycle) => cycle + 1);
+        }
+      }, 400);
+    };
+
+    recognitionRef.current = recognition;
+    setVoiceError(null);
+    setVoiceListening(true);
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      setVoiceError('Could not start voice input. Check microphone permission and try again.');
+      setVoiceConversation(false);
+    }
+
+    return () => {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        recognition.stop();
+      }
+    };
+  }, [voiceConversation, voiceLanguage, loading, isSpeaking, recognitionCycle]);
+
+  const renderComposer = () => (
+    <div className="w-full space-y-3 text-left">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleSubmit();
+        }}
+        className="flex w-full items-stretch gap-2"
+      >
+        <textarea
+          ref={textareaRef}
+          value={inputQuery}
+          onChange={(event) => setInputQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              handleSubmit();
+            }
+          }}
+          placeholder="Ask any question about SHINE girls, overdue follow-ups, expenses, or rent..."
+          rows={2}
+          disabled={loading}
+          className="min-h-12 min-w-0 flex-1 resize-y rounded-xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-teal-800 focus:bg-white focus:outline-none disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={!inputQuery.trim() || loading}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-900 px-5 py-3 text-sm font-semibold text-white shadow-xs transition-all hover:bg-teal-950 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loading ? <RefreshCw className="h-4 w-4 animate-spin text-amber-400" /> : <Send className="h-4 w-4 text-amber-400" />}
+          <span>Ask AI</span>
+        </button>
+      </form>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-y border-stone-200 py-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            role="switch"
+            aria-label={`Voice conversation ${voiceConversation ? 'On' : 'Off'}`}
+            aria-checked={voiceConversation}
+            onClick={() => {
+              setVoiceError(null);
+              setVoiceConversation((enabled) => !enabled);
+            }}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+              voiceConversation ? 'bg-teal-900 text-white' : 'border border-stone-300 bg-white text-stone-700'
+            }`}
+          >
+            {voiceConversation ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <span>Voice conversation {voiceConversation ? 'On' : 'Off'}</span>
+            {voiceListening && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
+          </button>
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-stone-600">
+            <Languages className="h-4 w-4" />
+            <span>Language</span>
+            <select
+              aria-label="Voice conversation language"
+              value={voiceLanguage}
+              onChange={(event) => setVoiceLanguage(event.target.value)}
+              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs text-stone-800"
+            >
+              <option value="en-GB">English (UK)</option>
+              <option value="en-US">English (US)</option>
+              <option value="ny-MW">Chichewa</option>
+            </select>
+          </label>
+        </div>
+        <button
+          type="button"
+          onClick={stopSpeaking}
+          disabled={!isSpeaking}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Stop speaking"
+        >
+          <StopCircle className="h-4 w-4" />
+          <span>Stop speaking</span>
+        </button>
+      </div>
+
+      {voiceError && <p className="text-xs text-rose-700" role="status">{voiceError}</p>}
+      <details className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+        <summary className="cursor-pointer text-xs font-semibold text-stone-700">Record or upload a voice question</summary>
+        <div className="pt-3">
+          <AudioDataInput label="Voice question" onTranscriptionChange={setInputQuery} disabled={loading} />
+        </div>
+      </details>
+      <p className="text-center text-[11px] font-medium text-stone-500">
+        AI-generated summaries may contain errors. Verify important information against the original SHINE records.
+      </p>
+    </div>
+  );
 
   // Extract girl IDs (e.g., SG-001) or household IDs (e.g., HH-01) from content to create quick navigation links
   const renderFormattedContent = (content: string) => {
@@ -532,7 +751,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       {/* Main Chat Stream */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 max-w-5xl w-full mx-auto">
         {messages.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs max-w-2xl mx-auto my-4 text-center">
+          <div className="shine-card bg-white border border-stone-200 p-6 max-w-5xl mx-auto my-4 text-center">
             <div className="w-14 h-14 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-center text-teal-800 mx-auto mb-4">
               <Sparkles className="w-7 h-7 text-amber-600" />
             </div>
@@ -574,6 +793,10 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
               </div>
             </div>
 
+            <div className="mt-5 border-t border-stone-200 pt-5">
+              {renderComposer()}
+            </div>
+
             <div className="bg-stone-50 rounded-xl border border-stone-200 p-3 text-[11px] text-stone-500 flex items-center justify-center gap-2">
               <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0" />
               <span>
@@ -596,7 +819,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                 )}
 
                 <div
-                  className={`max-w-3xl rounded-2xl px-4 py-3 shadow-xs ${
+                  className={`shine-card max-w-3xl px-4 py-3 ${
                     isUser
                       ? 'bg-teal-900 text-white rounded-tr-xs'
                       : msg.isUnavailable
@@ -698,7 +921,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
             <div className="w-8 h-8 rounded-lg bg-teal-900 text-amber-400 flex items-center justify-center shrink-0 mt-1 shadow-xs animate-pulse">
               <Bot className="w-5 h-5" />
             </div>
-            <div className="bg-white border border-stone-200 rounded-2xl rounded-tl-xs px-4 py-3 shadow-xs">
+            <div className="shine-card bg-white border rounded-xl px-4 py-3">
               <div className="flex items-center gap-2 text-xs text-teal-900 font-medium">
                 <RefreshCw className="w-4 h-4 animate-spin text-teal-700" />
                 <span>Analyzing SHINE records with controlled tools...</span>
@@ -739,61 +962,14 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         </div>
       )}
 
-      {/* Input Form & Mandatory Disclaimer */}
-      <div className="bg-white border-t border-stone-200 p-4 shrink-0 shadow-lg">
-        <div className="max-w-5xl mx-auto">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSubmit();
-            }}
-            className="flex items-end gap-2"
-          >
-            <AudioDataInput label="Voice question" onTranscriptionChange={setInputQuery} disabled={loading} />
-            <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
-                value={inputQuery}
-                onChange={(e) => setInputQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder={
-                  activeGirl
-                    ? `Ask about ${activeGirl.fullName}'s follow-ups, education, or medical logs...`
-                    : 'Ask any question about SHINE girls, overdue follow-ups, expenses, or rent...'
-                }
-                rows={1}
-                disabled={loading}
-                className="w-full bg-stone-50 border border-stone-300 focus:border-teal-800 focus:bg-white focus:outline-none rounded-xl px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 resize-none max-h-32 transition-colors disabled:opacity-60"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={!inputQuery.trim() || loading}
-              className="bg-teal-900 hover:bg-teal-950 text-white rounded-xl px-5 py-3 font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed shrink-0 cursor-pointer"
-            >
-              {loading ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
-              ) : (
-                <Send className="w-4 h-4 text-amber-400" />
-              )}
-              <span className="hidden sm:inline">Ask AI</span>
-            </button>
-          </form>
-
-          {/* Mandatory AI Accuracy Disclaimer Notice */}
-          <div className="mt-2 text-center">
-            <p className="text-[11px] text-stone-500 font-medium">
-              AI-generated summaries may contain errors. Verify important information against the original SHINE records.
-            </p>
+      {/* Keep the chat composer directly beneath quick questions. */}
+      {messages.length > 0 && (
+        <div className="shrink-0 border-t border-stone-200 bg-white p-4">
+          <div className="mx-auto max-w-5xl">
+            {renderComposer()}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

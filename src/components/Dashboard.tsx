@@ -198,7 +198,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div id="dashboard-view" className="space-y-6 pb-12">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-teal-950 via-teal-900 to-teal-950 rounded-2xl text-white p-5 sm:p-6 shadow-md border border-teal-900">
+      <div className="shine-hero rounded-xl p-5 sm:p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -251,7 +251,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Girls Card */}
         <div
           onClick={() => onNavigateToGirlsList()}
-          className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs hover:border-teal-700 cursor-pointer transition-all group"
+          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -274,7 +274,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Girls Outcomes Card */}
         <div
           onClick={() => onNavigateToGirlsList('Completed')}
-          className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs hover:border-teal-700 cursor-pointer transition-all group"
+          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -296,7 +296,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* SHINE Houses Card */}
         <div
           onClick={onNavigateToHousesList}
-          className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs hover:border-teal-700 cursor-pointer transition-all group"
+          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -318,7 +318,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Expenditure Card */}
         <div
           onClick={onNavigateToReports}
-          className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs hover:border-teal-700 cursor-pointer transition-all group"
+          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -448,7 +448,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Two Column Layout: Houses Capacity & Upcoming Follow-ups */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* SHINE Houses & Resident Breakdown */}
-        <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm space-y-4">
+        <div className="shine-card bg-white rounded-xl border border-stone-200 p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-stone-200 pb-3">
             <div>
               <h2 className="text-base font-bold text-stone-900">SHINE Households & Residents</h2>
@@ -527,7 +527,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Upcoming & Overdue Follow-ups */}
-        <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm space-y-4">
+        <div className="shine-card bg-white rounded-xl border border-stone-200 p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-stone-200 pb-3">
             <div>
               <h2 className="text-base font-bold text-stone-900">Upcoming & Scheduled Follow-ups</h2>
@@ -599,7 +599,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Recent Activity Timeline Stream */}
-      <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm space-y-4">
+      <div className="shine-card bg-white rounded-xl border border-stone-200 p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-stone-200 pb-3">
           <div>
             <h2 className="text-base font-bold text-stone-900">Recent Follow-Up & Activity Stream</h2>

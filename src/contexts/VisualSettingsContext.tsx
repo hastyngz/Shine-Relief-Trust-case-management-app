@@ -12,6 +12,9 @@ export type ThemeId =
   | 'fire-violet'
   | 'vibrant-shine';
 
+const DEFAULT_THEME: ThemeId = 'sunset-pop';
+const DEFAULT_ANIMATED_GLASS = true;
+
 export interface ThemeOption {
   id: ThemeId;
   name: string;
@@ -45,13 +48,13 @@ const VisualSettingsContext = createContext<VisualSettingsContextValue | undefin
 export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
   const [mobileView, setMobileView] = useState(false);
-  const [theme, setTheme] = useState<ThemeId>('shine');
-  const [animatedGlass, setAnimatedGlass] = useState(false);
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
+  const [animatedGlass, setAnimatedGlass] = useState(DEFAULT_ANIMATED_GLASS);
 
   useEffect(() => {
     setMobileView(false);
-    setTheme('shine');
-    setAnimatedGlass(false);
+    setTheme(DEFAULT_THEME);
+    setAnimatedGlass(DEFAULT_ANIMATED_GLASS);
   }, [currentUser?.uid]);
 
   return (

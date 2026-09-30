@@ -15,6 +15,7 @@ import {
   ChevronDown,
   UserCheck,
   MessageSquare,
+  Bell,
   Palette,
   Check,
   Smartphone,
@@ -27,6 +28,7 @@ import { StaffRole } from '../types';
 import { NotificationBellDropdown } from './Notifications/NotificationBellDropdown';
 
 interface HeaderProps {
+  onNavigateDashboard: () => void;
   onOpenQuickAdd: () => void;
   onOpenSearch: () => void;
   onOpenDataModal: () => void;
@@ -38,6 +40,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  onNavigateDashboard,
   onOpenQuickAdd,
   onOpenSearch,
   onOpenDataModal,
@@ -50,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
   const { mobileView, setMobileView, theme, setTheme, animatedGlass, setAnimatedGlass } = useVisualSettings();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -103,18 +107,23 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Name */}
-          <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onNavigateDashboard}
+            aria-label="Go to SHINE Relief Trust dashboard"
+            className="flex min-w-0 items-center gap-3 rounded-lg text-left transition-opacity hover:opacity-90 active:scale-[0.99]"
+          >
             <div className="w-10 h-10 rounded-xl bg-white p-1 shadow-sm flex items-center justify-center shrink-0 border border-teal-800/80 overflow-hidden">
               <img
                 src="/shine-logo.png"
-                alt="SHINE Relief Trust Logo"
+                alt=""
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-black tracking-tight text-white text-lg sm:text-xl">
+                <span className="whitespace-nowrap font-black tracking-tight text-white text-lg sm:text-xl">
                   SHINE <span className="text-amber-400 font-bold">Relief Trust</span>
                 </span>
                 <span className="hidden sm:inline-block text-[11px] font-semibold uppercase tracking-wider bg-teal-800 text-amber-300 px-2 py-0.5 rounded-full">
@@ -125,7 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
                 Case Management & Household Monitoring System
               </p>
             </div>
-          </div>
+          </button>
 
           {/* Quick Action Controls, Cloud Status & User Session */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -181,6 +190,8 @@ export const Header: React.FC<HeaderProps> = ({
                 onOpenInbox={onOpenInbox}
                 onOpenRecord={onOpenRecord || (() => {})}
                 onOpenSettings={onOpenNotificationSettings || onOpenInbox}
+                isOpen={alertsOpen}
+                onOpenChange={setAlertsOpen}
               />
             )}
 
@@ -306,7 +317,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Dropdown Menu */}
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-stone-200 py-2 z-50 text-stone-900 animate-in fade-in zoom-in-95 duration-100">
+                <div id="user-profile-menu" className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-stone-200 py-2 z-50 text-stone-900 animate-in fade-in zoom-in-95 duration-100">
                   <div className="px-4 py-2.5 border-b border-stone-100">
                     <p className="text-xs font-bold text-stone-900 truncate">{displayName}</p>
                     <p className="text-[11px] text-stone-500 truncate">{currentUser?.email}</p>
@@ -329,6 +340,20 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
 
                   <div className="py-1">
+                    {onOpenInbox && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setAlertsOpen(true);
+                        }}
+                        className="w-full px-4 py-2 text-left text-xs font-semibold text-teal-950 hover:bg-stone-50 flex items-center gap-2"
+                      >
+                        <Bell className="w-4 h-4 text-amber-600" />
+                        <span>Alerts</span>
+                      </button>
+                    )}
+
                     {onOpenInbox && (
                       <button
                         type="button"

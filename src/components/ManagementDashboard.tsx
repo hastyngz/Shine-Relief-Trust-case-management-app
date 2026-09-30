@@ -146,23 +146,23 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
 
   return (
     <div id="management-dashboard-view" className="space-y-6 pb-12">
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-900 rounded-2xl text-white p-5 shadow-md border border-slate-700">
+      <div className="shine-hero rounded-xl p-5">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-400 text-slate-950 uppercase tracking-wider">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-400 text-teal-950 uppercase tracking-wider">
                 Executive Overview
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               Management Dashboard
             </h1>
-            <p className="text-xs text-slate-200 mt-1 max-w-2xl">
+            <p className="text-xs text-stone-600 mt-1 max-w-2xl">
               Monitor programme delivery, staffing, payroll, and budget health using the live operational records already in the SHINE system.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-200 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             Live operational view
           </div>

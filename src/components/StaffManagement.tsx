@@ -277,23 +277,23 @@ export const StaffManagement: React.FC = () => {
 
       {/* Metrics Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs">
+        <div className="shine-card bg-white p-3.5 rounded-xl border border-stone-200">
           <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Total Staff</p>
           <p className="text-xl font-black text-stone-900 mt-0.5">{totalCount}</p>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-xs bg-gradient-to-br from-amber-50/50 to-white">
+        <div className="shine-card bg-white p-3.5 rounded-xl border border-stone-200">
           <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Administrators</p>
           <p className="text-xl font-black text-amber-900 mt-0.5">{adminCount}</p>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-blue-200 shadow-xs bg-gradient-to-br from-blue-50/50 to-white">
-          <p className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Managers</p>
-          <p className="text-xl font-black text-blue-900 mt-0.5">{managerCount}</p>
+        <div className="shine-card bg-white p-3.5 rounded-xl border border-stone-200">
+          <p className="text-[10px] font-bold text-teal-800 uppercase tracking-wider">Managers</p>
+          <p className="text-xl font-black text-stone-900 mt-0.5">{managerCount}</p>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-xs bg-gradient-to-br from-emerald-50/50 to-white">
-          <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Field Staff</p>
-          <p className="text-xl font-black text-emerald-900 mt-0.5">{regularStaffCount}</p>
+        <div className="shine-card bg-white p-3.5 rounded-xl border border-stone-200">
+          <p className="text-[10px] font-bold text-teal-800 uppercase tracking-wider">Field Staff</p>
+          <p className="text-xl font-black text-stone-900 mt-0.5">{regularStaffCount}</p>
         </div>
-        <div className="bg-white p-3.5 rounded-xl border border-stone-200 shadow-xs col-span-2 sm:col-span-1">
+        <div className="shine-card bg-white p-3.5 rounded-xl border border-stone-200 col-span-2 sm:col-span-1">
           <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">View Only</p>
           <p className="text-xl font-black text-stone-700 mt-0.5">{viewOnlyCount}</p>
         </div>

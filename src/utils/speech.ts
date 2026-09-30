@@ -1,0 +1,27 @@
+export function cleanTextForSpeech(markdown: string): string {
+  return markdown
+    .replace(/```[^\n]*\n?([\s\S]*?)```/g, '$1')
+    .replace(/~~~[^\n]*\n?([\s\S]*?)~~~/g, '$1')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/!?\[([^\]]*)\]\[[^\]]*\]/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}(?:[-+*]|•)\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*(?:[-*_]\s*){3,}$/gm, '')
+    .replace(/`{1,3}([^`]*?)`{1,3}/g, '$1')
+    .replace(/\*{1,3}([^*]+?)\*{1,3}/g, '$1')
+    .replace(/_{1,3}([^_]+?)_{1,3}/g, '$1')
+    .replace(/~~([^~]+?)~~/g, '$1')
+    .replace(/\[(?:x|X| )\]\s*/g, '')
+    .replace(/\|/g, ' ')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\\([\\`*_{}\[\]()#+\-.!])/g, '$1')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '. ')
+    .replace(/:\.\s/g, ': ')
+    .replace(/(?:\.\s*){2,}/g, '. ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/([,;:])(?=\S)/g, '$1 ')
+    .trim();
+}
