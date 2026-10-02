@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import {
   AppDatabase,
   Girl,
@@ -46,6 +46,7 @@ import { MessagingProvider } from './contexts/MessagingContext';
 import { useVisualSettings, VisualSettingsProvider } from './contexts/VisualSettingsContext';
 import { StaffLoginView } from './components/StaffLoginView';
 import { StaffManagement } from './components/StaffManagement';
+import { ShineLogo } from './components/ShineLogo';
 
 import { Header } from './components/Header';
 import { Navigation, NavTab } from './components/Navigation';
@@ -124,7 +125,7 @@ function parseHash(): {
   girlId?: string;
   houseId?: string;
 } {
-  const hash = window.location.hash.replace(/^#\/?/, '');
+  const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
   if (!hash) return { view: 'dashboard', activeTab: 'dashboard' };
 
   if (hash.startsWith('girl/')) {
@@ -221,6 +222,10 @@ function AppContent() {
   const initialRoute = parseHash();
   const [view, setView] = useState<AppView>(initialRoute.view);
   const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.activeTab);
+  const [previousImportLocation, setPreviousImportLocation] = useState<{ view: AppView; tab: NavTab; girlId?: string | null; houseId?: string | null }>({ view: 'dashboard', tab: 'dashboard' });
+  const [importWizardKey, setImportWizardKey] = useState(0);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const sharedImportInputRef = useRef<HTMLInputElement>(null);
 
   // Selected entities for profiles & forms
   const [selectedGirlId, setSelectedGirlId] = useState<string | null>(
@@ -399,6 +404,14 @@ function AppContent() {
 
   // Navigation tab switcher
   const handleSelectTab = (tab: NavTab) => {
+    if (tab === 'import') {
+      if (view !== 'import') {
+        setPreviousImportLocation({ view, tab: activeTab, girlId: selectedGirlId, houseId: selectedHouseId });
+      }
+      setImportWizardKey((key) => key + 1);
+      navigateTo('import', 'import');
+      return;
+    }
     if (tab === 'girls') {
       setGirlsStatusFilter(undefined);
     }
@@ -420,6 +433,8 @@ function AppContent() {
     }
     navigateTo(tab, tab);
   };
+
+  const openImportFilePicker = () => sharedImportInputRef.current?.click();
 
   // Profile navigation
   const handleOpenGirlProfile = (girlId: string) => {
@@ -946,18 +961,13 @@ function AppContent() {
   // Authentication Loading Screen
   if (loading) {
     return (
-      <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
+      <div data-theme={theme} className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-3">
           <div className="w-16 h-16 rounded-2xl bg-white p-2 shadow-md border border-stone-200 flex items-center justify-center animate-pulse overflow-hidden">
-            <img
-              src="/shine-logo.png"
-              alt="SHINE Relief Trust Logo"
-              className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+            <ShineLogo variant="mark" className="h-full w-full" />
           </div>
           <div className="text-center">
-            <h2 className="text-sm font-bold text-stone-900">SHINE Relief Trust Malawi</h2>
+            <h2 className="brand-title text-sm font-bold">SHINE Relief Trust Malawi</h2>
             <p className="text-xs text-stone-500 mt-0.5">Connecting to secure authentication...</p>
           </div>
         </div>
@@ -1024,6 +1034,18 @@ function AppContent() {
       data-animated-glass={animatedGlass || glassEffect}
       className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans"
     >
+      <input
+        ref={sharedImportInputRef}
+        type="file"
+        accept=".docx,.xlsx,.xls"
+        className="hidden"
+        aria-label="Choose Word or Excel import file"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) setPendingImportFile(file);
+          event.currentTarget.value = '';
+        }}
+      />
       {/* Top Application Header */}
       <Header
         onNavigateDashboard={() => navigateTo('dashboard', 'dashboard')}
@@ -1224,12 +1246,19 @@ function AppContent() {
         {/* VIEW: DOCUMENT INGESTION WIZARD */}
         {view === 'import' && (
           <DataImportWizard
+            key={importWizardKey}
             db={db}
+            initialFile={pendingImportFile}
+            onInitialFileConsumed={() => setPendingImportFile(null)}
+            onOpenFilePicker={openImportFilePicker}
             onImportComplete={() => {
               reloadData();
               showToast('Data ingestion completed and saved to Firestore!');
             }}
-            onCancel={() => navigateTo('girls', 'girls')}
+            onCancel={() => {
+              setPendingImportFile(null);
+              navigateTo(previousImportLocation.view, previousImportLocation.tab, previousImportLocation.girlId, previousImportLocation.houseId);
+            }}
           />
         )}
 

@@ -322,6 +322,22 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Contact details are private staff data. Edits remain attributable and contacts are archived, never deleted.
+    match /contacts/{contactId} {
+      allow read: if isStaffActive();
+      allow create: if (isManagerOrAdmin() || isManagerOrStaff()) &&
+        request.resource.data.id == contactId &&
+        request.resource.data.type in ['person', 'organisation'] &&
+        request.resource.data.name is string &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid;
+      allow update: if (isManagerOrAdmin() || isManagerOrStaff()) &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if false;
+    }
+
     // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
     match /safeguardingCases/{caseId} {
       allow read, write: if false;

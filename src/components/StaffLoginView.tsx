@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
+import { useVisualSettings } from '../contexts/VisualSettingsContext';
+import { ShineLogo } from './ShineLogo';
 import { Heart, Lock, Mail, User, ShieldCheck, KeyRound, AlertCircle, CheckCircle2, ArrowRight, ExternalLink } from 'lucide-react';
 
 export const StaffLoginView: React.FC = () => {
+  const { theme } = useVisualSettings();
   const { login, loginWithGoogle, setupInitialAdmin, sendResetPassword } = useAuth();
   const [tab, setTab] = useState<'signin' | 'first-admin' | 'forgot'>('signin');
 
@@ -141,21 +144,16 @@ export const StaffLoginView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div data-theme={theme} className="min-h-screen bg-stone-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         {/* Brand Header */}
         <div className="flex flex-col items-center justify-center text-center mb-6">
           <div className="w-20 h-20 rounded-2xl bg-white p-2 shadow-sm border border-stone-200/90 flex items-center justify-center mb-3 overflow-hidden">
-            <img
-              src="/shine-logo.png"
-              alt="SHINE Relief Trust Logo"
-              className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+            <ShineLogo variant="mark" className="h-full w-full" />
           </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-teal-950">
-              SHINE <span className="text-amber-600">Relief Trust</span>
+            <h1 className="brand-title text-2xl font-black tracking-tight">
+              SHINE <span className="brand-title-accent">Relief Trust</span>
             </h1>
             <p className="text-xs text-stone-500 font-medium mt-0.5">Malawi Care & Monitoring System</p>
           </div>

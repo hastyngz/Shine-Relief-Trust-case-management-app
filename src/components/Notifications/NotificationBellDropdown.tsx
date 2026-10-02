@@ -139,7 +139,7 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
       {isOpen && (
         <div
           id="notification-dropdown-panel"
-          className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-stone-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+          className="fixed left-4 right-4 top-[4.5rem] w-auto sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96 bg-white rounded-2xl shadow-2xl border border-stone-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {/* Header */}
           <div className="bg-teal-950 text-white p-3.5 border-b border-teal-900 flex items-center justify-between">

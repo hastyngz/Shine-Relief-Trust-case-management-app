@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppDatabase } from '../types';
 import {
   exportGirlsToCSV,
@@ -53,6 +53,16 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
   const canViewManagementReports = isAdmin || role === 'Manager';
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
+  const [sourceImportAuditId, setSourceImportAuditId] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return new URLSearchParams(window.location.hash.split('?')[1] || '').get('importAudit') || '';
+  });
+
+  useEffect(() => {
+    const readSourceId = () => setSourceImportAuditId(new URLSearchParams(window.location.hash.split('?')[1] || '').get('importAudit') || '');
+    window.addEventListener('hashchange', readSourceId);
+    return () => window.removeEventListener('hashchange', readSourceId);
+  }, []);
 
   const houseMap = new Map(db.households.map((h) => [h.id, h.name]));
   const girlMap = new Map(db.girls.map((g) => [g.id, g.fullName]));
@@ -102,6 +112,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
     {}
   );
   const grandTotalExpenses = db.expenses.reduce((s, e) => s + e.totalCost, 0);
+  const sourceImportAudit = (db.importAudits || []).find((audit) => audit.id === sourceImportAuditId);
 
   // 5. Rent & Arrears
   const rentSummary = db.rentPayments.map((r) => {
@@ -147,6 +158,13 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
           </button>
         </div>
       </div>
+
+      {sourceImportAudit && <section id={`import-audit-${sourceImportAudit.id}`} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm" aria-label="Imported source report">
+        <p className="text-[11px] font-bold uppercase text-teal-800">Imported source report</p>
+        <h2 className="mt-1 break-words text-sm font-bold text-stone-900">{sourceImportAudit.fileName}</h2>
+        <p className="mt-1 text-xs text-stone-600">{sourceImportAudit.reportingPeriod || 'Reporting period not recorded'} · Imported {formatDate(sourceImportAudit.importedAt)} by {sourceImportAudit.importedByName}</p>
+        {sourceImportAudit.summary && <p className="mt-2 break-words text-xs text-stone-700">{sourceImportAudit.summary}</p>}
+      </section>}
 
       {/* Tabs */}
       <div className="bg-white rounded-xl border border-stone-200 shadow-xs overflow-hidden">

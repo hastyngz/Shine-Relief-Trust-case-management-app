@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AppDatabase,
   ImportPreviewItem,
@@ -13,6 +13,8 @@ import {
   analyzeImportRows,
   commitImportBatch,
 } from '../../services/importService';
+import { ContactCandidate, ConfirmedContactCandidate, listContacts, matchContactCandidate } from '../../services/contactsService';
+import { ACTIVITY_CATEGORY_OPTIONS, DueDatePeriodChoice, getDueDateRange, serializeDueDatePeriod } from '../../services/ingestionRules';
 import { ReportMetadata } from '../../services/docxParserService';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -51,9 +53,28 @@ interface DataImportWizardProps {
   db: AppDatabase;
   onImportComplete: () => void;
   onCancel?: () => void;
+  initialFile: File | null;
+  onInitialFileConsumed: () => void;
+  onOpenFilePicker: () => void;
 }
 
 type WizardStep = 'upload' | 'review' | 'importing' | 'completed';
+type DueDatePeriodDraft = {
+  type: 'month' | 'quarter' | 'range';
+  month: string;
+  year: string;
+  quarter: string;
+  start: string;
+  end: string;
+};
+
+interface ContactReviewItem {
+  candidate: ContactCandidate;
+  status: 'linked' | 'possible' | 'new';
+  contactId?: string;
+  matches: Array<{ id: string; name: string; category: string }>;
+  confirmed: boolean;
+}
 
 const PhotoPreview: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
   const [failed, setFailed] = useState(false);
@@ -104,9 +125,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   db,
   onImportComplete,
   onCancel,
+  initialFile,
+  onInitialFileConsumed,
+  onOpenFilePicker,
 }) => {
   const { staffProfile, canEdit } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeStaff: StaffUser = staffProfile || {
     id: 'staff-user',
@@ -130,6 +153,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [previewItems, setPreviewItems] = useState<ImportPreviewItem[]>([]);
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [contactReview, setContactReview] = useState<ContactReviewItem[]>([]);
+  const [workplanDueDateItems, setWorkplanDueDateItems] = useState<ImportPreviewItem[]>([]);
+  const [workplanDueDateChoices, setWorkplanDueDateChoices] = useState<Record<string, DueDatePeriodDraft>>({});
+  const [workplanDueDateError, setWorkplanDueDateError] = useState('');
+  const [workplanDueDatePromptOpen, setWorkplanDueDatePromptOpen] = useState(false);
+  const [addingActivityCategory, setAddingActivityCategory] = useState<Record<string, boolean>>({});
+  const [activityCategoryDrafts, setActivityCategoryDrafts] = useState<Record<string, string>>({});
 
   // Editing Item Modal State
   const [editingItem, setEditingItem] = useState<ImportPreviewItem | null>(null);
@@ -141,11 +171,22 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   });
   const [completedAudit, setCompletedAudit] = useState<ImportAuditRecord | null>(null);
 
-  // Handle file selection and parsing
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const prepareContactReview = async (candidates: ContactCandidate[]) => {
+    const existingContacts = await listContacts().catch(() => db.contacts || []);
+    setContactReview(candidates.map((candidate) => {
+      const match = matchContactCandidate(candidate, existingContacts);
+      return {
+        candidate,
+        status: match.status,
+        contactId: match.contact?.id,
+        matches: match.candidates.map(({ id, name, category }) => ({ id, name, category })),
+        confirmed: false,
+      };
+    }));
+  };
 
+  // Handle file selection and parsing
+  const handleFile = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['xlsx', 'xls', 'docx'].includes(ext || '')) {
       setParseError('Unsupported file type. Please select a Microsoft Word (.docx) or Excel (.xlsx, .xls) document.');
@@ -167,10 +208,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
         setReportMetadata(analysis.docxResult.metadata);
         setPreviewItems(analysis.docxResult.items);
+        await prepareContactReview(analysis.detectedContacts);
         setStep('review');
       } else {
         // Excel file
-        const analysis = await parseExcelFile(file);
+        const analysis = await parseExcelFile(file, db.girls.map((girl) => girl.fullName));
         if (analysis.rawRows.length === 0) {
           throw new Error('Spreadsheet contains zero readable data rows or table sheets.');
         }
@@ -182,6 +224,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         const chosenEntity = analysis.suggestedEntity as typeof supportedEntities[number];
         const previews = analyzeImportRows(analysis.rawRows, chosenEntity, db, file.name, activeStaff);
         setPreviewItems(previews);
+        await prepareContactReview(analysis.detectedContacts);
         setStep('review');
       }
     } catch (err: any) {
@@ -194,6 +237,12 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setIsParsing(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialFile) return;
+    onInitialFileConsumed();
+    void handleFile(initialFile);
+  }, [initialFile]);
 
   // Load sample report for direct browser testing
   const handleLoadSampleReport = async () => {
@@ -216,6 +265,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       }
       setReportMetadata(analysis.docxResult.metadata);
       setPreviewItems(analysis.docxResult.items);
+      await prepareContactReview(analysis.detectedContacts);
       setStep('review');
     } catch (err: any) {
       console.error('Error loading test docx:', err);
@@ -311,6 +361,72 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     setEditingItem(null);
   };
 
+  const handleActivityCategoryChange = (tempId: string, category: string) => {
+    if (category === '__add_new__') {
+      setAddingActivityCategory((current) => ({ ...current, [tempId]: true }));
+      return;
+    }
+    setPreviewItems((current) => current.map((item) => item.tempId === tempId
+      ? { ...item, extractedData: { ...item.extractedData, activityCategory: category } }
+      : item));
+  };
+
+  const handleAddActivityCategory = (tempId: string) => {
+    const category = activityCategoryDrafts[tempId]?.trim();
+    if (!category) return;
+    setPreviewItems((current) => current.map((item) => item.tempId === tempId
+      ? { ...item, extractedData: { ...item.extractedData, activityCategory: category } }
+      : item));
+    setAddingActivityCategory((current) => ({ ...current, [tempId]: false }));
+  };
+
+  const updateDueDateDraft = (tempId: string, updates: Partial<DueDatePeriodDraft>) => {
+    setWorkplanDueDateChoices((current) => ({
+      ...current,
+      [tempId]: { ...current[tempId], ...updates },
+    }));
+    setWorkplanDueDateError('');
+  };
+
+  const handleConfirmWorkplanDueDates = () => {
+    const dueDatePeriods: Record<string, string> = {};
+    for (const item of workplanDueDateItems) {
+      const draft = workplanDueDateChoices[item.tempId];
+      if (!draft) {
+        setWorkplanDueDateError('Choose a due-date period for every Workplan item.');
+        return;
+      }
+      let choice: DueDatePeriodChoice;
+      if (draft.type === 'month') {
+        if (!draft.month) {
+          setWorkplanDueDateError('Choose a month for every Workplan item.');
+          return;
+        }
+        choice = { type: 'month', value: draft.month };
+      } else if (draft.type === 'quarter') {
+        if (!draft.year || !draft.quarter) {
+          setWorkplanDueDateError('Choose a year and quarter for every Workplan item.');
+          return;
+        }
+        choice = { type: 'quarter', year: draft.year, quarter: draft.quarter };
+      } else {
+        if (!draft.start || !draft.end) {
+          setWorkplanDueDateError('Choose both dates for every Workplan range.');
+          return;
+        }
+        choice = { type: 'range', start: draft.start, end: draft.end };
+      }
+      const period = serializeDueDatePeriod(choice);
+      if (!getDueDateRange(period)) {
+        setWorkplanDueDateError('Each due-date range must have a valid start and end date.');
+        return;
+      }
+      dueDatePeriods[item.tempId] = period;
+    }
+    setWorkplanDueDatePromptOpen(false);
+    void handleExecuteImport(dueDatePeriods);
+  };
+
   // Reject an item
   const handleRejectItem = (tempId: string) => {
     setPreviewItems((prev) =>
@@ -319,7 +435,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   };
 
   // Run the batch import commit
-  const handleExecuteImport = async () => {
+  const handleExecuteImport = async (confirmedDueDatePeriods: Record<string, string> = {}) => {
     if (!selectedFile) return;
 
     if (!canEdit) {
@@ -328,13 +444,35 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
 
     const selectedItems = previewItems.filter((i) => i.selected);
-    if (selectedItems.length === 0) {
-      alert('Please select at least one record to import.');
+    const workplanItems = selectedItems.filter((item) =>
+      item.classification === 'WORKPLAN_PRIORITY' ||
+      item.targetEntity === 'workplan' ||
+      item.extractedData.createWorkplan === true
+    );
+    const missingDueDateItems = workplanItems.filter((item) => {
+      const period = confirmedDueDatePeriods[item.tempId];
+      return !period || !getDueDateRange(period);
+    });
+    if (missingDueDateItems.length > 0) {
+      setWorkplanDueDateItems(missingDueDateItems);
+      setWorkplanDueDateChoices((current) => Object.fromEntries(missingDueDateItems.map((item) => [
+        item.tempId,
+        current[item.tempId] || { type: 'month', month: '', year: '', quarter: '', start: '', end: '' },
+      ])));
+      setWorkplanDueDateError('');
+      setWorkplanDueDatePromptOpen(true);
+      return;
+    }
+    const approvedContacts: ConfirmedContactCandidate[] = contactReview
+      .filter((item) => item.confirmed && (item.status !== 'possible' || item.contactId))
+      .map((item) => ({ candidate: item.candidate, contactId: item.contactId }));
+    if (selectedItems.length === 0 && approvedContacts.length === 0) {
+      alert('Please select at least one record or confirm at least one contact.');
       return;
     }
 
     setStep('importing');
-    setImportProgress({ current: 0, total: selectedItems.length });
+    setImportProgress({ current: 0, total: selectedItems.length + approvedContacts.length });
 
     const auditData: Omit<ImportAuditRecord, 'id'> = {
       fileName: selectedFile.name,
@@ -346,7 +484,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       importedAt: new Date().toISOString(),
       importedByUid: activeStaff.uid,
       importedByName: activeStaff.fullName,
-      totalExamined: previewItems.length,
+      reportingPeriod: reportMetadata?.reportingPeriod,
+      contactsDetectedCount: contactReview.length,
+      newContactsCount: approvedContacts.filter((item) => !item.contactId).length,
+      existingContactsLinkedCount: approvedContacts.filter((item) => !!item.contactId).length,
+      totalExamined: previewItems.length + contactReview.length,
       newRecordsCount: selectedItems.filter(
         (i) => i.resultType === 'NEW_RECORD' && i.classification !== 'INDIVIDUAL_GIRL_HISTORICAL'
       ).length,
@@ -359,15 +501,12 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       conflictsCount: selectedItems.filter((i) => i.resultType === 'CONFLICT').length,
       errorsCount: selectedItems.filter((i) => i.resultType === 'IMPORT_ERROR').length,
       status: 'completed',
-      summary: `Batch imported ${selectedItems.length} records from ${selectedFile.name} (Reporting period: ${
-        reportMetadata?.reportingPeriod || 'Preserved'
-      })`,
+      summary: `Batch imported ${selectedItems.length} records and ${approvedContacts.length} contacts from ${selectedFile.name} (Reporting period: ${reportMetadata?.reportingPeriod || 'Not provided'})`,
     };
 
     try {
       const result = await commitImportBatch(selectedItems, auditData, db, (current, total) =>
-        setImportProgress({ current, total })
-      );
+        setImportProgress({ current, total }), approvedContacts, confirmedDueDatePeriods);
 
       setCompletedAudit(result.createdAudit);
       setStep('completed');
@@ -396,8 +535,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const countUnclassified = previewItems.filter(
     (i) => i.classification === 'UNCLASSIFIED_REVIEW' || !i.classification
   ).length;
+  const countContacts = contactReview.length;
 
-  const selectedCount = previewItems.filter((i) => i.selected).length;
+  const selectedCount = previewItems.filter((i) => i.selected).length + contactReview.filter((item) => item.confirmed && (item.status !== 'possible' || item.contactId)).length;
 
   // Tab Filtering
   const filteredItems = previewItems.filter((item) => {
@@ -475,7 +615,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             >
               2
             </span>
-            Review & Historical Protection ({countHistoricalGirls} Girls Detected)
+            Review & Historical Protection ({countHistoricalGirls} Girls, {countContacts} Contacts Detected)
           </span>
           <span className="text-stone-300">/</span>
           <span
@@ -508,24 +648,23 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       {step === 'upload' && (
         <div className="p-8 space-y-6">
           <div className="border-2 border-dashed border-stone-300 hover:border-teal-700 bg-stone-50/50 rounded-2xl p-10 text-center transition-all">
-            <div className="w-16 h-16 mx-auto bg-teal-50 rounded-full flex items-center justify-center text-teal-800 mb-4 border border-teal-100">
+            <button
+              type="button"
+              onClick={onOpenFilePicker}
+              disabled={isParsing}
+              aria-label="Browse Word or Excel files"
+              title="Browse Word or Excel files"
+              className="w-16 h-16 mx-auto bg-teal-50 rounded-full flex items-center justify-center text-teal-800 mb-4 border border-teal-100 cursor-pointer hover:bg-teal-100 disabled:cursor-not-allowed"
+            >
               <Upload className="w-8 h-8 text-teal-700" />
-            </div>
+            </button>
             <h3 className="text-base font-bold text-stone-900 mb-1">Select Word or Excel File to Ingest</h3>
             <p className="text-xs text-stone-500 max-w-lg mx-auto mb-5">
               Supports real narrative Word reports (<strong>.docx</strong>) including headings, paragraphs, bullet lists, Early Years monitoring, workplans, and embedded photographs, as well as Excel spreadsheets (<strong>.xlsx</strong>).
             </p>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".docx,.xlsx,.xls"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={onOpenFilePicker}
               disabled={isParsing}
               className="px-6 py-2.5 bg-teal-800 text-white rounded-xl text-xs font-bold hover:bg-teal-900 transition-all inline-flex items-center gap-2 shadow-xs cursor-pointer"
             >
@@ -641,7 +780,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           )}
 
           {/* Category Filter Cards with Real Calculated Counts */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             <button
               onClick={() => setActiveTab('ALL')}
               className={`p-2.5 rounded-xl border text-left transition-all ${
@@ -651,7 +790,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               }`}
             >
               <p className="text-[10px] font-semibold text-stone-500 uppercase">All Detected</p>
-              <p className="text-base font-black text-stone-900 mt-0.5">{totalCount}</p>
+              <p className="text-base font-black text-stone-900 mt-0.5">{totalCount + countContacts}</p>
             </button>
 
             <button
@@ -725,6 +864,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               <p className="text-[10px] font-semibold text-indigo-700 uppercase">Photos</p>
               <p className="text-base font-black text-indigo-900 mt-0.5">{countPhotos}</p>
             </button>
+
+            <div className="p-2.5 rounded-xl border border-teal-200 bg-teal-50 text-left">
+              <p className="text-[10px] font-semibold text-teal-800 uppercase">Contacts detected</p>
+              <p className="text-base font-black text-teal-950 mt-0.5">{countContacts}</p>
+            </div>
           </div>
 
           {/* Action Bar & Controls */}
@@ -769,7 +913,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               </button>
 
               <button
-                onClick={handleExecuteImport}
+                onClick={() => void handleExecuteImport()}
                 disabled={selectedCount === 0 || !canEdit}
                 className={`min-w-0 max-w-full whitespace-normal text-left px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
                   selectedCount > 0 && canEdit
@@ -792,10 +936,47 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0" />
               <span>
-                <strong>View Only Role:</strong> Your account does not have permission to import new beneficiaries or commit database updates.
+                <strong>View Only Role:</strong> Your account can review records and contacts but cannot add or link them.
               </span>
             </div>
           )}
+
+          <section className="w-full min-w-0 space-y-3" aria-label="Contacts detected">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-2">
+              <div><h3 className="text-sm font-bold text-stone-900">Contacts detected</h3><p className="text-xs text-stone-600">Confirm each contact to add it or link it to the directory.</p></div>
+              <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-900">{contactReview.filter((item) => item.confirmed).length} confirmed / {countContacts}</span>
+            </div>
+            {contactReview.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4 text-xs text-stone-600">No contact entities were detected in this file.</p> : contactReview.map((item, index) => {
+              const statusText = item.status === 'linked' ? 'Already in contacts, will link' : item.status === 'possible' ? 'Possible match, choose' : 'New';
+              return <article key={`${item.candidate.type}-${item.candidate.name}-${index}`} className="flex min-w-0 flex-col gap-3 rounded-xl border border-stone-200 bg-white p-3 sm:flex-row sm:items-start">
+                <input
+                  type="checkbox"
+                  checked={item.confirmed}
+                  disabled={!canEdit || (item.status === 'possible' && !item.contactId)}
+                  onChange={(event) => setContactReview((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, confirmed: event.target.checked } : entry))}
+                  aria-label={`${item.status === 'new' ? 'Add' : 'Confirm'} ${item.candidate.name}`}
+                  className="mt-1 h-4 w-4 shrink-0 rounded-sm text-teal-800 focus:ring-teal-700"
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h4 className="min-w-0 break-words text-sm font-bold text-stone-900">{item.candidate.name}</h4>
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700">{item.candidate.type} · {item.candidate.category}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${item.candidate.confidence >= 0.85 ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-900'}`}>{Math.round(item.candidate.confidence * 100)}% confidence</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${item.status === 'linked' ? 'bg-sky-50 text-sky-900' : item.status === 'possible' ? 'bg-amber-50 text-amber-900' : 'bg-stone-100 text-stone-800'}`}>{statusText}</span>
+                  </div>
+                  {(item.candidate.roleTitle || item.candidate.affiliation) && <p className="break-words text-xs text-stone-600">{[item.candidate.roleTitle, item.candidate.affiliation].filter(Boolean).join(' · ')}</p>}
+                  {(item.candidate.phone.length > 0 || item.candidate.email.length > 0) && <p className="break-all text-xs text-stone-600">{[...item.candidate.phone, ...item.candidate.email].join(' · ')}</p>}
+                  <p className="break-words text-xs text-stone-600">{item.candidate.context}</p>
+                  {item.status === 'possible' && <label className="block max-w-full text-xs font-semibold text-stone-700">Choose existing contact
+                    <select className="field mt-1 w-full" value={item.contactId || ''} onChange={(event) => setContactReview((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, contactId: event.target.value, confirmed: false } : entry))}>
+                      <option value="">Select a match</option>{item.matches.map((match) => <option key={match.id} value={match.id}>{match.name} · {match.category}</option>)}
+                    </select>
+                  </label>}
+                  <p className="text-[11px] font-semibold text-teal-900">{item.status === 'new' ? 'Add to contacts' : 'Confirm contact link'}</p>
+                </div>
+              </article>;
+            })}
+          </section>
 
           {/* Detected Item Cards List */}
           <div className="w-full max-w-full min-w-0 space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1">
@@ -955,6 +1136,41 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                             <p className="text-xs text-stone-800 font-medium [overflow-wrap:anywhere]">{item.summary}</p>
                           )}
 
+                          {item.targetEntity === 'activity' && (
+                            <div className="max-w-sm space-y-2">
+                              <label className="block text-[11px] font-semibold text-stone-700">
+                                Suggested activity category
+                                <select
+                                  value={item.extractedData.activityCategory || 'Group Activity'}
+                                  onChange={(event) => handleActivityCategoryChange(item.tempId, event.target.value)}
+                                  className="field mt-1 w-full"
+                                >
+                                  {[...new Set([
+                                    ...ACTIVITY_CATEGORY_OPTIONS,
+                                    ...(db.householdActivities || []).map((activity) => activity.activityCategory).filter((category): category is string => Boolean(category)),
+                                    item.extractedData.activityCategory,
+                                  ].filter((category): category is string => Boolean(category)))].map((category) => (
+                                    <option key={category} value={category}>{category}</option>
+                                  ))}
+                                  <option value="__add_new__">Add new category...</option>
+                                </select>
+                              </label>
+                              {addingActivityCategory[item.tempId] && (
+                                <div className="flex gap-2">
+                                  <input
+                                    aria-label="New activity category"
+                                    value={activityCategoryDrafts[item.tempId] || ''}
+                                    onChange={(event) => setActivityCategoryDrafts((current) => ({ ...current, [item.tempId]: event.target.value }))}
+                                    onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); handleAddActivityCategory(item.tempId); } }}
+                                    placeholder="New category name"
+                                    className="field min-w-0 flex-1"
+                                  />
+                                  <button type="button" onClick={() => handleAddActivityCategory(item.tempId)} className="rounded-md bg-teal-800 px-3 text-xs font-bold text-white hover:bg-teal-900">Add</button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Missing Fields Indicators */}
                           {item.missingFields && item.missingFields.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 pt-1">
@@ -1023,6 +1239,85 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               })
             )}
           </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* REQUIRED WORKPLAN DUE-PERIOD CONFIRMATION */}
+      {/* ------------------------------------------------------------------ */}
+      {workplanDueDatePromptOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-950/50 p-4" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workplan-due-date-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl"
+          >
+            <header className="border-b border-stone-200 px-5 py-4">
+              <h3 id="workplan-due-date-title" className="text-base font-bold text-stone-900">Set Workplan due dates</h3>
+              <p className="mt-1 text-xs text-stone-600">Choose a month, quarter, or date range for each selected Workplan item before ingestion.</p>
+            </header>
+            <div className="space-y-4 p-5">
+              {workplanDueDateItems.map((item) => {
+                const draft = workplanDueDateChoices[item.tempId] || { type: 'month', month: '', year: '', quarter: '', start: '', end: '' };
+                return (
+                  <fieldset key={item.tempId} className="space-y-3 border-b border-stone-200 pb-4 last:border-0">
+                    <legend className="max-w-full text-xs font-bold text-stone-900">{item.title || item.summary}</legend>
+                    <label className="block text-xs font-semibold text-stone-700">
+                      Period type
+                      <select
+                        value={draft.type}
+                        onChange={(event) => updateDueDateDraft(item.tempId, { type: event.target.value as DueDatePeriodDraft['type'] })}
+                        className="field mt-1 w-full"
+                      >
+                        <option value="month">Month</option>
+                        <option value="quarter">Quarter</option>
+                        <option value="range">Date range</option>
+                      </select>
+                    </label>
+                    {draft.type === 'month' && (
+                      <label className="block text-xs font-semibold text-stone-700">
+                        Due month
+                        <input type="month" required value={draft.month} onChange={(event) => updateDueDateDraft(item.tempId, { month: event.target.value })} className="field mt-1 w-full" />
+                      </label>
+                    )}
+                    {draft.type === 'quarter' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block text-xs font-semibold text-stone-700">
+                          Year
+                          <input type="number" min="2000" max="2100" required value={draft.year} onChange={(event) => updateDueDateDraft(item.tempId, { year: event.target.value })} className="field mt-1 w-full" />
+                        </label>
+                        <label className="block text-xs font-semibold text-stone-700">
+                          Quarter
+                          <select required value={draft.quarter} onChange={(event) => updateDueDateDraft(item.tempId, { quarter: event.target.value })} className="field mt-1 w-full">
+                            <option value="">Choose quarter</option>
+                            <option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                    {draft.type === 'range' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block text-xs font-semibold text-stone-700">
+                          Start date
+                          <input type="date" required value={draft.start} onChange={(event) => updateDueDateDraft(item.tempId, { start: event.target.value })} className="field mt-1 w-full" />
+                        </label>
+                        <label className="block text-xs font-semibold text-stone-700">
+                          End date
+                          <input type="date" required min={draft.start || undefined} value={draft.end} onChange={(event) => updateDueDateDraft(item.tempId, { end: event.target.value })} className="field mt-1 w-full" />
+                        </label>
+                      </div>
+                    )}
+                  </fieldset>
+                );
+              })}
+              {workplanDueDateError && <p role="alert" className="text-xs font-semibold text-rose-700">{workplanDueDateError}</p>}
+            </div>
+            <footer className="flex justify-end gap-2 border-t border-stone-200 px-5 py-4">
+              <button type="button" onClick={() => setWorkplanDueDatePromptOpen(false)} className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50">Cancel</button>
+              <button type="button" onClick={handleConfirmWorkplanDueDates} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Confirm due dates</button>
+            </footer>
+          </section>
         </div>
       )}
 
@@ -1156,6 +1451,17 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                     setEditingItem({
                       ...editingItem,
                       classification: e.target.value as DocxClassification,
+                      targetEntity: e.target.value === 'WORKPLAN_PRIORITY'
+                        ? 'workplan'
+                        : e.target.value === 'EARLY_YEARS_RECORD'
+                        ? 'earlyYears'
+                        : ['GROUP_ACTIVITY', 'PROGRAMME_ACTIVITY', 'AGRICULTURE_PRACTICAL_SKILLS'].includes(e.target.value)
+                        ? 'activity'
+                        : e.target.value === 'PHOTO_HIGHLIGHT'
+                        ? 'attachment'
+                        : e.target.value === 'INDIVIDUAL_GIRL_HISTORICAL'
+                        ? 'girl'
+                        : 'general',
                       classificationLabel: CLASSIFICATION_OPTIONS.find((o) => o.value === e.target.value)?.label,
                     })
                   }

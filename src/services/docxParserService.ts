@@ -10,6 +10,7 @@ import {
   PersonType,
 } from '../types';
 import { generateFollowUpId } from '../utils/storage';
+import { detectActivityCategory, extractPendingActionText, getWorkplanDomain, isActionItemText } from './ingestionRules';
 
 export interface ReportMetadata {
   organisation: string;
@@ -533,7 +534,8 @@ export function extractEarlyYearsMetrics(text: string): {
   const graduates = text.match(/(\d+)\s*(?:learners?|children)?\s*(?:graduated|graduates)/i)?.[1] ||
     text.match(/(\d+)\s*(?:graduated|graduates)/i)?.[1];
   const targetEnrolment = text.match(/(?:target\s+(?:enrolment|enrollment)|enrol\s+at\s+least|enrolment\s+for\s+the\s+upcoming\s+intake)\s*(?:is\s+at\s+least\s+)?(\d+)/i)?.[1];
-  const ratio = text.match(/(\d+:\d+)\s*(?:teacher\/caregiver|teacher\/care giver|teacher\s*\/\s*caregiver)\s*ratio/i)?.[1] ||
+  const ratio = text.match(/(\d+:\d+)\s*(?:teacher(?:\s*\/\s*care\s*giver|\s*[- ]to[- ](?:child|caregiver))?\s*)ratio/i)?.[1] ||
+    text.match(/teacher(?:\s*\/\s*care\s*giver|\s*[- ]to[- ](?:child|caregiver))?\s*ratio\s*(?:of)?\s*(\d+:\d+)/i)?.[1] ||
     text.match(/ratio\s*(?:of)?\s*(\d+:\d+)/i)?.[1];
   const teachersReq = text.match(/(\d+)\s*(?:qualified\s+)?(?:teachers?|caregivers?)\s*(?:required|needed)/i)?.[1];
   const volunteers = text.match(/(\d+)\s*(?:dedicated\s+)?community\s+volunteers/i)?.[1];
@@ -916,12 +918,14 @@ export async function parseDocxProgressReport(
     // caregivers required, volunteers, start dates.
     // -------------------------------------------------------------
     if (
-      /early years|early childhood|ecd|pre-school|caregiver ratio|feeding programme start/i.test(
+      /early years|early childhood|ecd|pre-school|caregiver ratio|feeding programme start|\d+:\d+\s*teacher(?:\s*\/\s*care\s*giver)?\s*ratio|teacher(?:\s*\/\s*care\s*giver)?\s*ratio\s*(?:of\s*)?\d+:\d+/i.test(
         textContent
       ) ||
       /early years/i.test(currentSection)
     ) {
       const earlyYearsMetrics = extractEarlyYearsMetrics(`${currentSection} ${textContent}`);
+      const pendingActions = extractPendingActionText(textContent);
+      const createWorkplan = pendingActions.length > 0;
 
       previewItems.push({
         tempId: `ey_${Date.now()}_${previewItems.length}`,
@@ -948,6 +952,9 @@ export async function parseDocxProgressReport(
           feedingProgrammeStartDate: earlyYearsMetrics.feedingProgrammeStartDate || '2026-10-12',
           notes: textContent,
           sourceDocument: file.name,
+          createWorkplan,
+          workplanAction: pendingActions.join(' '),
+          workplanDomain: getWorkplanDomain(`${currentSection} ${textContent}`, 'Early Years'),
         },
         isHistorical: false,
         selected: true,
@@ -973,6 +980,8 @@ export async function parseDocxProgressReport(
       for (const priority of entriesToAdd) {
         const cleaned = priority.text.replace(/^(?:\d+[\.)]|[•\-])\s*/, '');
         if (!cleaned) continue;
+        const pendingActions = extractPendingActionText(cleaned);
+        if (pendingActions.length === 0) continue;
         previewItems.push({
           tempId: `wp_${Date.now()}_${previewItems.length}`,
           resultType: 'NEW_RECORD',
@@ -1006,6 +1015,9 @@ export async function parseDocxProgressReport(
             targetCount: /100/.test(cleaned) ? 100 : /25/.test(cleaned) ? 25 : 1,
             unit: /learners|children/.test(cleaned) ? 'learners' : 'initiatives',
             location: metadata.location,
+            createWorkplan: true,
+            workplanAction: pendingActions.join(' '),
+            workplanDomain: getWorkplanDomain(`${currentSection} ${cleaned}`),
           },
           isHistorical: false,
           selected: true,
@@ -1019,10 +1031,8 @@ export async function parseDocxProgressReport(
     // D. DETECT AGRICULTURE & PRACTICAL SKILLS ACTIVITIES
     // E.g., gardening, solar irrigation, vegetable harvesting, tailoring, catering
     // -------------------------------------------------------------
-    if (
-      /agriculture|solar irrigation|gardening|vegetable|harvest|maize|poultry/i.test(textContent) ||
-      /agriculture|gardening|practical skills/i.test(currentSection)
-    ) {
+    if (detectActivityCategory(textContent, currentSection) === 'Agriculture / Practical Skills') {
+      const pendingActions = extractPendingActionText(textContent);
       previewItems.push({
         tempId: `agr_${Date.now()}_${previewItems.length}`,
         resultType: 'NEW_RECORD',
@@ -1047,6 +1057,10 @@ export async function parseDocxProgressReport(
           recommendations: 'Continue practical agricultural education',
           householdId: db.households[0]?.id || 'SH-01',
           furtherActionRequired: false,
+          activityCategory: detectActivityCategory(textContent, currentSection),
+          createWorkplan: pendingActions.length > 0,
+          workplanAction: pendingActions.join(' '),
+          workplanDomain: getWorkplanDomain(`${currentSection} ${textContent}`),
         },
         isHistorical: false,
         selected: true,
@@ -1123,6 +1137,11 @@ export async function parseDocxProgressReport(
       'visiting the sick',
       'bible study',
       'business competition',
+      'business competitions',
+      'small business',
+      'enterprise',
+      'entrepreneurship',
+      'pitching',
       'field visit',
       'guest speaker',
       'cooperative learning',
@@ -1131,14 +1150,25 @@ export async function parseDocxProgressReport(
       'gardening',
       'community service',
       'sports',
+      'athletics',
+      'football',
+      'netball',
+      'volleyball',
       'arts and craft',
       'cooking',
       'nutrition',
+      'life skills',
+      'teamwork',
+      'fitness',
+      'health awareness',
+      'community engagement',
     ];
 
     const matchedActivity = activityKeywords.find((kw) => textContent.toLowerCase().includes(kw));
 
     if (matchedActivity) {
+      const pendingActions = extractPendingActionText(textContent);
+      const activityCategory = detectActivityCategory(textContent, currentSection);
       // Extract participant count if mentioned (e.g. "18 girls", "25 participants")
       const countMatch = textContent.match(/(\d+)\s*(?:girls|participants|learners|children|beneficiaries|members)/i);
       const participantCount = countMatch ? parseInt(countMatch[1], 10) : 18;
@@ -1161,6 +1191,7 @@ export async function parseDocxProgressReport(
         extractedData: {
           activityName: actTitle.slice(0, 80),
           activityType: 'Group activity',
+          activityCategory,
           participantCount,
           description: textContent,
           outcome: 'Successful participation and engagement',
@@ -1169,11 +1200,48 @@ export async function parseDocxProgressReport(
           recommendations: 'Continue scheduled group development activities',
           householdId: db.households[0]?.id || 'SH-01',
           furtherActionRequired: false,
+          createWorkplan: pendingActions.length > 0,
+          workplanAction: pendingActions.join(' '),
+          workplanDomain: getWorkplanDomain(`${currentSection} ${textContent}`),
         },
         isHistorical: false,
         selected: true,
       });
 
+      continue;
+    }
+
+    if (isActionItemText(textContent)) {
+      const domain = getWorkplanDomain(`${currentSection} ${textContent}`);
+      previewItems.push({
+        tempId: `action_${Date.now()}_${previewItems.length}`,
+        resultType: 'NEW_RECORD',
+        targetEntity: 'workplan',
+        classification: 'WORKPLAN_PRIORITY',
+        classificationLabel: `${domain} Action Item`,
+        summary: `Action item: ${textContent}`,
+        reportingPeriod: metadata.reportingPeriod,
+        isDateUnknown: true,
+        title: textContent.slice(0, 80),
+        originalSnippet: textContent,
+        actionProposed: 'Add action item to Workplan',
+        extractedData: {
+          activity: textContent.slice(0, 80),
+          objective: textContent,
+          description: textContent,
+          period: metadata.reportingPeriod,
+          periodType: 'project',
+          status: 'Planned',
+          progress: 0,
+          targetCount: 1,
+          unit: 'activities',
+          location: metadata.location,
+          createWorkplan: true,
+          workplanDomain: domain,
+        },
+        isHistorical: false,
+        selected: true,
+      });
       continue;
     }
 

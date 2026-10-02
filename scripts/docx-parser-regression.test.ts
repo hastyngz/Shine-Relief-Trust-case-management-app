@@ -55,6 +55,8 @@ assert.equal(earlyYears.previousEnrolment, 85, 'prior enrolment should be parsed
 assert.equal(earlyYears.graduates, 24, 'graduates count should be parsed');
 assert.equal(earlyYears.targetEnrolment, 100, 'upcoming intake target should be parsed');
 assert.equal(earlyYears.teacherCaregiverRatio, '1:25', 'ratio should be kept as a structured value');
+assert.equal(extractEarlyYearsMetrics('Early Years target: 1:25 teacher ratio').teacherCaregiverRatio, '1:25', 'teacher ratio value should parse before the ratio label');
+assert.equal(extractEarlyYearsMetrics('Maintain teacher-to-child ratio of 1:25').teacherCaregiverRatio, '1:25', 'teacher-to-child ratio wording should also parse');
 assert.equal(earlyYears.teachersRequired, 4, 'caregiver count should be parsed');
 assert.equal(earlyYears.programmeStartDate, '5 October 2026', 'programme start date should be parsed');
 assert.equal(earlyYears.feedingProgrammeStartDate, '12 October 2026', 'feeding start date should be parsed');
@@ -115,6 +117,11 @@ const user = { id: 'test-user', name: 'Test User', role: 'admin' } as any;
 const manualUploadFile = new File([sampleBytes], sampleName);
 const manualUpload = await parseDocxFile(manualUploadFile, database, user);
 assert.ok(manualUpload.docxResult?.items.length, 'manual upload input should reach document review data');
+assert.ok(manualUpload.detectedContacts.length > 0, 'real report should surface stakeholder contacts for review');
+assert.ok(manualUpload.detectedContacts.some((contact) => contact.type === 'organisation' && contact.category === 'school'), 'real report should detect schools as organisations');
+assert.ok(manualUpload.detectedContacts.some((contact) => contact.name === 'Lilongwe Girls Secondary School'), 'real report should detect Lilongwe Girls Secondary School');
+assert.ok(!manualUpload.detectedContacts.some((contact) => contact.name === manualUpload.docxResult?.metadata.author), 'report author should not become a contact');
+assert.ok(!manualUpload.detectedContacts.some((contact) => ['Margaret', 'Patience', 'Bridget', 'Aida', 'Emily', 'Monica', 'Memory', 'Aisha'].includes(contact.name)), 'Child House girls should stay out of the contacts directory');
 assert.equal(manualUpload.docxResult?.counts.historicalGirls, expectedGirlCount, 'manual upload should detect all girls in the selected fixture');
 assert.equal(manualUpload.docxResult?.counts.photos, expectedPhotoCount, 'manual upload should detect the selected fixture photo count');
 assert.equal(manualUpload.docxResult?.images.length, 15, 'the real report should extract all 15 inline images');
@@ -127,6 +134,20 @@ assert.equal(manualUpload.docxResult?.images[14].caption, 'Shine girls together 
 const actualPhotoItems = manualUpload.docxResult?.items.filter((item) => item.classification === 'PHOTO_HIGHLIGHT') || [];
 assert.equal(actualPhotoItems.length, 15, 'the real report should show one review card per image');
 assert.ok(actualPhotoItems.every((item) => Boolean(item.photoBase64 && item.photoCaption)), 'each real photo card should carry its preview and caption');
+const earlyYearsRatioItem = manualUpload.docxResult?.items.find(
+  (item) => item.targetEntity === 'earlyYears' && /1:25 teacher\/caregiver-to-learner ratio/i.test(item.originalSnippet || '')
+);
+assert.ok(earlyYearsRatioItem, 'the ratio target should remain an Early Years record');
+assert.equal(earlyYearsRatioItem.extractedData.createWorkplan, true, 'the pending ratio target should also be routed to Workplan');
+assert.match(earlyYearsRatioItem.extractedData.workplanAction, /work toward/i, 'the Workplan copy should carry the pending ratio sentence');
+const businessCompetitionItem = manualUpload.docxResult?.items.find((item) => /business competitions/i.test(item.originalSnippet || ''));
+assert.equal(businessCompetitionItem?.extractedData.activityCategory, 'Business / Entrepreneurship', 'business competitions should suggest the business category');
+const businessMentorshipItem = manualUpload.docxResult?.items.find(
+  (item) => /mentorship activities included pairing girls with role models in business/i.test(item.originalSnippet || '')
+);
+assert.equal(businessMentorshipItem?.extractedData.activityCategory, 'Business / Entrepreneurship', 'business mentorship should suggest the business category');
+const sportsActivityItem = manualUpload.docxResult?.items.find((item) => /sports and fitness/i.test(item.originalSnippet || ''));
+assert.equal(sportsActivityItem?.extractedData.activityCategory, 'Sports / Recreation', 'sports should receive a specific suggested category');
 const unmatchedLegacyTransition = manualUpload.docxResult?.items.find(
   (item) => item.classification === 'INDIVIDUAL_GIRL_HISTORICAL' && item.matchedName === 'Margaret'
 );

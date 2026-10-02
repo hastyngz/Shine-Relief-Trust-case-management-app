@@ -52,6 +52,7 @@ import {
   WhatIfScenario,
   IntelligenceSuggestion,
   AISettings,
+  ContactRecord,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -101,6 +102,7 @@ export const COLLECTIONS = {
   RENT_PAYMENTS: 'rentPayments',
   EXPENSES: 'expenses',
   ACTIVITIES: 'householdActivities',
+  CONTACTS: 'contacts',
   BUDGETS: 'budgets',
   ANNUAL_BUDGETS: 'annualBudgets',
   PAYROLL_RECORDS: 'payrollRecords',
@@ -182,7 +184,7 @@ export async function getEmployeeSalaryHistory(employeeId: string): Promise<Sala
 }
 
 export async function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
-  const uniqueIds = [...new Set(employeeIds.filter(Boolean))];
+  const uniqueIds = Array.from(new Set(employeeIds));
   const records: SalaryHistoryRecord[] = [];
   for (let index = 0; index < uniqueIds.length; index += 30) {
     const batch = uniqueIds.slice(index, index + 30);
@@ -795,6 +797,18 @@ export async function persistPersonToFirestore(person: Person): Promise<void> {
   }
 }
 
+export async function persistContactToFirestore(contact: ContactRecord): Promise<void> {
+  try {
+    updateSyncStatus('saving');
+    await setDoc(doc(firestore, COLLECTIONS.CONTACTS, contact.id), sanitizeForFirestore(contact), { merge: true });
+    updateSyncStatus('synced');
+  } catch (err) {
+    console.error('Firestore persistContact error:', err);
+    updateSyncStatus('error');
+    throw err;
+  }
+}
+
 export async function deletePersonFromFirestore(id: string): Promise<void> {
   try {
     updateSyncStatus('saving');
@@ -964,6 +978,13 @@ export async function syncEntireDatabaseToFirestore(
       });
     }
 
+    if (db.contacts) {
+      db.contacts.forEach((contact) => operations.push({
+        ref: doc(firestore, COLLECTIONS.CONTACTS, contact.id),
+        data: sanitizeForFirestore(contact),
+      }));
+    }
+
     if (db.attachments) {
       db.attachments.forEach((attachment) => {
         operations.push({
@@ -1011,6 +1032,7 @@ export async function syncEntireDatabaseToFirestore(
         COLLECTIONS.IMPORT_AUDITS,
         COLLECTIONS.EARLY_YEARS,
         COLLECTIONS.PEOPLE,
+        COLLECTIONS.CONTACTS,
         COLLECTIONS.ATTACHMENTS,
         COLLECTIONS.CASE_ACTIONS,
         COLLECTIONS.EDUCATION_HISTORY,
@@ -1148,6 +1170,7 @@ export function initFirestoreListeners(
     rentPayments: [],
     expenses: [],
     householdActivities: [],
+    contacts: [],
     budgets: [],
     annualBudgets: [],
     payrollRecords: [],
@@ -1174,7 +1197,7 @@ export function initFirestoreListeners(
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 31;
+  const TOTAL_COLLECTIONS = 32;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -1186,6 +1209,7 @@ export function initFirestoreListeners(
       rentPayments: [...liveState.rentPayments],
       expenses: [...liveState.expenses],
       householdActivities: [...liveState.householdActivities],
+      contacts: [...(liveState.contacts || [])],
       budgets: [...(liveState.budgets || [])],
       annualBudgets: [...(liveState.annualBudgets || [])],
       payrollRecords: [...(liveState.payrollRecords || [])],
@@ -1262,6 +1286,7 @@ export function initFirestoreListeners(
   handleCollection<HouseholdRentPayment>(COLLECTIONS.RENT_PAYMENTS, 'rentPayments');
   handleCollection<HouseholdExpense>(COLLECTIONS.EXPENSES, 'expenses');
   handleCollection<HouseholdActivity>(COLLECTIONS.ACTIVITIES, 'householdActivities');
+  handleCollection<ContactRecord>(COLLECTIONS.CONTACTS, 'contacts');
   handleCollection<BudgetItem>(COLLECTIONS.BUDGETS, 'budgets');
   handleCollection<AnnualBudgetPlan>(COLLECTIONS.ANNUAL_BUDGETS, 'annualBudgets');
   handleCollection<PayrollRecord>(COLLECTIONS.PAYROLL_RECORDS, 'payrollRecords');

@@ -183,7 +183,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {metric('My open tasks', openMine.length, 'Mine', 'bg-white border-stone-200 text-stone-900')}
+        {metric('My open tasks', openMine.length, 'Mine', 'theme-card border-stone-200 text-stone-900')}
         {metric('Due today', dueToday.length, 'Due Today', 'bg-amber-50 border-amber-200 text-amber-950')}
         {metric('Due this week', dueThisWeek.length, 'Due This Week', 'bg-sky-50 border-sky-200 text-sky-950')}
         {metric('Overdue', overdue.length, 'Overdue', 'bg-rose-50 border-rose-200 text-rose-950')}
@@ -192,7 +192,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
       </div>
 
       {showForm && (
-        <form onSubmit={submit} className="bg-white border border-stone-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <form onSubmit={submit} className="theme-card border border-stone-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <label className="text-xs font-semibold text-stone-700">Action title *
             <input value={title} onChange={(event) => setTitle(event.target.value)} required className="mt-1 w-full border border-stone-300 rounded-md px-2.5 py-2" />
           </label>

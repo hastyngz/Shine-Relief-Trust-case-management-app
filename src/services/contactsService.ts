@@ -40,12 +40,18 @@ export interface ContactCandidate {
   context: string;
   confidence: number;
   programme?: string;
+  sourceRecordId?: string;
 }
 
 export interface ContactMatch {
   status: 'linked' | 'possible' | 'new';
   contact?: ContactRecord;
   candidates: ContactRecord[];
+}
+
+export interface ConfirmedContactCandidate {
+  candidate: ContactCandidate;
+  contactId?: string;
 }
 
 export function normalizeContactValue(value: string): string {
@@ -124,6 +130,13 @@ function contactChannels(context: string): { phone: string[]; email: string[] } 
   return { phone, email };
 }
 
+function programmeFromCue(text: string): string | undefined {
+  if (/early years|early childhood|ecd|nursery|pre-school/i.test(text)) return 'Early Years';
+  if (/agriculture|gardening|irrigation|farming/i.test(text)) return 'Agriculture';
+  if (/child house/i.test(text)) return 'Child House';
+  return undefined;
+}
+
 export function detectContactEntities(
   text: string,
   options: { authorName?: string; excludedNames?: string[]; programme?: string } = {}
@@ -135,8 +148,9 @@ export function detectContactEntities(
   );
   const found = new Map<string, ContactCandidate>();
   const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  const orgSuffix = '(?:Secondary\\s+School|Primary\\s+School|School|Church|Ministry|Hospital|Health\\s+(?:Centre|Center|Facility)|NGO|Trust|Foundation|University|College|Training\\s+(?:Centre|Center|Institution)|Company|Limited|Ltd\\.?)';
+  const orgSuffix = '(?:Secondary\\s+School|Primary\\s+School|School|Church|Ministry|Hospital|Health\\s+(?:Centre|Center|Facility)|NGO|Trust|Foundation|University|College|Training\\s+(?:Centre|Center|Institution)|District\\s+Council|Council|Company|Organisation|Organization|Limited|Ltd\\.?)';
   const orgRegex = new RegExp(`\\b((?:(?:[A-Z][\\p{L}\\d&'’.-]*|of|and|the)\\s+){0,5}[A-Z][\\p{L}\\d&'’.-]*\\s+${orgSuffix})\\b`, 'gu');
+  const partnerOrgRegex = /\\b(?:partner organisations?|partner organizations?|partner NGOs?|working with|in collaboration with)\\s*[:,-]?\\s*((?:[A-Z][\\p{L}\\d&'’.-]*|of|and|the)(?:\\s+(?:[A-Z][\\p{L}\\d&'’.-]*|of|and|the)){0,5})/giu;
   const titledPersonRegex = /\b(Mr\.?|Mrs\.?|Ms\.?|Miss|Dr\.?|Pastor|Reverend|Rev\.?|Bishop|Nurse|Teacher|Mentor|Facilitator|Guest Speaker)\s+([A-Z][\p{L}'-]+(?:\s+[A-Z][\p{L}'-]+){0,2})/gu;
   const contextualPersonRegex = /\b(?:guest speakers?|mentors?|health workers?|suppliers?|donors?|facilitators?)\b[^A-Z]{0,30}([A-Z][\p{L}'-]+(?:\s+[A-Z][\p{L}'-]+){1,2})/giu;
 
@@ -167,7 +181,22 @@ export function detectContactEntities(
         email: channels.email,
         context: line,
         confidence: 0.9,
-        programme: options.programme,
+        programme: options.programme || programmeFromCue(line),
+      });
+    }
+    partnerOrgRegex.lastIndex = 0;
+    for (const match of line.matchAll(partnerOrgRegex)) {
+      const name = match[1].trim().replace(/[.,;:]+$/, '');
+      if (name.length < 3) continue;
+      addCandidate({
+        type: 'organisation',
+        name,
+        category: categoryFromCue(`${name} partner organisation`, 'organisation'),
+        phone: channels.phone,
+        email: channels.email,
+        context: line,
+        confidence: 0.75,
+        programme: options.programme || programmeFromCue(line),
       });
     }
 
@@ -186,11 +215,64 @@ export function detectContactEntities(
         email: channels.email,
         context: line,
         confidence: person.title ? 0.88 : 0.7,
-        programme: options.programme,
+        programme: options.programme || programmeFromCue(line),
       });
     }
   }
   return Array.from(found.values());
+}
+
+export function detectRosterContacts(
+  rows: Array<Record<string, unknown>>,
+  options: { excludedNames?: string[] } = {}
+): ContactCandidate[] {
+  const excluded = new Set((options.excludedNames || []).map(normalizeContactValue));
+  const candidates = new Map<string, ContactCandidate>();
+  const normalizeHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  rows.forEach((row) => {
+    const entries = Object.entries(row).map(([key, value]) => [key, String(value ?? '').trim()] as const);
+    const get = (...names: string[]) => {
+      const accepted = new Set(names.map(normalizeHeader));
+      return entries.find(([key, value]) => accepted.has(normalizeHeader(key)) && value)?.[1] || '';
+    };
+    const headers = entries.map(([key]) => normalizeHeader(key));
+    const rowText = entries.filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`).join('. ');
+    const contactColumn = headers.some((header) => /contact|stakeholder|partner|supplier|donor|speaker|mentor|school|church|organisation|organization|institution|facility/.test(header));
+    const beneficiaryColumn = headers.some((header) => /girlname|studentname|beneficiaryname|childname|girlid|studentid|beneficiaryid|guardian|dateofbirth|classlevel|grade|form/.test(header));
+    if (beneficiaryColumn) return;
+
+    const organisationName = get('organisation name', 'organization name', 'institution name', 'school name', 'facility name', 'company name');
+    const personName = get('contact name', 'person name', 'full name', 'stakeholder name', 'name');
+    const typeValue = get('type', 'contact type', 'entity type').toLowerCase();
+    const roleTitle = get('role', 'title', 'position', 'job title');
+    const name = organisationName || personName;
+    if (!name || excluded.has(normalizeContactValue(name))) return;
+    const type: ContactEntityType = /organisation|organization|school|church|ngo|company|facility|institution/.test(`${typeValue} ${rowText.toLowerCase()}`) && !personName
+      ? 'organisation'
+      : /organisation|organization/.test(typeValue) || organisationName
+      ? 'organisation'
+      : 'person';
+    if (!contactColumn && !/\b(?:Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Pastor|Reverend|Rev\.?|Bishop|Nurse|Teacher)\s+[A-Z]/.test(`${roleTitle} ${name}`)) return;
+
+    const channels = contactChannels(rowText);
+    const category = categoryFromCue(`${headers.join(' ')} ${typeValue} ${roleTitle} ${rowText}`, type);
+    const candidate: ContactCandidate = {
+      type,
+      name,
+      category,
+      roleTitle: roleTitle || undefined,
+      affiliation: get('organisation', 'organization', 'affiliation', 'workplace'),
+      phone: channels.phone,
+      email: channels.email,
+      context: rowText,
+      confidence: contactColumn ? 0.9 : 0.72,
+      programme: get('programme', 'program') || programmeFromCue(rowText),
+      sourceRecordId: get('record id', 'source record id', 'id') || undefined,
+    };
+    candidates.set(`${type}:${normalizeContactValue(name)}`, candidate);
+  });
+  return Array.from(candidates.values());
 }
 
 export async function listContacts(includeArchived = false): Promise<ContactRecord[]> {
@@ -260,13 +342,20 @@ export async function addContactInteraction(
   interaction: ContactInteraction,
   actor: { uid: string; name: string }
 ): Promise<void> {
-  await updateDoc(doc(firestore, 'contacts', id), {
-    interactions: arrayUnion(interaction),
-    programmes: interaction.programme ? arrayUnion(interaction.programme) : undefined,
-    lastSeen: interaction.date,
-    updatedAt: new Date().toISOString(),
-    updatedByUid: actor.uid,
-    updatedByName: actor.name,
+  const contactRef = doc(firestore, 'contacts', id);
+  await runTransaction(firestore, async (transaction) => {
+    const snapshot = await transaction.get(contactRef);
+    if (!snapshot.exists()) throw new Error('Contact no longer exists.');
+    const contact = snapshot.data() as ContactRecord;
+    const changes: Record<string, unknown> = {
+      interactions: arrayUnion(interaction),
+      lastSeen: contact.lastSeen > interaction.date ? contact.lastSeen : interaction.date,
+      updatedAt: new Date().toISOString(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    };
+    if (interaction.programme) changes.programmes = arrayUnion(interaction.programme);
+    transaction.update(contactRef, changes);
   });
 }
 

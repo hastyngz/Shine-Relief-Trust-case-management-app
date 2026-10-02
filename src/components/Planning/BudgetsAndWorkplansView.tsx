@@ -283,8 +283,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const progress = Math.min(100, Math.round((completedCount / targetCount) * 100));
     const responsibleStaffName = (fd.get('responsibleStaffName') as string).trim();
     const responsibleStaffId = staffProfile?.id || staffProfile?.uid || 'staff-1';
-    const startDate = (fd.get('startDate') as string);
-    const endDate = (fd.get('endDate') as string);
+    const endDate = (fd.get('endDate') as string).trim();
+    if (!endDate) return;
+    const startDate = ((fd.get('startDate') as string).trim() || endDate);
     const location = (fd.get('location') as string).trim();
     const notes = (fd.get('notes') as string).trim();
 
@@ -306,6 +307,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           responsibleStaffName,
           startDate,
           endDate,
+          dueDatePeriod: `date:${endDate}`,
           location,
           notes,
         },
@@ -328,6 +330,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           responsibleStaffName,
           startDate,
           endDate,
+          dueDatePeriod: `date:${endDate}`,
           location,
           notes,
         },
@@ -1457,19 +1460,20 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Start Date</label>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Start Date (optional)</label>
                   <input
                     type="date"
                     name="startDate"
-                    defaultValue={editingWorkplan?.startDate || new Date().toISOString().slice(0, 10)}
+                    defaultValue={editingWorkplan?.startDate || ''}
                     className="w-full text-xs border border-stone-300 rounded-lg p-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">End Date</label>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Due Date</label>
                   <input
                     type="date"
                     name="endDate"
+                    required
                     defaultValue={editingWorkplan?.endDate || ''}
                     className="w-full text-xs border border-stone-300 rounded-lg p-2"
                   />

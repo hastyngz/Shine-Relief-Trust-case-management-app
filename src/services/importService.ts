@@ -15,6 +15,7 @@ import {
   Person,
   PersonType,
   PersonSourceDocument,
+  ContactRecord,
 } from '../types';
 import { generateFollowUpId, generatePersonId, saveDatabase } from '../utils/storage';
 import {
@@ -31,6 +32,14 @@ import {
   persistImportAuditToFirestore,
 } from './firestoreSync';
 import { parseDocxProgressReport, ParsedDocxReportResult } from './docxParserService';
+import {
+  addContactInteraction,
+  ConfirmedContactCandidate,
+  createContact,
+  detectContactEntities,
+  detectRosterContacts,
+} from './contactsService';
+import { getDueDateRange } from './ingestionRules';
 
 export interface FileAnalysisResult {
   fileName: string;
@@ -39,12 +48,13 @@ export interface FileAnalysisResult {
   rawRows: Array<Record<string, any>>;
   suggestedEntity: 'girl' | 'person' | 'household' | 'educationalFollowUp' | 'healthFollowUp' | 'familyFollowUp' | 'general';
   docxResult?: ParsedDocxReportResult;
+  detectedContacts: ReturnType<typeof detectContactEntities>;
 }
 
 /**
  * Parses an Excel (.xlsx / .xls) file into structured raw row objects
  */
-export async function parseExcelFile(file: File): Promise<FileAnalysisResult> {
+export async function parseExcelFile(file: File, excludedNames: string[] = []): Promise<FileAnalysisResult> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetNames = workbook.SheetNames;
@@ -83,6 +93,9 @@ export async function parseExcelFile(file: File): Promise<FileAnalysisResult> {
         k.includes('contact') ||
         k.includes('persontype') ||
         k.includes('stakeholder') ||
+        k.includes('organisation') ||
+        k.includes('organization') ||
+        k.includes('institution') ||
         k.includes('pastor') ||
         k.includes('teacher') ||
         (k.includes('role') &&
@@ -101,6 +114,7 @@ export async function parseExcelFile(file: File): Promise<FileAnalysisResult> {
     sheetsOrSections: sheetNames,
     rawRows,
     suggestedEntity,
+    detectedContacts: detectRosterContacts(rawRows, { excludedNames }),
   };
 }
 
@@ -139,6 +153,10 @@ export async function parseDocxFile(
     rawRows,
     suggestedEntity: 'general',
     docxResult,
+    detectedContacts: detectContactEntities(docxResult.rawText, {
+      authorName: docxResult.metadata.author,
+      excludedNames: db.girls.map((girl) => girl.fullName),
+    }),
   };
 }
 
@@ -535,7 +553,9 @@ export async function commitImportBatch(
   approvedItems: ImportPreviewItem[],
   auditRecord: Omit<ImportAuditRecord, 'id'>,
   db: AppDatabase,
-  onProgress?: (processed: number, total: number) => void
+  onProgress?: (processed: number, total: number) => void,
+  approvedContacts: ConfirmedContactCandidate[] = [],
+  confirmedDueDatePeriods: Record<string, string> = {}
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
   const updatedDb: AppDatabase = {
     ...db,
@@ -550,14 +570,22 @@ export async function commitImportBatch(
     attachments: [...(db.attachments || [])],
     historicalRecords: [...(db.historicalRecords || [])],
     importAudits: [...(db.importAudits || [])],
+    contacts: [...(db.contacts || [])],
   };
 
   let processed = 0;
-  const total = approvedItems.length;
+  const total = approvedItems.length + approvedContacts.length;
   const auditId = generateFollowUpId('AUD');
 
   for (const item of approvedItems) {
     if (!item.selected) continue;
+    const createsWorkplan = item.classification === 'WORKPLAN_PRIORITY' || item.targetEntity === 'workplan' || item.extractedData.createWorkplan === true;
+    const dueDatePeriod = createsWorkplan ? confirmedDueDatePeriods[item.tempId] : undefined;
+    const dueDateRange = dueDatePeriod ? getDueDateRange(dueDatePeriod) : null;
+    if (createsWorkplan && !dueDateRange) {
+      throw new Error(`A valid due-date period is required for Workplan item: ${item.title || item.summary}`);
+    }
+    let linkedRecordId: string | undefined;
 
     // 1. Historical Case Records (Preserves current profile completely)
     if (item.resultType === 'HISTORICAL_RECORD' || item.classification === 'INDIVIDUAL_GIRL_HISTORICAL') {
@@ -601,6 +629,7 @@ export async function commitImportBatch(
         date: item.recordDate || new Date().toISOString().slice(0, 10),
         activityName: item.extractedData.activityName || item.title || 'Group Activity',
         activityType: item.extractedData.activityType || 'Group activity',
+        activityCategory: item.extractedData.activityCategory || item.extractedData.activityType,
         participantCount: item.extractedData.participantCount || 18,
         participatingGirlIds: item.extractedData.participatingGirlIds || [],
         description: item.extractedData.description || item.summary,
@@ -613,6 +642,7 @@ export async function commitImportBatch(
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      linkedRecordId = newActivity.id;
       updatedDb.householdActivities.unshift(newActivity);
       await persistHouseholdActivityToFirestore(newActivity);
     }
@@ -634,6 +664,7 @@ export async function commitImportBatch(
         createdAt: new Date().toISOString(),
         createdBy: auditRecord.importedByName,
       };
+      linkedRecordId = newEarlyYears.id;
       if (!updatedDb.earlyYearsRecords) updatedDb.earlyYearsRecords = [];
       updatedDb.earlyYearsRecords.unshift(newEarlyYears);
       await persistEarlyYearsRecordToFirestore(newEarlyYears);
@@ -645,15 +676,18 @@ export async function commitImportBatch(
         activity: item.extractedData.activity || item.title || 'Workplan Priority',
         objective: item.extractedData.objective || item.summary,
         description: item.extractedData.description || item.summary,
-        period: item.extractedData.period || 'Annual 2026/2027',
-        periodType: item.extractedData.periodType || 'annual',
+        period: `${dueDateRange!.startDate} to ${dueDateRange!.endDate}`,
+        periodType: dueDatePeriod?.startsWith('month:') ? 'monthly' : dueDatePeriod?.startsWith('quarter:') ? 'quarterly' : 'project',
+        dueDatePeriod,
+        domain: item.extractedData.workplanDomain || 'Programme',
+        sourceRecordId: item.extractedData.sourceRecordId,
         status: item.extractedData.status || 'Planned',
         progress: 0,
         responsibleStaffId: item.extractedData.responsibleStaffId || auditRecord.importedByUid,
         responsibleStaffName: item.extractedData.responsibleStaffName || 'NOT PROVIDED IN SOURCE - REQUIRES REVIEW',
         budget: item.extractedData.budget,
-        startDate: item.extractedData.startDate || '2026-10-01',
-        endDate: item.extractedData.endDate || '2027-09-30',
+        startDate: dueDateRange!.startDate,
+        endDate: dueDateRange!.endDate,
         targetCount: item.extractedData.targetCount || 1,
         unit: item.extractedData.unit || 'activities',
         location: item.extractedData.location || 'Shine Village, Malawi',
@@ -891,6 +925,92 @@ export async function commitImportBatch(
       await persistHealthFollowUpToFirestore(newHealth);
     }
 
+    if (createsWorkplan && item.targetEntity !== 'workplan' && item.classification !== 'WORKPLAN_PRIORITY') {
+      const periodType = dueDatePeriod!.startsWith('month:') ? 'monthly' : dueDatePeriod!.startsWith('quarter:') ? 'quarterly' : 'project';
+      const linkedWorkplan: WorkplanItem = {
+        id: generateFollowUpId('WP'),
+        activity: item.extractedData.workplanAction || item.extractedData.activity || item.extractedData.activityName || item.title || item.summary,
+        objective: item.extractedData.workplanAction || item.extractedData.objective || item.summary,
+        description: item.extractedData.workplanAction || item.extractedData.description || item.extractedData.notes || item.summary,
+        period: `${dueDateRange!.startDate} to ${dueDateRange!.endDate}`,
+        periodType,
+        dueDatePeriod,
+        domain: item.extractedData.workplanDomain || 'Programme',
+        sourceRecordId: linkedRecordId,
+        linkedActivityIds: item.targetEntity === 'activity' && linkedRecordId ? [linkedRecordId] : undefined,
+        status: 'Planned',
+        progress: 0,
+        responsibleStaffId: auditRecord.importedByUid,
+        responsibleStaffName: auditRecord.importedByName,
+        startDate: dueDateRange!.startDate,
+        endDate: dueDateRange!.endDate,
+        targetCount: item.extractedData.targetCount || 1,
+        unit: item.extractedData.unit || 'activities',
+        location: item.extractedData.location || 'Shine Village, Malawi',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (!updatedDb.workplans) updatedDb.workplans = [];
+      updatedDb.workplans.unshift(linkedWorkplan);
+      await persistWorkplanItemToFirestore(linkedWorkplan);
+    }
+
+    processed++;
+    onProgress?.(processed, total);
+  }
+
+  const reportDate = (() => {
+    const period = auditRecord.reportingPeriod || '';
+    const months = period.match(/January|February|March|April|May|June|July|August|September|October|November|December/gi) || [];
+    const year = period.match(/20\d{2}/)?.[0];
+    if (!year || months.length === 0) return auditRecord.importedAt.slice(0, 10);
+    const month = new Date(`${months[months.length - 1]} 1, ${year}`).getMonth() + 1;
+    const lastDay = new Date(Number(year), month, 0).getDate();
+    return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  })();
+  for (const { candidate, contactId } of approvedContacts) {
+    const interaction = {
+      id: `${auditId}-${candidate.type}-${candidate.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      date: reportDate,
+      type: 'Report mention',
+      summary: `${auditRecord.reportingPeriod ? `Reporting period ${auditRecord.reportingPeriod}. ` : ''}${candidate.context}`,
+      sourceReportId: auditId,
+      sourceRecordId: candidate.sourceRecordId,
+      programme: candidate.programme,
+    };
+    const actor = { uid: auditRecord.importedByUid, name: auditRecord.importedByName };
+    if (contactId) {
+      await addContactInteraction(contactId, interaction, actor);
+      const existing = updatedDb.contacts?.find((contact) => contact.id === contactId);
+      if (existing) {
+        const updated: ContactRecord = {
+          ...existing,
+          interactions: [...existing.interactions, interaction],
+          programmes: Array.from(new Set([...existing.programmes, ...(interaction.programme ? [interaction.programme] : [])])),
+          lastSeen: existing.lastSeen > reportDate ? existing.lastSeen : reportDate,
+          updatedAt: new Date().toISOString(),
+          updatedByUid: actor.uid,
+          updatedByName: actor.name,
+        };
+        updatedDb.contacts = updatedDb.contacts?.map((contact) => contact.id === contactId ? updated : contact);
+      }
+    } else {
+      const created = await createContact({
+        type: candidate.type,
+        name: candidate.name,
+        category: candidate.category,
+        aliases: [],
+        roleTitle: candidate.roleTitle,
+        affiliation: candidate.affiliation,
+        phone: candidate.phone,
+        email: candidate.email,
+        notes: candidate.context,
+        programmes: candidate.programme ? [candidate.programme] : [],
+        firstSeen: reportDate,
+        lastSeen: reportDate,
+      }, actor, 'import', interaction);
+      updatedDb.contacts?.unshift(created);
+    }
     processed++;
     onProgress?.(processed, total);
   }

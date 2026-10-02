@@ -5,7 +5,7 @@ import {
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import assert from 'node:assert/strict';
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -81,6 +81,11 @@ async function seedData() {
     });
     await setDoc(doc(firestore, 'payrollRecords/payroll-manager'), { id: 'payroll-manager', employeeId: 'manager', expectedAmount: 100000, amountPaid: 0 });
     await setDoc(doc(firestore, 'payrollRecords/payroll-worker'), { id: 'payroll-worker', employeeId: 'worker', expectedAmount: 80000, amountPaid: 80000 });
+    await setDoc(doc(firestore, 'contacts/contact-1'), {
+      id: 'contact-1', type: 'person', name: 'Contact One', category: 'volunteer', aliases: [],
+      phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
+      createdByUid: 'manager', updatedByUid: 'manager',
+    });
   });
 }
 
@@ -99,6 +104,22 @@ async function run() {
     const worker = testEnvironment.authenticatedContext('worker', { email: 'worker@example.test' }).firestore();
     const manager = testEnvironment.authenticatedContext('manager', { email: 'manager@example.test' }).firestore();
     const admin = testEnvironment.authenticatedContext('admin', { email: 'admin@example.test' }).firestore();
+    const anonymous = testEnvironment.unauthenticatedContext().firestore();
+
+    await assertSucceeds(getDoc(doc(worker, 'contacts/contact-1')));
+    await assertFails(getDoc(doc(anonymous, 'contacts/contact-1')));
+    await assertSucceeds(setDoc(doc(worker, 'contacts/contact-worker'), {
+      id: 'contact-worker', type: 'organisation', name: 'Worker Contact', category: 'school',
+      aliases: [], phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
+      createdByUid: 'worker', updatedByUid: 'worker',
+    }));
+    await assertFails(setDoc(doc(worker, 'contacts/contact-forged'), {
+      id: 'contact-forged', type: 'person', name: 'Forged Contact', category: 'other',
+      createdByUid: 'manager', updatedByUid: 'worker',
+    }));
+    await assertSucceeds(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Updated by staff', updatedByUid: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Forged editor', updatedByUid: 'manager' }));
+    await assertFails(deleteDoc(doc(worker, 'contacts/contact-worker')));
 
     await assertSucceeds(getDoc(doc(viewer, 'caseActions/action-1')));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));

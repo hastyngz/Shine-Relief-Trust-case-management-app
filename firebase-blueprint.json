@@ -306,7 +306,23 @@
         "updatedByName": { "type": "string", "description": "Last editor name" },
         "source": { "type": "string", "description": "manual or import" },
         "archived": { "type": "boolean", "description": "Soft-delete marker" },
-        "interactions": { "type": "array", "description": "Contact timeline records with links to source reports and records" }
+        "interactions": {
+          "type": "array",
+          "description": "Contact timeline records with links to source reports and records",
+          "items": {
+            "type": "map",
+            "fields": {
+              "id": { "type": "string" },
+              "date": { "type": "string" },
+              "type": { "type": "string" },
+              "summary": { "type": "string" },
+              "sourceReportId": { "type": "string" },
+              "sourceRecordId": { "type": "string" },
+              "programme": { "type": "string" }
+            }
+          }
+        },
+        "mergedInto": { "type": "string", "description": "Canonical contact ID when this record has been merged" }
       }
     },
     "earlyYearsRecords": {

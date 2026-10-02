@@ -26,6 +26,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
 
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const girlMap = new Map(girls.map((g) => [g.id, g.fullName]));
+  const activityCategories = Array.from(new Set(activities.map((activity) => activity.activityCategory).filter((category): category is string => Boolean(category))));
 
   const filteredActivities = activities
     .filter((act) => {
@@ -41,7 +42,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
       if (selectedHouseId !== 'All' && act.householdId !== selectedHouseId) {
         return false;
       }
-      if (selectedType !== 'All' && act.activityType !== selectedType) {
+      if (selectedType !== 'All' && (act.activityCategory || act.activityType) !== selectedType) {
         return false;
       }
       if (actionRequiredOnly && !act.furtherActionRequired) {
@@ -116,6 +117,10 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
               <option value="Groceries">Groceries</option>
               <option value="Rent payment">Rent payment</option>
               <option value="Other">Other</option>
+              {activityCategories.filter((category) => ![
+                'Group activity', 'Household meeting', 'House visit', 'Repairs/maintenance',
+                'Household supplies', 'Utilities', 'Groceries', 'Rent payment', 'Other',
+              ].includes(category)).map((category) => <option key={category} value={category}>{category}</option>)}
             </select>
           </div>
         </div>
@@ -149,7 +154,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-800 text-white">
-                          {act.activityType}
+                          {act.activityCategory || act.activityType}
                         </span>
                         <span className="text-xs text-stone-500 font-medium">
                           {formatDate(act.date)}

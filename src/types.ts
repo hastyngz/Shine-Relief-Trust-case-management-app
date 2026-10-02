@@ -24,6 +24,9 @@ export type HouseholdActivityType =
   | 'Repairs/maintenance'
   | 'Household meeting'
   | 'Group activity'
+  | 'Business / Entrepreneurship'
+  | 'Sports'
+  | 'Agriculture'
   | 'House visit'
   | 'Other';
 
@@ -463,6 +466,7 @@ export interface HouseholdActivity {
   date: string;
   activityName: string;
   activityType: HouseholdActivityType;
+  activityCategory?: string;
   location?: string;
   participantCount: number;
   participatingGirlIds?: string[];
@@ -652,6 +656,9 @@ export interface WorkplanItem {
   id: string;
   period: string; // e.g. "Annual 2026", "2026-Q3", "September 2026"
   periodType: WorkplanPeriodType;
+  dueDatePeriod?: string;
+  domain?: string;
+  sourceRecordId?: string;
   activity: string; // e.g. "School Monitoring Visits"
   objective: string; // e.g. "Assess girl attendance and academic term performance"
   description: string;
@@ -1026,6 +1033,10 @@ export interface ImportAuditRecord {
   importedAt: string;
   importedByUid: string;
   importedByName: string;
+  reportingPeriod?: string;
+  contactsDetectedCount?: number;
+  newContactsCount?: number;
+  existingContactsLinkedCount?: number;
   totalExamined: number;
   newRecordsCount: number;
   profileUpdatesCount: number;

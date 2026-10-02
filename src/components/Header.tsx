@@ -26,6 +26,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { themes, useVisualSettings } from '../contexts/VisualSettingsContext';
 import { StaffRole } from '../types';
 import { NotificationBellDropdown } from './Notifications/NotificationBellDropdown';
+import { ShineLogo } from './ShineLogo';
 
 interface HeaderProps {
   onNavigateDashboard: () => void;
@@ -51,7 +52,7 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'synced',
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
-  const { mobileView, setMobileView, theme, setTheme, glassEffect, setGlassEffect, animatedGlass, setAnimatedGlass } = useVisualSettings();
+  const { mobileView, setMobileView, theme, setTheme, glassEffect, setGlassEffect } = useVisualSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
@@ -113,27 +114,12 @@ export const Header: React.FC<HeaderProps> = ({
             aria-label="Go to SHINE Relief Trust dashboard"
             className="flex min-w-0 items-center gap-3 rounded-lg text-left transition-opacity hover:opacity-90 active:scale-[0.99]"
           >
-            <div className="w-10 h-10 rounded-xl bg-white p-1 shadow-sm flex items-center justify-center shrink-0 border border-teal-800/80 overflow-hidden">
-              <img
-                src="/shine-logo.png"
-                alt=""
-                className="w-full h-full object-contain"
-                referrerPolicy="no-referrer"
-              />
+            <div className="relative -translate-x-1 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
+              <ShineLogo variant="mark" className="h-full w-full object-contain" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="whitespace-nowrap font-black tracking-tight text-white text-lg sm:text-xl">
-                  SHINE <span className="text-amber-400 font-bold">Relief Trust</span>
-                </span>
-                <span className="hidden sm:inline-block text-[11px] font-semibold uppercase tracking-wider bg-teal-800 text-amber-300 px-2 py-0.5 rounded-full">
-                  Malawi
-                </span>
-              </div>
-              <p className="text-[11px] text-teal-200 hidden sm:block font-medium">
-                Case Management & Household Monitoring System
-              </p>
-            </div>
+            <span className="hidden sm:inline-block text-[11px] font-semibold uppercase tracking-wider bg-teal-800 text-amber-300 px-2 py-0.5 rounded-full">
+              Malawi
+            </span>
           </button>
 
           {/* Quick Action Controls, Cloud Status & User Session */}
@@ -260,13 +246,9 @@ export const Header: React.FC<HeaderProps> = ({
                       type="button"
                       role="switch"
                       aria-label="Glass effect"
-                      aria-checked={glassEffect || animatedGlass}
-                      onClick={() => {
-                        const next = !(glassEffect || animatedGlass);
-                        setGlassEffect(next);
-                        setAnimatedGlass(next);
-                      }}
-                      data-enabled={glassEffect || animatedGlass}
+                      aria-checked={glassEffect}
+                      onClick={() => setGlassEffect(!glassEffect)}
+                      data-enabled={glassEffect}
                       className="visual-switch"
                     >
                       <span />

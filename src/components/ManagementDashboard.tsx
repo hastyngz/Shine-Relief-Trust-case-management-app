@@ -65,6 +65,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
   const [staffSort, setStaffSort] = useState('overdue');
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[] | null>(null);
   const [salaryHistoryError, setSalaryHistoryError] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(true);
 
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
@@ -74,6 +75,11 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
       .catch(() => { if (mounted) setSalaryHistoryError(true); });
     return () => { mounted = false; };
   }, [isAdmin, role, staff]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setOverviewLoading(false), 0);
+    return () => window.clearTimeout(timer);
+  }, [db.girls.length, db.households.length, db.importAudits?.length]);
 
   const today = new Date().toISOString().slice(0, 10);
   const range = getPresetRange(preset, customStart, customEnd, new Date());
@@ -110,6 +116,11 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     return totals;
   }, [salaryHistory, salaryHistoryError, staff, today]);
   const analytics = buildManagementAnalytics(permittedDb, filters, staff, today, gratuityByEmployee);
+  const latestImport = [...(db.importAudits || [])].sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0];
+  const latestReportPeriod = [...(db.importAudits || [])]
+    .filter((record) => record.reportingPeriod)
+    .sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0]?.reportingPeriod;
+  const hasOverviewData = db.girls.length > 0 || db.households.length > 0 || !!latestImport;
   const programmes = Array.from(new Set([
     ...(db.budgets || []).map((line) => line.programme),
     ...(db.annualBudgets || []).map((plan) => plan.programme),
@@ -146,28 +157,18 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
 
   return (
     <div id="management-dashboard-view" className="space-y-6 pb-12">
-      <div className="shine-hero rounded-xl p-5">
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-400 text-teal-950 uppercase tracking-wider">
-                Executive Overview
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-              Management Dashboard
-            </h1>
-            <p className="text-xs text-stone-600 mt-1 max-w-2xl">
-              Monitor programme delivery, staffing, payroll, and budget health using the live operational records already in the SHINE system.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            Live operational view
-          </div>
+      <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm" aria-label="Executive Overview">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
+          <h1 className="text-base font-black text-stone-900">Executive Overview</h1>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600"><CheckCircle2 className="h-4 w-4 text-emerald-700" />Live operational view</span>
         </div>
-      </div>
+        {overviewLoading ? <p className="py-5 text-sm text-stone-600" role="status">Loading executive overview…</p> : !hasOverviewData ? <p className="py-5 text-sm text-stone-600">No operational records or imports are available yet.</p> : <div className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0"><p className="text-xs font-semibold text-stone-600">Active girls</p><p className="mt-1 text-xl font-black text-stone-900">{analytics.cases.activeGirls}</p></div>
+          <div className="min-w-0"><p className="text-xs font-semibold text-stone-600">Active households</p><p className="mt-1 text-xl font-black text-stone-900">{analytics.cases.activeHouseholds}</p></div>
+          <div className="min-w-0"><p className="text-xs font-semibold text-stone-600">Latest report period</p><p className="mt-1 break-words text-sm font-bold text-stone-900">{latestReportPeriod || 'No report period recorded'}</p></div>
+          <div className="min-w-0"><p className="text-xs font-semibold text-stone-600">Latest import</p><p className="mt-1 break-words text-sm font-bold text-stone-900">{latestImport?.fileName || 'No import recorded'}</p>{latestImport && <p className="mt-0.5 text-xs text-stone-600">{new Date(latestImport.importedAt).toLocaleDateString()}</p>}</div>
+        </div>}
+      </section>
 
       <section className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm space-y-3" aria-label="Management dashboard filters">
         <div className="flex flex-wrap items-center justify-between gap-3">

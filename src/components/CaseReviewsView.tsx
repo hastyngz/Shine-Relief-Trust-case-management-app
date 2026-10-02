@@ -49,7 +49,7 @@ export const CaseReviewsView: React.FC<CaseReviewsViewProps> = ({ db, onRefresh 
         <h2 className="text-lg font-black text-stone-900 flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-teal-800" />Case Reviews</h2>
         <p className="text-xs text-stone-500">Summarize current circumstances and the agreed next review without duplicating underlying records.</p>
       </div>
-      {canEditCaseReviews && <form onSubmit={submit} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-white border border-stone-200 p-3 rounded-md">
+      {canEditCaseReviews && <form onSubmit={submit} className="theme-card grid sm:grid-cols-2 lg:grid-cols-3 gap-2 border border-stone-200 p-3 rounded-md">
         <select name="girlId" required className="border rounded-md p-2 text-xs"><option value="">Girl *</option>{db.girls.map((girl) => <option key={girl.id} value={girl.id}>{girl.fullName}</option>)}</select>
         <input type="date" name="reviewDate" required aria-label="Review date" className="border rounded-md p-2 text-xs" />
         <input type="date" name="nextReviewDate" aria-label="Next review date" className="border rounded-md p-2 text-xs" />

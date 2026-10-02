@@ -16,6 +16,11 @@ const DEFAULT_THEME: ThemeId = 'sunset-pop';
 const DEFAULT_GLASS_EFFECT = false;
 const DEFAULT_ANIMATED_GLASS = false;
 
+export interface VisualSettings {
+  theme: ThemeId;
+  glassEffect: boolean;
+}
+
 export interface ThemeOption {
   id: ThemeId;
   name: string;
@@ -54,13 +59,30 @@ export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [glassEffect, setGlassEffect] = useState(DEFAULT_GLASS_EFFECT);
   const [animatedGlass, setAnimatedGlass] = useState(DEFAULT_ANIMATED_GLASS);
+  const [loadedSettingsKey, setLoadedSettingsKey] = useState<string | null>(null);
+  const settingsKey = `shine_visual_settings_${currentUser?.uid || 'guest'}`;
 
   useEffect(() => {
     setMobileView(false);
-    setTheme(DEFAULT_THEME);
-    setGlassEffect(DEFAULT_GLASS_EFFECT);
-    setAnimatedGlass(DEFAULT_ANIMATED_GLASS);
-  }, [currentUser?.uid]);
+    let saved: Partial<VisualSettings> = {};
+    try {
+      const raw = typeof window === 'undefined' ? null : window.localStorage.getItem(settingsKey);
+      if (raw) saved = JSON.parse(raw) as Partial<VisualSettings>;
+    } catch {
+      saved = {};
+    }
+    const restoredTheme = themes.some((option) => option.id === saved.theme) ? saved.theme! : DEFAULT_THEME;
+    const restoredGlass = typeof saved.glassEffect === 'boolean' ? saved.glassEffect : DEFAULT_GLASS_EFFECT;
+    setTheme(restoredTheme);
+    setGlassEffect(restoredGlass);
+    setAnimatedGlass(restoredGlass);
+    setLoadedSettingsKey(settingsKey);
+  }, [settingsKey]);
+
+  useEffect(() => {
+    if (loadedSettingsKey !== settingsKey || typeof window === 'undefined') return;
+    window.localStorage.setItem(settingsKey, JSON.stringify({ theme, glassEffect } satisfies VisualSettings));
+  }, [settingsKey, loadedSettingsKey, theme, glassEffect]);
 
   useEffect(() => {
     setAnimatedGlass(glassEffect);
