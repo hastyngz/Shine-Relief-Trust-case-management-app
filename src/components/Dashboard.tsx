@@ -2,18 +2,20 @@ import React from 'react';
 import { AppDatabase, Girl, Household } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
-import { useVisualSettings } from '../contexts/VisualSettingsContext';
 import {
   Users,
   Home,
   GraduationCap,
   HeartPulse,
   Banknote,
-  ShoppingBag,
+  Wallet,
   AlertTriangle,
   Clock,
   CheckCircle2,
   Calendar,
+  ClipboardList,
+  Flag,
+  ShieldAlert,
   Sparkles,
   ArrowRight,
   PlusCircle,
@@ -44,7 +46,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   safeguardingCount,
 }) => {
   const { currentUser, isAdmin, role, canViewHealthRecords, canViewCaseReviews } = useAuth();
-  const { mobileView, setMobileView } = useVisualSettings();
   // Girls statistics
   const totalGirls = db.girls.length;
   const activeGirls = db.girls.filter((g) => g.status === 'Active').length;
@@ -199,13 +200,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
     <div id="dashboard-view" className="space-y-6 pb-12">
       {/* Welcome Banner */}
       <div className="shine-hero rounded-xl p-5 sm:p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="hero-location-line flex items-center gap-2 mb-1">
               <span className="hero-location-pill px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-teal-950 uppercase tracking-wider">
                 Malawi Field Operations
               </span>
-              <span className="text-xs text-teal-200">Zomba & Shire Highlands</span>
+              <span className="hero-location-divider text-stone-400" aria-hidden="true">|</span>
+              <span className="hero-location-region text-xs text-teal-200">Zomba &amp; Shire Highlands</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               SHINE Relief Case Management & Monitoring
@@ -216,29 +218,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              role="switch"
-              aria-label="Mobile view"
-              aria-checked={mobileView}
-              onClick={() => setMobileView(!mobileView)}
-              data-enabled={mobileView}
-              className="visual-switch-button"
-            >
-              <span>Mobile view</span>
-              <span className="visual-switch" aria-hidden="true"><span /></span>
-            </button>
+          <div className="hero-actions flex flex-col gap-2 shrink-0 sm:flex-row sm:flex-wrap sm:items-center">
             <button
               onClick={onOpenQuickAdd}
-              className="hero-primary-action px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-teal-950 text-xs font-black rounded-xl shadow-md flex items-center gap-2 transition-transform active:scale-95"
+              className="hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Record New Entry</span>
             </button>
             <button
               onClick={onNavigateToReports}
-              className="hero-secondary-action px-3.5 py-2.5 bg-teal-900/90 hover:bg-teal-800 text-teal-100 text-xs font-bold rounded-xl border border-teal-700/80 transition-colors"
+              className="hero-secondary-action px-3.5 py-2.5 text-white text-xs font-bold rounded-xl border transition-colors"
             >
               Export CSV / Reports
             </button>
@@ -251,7 +241,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Girls Card */}
         <div
           onClick={() => onNavigateToGirlsList()}
-          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -274,7 +264,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Girls Outcomes Card */}
         <div
           onClick={() => onNavigateToGirlsList('Completed')}
-          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -287,16 +277,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-blue-900 mt-2">
             {completedGirls}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
+          <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-blue-700 font-semibold">Completed SHINE</span>
-            <span className="text-stone-500">{leftGirls} Reintegrated/Left</span>
+            <span className="text-stone-500">{leftGirls} Reintegrated / Left</span>
           </div>
         </div>
 
         {/* SHINE Houses Card */}
         <div
           onClick={onNavigateToHousesList}
-          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -309,7 +299,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
             {totalHouses}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
+          <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-emerald-700 font-bold">{activeHouses} Active Homes</span>
             <span className="text-stone-500">{totalHouses - activeHouses} Under Renovation</span>
           </div>
@@ -318,22 +308,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Expenditure Card */}
         <div
           onClick={onNavigateToReports}
-          className="shine-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
               Household Spend
             </span>
             <div className="dashboard-stat-icon dashboard-stat-icon--success w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center group-hover:bg-emerald-800 group-hover:text-white transition-colors">
-              <ShoppingBag className="w-4 h-4" />
+              <Wallet className="w-4 h-4" />
             </div>
           </div>
           <div className="dashboard-stat-number text-lg sm:text-xl font-black text-emerald-950 mt-2 truncate">
             {formatMWK(totalExpenditure)}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
-            <span>{db.expenses.length} Groceries & Bills</span>
-            <span className="text-emerald-700 font-semibold">Tracked</span>
+          <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
+            <span>{db.expenses.length} Groceries &amp; Bills</span>
+            <span className="text-emerald-700 font-semibold">{db.expenses.length} Tracked</span>
           </div>
         </div>
       </div>
@@ -346,19 +336,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           {[
-            { label: 'Open actions', count: openActionCount, tone: 'border-teal-200 bg-teal-50 text-teal-950' },
-            { label: 'Overdue actions', count: overdueActionCount, tone: 'border-rose-200 bg-rose-50 text-rose-950' },
-            { label: 'High priority', count: highPriorityActionCount, tone: 'border-amber-200 bg-amber-50 text-amber-950' },
-            { label: 'Education follow-ups', count: outstandingEdu.length, tone: 'border-sky-200 bg-sky-50 text-sky-950' },
-            ...(canViewHealthRecords ? [{ label: 'Medical follow-ups', count: outstandingHlt.length, tone: 'border-rose-200 bg-white text-rose-950' }] : []),
-            { label: 'Family follow-ups', count: outstandingFam.length, tone: 'border-orange-200 bg-white text-orange-950' },
-            ...(safeguardingCount !== undefined ? [{ label: 'Safeguarding · restricted', count: safeguardingCount, tone: 'border-red-300 bg-red-50 text-red-950' }] : []),
-            { label: 'Girls on leave', count: girlsOnLeaveCount, tone: 'border-blue-200 bg-blue-50 text-blue-950' },
-            ...(canViewCaseReviews ? [{ label: 'Upcoming reviews', count: upcomingReviewCount, tone: 'border-stone-300 bg-white text-stone-950' }] : []),
+            { label: 'Open actions', count: openActionCount, icon: ClipboardList, tone: 'border-teal-200 bg-teal-50 text-teal-950', accent: 'teal' },
+            { label: 'Overdue actions', count: overdueActionCount, icon: AlertTriangle, tone: 'border-rose-200 bg-rose-50 text-rose-950', accent: 'rose' },
+            { label: 'High priority', count: highPriorityActionCount, icon: Flag, tone: 'border-amber-200 bg-amber-50 text-amber-950', accent: 'amber' },
+            { label: 'Education follow-ups', count: outstandingEdu.length, icon: GraduationCap, tone: 'border-sky-200 bg-sky-50 text-sky-950', accent: 'sky' },
+            ...(canViewHealthRecords ? [{ label: 'Medical follow-ups', count: outstandingHlt.length, icon: HeartPulse, tone: 'border-rose-200 bg-white text-rose-950', accent: 'rose' }] : []),
+            { label: 'Family follow-ups', count: outstandingFam.length, icon: Users, tone: 'border-orange-200 bg-white text-orange-950', accent: 'orange' },
+            ...(safeguardingCount !== undefined ? [{ label: 'Safeguarding · restricted', count: safeguardingCount, icon: ShieldAlert, tone: 'border-red-300 bg-red-50 text-red-950', accent: 'red' }] : []),
+            { label: 'Girls on leave', count: girlsOnLeaveCount, icon: Calendar, tone: 'border-blue-200 bg-blue-50 text-blue-950', accent: 'blue' },
+            ...(canViewCaseReviews ? [{ label: 'Upcoming reviews', count: upcomingReviewCount, icon: Clock, tone: 'border-stone-300 bg-white text-stone-950', accent: 'slate' }] : []),
           ].map((item) => (
-            <button key={item.label} onClick={onNavigateToCaseManagement} className={`text-left p-3 border rounded-lg ${item.tone} hover:brightness-[0.98]`}>
-              <span className="block text-[10px] font-bold uppercase">{item.label}</span>
-              <span className="block text-xl font-black mt-0.5">{item.count}</span>
+            <button
+              key={item.label}
+              onClick={onNavigateToCaseManagement}
+              className={`case-indicator-card case-indicator--${item.accent} text-left p-3 border rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-md ${item.tone}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="block text-[10px] font-bold uppercase leading-snug">{item.label}</span>
+                <span className={`case-indicator-icon case-indicator-icon--${item.accent} flex h-8 w-8 shrink-0 items-center justify-center rounded-lg`}>
+                  <item.icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+              </div>
+              <span className="mt-1 block text-2xl font-black leading-none">{item.count}</span>
             </button>
           ))}
         </div>

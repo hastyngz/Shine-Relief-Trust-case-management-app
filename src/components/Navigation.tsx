@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
+import { useVisualSettings } from '../contexts/VisualSettingsContext';
 
 export type NavTab =
   | 'dashboard'
@@ -51,6 +52,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 }) => {
   const { isAdmin, role, allStaff } = useAuth();
   const { totalUnreadCount, unreadMessagesCount } = useMessaging();
+  const { mobileViewMode } = useVisualSettings();
   const canViewManagement = isAdmin || role === 'Manager';
 
   const navItems: {
@@ -92,6 +94,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         ]
       : []),
   ];
+  const mobileNavItems = navItems.filter((item) => item.id !== 'staff' && item.id !== 'messages');
 
   return (
     <>
@@ -144,10 +147,10 @@ export const Navigation: React.FC<NavigationProps> = ({
       {/* Mobile Bottom Navigation Bar */}
       <nav
         id="mobile-bottom-nav"
-        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 z-40 px-2 py-1 shadow-lg overflow-x-auto flex gap-1 justify-start"
+        className={`mobile-bottom-nav--${mobileViewMode} md:hidden fixed bottom-0 left-0 right-0 z-40 px-2 pt-2 shadow-lg`}
       >
-        <div className="flex items-center gap-1 min-w-max mx-auto">
-          {navItems.map((item) => {
+        <div className={`mobile-bottom-nav-inner mobile-bottom-nav-inner--${mobileViewMode} flex items-center justify-between gap-1 max-w-xl mx-auto`}>
+          {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
@@ -155,12 +158,14 @@ export const Navigation: React.FC<NavigationProps> = ({
                 key={item.id}
                 id={`mobile-nav-tab-${item.id}`}
                 onClick={() => onSelectTab(item.id)}
-                className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-lg transition-colors relative min-w-[54px] ${
-                  isActive ? 'text-teal-900 font-bold' : 'text-stone-500 hover:text-stone-800'
+                className={`mobile-nav-button flex flex-col items-center justify-center gap-1 rounded-xl py-1.5 transition-colors relative ${
+                  mobileViewMode === 'ios'
+                    ? `flex-1 ${isActive ? 'text-white font-bold' : 'text-slate-400 hover:text-white'}`
+                    : `min-w-[54px] shrink-0 px-2.5 ${isActive ? 'text-teal-900 font-bold' : 'text-stone-500 hover:text-stone-800'}`
                 }`}
               >
-                <div className={`p-1 rounded-lg relative ${isActive ? 'bg-teal-100 text-teal-900' : ''}`}>
-                  <Icon className={`w-4.5 h-4.5 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
+                <div className={`relative ${mobileViewMode === 'ios' && isActive ? 'text-teal-300' : ''}`}>
+                  <Icon className={mobileViewMode === 'ios' ? 'w-5 h-5' : `w-4.5 h-4.5 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
                   {item.isAi && (
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full" />
                   )}
@@ -170,23 +175,23 @@ export const Navigation: React.FC<NavigationProps> = ({
                     </span>
                   )}
                 </div>
-                <span className="text-[8.5px] leading-tight mt-0.5 tracking-tight truncate max-w-[62px]">
-                  {item.label === 'SHINE Girls'
+                <span className={`leading-tight tracking-tight truncate ${mobileViewMode === 'ios' ? 'text-[9px] max-w-full' : 'text-[8.5px] mt-0.5 max-w-[62px]'}`}>
+                  {item.id === 'girls'
                     ? 'Girls'
-                    : item.label === 'Households'
+                    : item.id === 'houses'
                     ? 'Houses'
+                    : item.id === 'activities'
+                    ? 'Activities'
+                    : item.id === 'case-management' && mobileViewMode === 'ios'
+                    ? 'Cases'
                     : item.label === 'Reports & Export'
                     ? 'Reports'
                     : item.label === 'SHINE AI Assistant'
                     ? 'SHINE AI'
                     : item.label === 'Staff Management'
                     ? 'Staff'
-                    : item.label === 'Group Activities'
-                    ? 'Activities'
                     : item.label === 'Messages'
                     ? 'Messages'
-                    : item.label === 'Contacts'
-                    ? 'Contacts'
                     : item.label === 'Budgets & Workplans'
                     ? 'Planning'
                     : item.label === 'Document Ingestion'

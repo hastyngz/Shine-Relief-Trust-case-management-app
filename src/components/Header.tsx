@@ -20,6 +20,7 @@ import {
   Check,
   Smartphone,
   Waves,
+  MoreVertical,
 } from 'lucide-react';
 import { SyncStatus } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,12 +53,14 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'synced',
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
-  const { mobileView, setMobileView, theme, setTheme, glassEffect, setGlassEffect } = useVisualSettings();
+  const { mobileViewMode, setMobileViewMode, theme, setTheme, glassEffect, setGlassEffect } = useVisualSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const mobileActionsRef = useRef<HTMLDivElement>(null);
   const visualSettingsRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -65,6 +68,9 @@ export const Header: React.FC<HeaderProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (mobileActionsRef.current && !mobileActionsRef.current.contains(e.target as Node)) {
+        setMobileActionsOpen(false);
       }
       if (visualSettingsRef.current && !visualSettingsRef.current.contains(e.target as Node)) {
         setVisualSettingsOpen(false);
@@ -117,6 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative -translate-x-1 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
               <ShineLogo variant="mark" className="h-full w-full object-contain" />
             </div>
+            <span className="header-brand-name text-sm font-black tracking-[0.18em] text-white">SHINE</span>
             <span className="hidden sm:inline-block text-[11px] font-semibold uppercase tracking-wider bg-teal-800 text-amber-300 px-2 py-0.5 rounded-full">
               Malawi
             </span>
@@ -184,7 +191,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               id="data-backup-btn"
               onClick={onOpenDataModal}
-              className="p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium flex items-center gap-1.5 border border-teal-800 transition-colors"
+              className="hidden sm:flex p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium items-center gap-1.5 border border-teal-800 transition-colors"
               title="Backup, export, or restore database"
             >
               <Database className="w-4 h-4 text-amber-400" />
@@ -195,12 +202,63 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="quick-add-btn"
                 onClick={onOpenQuickAdd}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-teal-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-transform active:scale-95"
+                className="hidden sm:flex px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-teal-950 text-xs font-bold items-center gap-1.5 shadow-sm transition-transform active:scale-95"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Record New</span>
               </button>
             )}
+
+            <div className="relative" ref={mobileActionsRef}>
+              <button
+                type="button"
+                onClick={() => setMobileActionsOpen((open) => !open)}
+                aria-label="More actions"
+                aria-expanded={mobileActionsOpen}
+                className="mobile-header-overflow sm:hidden rounded-lg p-2 text-white"
+              >
+                <MoreVertical className="h-5 w-5" />
+              </button>
+              {mobileActionsOpen && (
+                <div id="mobile-actions-menu" className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-stone-200 bg-white py-2 text-stone-900 shadow-xl sm:hidden animate-in fade-in zoom-in-95 duration-100">
+                  {!isViewOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileActionsOpen(false);
+                        onOpenQuickAdd();
+                      }}
+                      className="mobile-action-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-teal-950"
+                    >
+                      <PlusCircle className="mobile-action-menu-icon--record h-4 w-4" />
+                      Record new entry
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileActionsOpen(false);
+                      onOpenDataModal();
+                    }}
+                    className="mobile-action-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-teal-950"
+                  >
+                    <Database className="mobile-action-menu-icon--data h-4 w-4" />
+                    Cloud &amp; data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileActionsOpen(false);
+                      setVisualSettingsOpen(true);
+                    }}
+                    className="mobile-action-menu-item flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-teal-950"
+                  >
+                    <Palette className="mobile-action-menu-icon--appearance h-4 w-4" />
+                    Appearance settings
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="relative" ref={visualSettingsRef}>
               <button
@@ -210,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
                 aria-expanded={visualSettingsOpen}
                 aria-controls="visual-settings-panel"
                 title="App theme and mobile view"
-                className="p-2 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-white border border-teal-800 transition-colors"
+                className="hidden sm:block p-2 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-white border border-teal-800 transition-colors"
               >
                 <Palette className="w-4 h-4 text-amber-300" />
               </button>
@@ -225,17 +283,37 @@ export const Header: React.FC<HeaderProps> = ({
                       <Smartphone className="w-4 h-4 text-stone-500" />
                       <span className="text-sm font-semibold">Mobile view</span>
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-label="Mobile view"
-                      aria-checked={mobileView}
-                      onClick={() => setMobileView(!mobileView)}
-                      data-enabled={mobileView}
-                      className="visual-switch"
-                    >
-                      <span />
-                    </button>
+                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="Mobile view style">
+                      <button
+                        type="button"
+                        aria-pressed={mobileViewMode === 'classic'}
+                        onClick={() => setMobileViewMode('classic')}
+                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                          mobileViewMode === 'classic' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                        }`}
+                      >
+                        Classic
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={mobileViewMode === 'ios'}
+                        onClick={() => setMobileViewMode('ios')}
+                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                          mobileViewMode === 'ios' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                        }`}
+                      >
+                        iOS
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        aria-label="Third mobile view coming soon"
+                        title="Coming soon"
+                        className="cursor-not-allowed rounded-md px-2 py-1.5 text-[11px] font-semibold text-stone-400"
+                      >
+                        Coming soon
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-b border-stone-100 py-3">
                     <div className="flex items-center gap-2">
@@ -284,9 +362,11 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl bg-teal-900/80 hover:bg-teal-800 border border-teal-800 text-left transition-colors"
+                aria-label="Open profile menu"
+                aria-expanded={menuOpen}
+                className="header-profile-trigger flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl bg-teal-900/80 hover:bg-teal-800 border border-teal-800 text-left transition-colors"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-400 text-teal-950 font-black flex items-center justify-center text-xs shrink-0">
+                <div className="header-profile-avatar w-7 h-7 rounded-lg bg-amber-400 text-teal-950 font-black flex items-center justify-center text-xs shrink-0">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden lg:block text-left">

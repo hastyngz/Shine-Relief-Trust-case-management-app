@@ -157,7 +157,7 @@ function parseHash(): {
 }
 
 function AppContent() {
-  const { mobileView, theme, glassEffect, animatedGlass } = useVisualSettings();
+  const { mobileViewMode, theme, glassEffect, animatedGlass } = useVisualSettings();
   const {
     currentUser,
     staffProfile,
@@ -1029,7 +1029,7 @@ function AppContent() {
     <div
       id="app-shell"
       data-theme={theme}
-      data-mobile-view={mobileView}
+      data-mobile-view={mobileViewMode}
       data-glass-effect={glassEffect}
       data-animated-glass={animatedGlass || glassEffect}
       className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans"
@@ -1160,7 +1160,7 @@ function AppContent() {
         )}
 
         {view === 'contacts' && (
-          <ContactsView db={db} onBack={() => navigateTo('dashboard', 'dashboard')} />
+          <ContactsView db={db} />
         )}
 
         {view === 'case-management' && (

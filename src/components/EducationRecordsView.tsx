@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AppDatabase, EducationHistoryStatus } from '../types';
 import { addAcademicSupportRecord, addEducationHistoryRecord, addExaminationRecord, updateEducationHistoryRecord, updateGirl } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
-import { GraduationCap, Plus } from 'lucide-react';
+import { BookOpen, ClipboardCheck, FileCheck2, GraduationCap, Plus } from 'lucide-react';
 
 interface EducationRecordsViewProps {
   db: AppDatabase;
@@ -144,10 +144,22 @@ export const EducationRecordsView: React.FC<EducationRecordsViewProps> = ({ db, 
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="border border-stone-200 bg-white p-3 rounded-md"><div className="text-[10px] text-stone-500 uppercase font-bold">Girls by school</div><div className="text-lg font-black">{new Set(db.girls.map((girl) => girl.school).filter(Boolean)).size}</div></div>
-        <div className="border border-stone-200 bg-white p-3 rounded-md"><div className="text-[10px] text-stone-500 uppercase font-bold">Academic support</div><div className="text-lg font-black">{supportedGirls}</div></div>
-        <div className="border border-stone-200 bg-white p-3 rounded-md"><div className="text-[10px] text-stone-500 uppercase font-bold">Outstanding follow-ups</div><div className="text-lg font-black">{outstandingEducation}</div></div>
-        <div className="border border-stone-200 bg-white p-3 rounded-md"><div className="text-[10px] text-stone-500 uppercase font-bold">Exam support recorded</div><div className="text-lg font-black">{preparingGirls}</div></div>
+        {[
+          { label: 'Girls by school', count: new Set(db.girls.map((girl) => girl.school).filter(Boolean)).size, icon: BookOpen, color: 'blue' },
+          { label: 'Academic support', count: supportedGirls, icon: GraduationCap, color: 'teal' },
+          { label: 'Outstanding follow-ups', count: outstandingEducation, icon: ClipboardCheck, color: 'amber' },
+          { label: 'Exam support recorded', count: preparingGirls, icon: FileCheck2, color: 'violet' },
+        ].map(({ label, count, icon: Icon, color }) => (
+          <div key={label} className={`education-metric-card education-metric-card--${color} flex items-center justify-between gap-2 border p-3 rounded-xl`}>
+            <div className="min-w-0">
+              <div className="text-[10px] text-stone-600 uppercase font-bold leading-snug">{label}</div>
+              <div className="mt-1 text-2xl font-black leading-none">{count}</div>
+            </div>
+            <span className="education-metric-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+              <Icon className="h-5 w-5" aria-hidden="true" />
+            </span>
+          </div>
+        ))}
       </div>
 
       <div className="flex gap-1 border-b border-stone-200">

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, CheckCircle2, CircleDot, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CalendarDays, CheckCircle2, CircleDot, ClipboardList, Flag, Plus, RefreshCw } from 'lucide-react';
 import { AppDatabase, CaseAction, CaseActionPriority, CaseActionStatus, CaseActionSourceType } from '../types';
 import { addCaseAction, updateCaseAction } from '../utils/storage';
 import { persistPhase2Record } from '../services/firestoreSync';
@@ -163,10 +163,21 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     onRefresh();
   };
 
-  const metric = (label: string, count: number, value: ActionFilter, color: string) => (
-    <button key={label} onClick={() => setFilter(value)} className={`text-left p-3 border rounded-lg ${color} hover:brightness-[0.98]`}>
-      <span className="block text-[10px] uppercase font-bold">{label}</span>
-      <span className="block text-xl font-black mt-0.5">{count}</span>
+  const metric = (
+    label: string,
+    count: number,
+    value: ActionFilter,
+    color: string,
+    Icon: React.ComponentType<{ className?: string }>,
+  ) => (
+    <button key={label} onClick={() => setFilter(value)} className={`case-action-metric case-action-metric--${value.toLowerCase().replaceAll(' ', '-')} text-left p-3 border rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-md ${color}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="block text-[10px] uppercase font-bold leading-snug">{label}</span>
+        <span className="case-action-metric-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
+      <span className="block text-2xl font-black mt-1 leading-none">{count}</span>
     </button>
   );
 
@@ -183,12 +194,12 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {metric('My open tasks', openMine.length, 'Mine', 'theme-card border-stone-200 text-stone-900')}
-        {metric('Due today', dueToday.length, 'Due Today', 'bg-amber-50 border-amber-200 text-amber-950')}
-        {metric('Due this week', dueThisWeek.length, 'Due This Week', 'bg-sky-50 border-sky-200 text-sky-950')}
-        {metric('Overdue', overdue.length, 'Overdue', 'bg-rose-50 border-rose-200 text-rose-950')}
-        {metric('High priority', highPriority.length, 'High Priority', 'bg-orange-50 border-orange-200 text-orange-950')}
-        {metric('Completed', completed.length, 'Completed', 'bg-emerald-50 border-emerald-200 text-emerald-950')}
+        {metric('My open tasks', openMine.length, 'Mine', 'bg-teal-50 border-teal-200 text-teal-950', ClipboardList)}
+        {metric('Due today', dueToday.length, 'Due Today', 'bg-amber-50 border-amber-200 text-amber-950', CalendarDays)}
+        {metric('Due this week', dueThisWeek.length, 'Due This Week', 'bg-sky-50 border-sky-200 text-sky-950', CalendarClock)}
+        {metric('Overdue', overdue.length, 'Overdue', 'bg-rose-50 border-rose-200 text-rose-950', AlertTriangle)}
+        {metric('High priority', highPriority.length, 'High Priority', 'bg-orange-50 border-orange-200 text-orange-950', Flag)}
+        {metric('Completed', completed.length, 'Completed', 'bg-emerald-50 border-emerald-200 text-emerald-950', CheckCircle2)}
       </div>
 
       {showForm && (
