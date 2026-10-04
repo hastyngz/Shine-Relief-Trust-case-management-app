@@ -1469,7 +1469,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             </section>
           )}
           <QualityCheckPanel
-            issues={importQualityIssues}
+            issues={importQualityIssues.map((issue) => {
+              const resolution = qualityResolutions.find((entry) => entry.issueId === issue.id);
+              return {
+                ...issue,
+                ...(resolution ? {
+                  status: resolution.status,
+                  resolution: { note: resolution.note, by: resolution.by, at: resolution.at, before: resolution.before, after: resolution.after },
+                } : {}),
+              };
+            })}
             scores={importQualityScores}
             onApplyFix={canEdit ? applySafeImportFix : undefined}
             onOpenIssue={openImportQualityIssue}

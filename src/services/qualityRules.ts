@@ -21,6 +21,13 @@ export type QualityIssue = {
     reversible: boolean;
   };
   status?: 'open' | 'resolved' | 'overridden' | 'pending-approval';
+  resolution?: {
+    note: string;
+    by: string;
+    at: string;
+    before?: unknown;
+    after?: unknown;
+  };
   context?: string;
   whyMatters?: string;
 };

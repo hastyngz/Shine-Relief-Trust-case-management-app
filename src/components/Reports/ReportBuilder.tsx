@@ -114,6 +114,9 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
   const auditedQualityIssues = reportQualityIssues.map((issue) => ({
     ...issue,
     status: qualityResolutions.find((entry) => entry.issueId === issue.id)?.status || issue.status,
+    ...(qualityResolutions.find((entry) => entry.issueId === issue.id)
+      ? { resolution: qualityResolutions.find((entry) => entry.issueId === issue.id) }
+      : {}),
   }));
   const persistQualityAudit = async (format: 'docx' | 'xlsx' | 'pdf' | 'csv') => {
     if (!currentUser) throw new Error('Sign in is required to record report quality history.');
@@ -251,7 +254,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
       </section>
 
       <QualityCheckPanel
-        issues={reportQualityIssues}
+        issues={auditedQualityIssues}
         scores={reportQualityScores}
         canApproveNarrativeOnly={isAdmin || role === 'Manager'}
         currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}

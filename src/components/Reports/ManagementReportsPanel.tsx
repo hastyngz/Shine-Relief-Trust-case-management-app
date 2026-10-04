@@ -157,6 +157,9 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const auditedQualityIssues = reportQualityIssues.map((issue) => ({
     ...issue,
     status: qualityResolutions.find((entry) => entry.issueId === issue.id)?.status || issue.status,
+    ...(qualityResolutions.find((entry) => entry.issueId === issue.id)
+      ? { resolution: qualityResolutions.find((entry) => entry.issueId === issue.id) }
+      : {}),
   }));
   const qualityAnnexRows = [
     ['SCORE', 'Quantification', '', `${reportQualityScores.quantification}/100`, ''],
@@ -317,7 +320,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         <p className="text-xs text-stone-500">Exports contain filtered records and figures already stored in SHINE. No values are estimated or generated from mock data.</p>
       </div>
       <QualityCheckPanel
-        issues={reportQualityIssues}
+        issues={auditedQualityIssues}
         scores={reportQualityScores}
         canApproveNarrativeOnly
         currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}

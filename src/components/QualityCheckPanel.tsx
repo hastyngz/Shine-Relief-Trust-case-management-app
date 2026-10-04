@@ -76,16 +76,35 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
 
   const resolvedIds = useMemo(() => new Set(resolved.map(({ issue }) => issue.id)), [resolved]);
   const allOpen = issues.filter((issue) => (issue.status || 'open') === 'open' && !resolvedIds.has(issue.id));
-  const resolvedItems = resolved.filter(({ resolution }) => resolution.status === 'resolved' || resolution.status === 'overridden');
-  const pendingItems = resolved.filter(({ resolution }) => resolution.status === 'pending-approval');
+  const persistedResolved = issues
+    .filter((issue) => issue.status === 'resolved' || issue.status === 'overridden')
+    .map((issue) => ({
+      issue,
+      resolution: { status: issue.status as 'resolved' | 'overridden', note: issue.resolution?.note || '' },
+      by: issue.resolution?.by || 'Recorded user',
+      at: issue.resolution?.at || '',
+    }));
+  const resolvedItems = [
+    ...persistedResolved,
+    ...resolved.filter(({ resolution, issue }) =>
+      (resolution.status === 'resolved' || resolution.status === 'overridden')
+      && !persistedResolved.some((entry) => entry.issue.id === issue.id)),
+  ];
+  const persistedPending = issues.filter((issue) => issue.status === 'pending-approval').map((issue) => ({
+    issue,
+    resolution: { status: 'pending-approval' as const, note: issue.resolution?.note || '' },
+    by: issue.resolution?.by || 'Recorded user',
+    at: issue.resolution?.at || '',
+  }));
+  const pendingItems = [
+    ...persistedPending,
+    ...resolved.filter(({ resolution, issue }) =>
+      resolution.status === 'pending-approval'
+      && !persistedPending.some((entry) => entry.issue.id === issue.id)),
+  ];
   const baseItems = statusFilter === 'open'
     ? allOpen
-    : statusFilter === 'pending-approval'
-      ? pendingItems.map(({ issue }) => ({ ...issue, status: 'pending-approval' as const }))
-      : [
-        ...issues.filter((issue) => (issue.status === 'resolved' || issue.status === 'overridden') && !resolvedIds.has(issue.id)),
-        ...resolvedItems.map(({ issue, resolution }) => ({ ...issue, status: resolution.status })),
-      ];
+    : [];
   const filteredIssues = baseItems.filter((issue) =>
     (severityFilter === 'all' || issue.severity === severityFilter)
     && (ruleFilter === 'all' || issue.rule === ruleFilter));
@@ -355,17 +374,22 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         </article>
       ))}
 
-      {statusFilter === 'resolved' && resolvedItems.map(({ issue, resolution, by, at }) => (
+      {statusFilter === 'resolved' && resolvedItems.filter(({ issue }) =>
+        (severityFilter === 'all' || issue.severity === severityFilter)
+        && (ruleFilter === 'all' || issue.rule === ruleFilter)).map(({ issue, resolution, by, at }) => (
         <article key={issue.id} className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs">
           <p className="font-semibold">{issue.rule}: {issue.message}</p>
-          <p className="mt-1">Reviewed by {by} at {new Date(at).toLocaleString()}. {resolution.note}</p>
+          <p className="mt-1">Reviewed by {by}{at ? ` at ${new Date(at).toLocaleString()}` : ''}. {resolution.note}</p>
+          {issue.resolution?.before !== undefined && <p className="mt-1">Before: {String(issue.resolution.before)} · after: {String(issue.resolution.after)}</p>}
           {onUndoFix && <button type="button" className="mt-2 underline" onClick={() => { onUndoFix(issue); setResolved((items) => items.filter((item) => item.issue.id !== issue.id)); }}>Undo</button>}
         </article>
       ))}
-      {statusFilter === 'pending-approval' && pendingItems.map(({ issue, resolution, by, at }) => (
+      {statusFilter === 'pending-approval' && pendingItems.filter(({ issue }) =>
+        (severityFilter === 'all' || issue.severity === severityFilter)
+        && (ruleFilter === 'all' || issue.rule === ruleFilter)).map(({ issue, resolution, by, at }) => (
         <article key={issue.id} className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs">
           <p className="font-semibold">Pending manager approval · {issue.rule}</p>
-          <p className="mt-1">{resolution.note} · submitted by {by} at {new Date(at).toLocaleString()}.</p>
+          <p className="mt-1">{resolution.note} · submitted by {by}{at ? ` at ${new Date(at).toLocaleString()}` : ''}.</p>
           {onUndoFix && <button type="button" className="mt-2 underline" onClick={() => { onUndoFix(issue); setResolved((items) => items.filter((item) => item.issue.id !== issue.id)); }}>Undo request</button>}
         </article>
       ))}

@@ -220,6 +220,9 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   const auditedQualityIssues = reportQualityIssues.map((issue) => ({
     ...issue,
     status: qualityResolutions.find((entry) => entry.issueId === issue.id)?.status || issue.status,
+    ...(qualityResolutions.find((entry) => entry.issueId === issue.id)
+      ? { resolution: qualityResolutions.find((entry) => entry.issueId === issue.id) }
+      : {}),
   }));
 
   const applyCalendarPeriod = (preset: string, year: number, month: number, quarter: number) => {
@@ -783,7 +786,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
           </section>
 
           <QualityCheckPanel
-            issues={reportQualityIssues}
+            issues={auditedQualityIssues}
             scores={reportQualityScores}
             canApproveNarrativeOnly={isAdmin || role === 'Manager'}
             currentUserName={staffProfile?.fullName || currentUser?.email || authorName}
