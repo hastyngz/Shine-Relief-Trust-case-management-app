@@ -1,3 +1,5 @@
+import type { ProgrammeId } from './data/programmes';
+
 export type GirlStatus = 'Active' | 'On Holiday' | 'Completed' | 'Left SHINE';
 
 export type HouseStatus = 'Active' | 'Not in use' | 'Closed';
@@ -582,6 +584,7 @@ export interface AnnualBudgetPlan {
 
 export interface BudgetItem {
   id: string;
+  programmeId?: ProgrammeId;
   budgetId?: string;
   financialYear?: string;
   month?: number;
@@ -654,6 +657,7 @@ export type WorkplanStatus = 'Planned' | 'In Progress' | 'Completed' | 'Delayed'
 
 export interface WorkplanItem {
   id: string;
+  programmeId?: ProgrammeId;
   period: string; // e.g. "Annual 2026", "2026-Q3", "September 2026"
   periodType: WorkplanPeriodType;
   dueDatePeriod?: string;

@@ -1,7 +1,8 @@
 import { AppDatabase, BudgetItem, FeedingProgramLog, MarketPriceRecord, WhatIfScenario } from '../types';
+import { PROGRAMMES } from '../data/programmes';
 
 export interface IntelligenceSearchResult {
-  recordType: 'girl' | 'household' | 'meeting' | 'schedule' | 'workplan' | 'marketPrice' | 'feedingLog';
+  recordType: 'girl' | 'household' | 'meeting' | 'schedule' | 'workplan' | 'marketPrice' | 'feedingLog' | 'programmeLog';
   recordId: string;
   title: string;
   detail: string;
@@ -88,6 +89,19 @@ export function searchOperationalRecords(db: AppDatabase, query: string, limit =
   (db.feedingProgramLogs || []).forEach((log) => {
     if (matches([log.id, log.date, log.earlyYearsGroup, log.foodItems.join(' '), log.notes])) {
       results.push({ recordType: 'feedingLog', recordId: log.id, title: `Feeding log ${log.date}`, detail: `${log.studentsPresent} students · ${log.mealsServed} meals`, date: log.date });
+    }
+  });
+  (db.programmeLogs || []).forEach((log) => {
+    const programme = PROGRAMMES.find((item) => item.id === log.programmeId);
+    const programmeName = programme?.name || log.programmeId;
+    if (matches([log.id, programmeName, log.entryType, log.description, log.date, log.notes])) {
+      results.push({
+        recordType: 'programmeLog',
+        recordId: log.id,
+        title: `${programmeName} · ${log.entryType}`,
+        detail: `${log.description} · ${log.date}`,
+        date: log.date,
+      });
     }
   });
 

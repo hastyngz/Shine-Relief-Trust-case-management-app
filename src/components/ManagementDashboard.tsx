@@ -19,6 +19,8 @@ import { calculateBudgetForecast, calculateFeedingCostInsight } from '../service
 import { formatMWK } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
 import type { SalaryHistoryRecord, StaffUser } from '../types';
+import { PROGRAMMES, type ProgrammeId } from '../data/programmes';
+import { startBadge, summariseProgramme } from '../services/programmeSummary';
 
 interface ManagementDashboardProps {
   db: AppDatabase;
@@ -56,6 +58,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
   const [financialYear, setFinancialYear] = useState('ALL');
   const [month, setMonth] = useState('ALL');
   const [programme, setProgramme] = useState('ALL');
+  const [programmeId, setProgrammeId] = useState<'ALL' | ProgrammeId>('ALL');
   const [householdId, setHouseholdId] = useState('ALL');
   const [category, setCategory] = useState('ALL');
   const [staffId, setStaffId] = useState('ALL');
@@ -95,6 +98,12 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     priority: taskPriority === 'ALL' ? undefined : taskPriority,
   };
   const permittedDb = projectManagementDatabase(db, { canViewHealthRecords, canViewCaseReviews, canViewSafeguarding });
+  const programmeFilteredDb = programmeId === 'ALL' ? permittedDb : {
+    ...permittedDb,
+    budgets: (permittedDb.budgets || []).filter((item) => item.programmeId === programmeId),
+    workplans: (permittedDb.workplans || []).filter((item) => item.programmeId === programmeId),
+    programmeLogs: (permittedDb.programmeLogs || []).filter((item) => item.programmeId === programmeId),
+  };
   const gratuityByEmployee = useMemo(() => {
     if (!salaryHistory || salaryHistoryError) return undefined;
     const totals: Record<string, number> = {};
@@ -115,7 +124,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     }
     return totals;
   }, [salaryHistory, salaryHistoryError, staff, today]);
-  const analytics = buildManagementAnalytics(permittedDb, filters, staff, today, gratuityByEmployee);
+  const analytics = buildManagementAnalytics(programmeFilteredDb, filters, staff, today, gratuityByEmployee);
   const latestImport = [...(db.importAudits || [])].sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0];
   const latestReportPeriod = [...(db.importAudits || [])]
     .filter((record) => record.reportingPeriod)
@@ -149,7 +158,43 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     return b.overdueTasks - a.overdueTasks;
   });
   const phase5Feeding = calculateFeedingCostInsight(permittedDb.feedingProgramLogs || [], range.startDate, range.endDate);
-  const phase5Forecast = calculateBudgetForecast(permittedDb.budgets || [], 1 + ((permittedDb.forecastSettings?.[0]?.inflationPercent || 0) / 100));
+  const phase5Forecast = calculateBudgetForecast(programmeFilteredDb.budgets || [], 1 + ((permittedDb.forecastSettings?.[0]?.inflationPercent || 0) / 100));
+  const programmePerformance = PROGRAMMES
+    .filter((item) => programmeId === 'ALL' || item.id === programmeId)
+    .map((item) => {
+      const summary = summariseProgramme(permittedDb, item.id);
+      const budgetLines = (permittedDb.budgets || []).filter((line) => line.programmeId === item.id);
+      const budget = budgetLines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
+      const actual = budgetLines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
+      const openWorkplans = (permittedDb.workplans || []).filter((workplan) =>
+        workplan.programmeId === item.id && !['Completed', 'Cancelled'].includes(workplan.status)
+      ).length;
+      const incomeByYear = new Map<number, number>();
+      (permittedDb.programmeLogs || [])
+        .filter((log) => log.programmeId === item.id && log.date >= `${item.startYear || 0}-01-01`)
+        .forEach((log) => {
+          const year = Number(log.date.slice(0, 4));
+          if (!Number.isFinite(year)) return;
+          const amount = log.amountMWK || 0;
+          const delta = log.entryType === 'Sale' ? amount : log.entryType === 'Expense' || log.entryType === 'Input' ? -amount : 0;
+          incomeByYear.set(year, (incomeByYear.get(year) || 0) + delta);
+        });
+      const yearlyIncome = ['fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(item.id)
+        ? Array.from({ length: Math.max(0, new Date().getFullYear() - (item.startYear || new Date().getFullYear()) + 1) }, (_, index) => {
+            const year = (item.startYear || new Date().getFullYear()) + index;
+            return { year, net: incomeByYear.get(year) || 0 };
+          })
+        : [];
+      return {
+        programme: item,
+        summary,
+        badge: startBadge(item.id, summary.fallbackStartDate),
+        budget,
+        actual,
+        openWorkplans,
+        yearlyIncome,
+      };
+    });
 
   if (!canAccessManagementDashboard(isAdmin, role)) {
     return <div className="rounded-xl border border-rose-200 bg-white p-8 text-center"><h1 className="text-lg font-bold text-stone-900">Management access restricted</h1><p className="mt-2 text-sm text-stone-600">Only Administrators and Managers can view this dashboard.</p></div>;
@@ -193,9 +238,14 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
               <option value="ALL">All months</option>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{new Date(2026, index, 1).toLocaleString('en', { month: 'long' })}</option>)}
             </select>
           </label>
-          <label className="text-[11px] text-stone-600">Programme
+          <label className="text-[11px] text-stone-600">Programme grouping
             <select className="field mt-1 w-full" value={programme} onChange={(event) => setProgramme(event.target.value)}>
               <option value="ALL">All programmes</option>{programmes.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label className="text-[11px] text-stone-600">Programme
+            <select className="field mt-1 w-full" value={programmeId} onChange={(event) => setProgrammeId(event.target.value as 'ALL' | ProgrammeId)}>
+              <option value="ALL">All portfolio programmes</option>{PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
           <label className="text-[11px] text-stone-600">Household
@@ -213,7 +263,33 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
           <label className="text-[11px] text-stone-600">From<input className="field mt-1 w-full" type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label>
           <label className="text-[11px] text-stone-600">To<input className="field mt-1 w-full" type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label>
         </div>}
-        {programme !== 'ALL' && <p className="text-[11px] text-amber-800">Programme filtering applies only to records with a stored programme attribution; untagged operational records are not assigned a guessed programme.</p>}
+        {(programme !== 'ALL' || programmeId !== 'ALL') && <p className="text-[11px] text-amber-800">Programme filtering applies only to records with a stored programme attribution; untagged operational records are not assigned a guessed programme.</p>}
+      </section>
+
+      <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm" aria-label="Programme performance">
+        <h2 className="text-sm font-black text-stone-900">Programme performance</h2>
+        <div className="mt-3 divide-y divide-stone-200">
+          {programmePerformance.map(({ programme: item, summary, badge, budget, actual, openWorkplans, yearlyIncome }) => (
+            <article key={item.id} className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))]">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-stone-900">{item.name}</h3>
+                <p className="text-xs text-stone-600">{summary.value} {summary.label}</p>
+                <p className="text-[11px] text-stone-500">{badge.text}</p>
+              </div>
+              <div className="text-xs"><span className="block text-stone-500">Budget vs actual</span><strong>{formatMWK(budget)}</strong><span className="text-stone-500"> / {formatMWK(actual)}</span></div>
+              <div className="text-xs"><span className="block text-stone-500">Open workplan items</span><strong>{openWorkplans}</strong></div>
+              {yearlyIncome.length > 0 && (
+                <div className="text-xs">
+                  <span className="block text-stone-500">Net income by year</span>
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
+                    {yearlyIncome.map(({ year, net }) => <span key={year}>{year}: <strong>{formatMWK(net)}</strong></span>)}
+                  </div>
+                </div>
+              )}
+            </article>
+          ))}
+          {programmePerformance.length === 0 && <p className="py-4 text-xs text-stone-500">No programmes match this filter.</p>}
+        </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

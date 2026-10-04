@@ -46,6 +46,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
+import { PROGRAMMES, PROGRAMME_BY_ID } from '../../data/programmes';
 
 interface BudgetsAndWorkplansViewProps {
   db: AppDatabase;
@@ -63,6 +64,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   // Filters
   const [budgetPeriodFilter, setBudgetPeriodFilter] = useState<string>('ALL');
   const [budgetCategoryFilter, setBudgetCategoryFilter] = useState<string>('ALL');
+  const [budgetSummaryGroup, setBudgetSummaryGroup] = useState<'category' | 'period' | 'programme'>('category');
   const [workplanStatusFilter, setWorkplanStatusFilter] = useState<string>('ALL');
 
   // Modal States
@@ -142,19 +144,19 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     return { month, budgeted, actual, variance };
   });
 
-  const categoryBudgetSummary = uniqueCategories.map((category) => {
-    const lines = budgets.filter((line) => line.category === category);
+  const budgetSummary = (key: string, lines: BudgetItem[]) => {
     const budgeted = lines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
     const actual = lines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
-    return { category, budgeted, actual, variance: budgeted - actual };
-  });
-
-  const programmeBudgetSummary = Array.from(new Set(budgets.map((line) => line.programme).filter(Boolean))).map((programme) => {
-    const lines = budgets.filter((line) => line.programme === programme);
-    const budgeted = lines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
-    const actual = lines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
-    return { programme, budgeted, actual, variance: budgeted - actual };
-  });
+    return { key, budgeted, actual, variance: budgeted - actual };
+  };
+  const groupedBudgetSummary = budgetSummaryGroup === 'category'
+    ? uniqueCategories.map((key) => budgetSummary(key, budgets.filter((line) => line.category === key)))
+    : budgetSummaryGroup === 'period'
+    ? uniquePeriods.map((key) => budgetSummary(key, budgets.filter((line) => line.period === key)))
+    : PROGRAMMES.map((item) => budgetSummary(
+      item.name,
+      budgets.filter((line) => line.programmeId === item.id)
+    )).filter((row) => row.budgeted || row.actual);
 
   // Handle Budget Form Submit
   const handleSaveBudget = (e: React.FormEvent<HTMLFormElement>) => {
@@ -162,6 +164,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const fd = new FormData(e.currentTarget);
     const period = (fd.get('period') as string).trim();
     const programme = (fd.get('programme') as string).trim() || 'Education & Support';
+    const programmeIdValue = fd.get('programmeId');
+    const programmeId = PROGRAMMES.find((item) => item.id === programmeIdValue)?.id;
     const category = (fd.get('category') as BudgetCategory) || 'Education';
     const itemDescription = (fd.get('itemDescription') as string).trim();
     const quantity = parseFloat(fd.get('quantity') as string) || 1;
@@ -178,6 +182,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           period,
           periodType: 'quarterly',
           programme,
+          programmeId,
           category,
           itemDescription,
           quantity,
@@ -195,6 +200,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           period,
           periodType: 'quarterly',
           programme,
+          programmeId,
           category,
           itemDescription,
           quantity,
@@ -280,6 +286,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const completedCount = parseInt(fd.get('completedCount') as string, 10) || 0;
     const rawStatus = (fd.get('status') as string) || 'In Progress';
     const normalizedStatus = normalizeWorkplanStatus(rawStatus) as WorkplanStatus;
+    const programmeIdValue = fd.get('programmeId');
+    const programmeId = PROGRAMMES.find((item) => item.id === programmeIdValue)?.id;
     const progress = Math.min(100, Math.round((completedCount / targetCount) * 100));
     const responsibleStaffName = (fd.get('responsibleStaffName') as string).trim();
     const responsibleStaffId = staffProfile?.id || staffProfile?.uid || 'staff-1';
@@ -295,6 +303,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         {
           period,
           periodType: 'quarterly',
+          programmeId,
           activity,
           objective,
           description,
@@ -318,6 +327,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         {
           period,
           periodType: 'quarterly',
+          programmeId,
           activity,
           objective,
           description,
@@ -596,39 +606,40 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
-            <div className="mb-3">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Budget vs actual summary</p>
-              <h3 className="text-base font-black text-stone-900">Category and programme variance</h3>
-            </div>
-            <div className="grid gap-4 xl:grid-cols-2">
-              <div className="border border-stone-200 rounded-xl overflow-hidden">
-                <div className="bg-stone-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-stone-600">By category</div>
-                <div className="divide-y divide-stone-200">
-                  {categoryBudgetSummary.map(({ category, budgeted, actual, variance }) => (
-                    <div key={category} className="px-3 py-2 flex items-center justify-between gap-3 text-xs">
-                      <span className="font-medium text-stone-700">{category}</span>
-                      <div className="text-right">
-                        <div className="font-bold text-stone-900">MWK {budgeted.toLocaleString()}</div>
-                        <div className="text-stone-500">Actual {actual.toLocaleString()} • {variance >= 0 ? 'Surplus' : 'Over'} {Math.abs(variance).toLocaleString()}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <h3 className="text-base font-black text-stone-900">Budget variance grouping</h3>
+              <div className="flex gap-1" role="group" aria-label="Group budget variance by">
+                {(['category', 'period', 'programme'] as const).map((group) => (
+                  <button
+                    key={group}
+                    type="button"
+                    aria-pressed={budgetSummaryGroup === group}
+                    onClick={() => setBudgetSummaryGroup(group)}
+                    className={`rounded-md px-2.5 py-1.5 text-xs font-semibold capitalize ${
+                      budgetSummaryGroup === group ? 'bg-teal-800 text-white' : 'bg-stone-100 text-stone-700'
+                    }`}
+                  >
+                    By {group}
+                  </button>
+                ))}
               </div>
-
-              <div className="border border-stone-200 rounded-xl overflow-hidden">
-                <div className="bg-stone-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-stone-600">By programme</div>
-                <div className="divide-y divide-stone-200">
-                  {programmeBudgetSummary.map(({ programme, budgeted, actual, variance }) => (
-                    <div key={programme} className="px-3 py-2 flex items-center justify-between gap-3 text-xs">
-                      <span className="font-medium text-stone-700">{programme}</span>
-                      <div className="text-right">
-                        <div className="font-bold text-stone-900">MWK {budgeted.toLocaleString()}</div>
-                        <div className="text-stone-500">Actual {actual.toLocaleString()} • {variance >= 0 ? 'Surplus' : 'Over'} {Math.abs(variance).toLocaleString()}</div>
-                      </div>
+            </div>
+            <div className="border border-stone-200 rounded-xl overflow-hidden">
+              <div className="bg-stone-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-stone-600">
+                By {budgetSummaryGroup}
+              </div>
+              <div className="divide-y divide-stone-200">
+                {groupedBudgetSummary.map(({ key, budgeted, actual, variance }) => (
+                  <div key={key} className="px-3 py-2 flex items-center justify-between gap-3 text-xs">
+                    <span className="font-medium text-stone-700">{key}</span>
+                    <div className="text-right">
+                      <div className="font-bold text-stone-900">{formatMWK(budgeted)}</div>
+                      <div className="text-stone-500">Actual {formatMWK(actual)} • {variance >= 0 ? 'Surplus' : 'Over'} {formatMWK(Math.abs(variance))}</div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
+                {groupedBudgetSummary.length === 0 && <p className="p-3 text-xs text-stone-500">No attributed budget lines yet.</p>}
               </div>
             </div>
           </div>
@@ -706,6 +717,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           <td className="p-3 whitespace-nowrap">
                             <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-teal-50 text-teal-800 border border-teal-200">
                               {b.programme}
+                            </span>
+                            <span className="mt-1 block text-[10px] text-stone-500">
+                              {b.programmeId ? PROGRAMME_BY_ID[b.programmeId].name : 'Unassigned'}
                             </span>
                           </td>
                           <td className="p-3 font-medium text-stone-700 whitespace-nowrap">{b.category}</td>
@@ -925,6 +939,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           {w.period}
                         </span>
                         <h3 className="text-sm font-bold text-stone-900 mt-1.5">{w.activity}</h3>
+                        <p className="text-[10px] font-semibold text-stone-500">{w.programmeId ? PROGRAMME_BY_ID[w.programmeId].name : 'Unassigned'}</p>
                         <p className="text-xs text-stone-600 mt-0.5">{w.objective}</p>
                       </div>
                       <span
@@ -1249,6 +1264,18 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">Programme attribution</label>
+                <select
+                  name="programmeId"
+                  defaultValue={editingBudget?.programmeId || ''}
+                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                >
+                  <option value="">Unassigned</option>
+                  {PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">Category</label>
@@ -1383,6 +1410,18 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                     <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">Programme</label>
+                <select
+                  name="programmeId"
+                  defaultValue={editingWorkplan?.programmeId || ''}
+                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                >
+                  <option value="">Unassigned</option>
+                  {PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
               </div>
 
               <div>
