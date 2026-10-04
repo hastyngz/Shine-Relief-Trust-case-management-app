@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import type { SalaryHistoryRecord, StaffUser } from '../types';
 import { PROGRAMMES, type ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from '../services/programmeSummary';
+import { buildNeedsAttention } from '../services/attentionService';
 
 interface ManagementDashboardProps {
   db: AppDatabase;
@@ -69,6 +70,17 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[] | null>(null);
   const [salaryHistoryError, setSalaryHistoryError] = useState(false);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [showAllAttention, setShowAllAttention] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setDetailsOpen(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
@@ -159,6 +171,10 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
   });
   const phase5Feeding = calculateFeedingCostInsight(permittedDb.feedingProgramLogs || [], range.startDate, range.endDate);
   const phase5Forecast = calculateBudgetForecast(programmeFilteredDb.budgets || [], 1 + ((permittedDb.forecastSettings?.[0]?.inflationPercent || 0) / 100));
+  const attentionItems = useMemo(
+    () => buildNeedsAttention(permittedDb, today, canViewCaseReviews),
+    [permittedDb, today, canViewCaseReviews]
+  );
   const programmePerformance = PROGRAMMES
     .filter((item) => programmeId === 'ALL' || item.id === programmeId)
     .map((item) => {
@@ -214,6 +230,49 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
           <div className="min-w-0"><p className="text-xs font-semibold text-stone-600">Latest import</p><p className="mt-1 break-words text-sm font-bold text-stone-900">{latestImport?.fileName || 'No import recorded'}</p>{latestImport && <p className="mt-0.5 text-xs text-stone-600">{new Date(latestImport.importedAt).toLocaleDateString()}</p>}</div>
         </div>}
       </section>
+
+      <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm" aria-label="Needs attention">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-black text-stone-900">Needs attention</h2>
+            <p className="mt-1 text-[11px] text-stone-500">Items that may need action today</p>
+          </div>
+          {attentionItems.length > 8 && (
+            <button
+              type="button"
+              onClick={() => setShowAllAttention((show) => !show)}
+              className="text-xs font-bold text-teal-800 underline"
+              aria-expanded={showAllAttention}
+            >
+              {showAllAttention ? 'Show fewer' : `Show all (${attentionItems.length})`}
+            </button>
+          )}
+        </div>
+        <div className="mt-3 divide-y divide-stone-100">
+          {(showAllAttention ? attentionItems : attentionItems.slice(0, 8)).map((item) => (
+            <a key={item.id} href={item.target} className="flex min-h-11 items-center gap-3 py-2 text-left hover:bg-stone-50">
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                item.severity === 'high' ? 'bg-rose-600' : item.severity === 'medium' ? 'bg-amber-500' : 'bg-sky-600'
+              }`} aria-label={`${item.severity} severity`} />
+              <span className="min-w-0 flex-1">
+                <strong className="block text-xs text-stone-900">{item.title}</strong>
+                <span className="block text-[11px] text-stone-600">{item.detail}</span>
+              </span>
+              <span aria-hidden="true" className="text-stone-400">›</span>
+            </a>
+          ))}
+          {attentionItems.length === 0 && <p className="py-3 text-xs text-stone-500">Nothing currently needs attention.</p>}
+        </div>
+      </section>
+
+      <details
+        className="space-y-5"
+        open={detailsOpen}
+        onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+      >
+        <summary className="cursor-pointer rounded-xl border border-stone-200 bg-white p-4 text-sm font-black text-stone-900">
+          Details
+        </summary>
 
       <section className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm space-y-3" aria-label="Management dashboard filters">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -552,6 +611,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
       <details className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
         <summary className="cursor-pointer text-sm font-black text-stone-900">Trends</summary>
         {analytics.trends.enoughData ? <div className="mt-3 overflow-x-auto"><table className="min-w-[900px] w-full text-left text-xs"><thead><tr className="border-b text-stone-500"><th className="py-2">Month</th><th>Admissions</th><th>Completed / left</th><th>Education</th><th>Health</th><th>Family</th><th>Activities</th><th>Household spend</th><th>Programme spend</th><th>Payroll</th><th>Budget</th><th>Actual</th></tr></thead><tbody>{analytics.trends.monthly.map((row) => <tr key={row.month} className="border-b border-stone-100"><td className="py-2">{row.month}</td><td>{row.admissions}</td><td>{row.exits ?? 'Not tracked'}</td><td>{row.education}</td><td>{row.health}</td><td>{row.family}</td><td>{row.activities}</td><td>{formatMWK(row.householdSpend)}</td><td>{formatMWK(row.programmeSpend)}</td><td>{formatMWK(row.payroll)}</td><td>{formatMWK(row.budget)}</td><td>{formatMWK(row.actual)}</td></tr>)}</tbody></table><p className="mt-2 text-[11px] text-stone-500">Exit dates are not separately recorded, so exit trends are not inferred from profile edit timestamps.</p></div> : <p className="mt-3 text-xs text-stone-500">Not enough data across multiple months to show meaningful trends.</p>}
+      </details>
       </details>
     </div>
   );
