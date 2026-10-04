@@ -53,7 +53,16 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus = 'synced',
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
-  const { mobileViewMode, setMobileViewMode, theme, setTheme, glassEffect, setGlassEffect } = useVisualSettings();
+  const {
+    mobileViewMode,
+    setMobileViewMode,
+    foundationLook,
+    setFoundationLook,
+    theme,
+    setTheme,
+    glassEffect,
+    setGlassEffect,
+  } = useVisualSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
@@ -264,10 +273,10 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setVisualSettingsOpen((open) => !open)}
-                aria-label="Open visual settings"
+                aria-label="Open app view and appearance settings"
                 aria-expanded={visualSettingsOpen}
                 aria-controls="visual-settings-panel"
-                title="App theme and mobile view"
+                title="App view and theme settings"
                 className="hidden sm:block p-2 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-white border border-teal-800 transition-colors"
               >
                 <Palette className="w-4 h-4 text-amber-300" />
@@ -275,15 +284,15 @@ export const Header: React.FC<HeaderProps> = ({
               {visualSettingsOpen && (
                 <section
                   id="visual-settings-panel"
-                  aria-label="App theme and mobile view"
+                  aria-label="App view and appearance settings"
                   className="absolute right-0 top-full mt-2 w-[min(19rem,calc(100vw-1rem))] max-h-[min(75vh,36rem)] overflow-y-auto rounded-xl border border-stone-200 bg-white p-3 text-stone-900 shadow-xl z-50"
                 >
                   <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-3">
                     <div className="flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-stone-500" />
-                      <span className="text-sm font-semibold">Mobile view</span>
+                      <span className="text-sm font-semibold">App view</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="Mobile view style">
+                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="App view style">
                       <button
                         type="button"
                         aria-pressed={mobileViewMode === 'classic'}
@@ -306,15 +315,42 @@ export const Header: React.FC<HeaderProps> = ({
                       </button>
                       <button
                         type="button"
-                        disabled
-                        aria-label="Third mobile view coming soon"
-                        title="Coming soon"
-                        className="cursor-not-allowed rounded-md px-2 py-1.5 text-[11px] font-semibold text-stone-400"
+                        aria-pressed={mobileViewMode === 'foundation'}
+                        onClick={() => setMobileViewMode('foundation')}
+                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                          mobileViewMode === 'foundation' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                        }`}
                       >
-                        Coming soon
+                        Foundation
                       </button>
                     </div>
                   </div>
+                  {mobileViewMode === 'foundation' && (
+                    <div className="border-b border-stone-100 py-3">
+                      <div className="mb-2 text-sm font-semibold">Foundation style</div>
+                      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Foundation style">
+                        {([
+                          ['editorial-ink', 'Editorial Ink'],
+                          ['civic-navy', 'Civic Navy'],
+                          ['warm-paper', 'Warm Paper'],
+                        ] as const).map(([look, label]) => (
+                          <button
+                            key={look}
+                            type="button"
+                            aria-pressed={foundationLook === look}
+                            onClick={() => setFoundationLook(look)}
+                            className={`rounded-md px-1.5 py-2 text-[10px] font-semibold transition-colors ${
+                              foundationLook === look
+                                ? 'bg-stone-800 text-white'
+                                : 'bg-stone-100 text-stone-600 hover:text-stone-900'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-3 border-b border-stone-100 py-3">
                     <div className="flex items-center gap-2">
                       <Waves className="w-4 h-4 text-stone-500" />

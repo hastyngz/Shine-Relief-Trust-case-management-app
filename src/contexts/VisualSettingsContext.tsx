@@ -12,17 +12,21 @@ export type ThemeId =
   | 'fire-violet'
   | 'vibrant-shine';
 
-export type MobileViewMode = 'classic' | 'ios';
+export type AppViewMode = 'classic' | 'ios' | 'foundation';
+export type MobileViewMode = AppViewMode;
+export type FoundationLook = 'editorial-ink' | 'civic-navy' | 'warm-paper';
 
 const DEFAULT_THEME: ThemeId = 'sunset-pop';
-const DEFAULT_MOBILE_VIEW_MODE: MobileViewMode = 'classic';
+const DEFAULT_MOBILE_VIEW_MODE: AppViewMode = 'classic';
+const DEFAULT_FOUNDATION_LOOK: FoundationLook = 'editorial-ink';
 const DEFAULT_GLASS_EFFECT = false;
 const DEFAULT_ANIMATED_GLASS = false;
 
 export interface VisualSettings {
   theme: ThemeId;
   glassEffect: boolean;
-  mobileViewMode: MobileViewMode;
+  mobileViewMode: AppViewMode;
+  foundationLook: FoundationLook;
 }
 
 export interface ThemeOption {
@@ -45,8 +49,10 @@ export const themes: ThemeOption[] = [
 ];
 
 interface VisualSettingsContextValue {
-  mobileViewMode: MobileViewMode;
-  setMobileViewMode: (mode: MobileViewMode) => void;
+  mobileViewMode: AppViewMode;
+  setMobileViewMode: (mode: AppViewMode) => void;
+  foundationLook: FoundationLook;
+  setFoundationLook: (look: FoundationLook) => void;
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
   glassEffect: boolean;
@@ -59,7 +65,8 @@ const VisualSettingsContext = createContext<VisualSettingsContextValue | undefin
 
 export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
-  const [mobileViewMode, setMobileViewMode] = useState<MobileViewMode>(DEFAULT_MOBILE_VIEW_MODE);
+  const [mobileViewMode, setMobileViewMode] = useState<AppViewMode>(DEFAULT_MOBILE_VIEW_MODE);
+  const [foundationLook, setFoundationLook] = useState<FoundationLook>(DEFAULT_FOUNDATION_LOOK);
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [glassEffect, setGlassEffect] = useState(DEFAULT_GLASS_EFFECT);
   const [animatedGlass, setAnimatedGlass] = useState(DEFAULT_ANIMATED_GLASS);
@@ -77,20 +84,25 @@ export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
     const restoredTheme = themes.some((option) => option.id === saved.theme) ? saved.theme! : DEFAULT_THEME;
     const restoredGlass = typeof saved.glassEffect === 'boolean' ? saved.glassEffect : DEFAULT_GLASS_EFFECT;
     const restoredMobileViewMode =
-      saved.mobileViewMode === 'ios' || saved.mobileViewMode === 'classic'
+      saved.mobileViewMode === 'ios' || saved.mobileViewMode === 'foundation' || saved.mobileViewMode === 'classic'
         ? saved.mobileViewMode
         : DEFAULT_MOBILE_VIEW_MODE;
+    const restoredFoundationLook =
+      saved.foundationLook === 'editorial-ink' || saved.foundationLook === 'civic-navy' || saved.foundationLook === 'warm-paper'
+        ? saved.foundationLook
+        : DEFAULT_FOUNDATION_LOOK;
     setTheme(restoredTheme);
     setGlassEffect(restoredGlass);
     setAnimatedGlass(restoredGlass);
     setMobileViewMode(restoredMobileViewMode);
+    setFoundationLook(restoredFoundationLook);
     setLoadedSettingsKey(settingsKey);
   }, [settingsKey]);
 
   useEffect(() => {
     if (loadedSettingsKey !== settingsKey || typeof window === 'undefined') return;
-    window.localStorage.setItem(settingsKey, JSON.stringify({ theme, glassEffect, mobileViewMode } satisfies VisualSettings));
-  }, [settingsKey, loadedSettingsKey, theme, glassEffect, mobileViewMode]);
+    window.localStorage.setItem(settingsKey, JSON.stringify({ theme, glassEffect, mobileViewMode, foundationLook } satisfies VisualSettings));
+  }, [settingsKey, loadedSettingsKey, theme, glassEffect, mobileViewMode, foundationLook]);
 
   useEffect(() => {
     setAnimatedGlass(glassEffect);
@@ -100,6 +112,8 @@ export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
     <VisualSettingsContext.Provider value={{
       mobileViewMode,
       setMobileViewMode,
+      foundationLook,
+      setFoundationLook,
       theme,
       setTheme,
       glassEffect,
