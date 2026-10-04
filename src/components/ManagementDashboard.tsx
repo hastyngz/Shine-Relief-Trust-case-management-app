@@ -27,6 +27,7 @@ interface ManagementDashboardProps {
   db: AppDatabase;
   staff: StaffUser[];
   onNavigateReports: () => void;
+  onOpenReportBuilder?: () => void;
 }
 
 type DatePreset = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
@@ -51,7 +52,7 @@ function getPresetRange(preset: DatePreset, start: string, end: string, today: D
 
 const currency = (amount: number | null) => amount === null ? 'Not available' : formatMWK(amount);
 
-export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, staff, onNavigateReports }) => {
+export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, staff, onNavigateReports, onOpenReportBuilder }) => {
   const { isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding } = useAuth();
   const [preset, setPreset] = useState<DatePreset>('month');
   const [customStart, setCustomStart] = useState('');
@@ -277,9 +278,16 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
       <section className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm space-y-3" aria-label="Management dashboard filters">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-black text-stone-900">Dashboard filters</h2>
-          <button onClick={onNavigateReports} className="inline-flex items-center gap-2 text-xs font-bold text-teal-800 hover:text-teal-950">
-            <FileSpreadsheet className="w-4 h-4" /> Management reports
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onNavigateReports} className="inline-flex items-center gap-2 text-xs font-bold text-teal-800 hover:text-teal-950">
+              <FileSpreadsheet className="w-4 h-4" /> Management reports
+            </button>
+            {onOpenReportBuilder && (
+              <button onClick={onOpenReportBuilder} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-teal-900 px-3 text-xs font-bold text-white hover:bg-teal-800">
+                <FileSpreadsheet className="w-4 h-4" /> Sponsor report builder
+              </button>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2">
           <label className="text-[11px] text-stone-600">Period

@@ -1562,6 +1562,48 @@
 		color: #f1f5f9 !important;
 	}
 
+	@media print {
+		body:has(#report-builder-view) {
+			background: #fff !important;
+		}
+
+		body:has(#report-builder-view) #app-header,
+		body:has(#report-builder-view) #desktop-nav,
+		body:has(#report-builder-view) #mobile-bottom-nav,
+		body:has(#report-builder-view) .report-builder-actions {
+			display: none !important;
+		}
+
+		body:has(#report-builder-view) #app-shell,
+		body:has(#report-builder-view) main {
+			width: 100% !important;
+			max-width: none !important;
+			margin: 0 !important;
+			padding: 0 !important;
+			background: #fff !important;
+			color: #111 !important;
+		}
+
+		body:has(#report-builder-view) #report-builder-view {
+			max-width: none !important;
+			padding: 0 !important;
+		}
+
+		body:has(#report-builder-view) .report-builder-document {
+			border: 0 !important;
+			box-shadow: none !important;
+			padding: 0 !important;
+		}
+
+		body:has(#report-builder-view) .report-builder-print-narrative {
+			display: block !important;
+		}
+
+		body:has(#report-builder-view) .report-builder-screen-narrative {
+			display: none !important;
+		}
+	}
+
 	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 1) {
 		--programme-accent: #0f766e;
 		--programme-tint: #f0fdfa;
