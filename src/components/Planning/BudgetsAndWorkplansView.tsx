@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BudgetItem,
   WorkplanItem,
@@ -46,7 +46,9 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
-import { PROGRAMMES, PROGRAMME_BY_ID } from '../../data/programmes';
+import { expandWorkplanOccurrences, findOverloadedStaff, MAX_WORKPLANS_PER_STAFF_PER_WEEK } from '../../services/workplanRecurrence';
+import { calculateBudgetForecast } from '../../services/intelligenceService';
+import { PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 
 interface BudgetsAndWorkplansViewProps {
   db: AppDatabase;
@@ -66,6 +68,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [budgetCategoryFilter, setBudgetCategoryFilter] = useState<string>('ALL');
   const [budgetSummaryGroup, setBudgetSummaryGroup] = useState<'category' | 'period' | 'programme'>('category');
   const [workplanStatusFilter, setWorkplanStatusFilter] = useState<string>('ALL');
+  const [budgetProgrammeId, setBudgetProgrammeId] = useState<ProgrammeId | ''>('');
+  const [seasonalMonthsDraft, setSeasonalMonthsDraft] = useState<number[]>([]);
 
   // Modal States
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
@@ -103,17 +107,44 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const workloadSummary = buildWorkloadSummary(workplans);
   const workplanHealthSummary = summarizeWorkplanHealth(workplans);
   const activityOverview = buildActivityOverview(workplans, schedules);
+  const upcomingRangeEnd = useMemo(() => {
+    const date = new Date();
+    date.setUTCFullYear(date.getUTCFullYear() + 1);
+    return date.toISOString().slice(0, 10);
+  }, []);
+  const overloadedStaffIds = useMemo(
+    () => findOverloadedStaff(workplans, new Date().toISOString().slice(0, 10), upcomingRangeEnd),
+    [workplans, upcomingRangeEnd]
+  );
+  const forecastByMonth = calculateBudgetForecast(
+    filteredBudgets,
+    1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100)
+  ).monthlyForecast || [];
 
   const upcomingActivityItems = [
     ...workplans
-      .filter((plan) => normalizeWorkplanStatus(plan.status) !== 'Completed' && normalizeWorkplanStatus(plan.status) !== 'Cancelled')
+      .filter((plan) => !plan.recurrence && normalizeWorkplanStatus(plan.status) !== 'Completed' && normalizeWorkplanStatus(plan.status) !== 'Cancelled')
       .map((plan) => ({
         id: plan.id,
         label: plan.activity,
         when: plan.endDate || plan.startDate || 'TBD',
         owner: plan.responsibleStaffName || 'Unassigned',
         kind: 'workplan' as const,
+        workplanId: plan.id,
+        completed: (plan.completionDates || []).includes(plan.endDate),
       })),
+    ...workplans
+      .filter((plan) => plan.recurrence && normalizeWorkplanStatus(plan.status) !== 'Completed' && normalizeWorkplanStatus(plan.status) !== 'Cancelled')
+      .flatMap((plan) => expandWorkplanOccurrences([plan], new Date().toISOString().slice(0, 10), upcomingRangeEnd)
+        .map((occurrence) => ({
+          id: occurrence.occurrenceId,
+          label: plan.activity,
+          when: occurrence.date,
+          owner: plan.responsibleStaffName || 'Unassigned',
+          kind: 'workplan' as const,
+          workplanId: plan.id,
+          completed: occurrence.completed,
+        }))),
     ...schedules
       .filter((item) => item.status !== 'Completed' && item.status !== 'Cancelled')
       .map((item) => ({
@@ -122,6 +153,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         when: item.scheduledDate,
         owner: item.assignedStaffName || 'Unassigned',
         kind: 'schedule' as const,
+        workplanId: undefined,
+        completed: false,
       })),
   ].sort((a, b) => a.when.localeCompare(b.when));
 
@@ -158,6 +191,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       budgets.filter((line) => line.programmeId === item.id)
     )).filter((row) => row.budgeted || row.actual);
 
+  const toggleWorkplanOccurrence = (workplanId: string, date: string, currentlyCompleted: boolean) => {
+    const item = workplans.find((workplan) => workplan.id === workplanId);
+    if (!item) return;
+    const completionDates = new Set(item.completionDates || []);
+    if (currentlyCompleted) completionDates.delete(date);
+    else completionDates.add(date);
+    updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, actorName);
+    onRefresh();
+  };
+
   // Handle Budget Form Submit
   const handleSaveBudget = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -166,6 +209,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const programme = (fd.get('programme') as string).trim() || 'Education & Support';
     const programmeIdValue = fd.get('programmeId');
     const programmeId = PROGRAMMES.find((item) => item.id === programmeIdValue)?.id;
+    const selectedSeasonMonths = fd.getAll('seasonalMonths').map(Number).filter((month) => Number.isInteger(month) && month >= 1 && month <= 12);
+    const seasonalMonths = selectedSeasonMonths.length ? Array.from(new Set(selectedSeasonMonths)) : undefined;
     const category = (fd.get('category') as BudgetCategory) || 'Education';
     const itemDescription = (fd.get('itemDescription') as string).trim();
     const quantity = parseFloat(fd.get('quantity') as string) || 1;
@@ -183,6 +228,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           periodType: 'quarterly',
           programme,
           programmeId,
+          seasonalMonths,
           category,
           itemDescription,
           quantity,
@@ -201,6 +247,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           periodType: 'quarterly',
           programme,
           programmeId,
+          seasonalMonths,
           category,
           itemDescription,
           quantity,
@@ -288,6 +335,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const normalizedStatus = normalizeWorkplanStatus(rawStatus) as WorkplanStatus;
     const programmeIdValue = fd.get('programmeId');
     const programmeId = PROGRAMMES.find((item) => item.id === programmeIdValue)?.id;
+    const recurrenceEvery = fd.get('recurrenceEvery') as NonNullable<WorkplanItem['recurrence']>['every'] | '';
+    const recurrenceUntil = (fd.get('recurrenceUntil') as string).trim();
+    const recurrence = recurrenceEvery ? { every: recurrenceEvery, ...(recurrenceUntil ? { until: recurrenceUntil } : {}) } : undefined;
     const progress = Math.min(100, Math.round((completedCount / targetCount) * 100));
     const responsibleStaffName = (fd.get('responsibleStaffName') as string).trim();
     const responsibleStaffId = staffProfile?.id || staffProfile?.uid || 'staff-1';
@@ -304,6 +354,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           period,
           periodType: 'quarterly',
           programmeId,
+          recurrence,
           activity,
           objective,
           description,
@@ -328,6 +379,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           period,
           periodType: 'quarterly',
           programmeId,
+          recurrence,
           activity,
           objective,
           description,
@@ -516,6 +568,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 <button
                   onClick={() => {
                     setEditingBudget(null);
+                    setBudgetProgrammeId('');
+                    setSeasonalMonthsDraft([]);
                     setShowBudgetModal(true);
                   }}
                   className="px-3 py-2 bg-teal-800 text-white rounded-lg text-xs font-bold hover:bg-teal-900 transition-all flex items-center gap-1 shadow-xs"
@@ -600,6 +654,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                   <div className={`mt-2 text-xs font-bold ${variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                     {variance >= 0 ? '+' : '-'}MWK {Math.abs(variance).toLocaleString()}
                   </div>
+                  <div className="mt-1 text-[10px] text-stone-500">Seasonal forecast: MWK {Math.round(forecastByMonth[month - 1] || 0).toLocaleString()}</div>
                 </div>
               ))}
             </div>
@@ -760,6 +815,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                 <button
                                   onClick={() => {
                                     setEditingBudget(b);
+                                    setBudgetProgrammeId(b.programmeId || '');
+                                    setSeasonalMonthsDraft(b.seasonalMonths || []);
                                     setShowBudgetModal(true);
                                   }}
                                   className="p-1 hover:bg-stone-200 rounded-md text-stone-600 hover:text-teal-900"
@@ -855,6 +912,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                       <div className="font-semibold text-stone-700">{formatDate(item.when)}</div>
                       <div className="text-[10px] uppercase tracking-wide text-stone-500">{item.kind}</div>
                     </div>
+                    {item.kind === 'workplan' && item.workplanId && item.when !== 'TBD' && (
+                      <button
+                        type="button"
+                        onClick={() => toggleWorkplanOccurrence(item.workplanId!, item.when, item.completed)}
+                        className={`min-h-10 rounded-md border px-2 text-[10px] font-bold ${item.completed ? 'border-emerald-300 text-emerald-800' : 'border-stone-300 text-stone-600'}`}
+                        title={item.completed ? 'Mark this occurrence incomplete' : 'Mark this occurrence done'}
+                      >
+                        {item.completed ? 'Done' : 'Mark done'}
+                      </button>
+                    )}
                   </div>
                 ))
               )}
@@ -876,7 +943,14 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                     <div key={staff.id} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-sm font-bold text-stone-900">{staff.name}</div>
+                          <div className="flex items-center gap-1.5 text-sm font-bold text-stone-900">
+                            {staff.name}
+                            {overloadedStaffIds.has(staff.id) && (
+                              <span title={`More than ${MAX_WORKPLANS_PER_STAFF_PER_WEEK} workplan items are due in the same week.`} aria-label="High weekly workplan load">
+                                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-stone-500">{staff.plannedCount} planned • {staff.activeCount} active • {staff.delayedCount} delayed</div>
                         </div>
                         <div className="text-right">
@@ -1268,13 +1342,37 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 <label className="block text-xs font-semibold text-stone-700 mb-1">Programme attribution</label>
                 <select
                   name="programmeId"
-                  defaultValue={editingBudget?.programmeId || ''}
+                  value={budgetProgrammeId}
+                  onChange={(event) => setBudgetProgrammeId(event.target.value as ProgrammeId | '')}
                   className="w-full text-xs border border-stone-300 rounded-lg p-2"
                 >
                   <option value="">Unassigned</option>
                   {PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </div>
+
+              {['fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(budgetProgrammeId) && (
+                <fieldset className="rounded-lg border border-stone-200 p-3">
+                  <legend className="px-1 text-xs font-semibold text-stone-700">Seasonal forecast months</legend>
+                  <p className="mb-2 text-[11px] text-stone-500">Select the months when this line is expected. You can change these selections whenever needed.</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                      <label key={month} className="flex min-h-10 items-center gap-1.5 text-xs text-stone-700">
+                        <input
+                          type="checkbox"
+                          name="seasonalMonths"
+                          value={month}
+                          checked={seasonalMonthsDraft.includes(month)}
+                          onChange={(event) => setSeasonalMonthsDraft((current) =>
+                            event.target.checked ? [...current, month].sort((a, b) => a - b) : current.filter((value) => value !== month)
+                          )}
+                        />
+                        {new Date(2026, month - 1, 1).toLocaleString('en-US', { month: 'short' })}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1518,6 +1616,34 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Repeat</label>
+                  <select
+                    name="recurrenceEvery"
+                    defaultValue={editingWorkplan?.recurrence?.every || ''}
+                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                  >
+                    <option value="">Does not repeat</option>
+                    <option value="week">Every week</option>
+                    <option value="month">Every month</option>
+                    <option value="term">Every term (3 months)</option>
+                    <option value="year">Every year</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Repeat until (optional)</label>
+                  <input
+                    type="date"
+                    name="recurrenceUntil"
+                    min={editingWorkplan?.endDate || undefined}
+                    defaultValue={editingWorkplan?.recurrence?.until || ''}
+                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-stone-500">The due date is the first occurrence. Future occurrences are generated for the agenda and calendar without adding extra workplan records.</p>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
                 <button

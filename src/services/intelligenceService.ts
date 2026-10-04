@@ -36,6 +36,7 @@ export interface BudgetForecast {
   approved: number;
   actual: number;
   forecast: number;
+  monthlyForecast?: number[];
   remainingApproved: number;
   burnRate: number;
   status: 'on_track' | 'at_risk' | 'over_budget';
@@ -154,11 +155,25 @@ export function calculateBudgetForecast(budgetItems: BudgetItem[], forecastMulti
   const approved = budgetItems.reduce((sum, item) => sum + item.budgetAmount, 0);
   const actual = budgetItems.reduce((sum, item) => sum + (item.actualExpenditure || 0), 0);
   const forecast = Math.round(budgetItems.reduce((sum, item) => sum + item.budgetAmount * forecastMultiplier, 0));
+  const monthlyForecast = Array.from({ length: 12 }, () => 0);
+  budgetItems.forEach((item) => {
+    const amount = item.budgetAmount * forecastMultiplier;
+    const months = Array.from(new Set((item.seasonalMonths || []).filter((month) => Number.isInteger(month) && month >= 1 && month <= 12)));
+    if (months.length) {
+      const monthlyAmount = amount / months.length;
+      months.forEach((month) => { monthlyForecast[month - 1] += monthlyAmount; });
+    } else if (Number.isInteger(item.month) && (item.month || 0) >= 1 && (item.month || 0) <= 12) {
+      monthlyForecast[(item.month || 1) - 1] += amount;
+    } else {
+      monthlyForecast.forEach((_, index) => { monthlyForecast[index] += amount / 12; });
+    }
+  });
   const burnRate = approved ? actual / approved : 0;
   return {
     approved,
     actual,
     forecast,
+    monthlyForecast,
     remainingApproved: approved - actual,
     burnRate,
     status: actual > approved || forecast > approved * 1.1 ? 'over_budget' : forecast > approved ? 'at_risk' : 'on_track',

@@ -2,14 +2,26 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, DollarSign, LineChart, ListPlus, Mic, Plus, Save, Search, Sparkles, Utensils, X } from 'lucide-react';
 import type { AppDatabase, FeedingProgramLog, MarketPriceRecord, MeetingRecord, WhatIfScenario } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { addEarlyYearsRecord, addFeedingProgramLog, addMarketPrice, addMeetingRecord, addScheduleItem, addWhatIfScenario, addWorkplanItem, saveAISettings, saveIntelligenceSuggestion } from '../../utils/storage';
+import { addEarlyYearsRecord, addFeedingProgramLog, addMarketPrice, addMeetingRecord, addScheduleItem, addWhatIfScenario, addWorkplanItem, updateWorkplanItem, saveAISettings, saveIntelligenceSuggestion } from '../../utils/storage';
 import { AudioDataInput } from './AudioDataInput';
 import { DocumentIntelligencePanel } from './DocumentIntelligencePanel';
 import { calculateBudgetForecast, calculateFeedingCostInsight, calculateMarketPriceInsight, calculateWhatIfScenario, searchOperationalRecords } from '../../services/intelligenceService';
 import { buildIntelligentCaseSummary, detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from '../../services/caseIntelligenceService';
+import { expandWorkplanOccurrences } from '../../services/workplanRecurrence';
 
 interface Phase5OperationsViewProps { db: AppDatabase; onRefresh: () => void; }
 type Phase5Tab = 'overview' | 'meetings' | 'calendar' | 'feeding' | 'prices' | 'early-years' | 'review' | 'search' | 'what-if';
+type OperationsAgendaItem = {
+  id: string;
+  date: string;
+  time: string;
+  title: string;
+  type: string;
+  status: string;
+  workplanId?: string;
+  occurrenceDate?: string;
+  completed?: boolean;
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -101,12 +113,33 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
   }, [db, askQuestion]);
   const caseSummary = useMemo(() => summaryGirlId ? buildIntelligentCaseSummary(db, summaryGirlId) : null, [db, summaryGirlId]);
 
-  const agenda = useMemo(() => [
+  const workplanAgenda = useMemo(() => {
+    const selectedYear = Number(calendarDate.slice(0, 4));
+    const rangeStart = `${selectedYear}-01-01`;
+    const rangeEnd = `${selectedYear + 1}-12-31`;
+    return (db.workplans || []).flatMap((item) => {
+      if (!item.recurrence) {
+        return [{ id: item.id, date: item.endDate, time: '', title: item.activity, type: 'Workplan deadline', status: item.status, workplanId: item.id, occurrenceDate: item.endDate, completed: (item.completionDates || []).includes(item.endDate) }];
+      }
+      return expandWorkplanOccurrences([item], rangeStart, rangeEnd).map((occurrence) => ({
+        id: occurrence.occurrenceId,
+        date: occurrence.date,
+        time: '',
+        title: item.activity,
+        type: 'Workplan deadline',
+        status: item.status,
+        workplanId: item.id,
+        occurrenceDate: occurrence.date,
+        completed: occurrence.completed,
+      }));
+    });
+  }, [db.workplans, calendarDate]);
+  const agenda = useMemo<OperationsAgendaItem[]>(() => [
     ...meetings.map((item) => ({ id: item.id, date: item.dateTime.slice(0, 10), time: item.dateTime.slice(11, 16), title: item.title, type: 'Meeting', status: item.status })),
     ...(db.schedules || []).map((item) => ({ id: item.id, date: item.scheduledDate, time: item.scheduledTime || '', title: item.title, type: 'Schedule', status: item.status })),
-    ...(db.workplans || []).map((item) => ({ id: item.id, date: item.endDate, time: '', title: item.activity, type: 'Workplan deadline', status: item.status })),
+    ...workplanAgenda,
     ...feedingLogs.map((item) => ({ id: item.id, date: item.date, time: '', title: `School feeding: ${item.mealsServed} meals`, type: 'Feeding', status: 'Recorded' })),
-  ].sort((left, right) => `${left.date} ${left.time}`.localeCompare(`${right.date} ${right.time}`)), [db.schedules, db.workplans, feedingLogs, meetings]);
+  ].sort((left, right) => `${left.date} ${left.time}`.localeCompare(`${right.date} ${right.time}`)), [db.schedules, feedingLogs, meetings, workplanAgenda]);
   const visibleAgenda = useMemo(() => {
     if (calendarMode === 'agenda') return agenda;
     if (calendarMode === 'month') return agenda.filter((item) => item.date.slice(0, 7) === calendarDate.slice(0, 7));
@@ -152,6 +185,16 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     if (!isAdmin || !currentUser) return;
     saveAISettings({ ...aiSettings, updatedByUid: currentUser.uid, updatedAt: new Date().toISOString() });
     setMessage('AI settings saved by Administrator.');
+    onRefresh();
+  };
+
+  const markWorkplanOccurrence = (workplanId: string, date: string, completed: boolean) => {
+    const item = (db.workplans || []).find((workplan) => workplan.id === workplanId);
+    if (!item) return;
+    const completionDates = new Set(item.completionDates || []);
+    if (completed) completionDates.delete(date);
+    else completionDates.add(date);
+    updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, staffProfile?.fullName || 'SHINE Staff');
     onRefresh();
   };
 
@@ -218,7 +261,7 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
 
     {tab === 'meetings' && <Panel title="Meetings and minutes" action={canEdit ? <button type="button" onClick={() => setShowMeetingForm(true)} className="button-primary"><Plus className="h-4 w-4" />New meeting</button> : undefined}><div className="space-y-2">{meetings.map((meeting) => <div key={meeting.id} className="rounded-lg border border-stone-200 p-3"><div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{meeting.title}</strong><span className="text-xs text-stone-500">{meeting.dateTime.replace('T', ' ')} · {meeting.status}</span></div><p className="mt-1 text-xs text-stone-600">{meeting.summaryAndOutcomes || meeting.minutesText || 'No minutes recorded yet.'}</p></div>)}{!meetings.length && <Empty text="No meetings recorded yet." />}</div></Panel>}
 
-    {tab === 'calendar' && <Panel title="Central operational calendar"><div className="mb-4 flex flex-wrap items-center gap-2"><div className="flex overflow-x-auto rounded-lg border border-stone-200 p-1">{(['month', 'week', 'day', 'agenda'] as const).map((mode) => <button key={mode} type="button" onClick={() => setCalendarMode(mode)} className={`rounded-md px-3 py-1.5 text-xs font-bold capitalize ${calendarMode === mode ? 'bg-teal-900 text-white' : 'text-stone-600'}`}>{mode}</button>)}</div><input type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} className="field" /></div><div className="space-y-2">{visibleAgenda.map((item) => <div key={`${item.type}-${item.id}`} className="grid grid-cols-[90px_1fr_auto] items-center gap-3 rounded-lg border border-stone-200 p-3 text-xs"><div className="font-bold text-teal-900">{item.date}<br /><span className="font-normal text-stone-500">{item.time}</span></div><div><strong>{item.title}</strong><div className="text-stone-500">{item.type}</div></div><span className="text-stone-500">{item.status}</span></div>)}{!visibleAgenda.length && <Empty text="No calendar activity is recorded for this view." />}</div></Panel>}
+    {tab === 'calendar' && <Panel title="Central operational calendar"><div className="mb-4 flex flex-wrap items-center gap-2"><div className="flex overflow-x-auto rounded-lg border border-stone-200 p-1">{(['month', 'week', 'day', 'agenda'] as const).map((mode) => <button key={mode} type="button" onClick={() => setCalendarMode(mode)} className={`rounded-md px-3 py-1.5 text-xs font-bold capitalize ${calendarMode === mode ? 'bg-teal-900 text-white' : 'text-stone-600'}`}>{mode}</button>)}</div><input type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} className="field" /></div><div className="space-y-2">{visibleAgenda.map((item) => <div key={`${item.type}-${item.id}`} className="grid grid-cols-[90px_1fr_auto] items-center gap-3 rounded-lg border border-stone-200 p-3 text-xs"><div className="font-bold text-teal-900">{item.date}<br /><span className="font-normal text-stone-500">{item.time}</span></div><div><strong>{item.title}</strong><div className="text-stone-500">{item.type}</div></div><div className="flex items-center gap-2"><span className="text-stone-500">{item.status}</span>{item.workplanId && item.occurrenceDate && <button type="button" onClick={() => markWorkplanOccurrence(item.workplanId!, item.occurrenceDate!, item.completed || false)} className={`min-h-10 rounded-md border px-2 text-[10px] font-bold ${item.completed ? 'border-emerald-300 text-emerald-800' : 'border-stone-300 text-stone-600'}`} aria-label={item.completed ? 'Mark occurrence incomplete' : 'Mark occurrence done'}>{item.completed ? 'Done' : 'Mark done'}</button>}</div></div>)}{!visibleAgenda.length && <Empty text="No calendar activity is recorded for this view." />}</div></Panel>}
 
     {tab === 'feeding' && <Panel title="School feeding management" action={canEdit ? <button type="button" onClick={() => setShowFeedingForm(true)} className="button-primary"><Plus className="h-4 w-4" />Record feeding log</button> : undefined}><div className="grid gap-3 sm:grid-cols-4"><Metric label="Days" value={feedingInsight.days} /><Metric label="Meals" value={feedingInsight.mealsServed} /><Metric label="Daily cost" value={`MWK ${Math.round(feedingInsight.averageDailyCost).toLocaleString()}`} /><Metric label="Cost / meal" value={`MWK ${Math.round(feedingInsight.costPerMeal).toLocaleString()}`} /></div><div className="mt-4 space-y-2">{feedingLogs.map((log) => <div key={log.id} className="rounded-lg border border-stone-200 p-3 text-xs"><strong>{log.date}</strong><span className="ml-3">{log.studentsPresent} students · {log.mealsServed} meals · MWK {(log.actualCost ?? log.estimatedCost).toLocaleString()}</span><div className="text-stone-500">{log.foodItems.join(', ')}</div></div>)}</div></Panel>}
 

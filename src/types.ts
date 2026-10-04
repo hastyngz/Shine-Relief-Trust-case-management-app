@@ -605,6 +605,7 @@ export interface BudgetItem {
   historicalAveragePrice?: number;
   forecastUnitPrice?: number;
   forecastAmount?: number;
+  seasonalMonths?: number[];
   financialValueStatus?: 'Approved' | 'Actual' | 'Forecast' | 'Scenario';
   notes?: string;
   createdAt: string;
@@ -670,6 +671,8 @@ export interface WorkplanItem {
   responsibleStaffName: string;
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
+  recurrence?: { every: 'week' | 'month' | 'term' | 'year'; until?: string };
+  completionDates?: string[];
   targetCount: number; // e.g., 20 visits
   unit: string; // e.g. "visits", "girls", "workshops", "sessions"
   completedCount?: number; // Actual completed count (e.g. 14)
