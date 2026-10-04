@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BudgetItem,
   WorkplanItem,
@@ -53,19 +53,25 @@ import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, s
 import { expandWorkplanOccurrences, findOverloadedStaff, MAX_WORKPLANS_PER_STAFF_PER_WEEK } from '../../services/workplanRecurrence';
 import { calculateBudgetForecast } from '../../services/intelligenceService';
 import { PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
+import type { QualityIssue } from '../../services/qualityRules';
+
+type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
 interface BudgetsAndWorkplansViewProps {
   db: AppDatabase;
   onRefresh: () => void;
+  qualityRecordFocus?: QualityRecordFocus | null;
 }
 
 export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = ({
   db,
   onRefresh,
+  qualityRecordFocus,
 }) => {
   const { staffProfile, canEdit, isAdmin } = useAuth();
   const actorName = staffProfile?.fullName || 'SHINE Staff';
   const [activeSubTab, setActiveSubTab] = useState<'budgets' | 'workplans' | 'schedules' | 'procurement'>('budgets');
+  const [highlightedQualityId, setHighlightedQualityId] = useState<string | null>(null);
 
   // Filters
   const [budgetPeriodFilter, setBudgetPeriodFilter] = useState<string>('ALL');
@@ -75,6 +81,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [budgetProgrammeId, setBudgetProgrammeId] = useState<ProgrammeId | ''>('');
   const [seasonalMonthsDraft, setSeasonalMonthsDraft] = useState<number[]>([]);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, { supplier: string; amount: string }>>({});
+  const focusedQualityKey = useRef('');
 
   // Modal States
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
@@ -194,6 +201,56 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     if (workplanStatusFilter !== 'ALL' && normalizeWorkplanStatus(w.status) !== workplanStatusFilter) return false;
     return true;
   });
+
+  useEffect(() => {
+    if (!qualityRecordFocus) return;
+    if (qualityRecordFocus.kind === 'budget-item') {
+      setActiveSubTab('budgets');
+      setBudgetPeriodFilter('ALL');
+      setBudgetCategoryFilter('ALL');
+      setBudgetProgrammeId('');
+    } else if (qualityRecordFocus.kind === 'workplan-item' || qualityRecordFocus.kind === 'indicator-result') {
+      setActiveSubTab('workplans');
+      setWorkplanStatusFilter('ALL');
+    }
+  }, [qualityRecordFocus?.kind, qualityRecordFocus?.id]);
+
+  useEffect(() => {
+    if (!qualityRecordFocus) return;
+    const expectedTab = qualityRecordFocus.kind === 'budget-item' ? 'budgets' : 'workplans';
+    if (activeSubTab !== expectedTab) return;
+    const focusKey = `${qualityRecordFocus.kind}:${qualityRecordFocus.id}`;
+    if (focusedQualityKey.current === focusKey) return;
+    const recordExists = qualityRecordFocus.kind === 'budget-item'
+      ? filteredBudgets.some((item) => item.id === qualityRecordFocus.id)
+      : filteredWorkplans.some((item) => item.id === qualityRecordFocus.id);
+    if (!recordExists) return;
+    let highlightTimeout: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const record = document.getElementById(`quality-record-${encodeURIComponent(qualityRecordFocus.id)}`);
+      if (!record) return;
+      record.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      record.focus({ preventScroll: true });
+      setHighlightedQualityId(qualityRecordFocus.id);
+      focusedQualityKey.current = focusKey;
+      highlightTimeout = window.setTimeout(() => {
+        setHighlightedQualityId((current) => current === qualityRecordFocus.id ? null : current);
+      }, 2000);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (highlightTimeout !== undefined) window.clearTimeout(highlightTimeout);
+    };
+  }, [
+    qualityRecordFocus?.kind,
+    qualityRecordFocus?.id,
+    activeSubTab,
+    budgetPeriodFilter,
+    budgetCategoryFilter,
+    workplanStatusFilter,
+    budgets,
+    workplans,
+  ]);
 
   // Unique Periods and Categories
   const uniquePeriods = Array.from(new Set(budgets.map((b) => b.period).filter(Boolean)));
@@ -809,7 +866,13 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                       const pct = b.budgetAmount > 0 ? Math.round(((b.actualExpenditure || 0) / b.budgetAmount) * 100) : 0;
                       const varAmt = (b.budgetAmount || 0) - (b.actualExpenditure || 0);
                       return (
-                        <tr key={b.id} className="hover:bg-stone-50 transition-colors">
+                        <tr
+                          key={b.id}
+                          id={`quality-record-${encodeURIComponent(b.id)}`}
+                          data-quality-record-id={b.id}
+                          tabIndex={-1}
+                          className={`hover:bg-stone-50 transition-colors ${highlightedQualityId === b.id ? 'outline outline-2 outline-offset-2 outline-amber-500' : ''}`}
+                        >
                           <td className="p-3 font-semibold text-stone-900 whitespace-nowrap">{b.period}</td>
                           <td className="p-3 whitespace-nowrap">
                             <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-teal-50 text-teal-800 border border-teal-200">
@@ -1048,7 +1111,13 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
               filteredWorkplans.map((w) => {
                 const status = normalizeWorkplanStatus(w.status);
                 return (
-                  <div key={w.id} className="bg-white rounded-xl border border-stone-200 p-4 shadow-xs hover:border-teal-700 transition-all">
+                  <div
+                    key={w.id}
+                    id={`quality-record-${encodeURIComponent(w.id)}`}
+                    data-quality-record-id={w.id}
+                    tabIndex={-1}
+                    className={`bg-white rounded-xl border border-stone-200 p-4 shadow-xs hover:border-teal-700 transition-all ${highlightedQualityId === w.id ? 'outline outline-2 outline-offset-2 outline-amber-500' : ''}`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">

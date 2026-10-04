@@ -12,13 +12,15 @@ import { qualityScores } from '../../services/qualityRules';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { appendReportHistory } from '../../services/firestoreSync';
+import type { QualityIssue } from '../../services/qualityRules';
 
 interface ReportBuilderProps {
   db: AppDatabase;
   onClose: () => void;
+  onOpenQualityRecord: (issue: QualityIssue) => void;
 }
 
-export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => {
+export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpenQualityRecord }) => {
   const { isAdmin, role, currentUser, staffProfile } = useAuth();
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(new Date().toISOString().slice(0, 10));
@@ -258,8 +260,12 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
         scores={reportQualityScores}
         canApproveNarrativeOnly={isAdmin || role === 'Manager'}
         currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}
-        canOpenIssue={(issue) => issue.target?.kind === 'narrative-section' || issue.target?.kind === 'report-section'}
+        canOpenIssue={(issue) => ['narrative-section', 'report-section', 'budget-item', 'workplan-item', 'indicator-result'].includes(issue.target?.kind || '')}
         onOpenIssue={(issue) => {
+          if (issue.target?.kind === 'budget-item' || issue.target?.kind === 'workplan-item' || issue.target?.kind === 'indicator-result') {
+            onOpenQualityRecord(issue);
+            return;
+          }
           if (issue.target?.kind !== 'narrative-section' && issue.target?.kind !== 'report-section') return;
           const editor = document.getElementById('report-narrative');
           editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });

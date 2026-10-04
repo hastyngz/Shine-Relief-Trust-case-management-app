@@ -71,6 +71,7 @@ import { ContactsView } from './components/Contacts/ContactsView';
 import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
 import { ProgrammesView } from './components/Programmes/ProgrammesView';
 import { PROGRAMMES, ProgrammeId } from './data/programmes';
+import type { QualityIssue } from './services/qualityRules';
 import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
@@ -131,9 +132,20 @@ function parseHash(): {
   girlId?: string;
   houseId?: string;
   programmeId?: ProgrammeId | null;
+  qualityTarget?: { kind: 'budget-item' | 'workplan-item'; id: string };
 } {
-  const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+  const [hash, query = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
   if (!hash) return { view: 'dashboard', activeTab: 'dashboard' };
+  if (hash === 'planning') {
+    const params = new URLSearchParams(query);
+    const kind = params.get('qualityKind');
+    const id = params.get('qualityId');
+    const qualityTarget: { kind: 'budget-item' | 'workplan-item'; id: string } | undefined =
+      id && (kind === 'budget-item' || kind === 'workplan-item')
+        ? { kind, id }
+      : undefined;
+    return { view: 'planning', activeTab: 'planning', qualityTarget };
+  }
 
   if (hash === 'programmes' || hash.startsWith('programmes/')) {
     const routeId = hash.slice('programmes/'.length);
@@ -267,6 +279,7 @@ function AppContent() {
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<ProgrammeId | null>(
     initialRoute.programmeId || null
   );
+  const [qualityRecordFocus, setQualityRecordFocus] = useState(initialRoute.qualityTarget || null);
   const [editingGirl, setEditingGirl] = useState<Girl | null>(null);
   const [editingHouse, setEditingHouse] = useState<Household | null>(null);
 
@@ -352,6 +365,7 @@ function AppContent() {
       setView(route.view);
       setActiveTab(route.activeTab);
       setSelectedProgrammeId(route.programmeId || null);
+      setQualityRecordFocus(route.qualityTarget || null);
       if (route.girlId) setSelectedGirlId(route.girlId);
       if (route.houseId) setSelectedHouseId(route.houseId);
     };
@@ -443,6 +457,26 @@ function AppContent() {
       window.location.hash = targetHash;
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openQualityRecord = (issue: QualityIssue) => {
+    const target = issue.target;
+    if (!target) return;
+    const kind: 'budget-item' | 'workplan-item' | undefined = target.kind === 'budget-item'
+      ? 'budget-item'
+      : target.kind === 'workplan-item' || target.kind === 'indicator-result'
+        ? 'workplan-item'
+        : undefined;
+    if (!kind) return;
+    const idExists = kind === 'budget-item'
+      ? (db.budgets || []).some((item) => item.id === target.id)
+      : (db.workplans || []).some((item) => item.id === target.id);
+    if (!idExists) return;
+    const qualityTarget = { kind, id: target.id };
+    setQualityRecordFocus(qualityTarget);
+    navigateTo('planning', 'planning');
+    const targetHash = `#/planning?qualityKind=${kind}&qualityId=${encodeURIComponent(target.id)}`;
+    if (window.location.hash !== targetHash) window.location.hash = targetHash;
   };
 
   const openProgramme = (id: ProgrammeId | null) => {
@@ -1249,11 +1283,12 @@ function AppContent() {
             db={db}
             onSelectGirl={handleOpenGirlProfile}
             onSelectHouse={handleOpenHouseProfile}
+            onOpenQualityRecord={openQualityRecord}
           />
         )}
 
         {view === 'report-builder' && (
-          <ReportBuilder db={db} onClose={() => navigateTo('dashboard', 'dashboard')} />
+          <ReportBuilder db={db} onClose={() => navigateTo('dashboard', 'dashboard')} onOpenQualityRecord={openQualityRecord} />
         )}
 
         {view === 'payroll' && (
@@ -1304,7 +1339,7 @@ function AppContent() {
 
         {/* VIEW: PLANNING (BUDGETS, WORKPLANS & FIELD SCHEDULES) */}
         {view === 'planning' && (
-          <BudgetsAndWorkplansView db={db} onRefresh={reloadData} />
+          <BudgetsAndWorkplansView db={db} onRefresh={reloadData} qualityRecordFocus={qualityRecordFocus} />
         )}
 
         {view === 'management' && (canAccessManagementDashboard(isAdmin, role) ? (

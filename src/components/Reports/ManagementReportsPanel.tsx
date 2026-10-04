@@ -11,10 +11,12 @@ import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { downloadCSV } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
+import type { QualityIssue } from '../../services/qualityRules';
 
 interface ManagementReportsPanelProps {
   db: AppDatabase;
   staff: StaffUser[];
+  onOpenQualityRecord: (issue: QualityIssue) => void;
 }
 
 function saveBlob(blob: Blob, filename: string) {
@@ -26,7 +28,7 @@ function saveBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ db, staff }) => {
+export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ db, staff, onOpenQualityRecord }) => {
   const { isAdmin, role, canViewHealthRecords, canViewSafeguarding, canViewCaseReviews, currentUser, staffProfile } = useAuth();
   const [reportId, setReportId] = useState<ManagementReportId>('management-summary');
   const [startDate, setStartDate] = useState('');
@@ -326,6 +328,10 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}
         onOpenIssue={(issue) => {
           if (!issue.target) return;
+          if (issue.target.kind === 'budget-item' || issue.target.kind === 'workplan-item' || issue.target.kind === 'indicator-result') {
+            onOpenQualityRecord(issue);
+            return;
+          }
           const record = Array.from(document.querySelectorAll<HTMLElement>('[data-quality-record-id]'))
             .find((element) => element.dataset.qualityRecordId === issue.target?.id);
           const table = record || document.getElementById('management-report-table');

@@ -14,6 +14,7 @@ import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
 import { appendReportHistory, getReportHistory } from '../../services/firestoreSync';
+import type { QualityIssue } from '../../services/qualityRules';
 import {
   FileDown,
   FileSpreadsheet,
@@ -34,6 +35,7 @@ interface ComprehensiveReportModalProps {
   onClose: () => void;
   preselectedGirlId?: string;
   preselectedHouseholdId?: string;
+  onOpenQualityRecord: (issue: QualityIssue) => void;
 }
 
 function triggerFileDownload(blob: Blob, fileName: string) {
@@ -52,6 +54,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   onClose,
   preselectedGirlId,
   preselectedHouseholdId,
+  onOpenQualityRecord,
 }) => {
   const { staffProfile, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, currentUser, isAdmin, role, allStaff } = useAuth();
   const canGenerateReports = isAdmin || role === 'Manager' || role === 'Staff';
@@ -790,8 +793,12 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
             scores={reportQualityScores}
             canApproveNarrativeOnly={isAdmin || role === 'Manager'}
             currentUserName={staffProfile?.fullName || currentUser?.email || authorName}
-            canOpenIssue={(issue) => issue.target?.kind === 'narrative-section' || issue.target?.kind === 'report-section'}
+            canOpenIssue={(issue) => ['narrative-section', 'report-section', 'budget-item', 'workplan-item', 'indicator-result'].includes(issue.target?.kind || '')}
             onOpenIssue={(issue) => {
+              if (issue.target?.kind === 'budget-item' || issue.target?.kind === 'workplan-item' || issue.target?.kind === 'indicator-result') {
+                onOpenQualityRecord(issue);
+                return;
+              }
               if (issue.target?.kind !== 'narrative-section' && issue.target?.kind !== 'report-section') return;
               const editor = document.getElementById('report-narrative');
               editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });

@@ -30,11 +30,13 @@ import {
 import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
 import { ManagementReportsPanel } from './Reports/ManagementReportsPanel';
 import { useAuth } from '../contexts/AuthContext';
+import type { QualityIssue } from '../services/qualityRules';
 
 interface ReportsProps {
   db: AppDatabase;
   onSelectGirl: (girlId: string) => void;
   onSelectHouse: (houseId: string) => void;
+  onOpenQualityRecord: (issue: QualityIssue) => void;
 }
 
 type ReportTab =
@@ -48,7 +50,7 @@ type ReportTab =
   | 'management'
   | 'exports';
 
-export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse }) => {
+export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse, onOpenQualityRecord }) => {
   const { canViewHealthRecords, canViewCaseReviews, isAdmin, role, allStaff } = useAuth();
   const canViewManagementReports = isAdmin || role === 'Manager';
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
@@ -648,7 +650,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
           )}
 
           {activeTab === 'management' && canViewManagementReports && (
-            <ManagementReportsPanel db={db} staff={allStaff} />
+            <ManagementReportsPanel db={db} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
           )}
 
           {/* TAB 7: CSV EXPORTS CENTRE */}
@@ -816,6 +818,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
         <ComprehensiveReportModal
           db={db}
           onClose={() => setIsComprehensiveModalOpen(false)}
+          onOpenQualityRecord={onOpenQualityRecord}
         />
       )}
     </div>
