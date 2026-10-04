@@ -379,6 +379,25 @@ export interface GirlLeaveRecord {
   updatedAt: string;
 }
 
+export type ProgrammeLogType = 'Production' | 'Sale' | 'Expense' | 'Input' | 'Distribution' | 'Family support' | 'Activity' | 'Note';
+
+export interface ProgrammeLogRecord {
+  id: string;
+  programmeId: string;
+  date: string;
+  entryType: ProgrammeLogType;
+  description: string;
+  quantity?: number;
+  unit?: string;
+  amountMWK?: number;
+  beneficiaries?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+
 export interface CaseReview {
   id: string;
   girlId: string;
@@ -1206,6 +1225,7 @@ export interface AppDatabase {
   examinationRecords?: ExaminationRecord[];
   attendanceRecords?: AttendanceRecord[];
   girlLeaves?: GirlLeaveRecord[];
+  programmeLogs?: ProgrammeLogRecord[];
   caseReviews?: CaseReview[];
 }
 

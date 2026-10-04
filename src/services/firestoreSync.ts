@@ -43,6 +43,7 @@ import {
   ExaminationRecord,
   AttendanceRecord,
   GirlLeaveRecord,
+  ProgrammeLogRecord,
   CaseReview,
   ReportHistoryRecord,
   MeetingRecord,
@@ -133,6 +134,7 @@ export const COLLECTIONS = {
   EXAMINATION_RECORDS: 'examinationRecords',
   ATTENDANCE_RECORDS: 'attendanceRecords',
   GIRL_LEAVES: 'girlLeaves',
+  PROGRAMME_LOGS: 'programmeLogs',
   CASE_REVIEWS: 'caseReviews',
   SAFEGUARDING_CASES: 'safeguardingCases',
   SAFEGUARDING_AUDIT_LOGS: 'safeguardingAuditLogs',
@@ -1001,6 +1003,7 @@ export async function syncEntireDatabaseToFirestore(
       ['examinationRecords', COLLECTIONS.EXAMINATION_RECORDS],
       ['attendanceRecords', COLLECTIONS.ATTENDANCE_RECORDS],
       ['girlLeaves', COLLECTIONS.GIRL_LEAVES],
+      ['programmeLogs', COLLECTIONS.PROGRAMME_LOGS],
       ['caseReviews', COLLECTIONS.CASE_REVIEWS],
     ];
     for (const [field, collectionName] of phase2Collections) {
@@ -1040,6 +1043,7 @@ export async function syncEntireDatabaseToFirestore(
         COLLECTIONS.EXAMINATION_RECORDS,
         COLLECTIONS.ATTENDANCE_RECORDS,
         COLLECTIONS.GIRL_LEAVES,
+        COLLECTIONS.PROGRAMME_LOGS,
         COLLECTIONS.CASE_REVIEWS,
       ];
       const restoredIds = new Map<string, Set<string>>();
@@ -1124,6 +1128,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       COLLECTIONS.EXAMINATION_RECORDS,
       COLLECTIONS.ATTENDANCE_RECORDS,
       COLLECTIONS.GIRL_LEAVES,
+      COLLECTIONS.PROGRAMME_LOGS,
       COLLECTIONS.CASE_REVIEWS,
     ];
 
@@ -1193,11 +1198,12 @@ export function initFirestoreListeners(
     examinationRecords: [],
     attendanceRecords: [],
     girlLeaves: [],
+    programmeLogs: [],
     caseReviews: [],
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 32;
+  const TOTAL_COLLECTIONS = 33;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -1232,6 +1238,7 @@ export function initFirestoreListeners(
       examinationRecords: [...(liveState.examinationRecords || [])],
       attendanceRecords: [...(liveState.attendanceRecords || [])],
       girlLeaves: [...(liveState.girlLeaves || [])],
+      programmeLogs: [...(liveState.programmeLogs || [])],
       caseReviews: [...(liveState.caseReviews || [])],
     });
   };
@@ -1309,6 +1316,7 @@ export function initFirestoreListeners(
   handleCollection<ExaminationRecord>(COLLECTIONS.EXAMINATION_RECORDS, 'examinationRecords');
   handleCollection<AttendanceRecord>(COLLECTIONS.ATTENDANCE_RECORDS, 'attendanceRecords');
   handleCollection<GirlLeaveRecord>(COLLECTIONS.GIRL_LEAVES, 'girlLeaves');
+  handleCollection<ProgrammeLogRecord>(COLLECTIONS.PROGRAMME_LOGS, 'programmeLogs');
   handleCollection<CaseReview>(COLLECTIONS.CASE_REVIEWS, 'caseReviews');
 
   return () => {

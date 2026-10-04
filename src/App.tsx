@@ -58,6 +58,7 @@ import { GirlsList } from './components/GirlsList';
 import { HouseholdsList } from './components/HouseholdsList';
 import { ActivitiesList } from './components/ActivitiesList';
 import { Reports } from './components/Reports';
+import { ReportBuilder } from './components/Reports/ReportBuilder';
 import { GirlProfile } from './components/GirlProfile';
 import { HouseholdProfile } from './components/HouseholdProfile';
 import { AIAssistantView } from './components/AIAssistant/AIAssistantView';
@@ -68,6 +69,8 @@ import { CaseManagementView } from './components/CaseManagementView';
 import { DataImportWizard } from './components/Import/DataImportWizard';
 import { ContactsView } from './components/Contacts/ContactsView';
 import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
+import { ProgrammesView } from './components/Programmes/ProgrammesView';
+import { PROGRAMMES, ProgrammeId } from './data/programmes';
 import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
@@ -97,12 +100,14 @@ type AppView =
   | 'girls'
   | 'houses'
   | 'activities'
+  | 'programmes'
   | 'contacts'
   | 'messages'
   | 'planning'
   | 'import'
   | 'management'
   | 'reports'
+  | 'report-builder'
   | 'payroll'
   | 'staff'
   | 'ai-assistant'
@@ -125,9 +130,18 @@ function parseHash(): {
   activeTab: NavTab;
   girlId?: string;
   houseId?: string;
+  programmeId?: ProgrammeId | null;
 } {
   const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
   if (!hash) return { view: 'dashboard', activeTab: 'dashboard' };
+
+  if (hash === 'programmes' || hash.startsWith('programmes/')) {
+    const routeId = hash.slice('programmes/'.length);
+    const programmeId = routeId && PROGRAMMES.some((programme) => programme.id === routeId)
+      ? routeId as ProgrammeId
+      : null;
+    return { view: 'programmes', activeTab: 'programmes', programmeId };
+  }
 
   if (hash.startsWith('girl/')) {
     const girlId = hash.slice(5);
@@ -148,6 +162,7 @@ function parseHash(): {
   if (hash === 'management' || hash === 'executive-overview') return { view: 'management', activeTab: 'management' };
   if (hash === 'import' || hash === 'ingestion') return { view: 'import', activeTab: 'import' };
   if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
+  if (hash === 'report-builder') return { view: 'report-builder', activeTab: 'reports' };
   if (hash === 'payroll') return { view: 'payroll', activeTab: 'payroll' };
   if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
   if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
@@ -158,7 +173,7 @@ function parseHash(): {
 }
 
 function AppContent() {
-  const { mobileViewMode, theme, glassEffect, animatedGlass } = useVisualSettings();
+  const { mobileViewMode, foundationLook, theme, glassEffect, animatedGlass } = useVisualSettings();
   const {
     currentUser,
     staffProfile,
@@ -249,6 +264,9 @@ function AppContent() {
   const [selectedHouseId, setSelectedHouseId] = useState<string | null>(
     initialRoute.houseId || null
   );
+  const [selectedProgrammeId, setSelectedProgrammeId] = useState<ProgrammeId | null>(
+    initialRoute.programmeId || null
+  );
   const [editingGirl, setEditingGirl] = useState<Girl | null>(null);
   const [editingHouse, setEditingHouse] = useState<Household | null>(null);
 
@@ -332,6 +350,7 @@ function AppContent() {
       const route = parseHash();
       setView(route.view);
       setActiveTab(route.activeTab);
+      setSelectedProgrammeId(route.programmeId || null);
       if (route.girlId) setSelectedGirlId(route.girlId);
       if (route.houseId) setSelectedHouseId(route.houseId);
     };
@@ -345,12 +364,14 @@ function AppContent() {
     newView: AppView,
     tab?: NavTab,
     girlId?: string | null,
-    houseId?: string | null
+    houseId?: string | null,
+    programmeId?: ProgrammeId | null
   ) => {
     setView(newView);
     if (tab) setActiveTab(tab);
     if (girlId !== undefined) setSelectedGirlId(girlId);
     if (houseId !== undefined) setSelectedHouseId(houseId);
+    if (newView !== 'programmes' || programmeId !== undefined) setSelectedProgrammeId(programmeId || null);
 
     let targetHash = '';
     switch (newView) {
@@ -372,6 +393,9 @@ function AppContent() {
       case 'activities':
         targetHash = '#/activities';
         break;
+      case 'programmes':
+        targetHash = programmeId ? `#/programmes/${programmeId}` : '#/programmes';
+        break;
       case 'contacts':
         targetHash = '#/contacts';
         break;
@@ -392,6 +416,9 @@ function AppContent() {
         break;
       case 'reports':
         targetHash = '#/reports';
+        break;
+      case 'report-builder':
+        targetHash = '#/report-builder';
         break;
       case 'payroll':
         targetHash = '#/payroll';
@@ -417,6 +444,10 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openProgramme = (id: ProgrammeId | null) => {
+    navigateTo('programmes', 'programmes', undefined, undefined, id);
+  };
+
   // Navigation tab switcher
   const handleSelectTab = (tab: NavTab) => {
     if (tab === 'import') {
@@ -429,6 +460,10 @@ function AppContent() {
     }
     if (tab === 'girls') {
       setGirlsStatusFilter(undefined);
+    }
+    if (tab === 'programmes') {
+      openProgramme(null);
+      return;
     }
     if (tab === 'messages') {
       navigateTo('messages', 'messages');
@@ -1045,6 +1080,7 @@ function AppContent() {
       id="app-shell"
       data-theme={theme}
       data-mobile-view={mobileViewMode}
+      data-foundation-look={foundationLook}
       data-glass-effect={glassEffect}
       data-animated-glass={animatedGlass || glassEffect}
       className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans"
@@ -1132,8 +1168,10 @@ function AppContent() {
             }}
             onNavigateToHousesList={() => navigateTo('houses', 'houses')}
             onNavigateToReports={() => navigateTo('reports', 'reports')}
+            onOpenSponsorReport={() => navigateTo('report-builder', 'reports')}
             onOpenQuickAdd={() => setIsQuickAddOpen(true)}
             onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
+            onNavigateToProgramme={openProgramme}
             safeguardingCount={safeguardingCount}
           />
         )}
@@ -1175,6 +1213,20 @@ function AppContent() {
           />
         )}
 
+        {view === 'programmes' && (
+          <ProgrammesView
+            db={db}
+            selectedProgrammeId={selectedProgrammeId}
+            auditActor={auditActor}
+            isViewOnly={isViewOnly}
+            onOpenProgramme={openProgramme}
+            onNavigateToGirls={() => navigateTo('girls', 'girls')}
+            onNavigateToHouses={() => navigateTo('houses', 'houses')}
+            onNavigateToOperations={() => navigateTo('operations', 'operations')}
+            onRefresh={reloadData}
+          />
+        )}
+
         {view === 'contacts' && (
           <ContactsView db={db} />
         )}
@@ -1197,6 +1249,10 @@ function AppContent() {
             onSelectGirl={handleOpenGirlProfile}
             onSelectHouse={handleOpenHouseProfile}
           />
+        )}
+
+        {view === 'report-builder' && (
+          <ReportBuilder db={db} onClose={() => navigateTo('dashboard', 'dashboard')} />
         )}
 
         {view === 'payroll' && (
@@ -1251,7 +1307,12 @@ function AppContent() {
         )}
 
         {view === 'management' && (canAccessManagementDashboard(isAdmin, role) ? (
-          <ManagementDashboard db={db} staff={allStaff} onNavigateReports={() => navigateTo('reports', 'reports')} />
+          <ManagementDashboard
+            db={db}
+            staff={allStaff}
+            onNavigateReports={() => navigateTo('reports', 'reports')}
+            onOpenReportBuilder={() => navigateTo('report-builder', 'reports')}
+          />
         ) : (
           <div className="rounded-xl border border-rose-200 bg-white p-8 text-center">
             <h1 className="text-lg font-bold text-stone-900">Management access restricted</h1>

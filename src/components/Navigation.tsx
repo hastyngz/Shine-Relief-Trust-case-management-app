@@ -15,6 +15,7 @@ import {
   BarChart3,
   BrainCircuit,
   UserRound,
+  Sprout,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
@@ -25,6 +26,7 @@ export type NavTab =
   | 'girls'
   | 'houses'
   | 'activities'
+  | 'programmes'
   | 'contacts'
   | 'messages'
   | 'planning'
@@ -69,6 +71,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'girls', label: 'SHINE Girls', icon: Users, count: girlsCount },
     { id: 'houses', label: 'Households', icon: Home, count: housesCount },
     { id: 'activities', label: 'Group Activities', icon: Sparkles },
+    { id: 'programmes', label: 'Programmes', icon: Sprout },
     { id: 'contacts', label: 'Contacts', icon: UserRound },
     { id: 'case-management', label: 'Case Management', icon: ClipboardList },
     { id: 'operations', label: 'Operations', icon: BrainCircuit, count: pendingReviewCount > 0 ? pendingReviewCount : undefined },
@@ -100,8 +103,8 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   return (
     <>
-      {/* Desktop & Tablet Top Navigation Bar */}
-      <nav id="desktop-nav" className="hidden md:block bg-stone-100 border-b border-stone-200 overflow-x-auto">
+      {/* Desktop & Tablet Navigation */}
+      <nav id="desktop-nav" aria-label="Primary navigation" className="hidden md:block bg-stone-100 border-b border-stone-200 overflow-x-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-1 py-2">
             {navItems.map((item) => {

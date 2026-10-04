@@ -279,6 +279,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /programmeLogs/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
     match /caseReviews/{id} {
       allow read: if canViewCaseReviews();
       allow create, update: if canEditCaseReviews();

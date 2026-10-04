@@ -1604,108 +1604,6 @@
 		}
 	}
 
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 1) {
-		--programme-accent: #0f766e;
-		--programme-tint: #f0fdfa;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 2) {
-		--programme-accent: #1d4ed8;
-		--programme-tint: #eff6ff;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 3) {
-		--programme-accent: #92400e;
-		--programme-tint: #fffbeb;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 4) {
-		--programme-accent: #6d28d9;
-		--programme-tint: #f5f3ff;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 5) {
-		--programme-accent: #be123c;
-		--programme-tint: #fff1f2;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 6) {
-		--programme-accent: #166534;
-		--programme-tint: #f0fdf4;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 7) {
-		--programme-accent: #c2410c;
-		--programme-tint: #fff7ed;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n) {
-		--programme-accent: #0e7490;
-		--programme-tint: #ecfeff;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card {
-		border-top: 3px solid var(--programme-accent) !important;
-		background-color: var(--programme-tint) !important;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:hover {
-		border-color: var(--programme-accent) !important;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:first-child > span:first-child {
-		color: var(--programme-accent) !important;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:first-child > span:first-child > span {
-		background-color: color-mix(in srgb, var(--programme-accent) 12%, white) !important;
-		color: var(--programme-accent) !important;
-	}
-
-	#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:nth-child(2) {
-		color: var(--programme-accent) !important;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 1) {
-		--programme-accent: #5eead4;
-		--programme-tint: #132a2c;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 2) {
-		--programme-accent: #93c5fd;
-		--programme-tint: #17263a;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 3) {
-		--programme-accent: #fcd34d;
-		--programme-tint: #30291b;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 4) {
-		--programme-accent: #c4b5fd;
-		--programme-tint: #292238;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 5) {
-		--programme-accent: #fda4af;
-		--programme-tint: #321f2a;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 6) {
-		--programme-accent: #86efac;
-		--programme-tint: #1c2e2b;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n + 7) {
-		--programme-accent: #fdba74;
-		--programme-tint: #33251d;
-	}
-
-	#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:nth-child(8n) {
-		--programme-accent: #67e8f9;
-		--programme-tint: #172b34;
-	}
-
 	#app-shell[data-mobile-view="ios"]:has(#dashboard-view) #dashboard-view .shine-card [class~="text-stone-700"],
 	#app-shell[data-mobile-view="ios"]:has(#dashboard-view) #dashboard-view .shine-card [class~="text-stone-600"],
 	#app-shell[data-mobile-view="ios"]:has(#dashboard-view) #dashboard-view .shine-card [class~="text-stone-500"] {
@@ -2279,4 +2177,167 @@
 #app-shell[data-mobile-view="ios"] #app-header .offline-indicator :is(span, svg),
 #app-shell[data-mobile-view="foundation"] #app-header .offline-indicator :is(span, svg) {
 	color: #78350f !important;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 1) {
+	--programme-accent: #0f766e;
+	--programme-tint: #f0fdfa;
+	--programme-ink: #134e4a;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 2) {
+	--programme-accent: #be123c;
+	--programme-tint: #fff1f2;
+	--programme-ink: #881337;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 3) {
+	--programme-accent: #b45309;
+	--programme-tint: #fffbeb;
+	--programme-ink: #78350f;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 4) {
+	--programme-accent: #0369a1;
+	--programme-tint: #f0f9ff;
+	--programme-ink: #0c4a6e;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 5) {
+	--programme-accent: #c2410c;
+	--programme-tint: #fff7ed;
+	--programme-ink: #7c2d12;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 6) {
+	--programme-accent: #b91c1c;
+	--programme-tint: #fef2f2;
+	--programme-ink: #7f1d1d;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 7) {
+	--programme-accent: #1d4ed8;
+	--programme-tint: #eff6ff;
+	--programme-ink: #1e3a8a;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n) {
+	--programme-accent: #475569;
+	--programme-tint: #f1f5f9;
+	--programme-ink: #1e293b;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card {
+	border: 1px solid color-mix(in srgb, var(--programme-accent) 35%, transparent) !important;
+	border-top: 3px solid var(--programme-accent) !important;
+	background: var(--programme-tint) !important;
+	color: var(--programme-ink) !important;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card:hover {
+	border-color: var(--programme-accent) !important;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:first-child > span:first-child {
+	color: var(--programme-ink) !important;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:first-child > span:first-child > span {
+	background: color-mix(in srgb, var(--programme-accent) 12%, white) !important;
+	color: var(--programme-accent) !important;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:nth-child(2) {
+	color: var(--programme-ink) !important;
+}
+
+#app-shell #dashboard-view [aria-label="Programmes"] .dashboard-programme-icon {
+	flex: 0 0 auto;
+	border-color: currentColor !important;
+	background: color-mix(in srgb, var(--programme-accent) 12%, white) !important;
+	color: var(--programme-accent) !important;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 1) {
+	--programme-accent: #5eead4;
+	--programme-tint: #132a2c;
+	--programme-ink: #e6fffb;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 2) {
+	--programme-accent: #fda4af;
+	--programme-tint: #321f2a;
+	--programme-ink: #fff1f2;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 3) {
+	--programme-accent: #fcd34d;
+	--programme-tint: #30291b;
+	--programme-ink: #fffbeb;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 4) {
+	--programme-accent: #7dd3fc;
+	--programme-tint: #172b34;
+	--programme-ink: #f0f9ff;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 5) {
+	--programme-accent: #fdba74;
+	--programme-tint: #33251d;
+	--programme-ink: #fff7ed;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 6) {
+	--programme-accent: #fca5a5;
+	--programme-tint: #321f20;
+	--programme-ink: #fef2f2;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n + 7) {
+	--programme-accent: #93c5fd;
+	--programme-tint: #17263a;
+	--programme-ink: #eff6ff;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] :is(.dashboard-programme-card, .foundation-programme-row):nth-child(8n) {
+	--programme-accent: #cbd5e1;
+	--programme-tint: #222938;
+	--programme-ink: #f1f5f9;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card {
+	border-color: color-mix(in srgb, var(--programme-accent) 38%, transparent) !important;
+	border-top-color: var(--programme-accent) !important;
+	background: linear-gradient(145deg, color-mix(in srgb, var(--programme-accent) 18%, var(--programme-tint)), #151927 80%) !important;
+	color: var(--programme-ink) !important;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:first-child > span:first-child,
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:nth-child(2) {
+	color: var(--programme-ink) !important;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-card > span:first-child > span:first-child > span {
+	background: color-mix(in srgb, var(--programme-accent) 15%, var(--programme-tint)) !important;
+	color: var(--programme-accent) !important;
+}
+
+#app-shell[data-mobile-view="ios"] #dashboard-view [aria-label="Programmes"] .dashboard-programme-icon {
+	border-color: currentColor !important;
+	background: rgb(15 23 42 / 48%) !important;
+	color: var(--programme-accent) !important;
+}
+
+#app-shell[data-mobile-view="foundation"] #dashboard-view [aria-label="Programmes"] .foundation-programme-row {
+	border-left: 3px solid var(--programme-accent) !important;
+}
+
+#app-shell[data-mobile-view="foundation"] #dashboard-view [aria-label="Programmes"] .foundation-programme-name > span:first-child,
+#app-shell[data-mobile-view="foundation"] #dashboard-view [aria-label="Programmes"] .foundation-programme-value strong {
+	color: var(--programme-accent) !important;
+}
+
+#app-shell[data-mobile-view="foundation"] #dashboard-view [aria-label="Programmes"] .foundation-programme-row:hover {
+	background: color-mix(in srgb, var(--programme-accent) 5%, var(--foundation-bg)) !important;
 }

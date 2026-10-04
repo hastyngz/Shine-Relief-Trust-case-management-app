@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Household, Girl, AppDatabase } from '../types';
 import { formatMWK } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { PROGRAMME_BY_ID } from '../data/programmes';
 import {
   Home,
   Users,
@@ -79,6 +80,11 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
           </button>
         )}
       </div>
+
+      <aside className="rounded-xl border border-teal-200 bg-teal-50/70 p-4 text-sm text-teal-950">
+        <h2 className="font-bold">About {PROGRAMME_BY_ID['child-house'].name}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-teal-900">{PROGRAMME_BY_ID['child-house'].background}</p>
+      </aside>
 
       {/* Search and Filters */}
       <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs flex flex-col sm:flex-row items-center gap-3">

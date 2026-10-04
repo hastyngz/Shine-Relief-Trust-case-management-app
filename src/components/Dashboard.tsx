@@ -2,6 +2,11 @@ import React from 'react';
 import { AppDatabase, Girl, Household } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { useVisualSettings } from '../contexts/VisualSettingsContext';
+import { canAccessManagementDashboard } from '../services/managementAnalytics';
+import { PROGRAMMES, ProgrammeId } from '../data/programmes';
+import { startBadge, summariseProgramme } from '../services/programmeSummary';
+import { PROGRAMME_ICONS } from './Programmes/programmeIcons';
 import {
   Users,
   Home,
@@ -29,9 +34,11 @@ interface DashboardProps {
   onNavigateToGirlsList: (statusFilter?: string) => void;
   onNavigateToHousesList: () => void;
   onNavigateToReports: () => void;
+  onOpenSponsorReport: () => void;
   onOpenQuickAdd: () => void;
   onNavigateToCaseManagement: () => void;
   safeguardingCount?: number;
+  onNavigateToProgramme: (id: ProgrammeId | null) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -41,11 +48,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToGirlsList,
   onNavigateToHousesList,
   onNavigateToReports,
+  onOpenSponsorReport,
   onOpenQuickAdd,
   onNavigateToCaseManagement,
+  onNavigateToProgramme,
   safeguardingCount,
 }) => {
   const { currentUser, isAdmin, role, canViewHealthRecords, canViewCaseReviews } = useAuth();
+  const { mobileViewMode } = useVisualSettings();
+  const isFoundation = mobileViewMode === 'foundation';
+  const canBuildSponsorReport = canAccessManagementDashboard(isAdmin, role);
   // Girls statistics
   const totalGirls = db.girls.length;
   const activeGirls = db.girls.filter((g) => g.status === 'Active').length;
@@ -210,28 +222,41 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <span className="hero-location-region text-xs text-teal-200">Zomba &amp; Shire Highlands</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-              SHINE Relief Case Management & Monitoring
+              {isFoundation
+                ? `${totalGirls} girls supported across ${PROGRAMMES.length} programmes`
+                : 'SHINE Relief Case Management & Monitoring'}
             </h1>
-            <p className="text-xs sm:text-sm text-teal-100/90 mt-1 max-w-2xl">
+            {!isFoundation && <p className="text-xs sm:text-sm text-teal-100/90 mt-1 max-w-2xl">
               Track SHINE Girls and residential households without duplicating records. Log educational progress,
               medical care, family preservation, rent, and household expenditures.
-            </p>
+            </p>}
           </div>
 
           <div className="hero-actions flex flex-col gap-2 shrink-0 sm:flex-row sm:flex-wrap sm:items-center">
-            <button
-              onClick={onOpenQuickAdd}
-              className="hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Record New Entry</span>
-            </button>
-            <button
-              onClick={onNavigateToReports}
-              className="hero-secondary-action px-3.5 py-2.5 text-white text-xs font-bold rounded-xl border transition-colors"
-            >
-              Export CSV / Reports
-            </button>
+            {isFoundation ? (
+              <button
+                onClick={canBuildSponsorReport ? onOpenSponsorReport : onNavigateToReports}
+                className="hero-secondary-action px-3.5 py-2.5 text-white text-xs font-bold rounded-xl border transition-colors"
+              >
+                {canBuildSponsorReport ? 'Sponsor report' : 'Export CSV / Reports'}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={onOpenQuickAdd}
+                  className="hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Record New Entry</span>
+                </button>
+                <button
+                  onClick={onNavigateToReports}
+                  className="hero-secondary-action px-3.5 py-2.5 text-white text-xs font-bold rounded-xl border transition-colors"
+                >
+                  Export CSV / Reports
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -327,6 +352,55 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       </div>
+
+      <section aria-label="Programmes" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xs font-bold uppercase text-stone-600">Programmes</h2>
+          <button onClick={() => onNavigateToProgramme(null)} className="text-xs font-bold text-teal-800 hover:text-teal-950">All programmes</button>
+        </div>
+        <div className={isFoundation ? 'foundation-programme-ledger' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3'}>
+          {PROGRAMMES.map((programme) => {
+            const summary = summariseProgramme(db, programme.id);
+            const badge = startBadge(programme.id, summary.fallbackStartDate);
+            if (isFoundation) {
+              return (
+                <button
+                  key={programme.id}
+                  onClick={() => onNavigateToProgramme(programme.id)}
+                  className="foundation-programme-row"
+                >
+                  <span className="foundation-programme-name">
+                    <span>{programme.name}</span>
+                    <span>{summary.label}</span>
+                  </span>
+                  <span className="foundation-programme-value">
+                    <strong>{summary.value}</strong>
+                    <span>{badge.text}</span>
+                  </span>
+                </button>
+              );
+            }
+            const Icon = PROGRAMME_ICONS[programme.id];
+            return (
+              <button
+                key={programme.id}
+                onClick={() => onNavigateToProgramme(programme.id)}
+                className="shine-card dashboard-programme-card bg-white p-4 rounded-xl border border-stone-200 text-left transition-colors"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="flex items-center gap-2 text-sm font-bold text-stone-900">
+                    <span className="dashboard-programme-icon case-indicator-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><Icon className="h-4 w-4" /></span>
+                    {programme.name}
+                  </span>
+                  <span className="text-[10px] text-stone-500 whitespace-nowrap">{badge.text}{badge.text.startsWith('Since') && !badge.confirmed ? ' · confirm' : ''}</span>
+                </span>
+                <span className="mt-3 block text-xl font-black text-teal-950">{summary.value}</span>
+                <span className="block text-xs text-stone-600">{summary.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Case management indicators */}
       <section aria-label="Case management indicators" className="space-y-2">

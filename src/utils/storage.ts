@@ -83,6 +83,7 @@ import {
   ExaminationRecord,
   AttendanceRecord,
   GirlLeaveRecord,
+  ProgrammeLogRecord,
   CaseReview,
 } from '../types';
 
@@ -137,6 +138,7 @@ export function getDatabase(): AppDatabase {
       examinationRecords: parsed.examinationRecords || [],
       attendanceRecords: parsed.attendanceRecords || [],
       girlLeaves: parsed.girlLeaves || [],
+      programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
       caseReviews: parsed.caseReviews || [],
     };
   } catch (error) {
@@ -212,6 +214,7 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       examinationRecords: Array.isArray(parsed.examinationRecords) ? parsed.examinationRecords : [],
       attendanceRecords: Array.isArray(parsed.attendanceRecords) ? parsed.attendanceRecords : [],
       girlLeaves: Array.isArray(parsed.girlLeaves) ? parsed.girlLeaves : [],
+      programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
       caseReviews: Array.isArray(parsed.caseReviews) ? parsed.caseReviews : [],
     };
     await syncEntireDatabaseToFirestore(validatedDb, true);
@@ -765,6 +768,29 @@ export function updateGirlLeaveRecord(
   db.girlLeaves = records;
   saveDatabase(db);
   persistPhase2Record('girlLeaves', updated).catch((err) => console.error('Failed to update leave record:', err));
+  return updated;
+}
+
+export function addProgrammeLog(
+  data: Omit<ProgrammeLogRecord, keyof Phase2TrackedRecord>, actorName: string
+): ProgrammeLogRecord {
+  return addPhase2Record('programmeLogs', 'programmeLogs', 'PRG', data, actorName);
+}
+
+export function updateProgrammeLog(
+  id: string,
+  updates: Partial<ProgrammeLogRecord>,
+  actorName: string
+): ProgrammeLogRecord | null {
+  const db = getDatabase();
+  const records = db.programmeLogs || [];
+  const index = records.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  records[index] = updated;
+  db.programmeLogs = records;
+  saveDatabase(db);
+  persistPhase2Record('programmeLogs', updated).catch((err) => console.error('Failed to update programme log:', err));
   return updated;
 }
 

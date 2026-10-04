@@ -22,6 +22,7 @@ export const INITIAL_DATABASE: AppDatabase = {
   schedules: [],
   historicalRecords: [],
   importAudits: [],
+  programmeLogs: [],
   people: [],
   customPersonTypes: [],
 };
