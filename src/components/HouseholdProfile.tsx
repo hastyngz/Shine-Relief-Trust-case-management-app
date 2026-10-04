@@ -735,7 +735,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                             {formatDate(act.date)}
                           </span>
                           <span className="text-xs font-semibold text-stone-700">
-                            • {act.participantCount} Participants
+                            • {act.participantCount == null ? 'Participant count not recorded' : `${act.participantCount} Participants`}
                           </span>
                         </div>
                         <h4 className="text-base font-bold text-stone-900 mt-1">

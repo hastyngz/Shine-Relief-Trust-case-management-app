@@ -37,6 +37,9 @@ import {
 import { formatMWK, formatDate } from '../utils/export';
 import { calculateBudgetVariance } from './financialCalculations';
 import { matchesManagementProgramme } from './managementAnalytics';
+import { PROGRAMMES } from '../data/programmes';
+import type { QualityIssue } from './qualityRules';
+import { qualityScores, runQualityRules } from './qualityRules';
 
 // Color Palette for SHINE Relief Trust Malawi
 const SHINE_COLORS = {
@@ -73,6 +76,10 @@ export interface ReportConfig {
   selectedHouseholdId?: string;
   selectedGirlId?: string;
   executiveSummary?: string;
+  donorFacing?: boolean;
+  qualityIssues?: QualityIssue[];
+  qualityScores?: { quantification: number; impact: number; dataQuality: number };
+  blockerOverrideReason?: string;
   recommendationsNotes?: string;
   includeSections: {
     executiveSummary: boolean;
@@ -95,6 +102,61 @@ export interface ReportConfig {
   selectedPhotoIds?: string[];
   maxPhotos?: number;
   photoImageData?: Record<string, Uint8Array>;
+}
+
+export function reviewReportQuality(db: AppDatabase, config: ReportConfig): QualityIssue[] {
+  const reportData = filterDataForReport(db, config);
+  const workplanResults = reportData.workplans.map((item) => ({
+    id: item.id,
+    title: item.activity,
+    description: item.objective,
+    indicatorId: item.indicatorId,
+    target: item.targetCount,
+    actual: item.completedCount,
+    evidenceNote: item.notes,
+    evidenceDate: item.updatedAt,
+    verificationStatus: item.status === 'Completed' ? 'verified' : 'unverified',
+    method: item.indicatorId ? 'workplan indicator' : undefined,
+  }));
+  const summaryText = config.executiveSummary || (config.includeSections.executiveSummary ? buildFactualReportNarrative(db, config) : '');
+  const narrativeSections = [
+    ...(summaryText ? [{ title: 'Executive summary', text: summaryText, results: workplanResults }] : []),
+    ...(config.structuredTables || []).map((table) => ({
+      title: table.title,
+      text: table.rows.map((row) => row.map(String).join(' ')).join('. '),
+      results: workplanResults,
+    })),
+  ];
+  return runQualityRules({
+    finalReport: true,
+    donorFacing: config.donorFacing === true,
+    title: config.title,
+    donorReport: { donorFacing: config.donorFacing === true, description: summaryText },
+    narrativeSections,
+    activities: [
+      ...reportData.activities.map((item) => ({ title: item.activityName, description: item.description })),
+      ...workplanResults,
+    ],
+    indicators: workplanResults,
+    results: workplanResults,
+    budgets: reportData.budgets,
+    options: { now: new Date().toISOString(), ukSpelling: true, programmeNames: PROGRAMMES.map((programme) => programme.name), maxSentenceWords: 35 },
+  });
+}
+
+function qualityAnnexRows(issues: QualityIssue[], scores: { quantification: number; impact: number; dataQuality: number }): Array<Array<string | number>> {
+  return [
+    ['SCORE', 'Quantification', '', `${scores.quantification}/100`, ''],
+    ['SCORE', 'Impact evidence', '', `${scores.impact}/100`, ''],
+    ['SCORE', 'Data quality', '', `${scores.dataQuality}/100`, ''],
+    ...issues.map((issue) => [issue.severity.toUpperCase(), issue.rule, issue.location, issue.message, issue.suggestedFix || '']),
+  ];
+}
+
+function assertQualityOverride(issues: QualityIssue[], reason?: string): void {
+  if (issues.some((issue) => issue.severity === 'blocker') && (!reason || reason.trim().length < 10)) {
+    throw new Error('Report quality blockers must be resolved or overridden with a written reason of at least 10 characters.');
+  }
 }
 
 /**
@@ -319,6 +381,9 @@ export function buildRecordedRecommendations(db: AppDatabase, config: ReportConf
 // 1. PROFESSIONAL WORD (.DOCX) GENERATOR
 // ============================================================================
 export async function generateWordReport(db: AppDatabase, config: ReportConfig): Promise<Blob> {
+  const qualityIssues = reviewReportQuality(db, config);
+  const reportScores = qualityScores(qualityIssues);
+  assertQualityOverride(qualityIssues, config.blockerOverrideReason);
   const data = filterDataForReport(db, config);
   const houseMap = new Map(db.households.map((h) => [h.id, h.name]));
   const girlMap = new Map(db.girls.map((g) => [g.id, g.fullName]));
@@ -762,7 +827,12 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
     );
   }
 
-  config.structuredTables?.forEach((reportTable, index) => {
+  const qualityTable = {
+    title: 'Quality Issues',
+    headers: ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'],
+    rows: qualityAnnexRows(qualityIssues, reportScores),
+  };
+  [...(config.structuredTables || []), qualityTable].forEach((reportTable, index) => {
     if (reportTable.headers.length === 0) return;
     sections.push(
       createSectionHeading(`${index + 1}. ${reportTable.title}`),
@@ -921,6 +991,9 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
 // 2. PROFESSIONAL MULTI-SHEET EXCEL (.XLSX) GENERATOR
 // ============================================================================
 export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Uint8Array {
+  const qualityIssues = reviewReportQuality(db, config);
+  const reportScores = qualityScores(qualityIssues);
+  assertQualityOverride(qualityIssues, config.blockerOverrideReason);
   const data = filterDataForReport(db, config);
   const houseMap = new Map(db.households.map((h) => [h.id, h.name]));
   const girlMap = new Map(db.girls.map((g) => [g.id, g.fullName]));
@@ -1362,6 +1435,13 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
     }
   }
 
+  const qualitySheet = XLSX.utils.aoa_to_sheet([
+    ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'],
+    ...qualityAnnexRows(qualityIssues, reportScores),
+  ]);
+  qualitySheet['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 36 }, { wch: 72 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(wb, qualitySheet, 'Quality Issues');
+
   return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }
 
@@ -1369,6 +1449,9 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
 // 3. PROFESSIONAL PDF GENERATOR (JSPDF + JSPDF-AUTOTABLE)
 // ============================================================================
 export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
+  const qualityIssues = reviewReportQuality(db, config);
+  const reportScores = qualityScores(qualityIssues);
+  assertQualityOverride(qualityIssues, config.blockerOverrideReason);
   const data = filterDataForReport(db, config);
   const houseMap = new Map(db.households.map((h) => [h.id, h.name]));
   const girlMap = new Map(db.girls.map((g) => [g.id, g.fullName]));
@@ -1648,6 +1731,22 @@ export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
       }
     }
   }
+
+  doc.addPage();
+  currentY = 48;
+  doc.setTextColor(15, 76, 58);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Quality Issues and Evidence Scores', 40, currentY);
+  autoTable(doc, {
+    startY: currentY + 12,
+    head: [['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action']],
+    body: qualityAnnexRows(qualityIssues, reportScores).map((row) => row.map(String)),
+    theme: 'grid',
+    headStyles: { fillColor: [15, 76, 58], textColor: [255, 255, 255], fontSize: 7 },
+    bodyStyles: { fontSize: 6.5 },
+    margin: { left: 40, right: 40 },
+  });
 
   // Footer on all pages
   const totalPages = (doc as any).internal.getNumberOfPages();

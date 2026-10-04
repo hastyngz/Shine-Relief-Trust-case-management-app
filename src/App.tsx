@@ -306,6 +306,7 @@ function AppContent() {
       canViewTeamTasks: isAdmin || role === 'Manager',
       canReadHealthRecords: canViewHealthRecords,
       canReadCaseReviews: canViewCaseReviews,
+      canReadImportSourceData: isAdmin || role === 'Manager',
     });
     return () => unsub();
   }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews]);

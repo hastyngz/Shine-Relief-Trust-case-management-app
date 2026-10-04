@@ -172,7 +172,7 @@ export function buildManagementReportRows(
       return headersAndRows(['Indicator / workplan objective', 'Activity', 'Programme', 'Period', 'Target', 'Recorded achievement', 'Achievement %', 'Reporting period'], records.map((item) => [item.objective, item.activity, matchesManagementProgramme(db, filters.programme, { id: item.id, activityIds: item.linkedActivityIds }) ? filters.programme || 'Stored attribution' : 'Unattributed', item.period, item.targetCount, item.completedCount ?? 0, item.targetCount > 0 ? ((item.completedCount ?? 0) / item.targetCount) * 100 : 'N/A', `${filters.startDate || item.startDate} to ${filters.endDate || item.endDate}`]));
     }
     case 'programme-activity': {
-      const activityRows: ReportCell[][] = (db.householdActivities || []).filter((item) => householdIds.has(item.householdId) && inRange(item.date, filters) && matchesManagementProgramme(db, filters.programme, { id: item.id, householdId: item.householdId })).map((item) => [item.id, 'Household activity', item.activityName, item.activityType, item.date, item.location || '', item.householdId, item.participantCount, item.furtherActionRequired ? 'Yes' : 'No']);
+      const activityRows: ReportCell[][] = (db.householdActivities || []).filter((item) => householdIds.has(item.householdId) && inRange(item.date, filters) && matchesManagementProgramme(db, filters.programme, { id: item.id, householdId: item.householdId })).map((item) => [item.id, 'Household activity', item.activityName, item.activityType, item.date, item.location || '', item.householdId, item.participantCount ?? 'Not recorded', item.furtherActionRequired ? 'Yes' : 'No']);
       const scheduleRows: ReportCell[][] = (db.schedules || []).filter((item) => inRange(item.scheduledDate, filters) && (!filters.householdId || (item.targetType === 'household' && item.targetId === filters.householdId)) && (!filters.staffId || item.assignedStaffId === filters.staffId) && matchesManagementProgramme(db, filters.programme, { id: item.id, activityId: item.targetType === 'workplan' ? item.targetId : undefined, householdId: item.targetType === 'household' ? item.targetId : undefined, girlId: item.targetType === 'girl' ? item.targetId : undefined })).map((item) => [item.id, 'Scheduled activity', item.title, item.type, item.scheduledDate, item.location || '', item.targetId || '', item.assignedStaffName, item.status]);
       return headersAndRows(['Record ID', 'Record type', 'Activity', 'Activity type', 'Date', 'Recorded location', 'Household / target ID', 'Participants / assigned staff', 'Status / action'], [...activityRows, ...scheduleRows]);
     }
@@ -260,7 +260,8 @@ export function generateManagementReportWorkbook(
   report: { headers: string[]; rows: ReportCell[][] },
   filters: ManagementFilters,
   generatedBy: string,
-  generatedAt = new Date().toISOString()
+  generatedAt = new Date().toISOString(),
+  qualityRows: Array<Array<string | number>> = []
 ): Uint8Array {
   const workbook = XLSX.utils.book_new();
   const reportLabel = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
@@ -303,5 +304,11 @@ export function generateManagementReportWorkbook(
     }
   }
   XLSX.utils.book_append_sheet(workbook, sheet, 'Report Data');
+  const qualitySheet = XLSX.utils.aoa_to_sheet([
+    ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'],
+    ...qualityRows,
+  ]);
+  qualitySheet['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 36 }, { wch: 72 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(workbook, qualitySheet, 'Quality Issues');
   return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
 }

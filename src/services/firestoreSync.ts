@@ -53,6 +53,9 @@ import {
   WhatIfScenario,
   IntelligenceSuggestion,
   AISettings,
+  ProcurementList,
+  ProjectProjection,
+  RestrictedImportSourceData,
   ContactRecord,
 } from '../types';
 
@@ -118,6 +121,7 @@ export const COLLECTIONS = {
   AI_SETTINGS: 'aiSettings',
   HISTORICAL_RECORDS: 'historicalCaseRecords',
   IMPORT_AUDITS: 'importAudits',
+  RESTRICTED_IMPORT_SOURCES: 'restrictedImportSources',
   EARLY_YEARS: 'earlyYearsRecords',
   PEOPLE: 'people',
   ATTACHMENTS: 'attachments',
@@ -141,6 +145,8 @@ export const COLLECTIONS = {
   EMPLOYEE_SALARY_HISTORY: 'employeeSalaryHistory',
   EMPLOYEE_AUDIT_LOGS: 'employeeAuditLogs',
   REPORT_HISTORY: 'reportHistory',
+  PROCUREMENT_LISTS: 'procurementLists',
+  PROJECT_PROJECTIONS: 'projectProjections',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -757,7 +763,18 @@ export async function deleteHistoricalCaseRecordFromFirestore(id: string): Promi
 export async function persistImportAuditToFirestore(item: ImportAuditRecord): Promise<void> {
   try {
     updateSyncStatus('saving');
-    await setDoc(doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id), sanitizeForFirestore(item));
+    const { sourceData, ...auditMetadata } = item;
+    await setDoc(doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id), sanitizeForFirestore(auditMetadata));
+    if (sourceData) {
+      const sourceRecord: RestrictedImportSourceData = {
+        id: item.id,
+        auditId: item.id,
+        fileName: item.fileName,
+        importedAt: item.importedAt,
+        sourceData,
+      };
+      await setDoc(doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id), sanitizeForFirestore(sourceRecord));
+    }
     updateSyncStatus('synced');
   } catch (err) {
     console.error('Firestore persistImportAudit error:', err);
@@ -955,10 +972,24 @@ export async function syncEntireDatabaseToFirestore(
 
     if (db.importAudits) {
       db.importAudits.forEach((ia) => {
+        const { sourceData, ...auditMetadata } = ia;
         operations.push({
           ref: doc(firestore, COLLECTIONS.IMPORT_AUDITS, ia.id),
-          data: sanitizeForFirestore(ia),
+          data: sanitizeForFirestore(auditMetadata),
         });
+        if (sourceData) {
+          const sourceRecord: RestrictedImportSourceData = {
+            id: ia.id,
+            auditId: ia.id,
+            fileName: ia.fileName,
+            importedAt: ia.importedAt,
+            sourceData,
+          };
+          operations.push({
+            ref: doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, ia.id),
+            data: sanitizeForFirestore(sourceRecord),
+          });
+        }
       });
     }
 
@@ -1005,6 +1036,8 @@ export async function syncEntireDatabaseToFirestore(
       ['girlLeaves', COLLECTIONS.GIRL_LEAVES],
       ['programmeLogs', COLLECTIONS.PROGRAMME_LOGS],
       ['caseReviews', COLLECTIONS.CASE_REVIEWS],
+      ['procurementLists', COLLECTIONS.PROCUREMENT_LISTS],
+      ['projectProjections', COLLECTIONS.PROJECT_PROJECTIONS],
     ];
     for (const [field, collectionName] of phase2Collections) {
       const records = db[field] as Array<{ id: string }> | undefined;
@@ -1033,6 +1066,7 @@ export async function syncEntireDatabaseToFirestore(
         COLLECTIONS.SCHEDULES,
         COLLECTIONS.HISTORICAL_RECORDS,
         COLLECTIONS.IMPORT_AUDITS,
+        COLLECTIONS.RESTRICTED_IMPORT_SOURCES,
         COLLECTIONS.EARLY_YEARS,
         COLLECTIONS.PEOPLE,
         COLLECTIONS.CONTACTS,
@@ -1045,6 +1079,8 @@ export async function syncEntireDatabaseToFirestore(
         COLLECTIONS.GIRL_LEAVES,
         COLLECTIONS.PROGRAMME_LOGS,
         COLLECTIONS.CASE_REVIEWS,
+        COLLECTIONS.PROCUREMENT_LISTS,
+        COLLECTIONS.PROJECT_PROJECTIONS,
       ];
       const restoredIds = new Map<string, Set<string>>();
       operations.forEach(({ ref }) => {
@@ -1119,6 +1155,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       COLLECTIONS.SCHEDULES,
       COLLECTIONS.HISTORICAL_RECORDS,
       COLLECTIONS.IMPORT_AUDITS,
+      COLLECTIONS.RESTRICTED_IMPORT_SOURCES,
       COLLECTIONS.EARLY_YEARS,
       COLLECTIONS.PEOPLE,
       COLLECTIONS.ATTACHMENTS,
@@ -1157,7 +1194,13 @@ let activeUnsubscribers: Unsubscribe[] = [];
  */
 export function initFirestoreListeners(
   onDatabaseSynced: (updatedDb: AppDatabase) => void,
-  options: { uid?: string; canViewTeamTasks?: boolean; canReadHealthRecords?: boolean; canReadCaseReviews?: boolean } = {}
+  options: {
+    uid?: string;
+    canViewTeamTasks?: boolean;
+    canReadHealthRecords?: boolean;
+    canReadCaseReviews?: boolean;
+    canReadImportSourceData?: boolean;
+  } = {}
 ): () => void {
   // Teardown previous listeners if any
   activeUnsubscribers.forEach((unsub) => unsub());
@@ -1190,6 +1233,7 @@ export function initFirestoreListeners(
     aiSettings: [],
     historicalRecords: [],
     importAudits: [],
+    restrictedImportSources: [],
     earlyYearsRecords: [],
     people: [],
     caseActions: [],
@@ -1200,10 +1244,12 @@ export function initFirestoreListeners(
     girlLeaves: [],
     programmeLogs: [],
     caseReviews: [],
+    procurementLists: [],
+    projectProjections: [],
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 33;
+  const TOTAL_COLLECTIONS = 36;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -1229,7 +1275,11 @@ export function initFirestoreListeners(
       intelligenceSuggestions: [...(liveState.intelligenceSuggestions || [])],
       aiSettings: [...(liveState.aiSettings || [])],
       historicalRecords: [...(liveState.historicalRecords || [])],
-      importAudits: [...(liveState.importAudits || [])],
+      importAudits: (liveState.importAudits || []).map((audit) => {
+        const source = liveState.restrictedImportSources?.find((record) => record.auditId === audit.id);
+        return source ? { ...audit, sourceData: source.sourceData } : audit;
+      }),
+      restrictedImportSources: [...(liveState.restrictedImportSources || [])],
       earlyYearsRecords: [...(liveState.earlyYearsRecords || [])],
       people: [...(liveState.people || [])],
       caseActions: [...(liveState.caseActions || [])],
@@ -1240,6 +1290,8 @@ export function initFirestoreListeners(
       girlLeaves: [...(liveState.girlLeaves || [])],
       programmeLogs: [...(liveState.programmeLogs || [])],
       caseReviews: [...(liveState.caseReviews || [])],
+      procurementLists: [...(liveState.procurementLists || [])],
+      projectProjections: [...(liveState.projectProjections || [])],
     });
   };
 
@@ -1247,6 +1299,10 @@ export function initFirestoreListeners(
     colName: string,
     stateField: keyof AppDatabase
   ) => {
+    if (colName === COLLECTIONS.RESTRICTED_IMPORT_SOURCES && options.canReadImportSourceData !== true) {
+      initialLoadedCollections.add(colName);
+      return;
+    }
     if (colName === COLLECTIONS.HEALTH_FOLLOW_UPS && options.canReadHealthRecords === false) {
       initialLoadedCollections.add(colName);
       return;
@@ -1308,6 +1364,7 @@ export function initFirestoreListeners(
   handleCollection<AISettings>(COLLECTIONS.AI_SETTINGS, 'aiSettings');
   handleCollection<HistoricalCaseRecord>(COLLECTIONS.HISTORICAL_RECORDS, 'historicalRecords');
   handleCollection<ImportAuditRecord>(COLLECTIONS.IMPORT_AUDITS, 'importAudits');
+  handleCollection<RestrictedImportSourceData>(COLLECTIONS.RESTRICTED_IMPORT_SOURCES, 'restrictedImportSources');
   handleCollection<EarlyYearsRecord>(COLLECTIONS.EARLY_YEARS, 'earlyYearsRecords');
   handleCollection<Person>(COLLECTIONS.PEOPLE, 'people');
   handleCollection<CaseAction>(COLLECTIONS.CASE_ACTIONS, 'caseActions');
@@ -1318,6 +1375,8 @@ export function initFirestoreListeners(
   handleCollection<GirlLeaveRecord>(COLLECTIONS.GIRL_LEAVES, 'girlLeaves');
   handleCollection<ProgrammeLogRecord>(COLLECTIONS.PROGRAMME_LOGS, 'programmeLogs');
   handleCollection<CaseReview>(COLLECTIONS.CASE_REVIEWS, 'caseReviews');
+  handleCollection<ProcurementList>(COLLECTIONS.PROCUREMENT_LISTS, 'procurementLists');
+  handleCollection<ProjectProjection>(COLLECTIONS.PROJECT_PROJECTIONS, 'projectProjections');
 
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());

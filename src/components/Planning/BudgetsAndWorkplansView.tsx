@@ -13,6 +13,9 @@ import {
   ScheduleStatus,
   AnnualBudgetPlan,
   AnnualBudgetStatus,
+  ProcurementList,
+  ProcurementListItem,
+  ProcurementQuote,
 } from '../../types';
 import {
   addBudgetItem,
@@ -26,6 +29,7 @@ import {
   addScheduleItem,
   updateScheduleItem,
   deleteScheduleItem,
+  updateProcurementList,
 } from '../../utils/storage';
 import { formatMWK, formatDate } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
@@ -61,7 +65,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
 }) => {
   const { staffProfile, canEdit, isAdmin } = useAuth();
   const actorName = staffProfile?.fullName || 'SHINE Staff';
-  const [activeSubTab, setActiveSubTab] = useState<'budgets' | 'workplans' | 'schedules'>('budgets');
+  const [activeSubTab, setActiveSubTab] = useState<'budgets' | 'workplans' | 'schedules' | 'procurement'>('budgets');
 
   // Filters
   const [budgetPeriodFilter, setBudgetPeriodFilter] = useState<string>('ALL');
@@ -70,6 +74,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [workplanStatusFilter, setWorkplanStatusFilter] = useState<string>('ALL');
   const [budgetProgrammeId, setBudgetProgrammeId] = useState<ProgrammeId | ''>('');
   const [seasonalMonthsDraft, setSeasonalMonthsDraft] = useState<number[]>([]);
+  const [quoteDrafts, setQuoteDrafts] = useState<Record<string, { supplier: string; amount: string }>>({});
 
   // Modal States
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
@@ -88,6 +93,32 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const annualBudgets = db.annualBudgets || [];
   const workplans = db.workplans || [];
   const schedules = db.schedules || [];
+  const procurementLists = db.procurementLists || [];
+
+  const updateProcurementItem = (
+    list: ProcurementList,
+    itemIndex: number,
+    updates: Partial<ProcurementListItem>,
+  ) => {
+    const items = list.items.map((item, index) => index === itemIndex ? { ...item, ...updates } : item);
+    updateProcurementList(list.id, { items }, actorName);
+    onRefresh();
+  };
+
+  const addProcurementQuote = (list: ProcurementList, itemIndex: number) => {
+    const draftKey = `${list.id}:${itemIndex}`;
+    const draft = quoteDrafts[draftKey];
+    const amountMWK = Number(draft?.amount);
+    if (!draft?.supplier.trim() || !Number.isFinite(amountMWK) || amountMWK <= 0) return;
+    const item = list.items[itemIndex];
+    const quotes: ProcurementQuote[] = [...(item.quotes || []), {
+      supplier: draft.supplier.trim(),
+      amountMWK,
+      quotedAt: new Date().toISOString().slice(0, 10),
+    }];
+    updateProcurementItem(list, itemIndex, { quotes });
+    setQuoteDrafts((current) => ({ ...current, [draftKey]: { supplier: '', amount: '' } }));
+  };
 
   // Filtered Budgets
   const filteredBudgets = budgets.filter((b) => {
@@ -514,6 +545,17 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
               >
                 <Calendar className="w-3.5 h-3.5" />
                 Schedules ({schedules.length})
+              </button>
+              <button
+                onClick={() => setActiveSubTab('procurement')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  activeSubTab === 'procurement'
+                    ? 'bg-teal-800 text-white shadow-xs'
+                    : 'text-stone-700 hover:text-stone-900'
+                }`}
+              >
+                <ListTodo className="w-3.5 h-3.5" />
+                Procurement ({procurementLists.length})
               </button>
             </div>
           </div>
@@ -1092,14 +1134,20 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       {/* ------------------------------------------------------------- */}
       {/* 3. SCHEDULES TAB */}
       {/* ------------------------------------------------------------- */}
-      {activeSubTab === 'schedules' && (
+      {(activeSubTab === 'schedules' || activeSubTab === 'procurement') && (
         <div className="space-y-5">
           <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
             <div>
-              <h3 className="text-sm font-bold text-stone-900">Operational Field Agenda</h3>
-              <p className="text-xs text-stone-500">Upcoming home visits, school monitoring, health consultations and stakeholder activities</p>
+              <h3 className="text-sm font-bold text-stone-900">
+                {activeSubTab === 'procurement' ? 'Procurement lists' : 'Operational Field Agenda'}
+              </h3>
+              <p className="text-xs text-stone-500">
+                {activeSubTab === 'procurement'
+                  ? 'Review item prices, supplier quotes, and budget attachments.'
+                  : 'Upcoming home visits, school monitoring, health consultations and stakeholder activities'}
+              </p>
             </div>
-            {canEdit && (
+            {canEdit && activeSubTab === 'schedules' && (
               <button
                 onClick={() => {
                   setEditingSchedule(null);
@@ -1110,8 +1158,130 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 <Plus className="w-4 h-4" /> Schedule Field Activity
               </button>
             )}
+
+            {activeSubTab === 'procurement' && (
+              <section className="space-y-4" aria-label="Procurement lists">
+                <div className="rounded-xl border border-stone-200 bg-white p-4">
+                  <h3 className="text-sm font-bold text-stone-900">Imported procurement lists</h3>
+                  <p className="mt-1 text-xs text-stone-600">
+                    Unclear and missing prices remain flagged. Configure the quote threshold for each list; items above it should have three supplier quotes before approval.
+                  </p>
+                </div>
+                {procurementLists.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-sm text-stone-600">
+                    No procurement lists have been imported yet.
+                  </div>
+                ) : procurementLists.map((list) => (
+                  <article key={list.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+                    <header className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 p-4">
+                      <div>
+                        <h4 className="text-sm font-bold text-stone-900">{list.title}</h4>
+                        <p className="mt-1 text-xs text-stone-600">{list.purpose} · {list.items.length} items · {list.status}</p>
+                      </div>
+                      <label className="text-xs font-semibold text-stone-700">
+                        Three-quote threshold (MWK)
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={!canEdit}
+                          className="field mt-1 w-44"
+                          value={list.quoteThresholdMWK ?? 500000}
+                          onChange={(event) => updateProcurementList(list.id, {
+                            quoteThresholdMWK: Math.max(0, Number(event.target.value) || 0),
+                          }, actorName)}
+                          onBlur={onRefresh}
+                        />
+                      </label>
+                    </header>
+                    <div className="divide-y divide-stone-100">
+                      {list.items.map((item, index) => {
+                        const itemTotal = item.totalMWK ?? (
+                          item.unitPriceMWK === undefined ? undefined : item.unitPriceMWK * item.quantity
+                        );
+                        const quoteRequired = itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? 500000);
+                        const draftKey = `${list.id}:${index}`;
+                        const draft = quoteDrafts[draftKey] || { supplier: '', amount: '' };
+                        return (
+                          <div key={`${list.id}-${item.itemNumber || index}`} className="grid gap-2 p-4 lg:grid-cols-[1.2fr_0.6fr_0.9fr_1fr]">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-stone-900">{item.itemNumber ? `${item.itemNumber}. ` : ''}{item.description}</p>
+                              <p className="mt-1 text-[11px] text-stone-600">
+                                {item.quantity} {item.unit}{item.specification ? ` · ${item.specification}` : ''}
+                              </p>
+                              {item.note && <p className="mt-1 text-[11px] font-semibold text-amber-900">{item.note}</p>}
+                            </div>
+                            <div className="text-xs">
+                              <p className={`font-bold ${item.priceStatus === 'quoted' ? 'text-stone-800' : 'text-amber-900'}`}>
+                                {item.priceStatus === 'quoted' ? formatMWK(itemTotal || 0) : item.priceStatus === 'unclear' ? 'Price unclear' : 'Missing price'}
+                              </p>
+                              {quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Three quotes required: {item.quotes?.length || 0}/3</p>}
+                            </div>
+                            <label className="text-[11px] font-semibold text-stone-700">
+                              Attach to budget line
+                              <select
+                                disabled={!canEdit}
+                                value={item.budgetLineId || ''}
+                                onChange={(event) => updateProcurementItem(list, index, { budgetLineId: event.target.value || undefined })}
+                                className="field mt-1 w-full"
+                              >
+                                <option value="">Not attached</option>
+                                {budgets.map((budget) => (
+                                  <option key={budget.id} value={budget.id}>{budget.itemDescription} · {budget.period}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <div className="space-y-1">
+                              {(item.quotes || []).map((quote, quoteIndex) => (
+                                <p key={`${quote.supplier}-${quoteIndex}`} className="text-[11px] text-stone-700">
+                                  {quote.supplier}: {formatMWK(quote.amountMWK)}
+                                </p>
+                              ))}
+                              {canEdit && quoteRequired && (item.quotes?.length || 0) < 3 && (
+                                <div className="flex gap-1">
+                                  <input
+                                    aria-label="Quote supplier"
+                                    placeholder="Supplier"
+                                    className="field min-w-0"
+                                    value={draft.supplier}
+                                    onChange={(event) => setQuoteDrafts((current) => ({
+                                      ...current, [draftKey]: { ...draft, supplier: event.target.value },
+                                    }))}
+                                  />
+                                  <input
+                                    aria-label="Quote amount in MWK"
+                                    type="number"
+                                    min="1"
+                                    placeholder="MWK"
+                                    className="field w-24"
+                                    value={draft.amount}
+                                    onChange={(event) => setQuoteDrafts((current) => ({
+                                      ...current, [draftKey]: { ...draft, amount: event.target.value },
+                                    }))}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => addProcurementQuote(list, index)}
+                                    className="rounded-md bg-teal-800 px-2 text-[11px] font-bold text-white"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <footer className="border-t border-stone-200 bg-stone-50 px-4 py-3 text-xs font-bold text-stone-800">
+                      Quoted subtotal: {formatMWK(list.totalMWK)}
+                    </footer>
+                  </article>
+                ))}
+              </section>
+            )}
           </div>
 
+          {activeSubTab === 'schedules' && (
           <div className="bg-white rounded-xl border border-stone-200 shadow-xs divide-y divide-stone-200">
             {schedules.length === 0 ? (
               <div className="p-8 text-center text-stone-500 italic">
@@ -1181,6 +1351,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
               ))
             )}
           </div>
+          )}
         </div>
       )}
 

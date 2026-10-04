@@ -11,11 +11,15 @@ import {
   PhotoAttachment,
   ImportAuditRecord,
   ImportPreviewItem,
-  StaffUser,
   Person,
   PersonType,
   PersonSourceDocument,
   ContactRecord,
+  BudgetItem,
+  ProcurementList,
+  ProjectProjection,
+  StaffUser,
+  PayrollRecord,
 } from '../types';
 import { generateFollowUpId, generatePersonId, saveDatabase } from '../utils/storage';
 import {
@@ -27,6 +31,9 @@ import {
   persistHistoricalCaseRecordToFirestore,
   persistHouseholdActivityToFirestore,
   persistWorkplanItemToFirestore,
+  persistBudgetItemToFirestore,
+  persistPayrollRecordToFirestore,
+  persistPhase2Record,
   persistEarlyYearsRecordToFirestore,
   persistPersonToFirestore,
   persistImportAuditToFirestore,
@@ -40,6 +47,8 @@ import {
   detectRosterContacts,
 } from './contactsService';
 import { getDueDateRange } from './ingestionRules';
+import { analyzeSpreadsheetWorkbook, SpreadsheetAnalysis } from './spreadsheetImport/detector';
+import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spreadsheetImport/importers';
 
 export interface FileAnalysisResult {
   fileName: string;
@@ -48,15 +57,28 @@ export interface FileAnalysisResult {
   rawRows: Array<Record<string, any>>;
   suggestedEntity: 'girl' | 'person' | 'household' | 'educationalFollowUp' | 'healthFollowUp' | 'familyFollowUp' | 'general';
   docxResult?: ParsedDocxReportResult;
+  spreadsheetAnalysis?: SpreadsheetAnalysis;
+  spreadsheetImportPreview?: SpreadsheetImportPreview;
   detectedContacts: ReturnType<typeof detectContactEntities>;
 }
 
 /**
  * Parses an Excel (.xlsx / .xls) file into structured raw row objects
  */
-export async function parseExcelFile(file: File, excludedNames: string[] = []): Promise<FileAnalysisResult> {
+export async function parseExcelFile(
+  file: File,
+  excludedNames: string[] = [],
+  staff: StaffUser[] = [],
+): Promise<FileAnalysisResult> {
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array' });
+  const workbook = XLSX.read(buffer, {
+    type: 'array',
+    cellFormula: true,
+    cellNF: true,
+    cellText: true,
+  });
+  const spreadsheetAnalysis = analyzeSpreadsheetWorkbook(workbook);
+  const spreadsheetImportPreview = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff);
   const sheetNames = workbook.SheetNames;
   const primarySheet = workbook.Sheets[sheetNames[0]];
   const rawRows: Array<Record<string, any>> = XLSX.utils.sheet_to_json(primarySheet, { defval: '' });
@@ -114,6 +136,8 @@ export async function parseExcelFile(file: File, excludedNames: string[] = []): 
     sheetsOrSections: sheetNames,
     rawRows,
     suggestedEntity,
+    spreadsheetAnalysis,
+    spreadsheetImportPreview,
     detectedContacts: detectRosterContacts(rawRows, { excludedNames }),
   };
 }
@@ -566,6 +590,10 @@ export async function commitImportBatch(
     familyFollowUps: [...db.familyFollowUps],
     householdActivities: [...(db.householdActivities || [])],
     workplans: [...(db.workplans || [])],
+    budgets: [...(db.budgets || [])],
+    procurementLists: [...(db.procurementLists || [])],
+    projectProjections: [...(db.projectProjections || [])],
+    payrollRecords: [...(db.payrollRecords || [])],
     earlyYearsRecords: [...(db.earlyYearsRecords || [])],
     attachments: [...(db.attachments || [])],
     historicalRecords: [...(db.historicalRecords || [])],
@@ -579,10 +607,11 @@ export async function commitImportBatch(
 
   for (const item of approvedItems) {
     if (!item.selected) continue;
+    const spreadsheetWorkplan = item.extractedData.spreadsheetKind === 'workplan-matrix';
     const createsWorkplan = item.classification === 'WORKPLAN_PRIORITY' || item.targetEntity === 'workplan' || item.extractedData.createWorkplan === true;
     const dueDatePeriod = createsWorkplan ? confirmedDueDatePeriods[item.tempId] : undefined;
     const dueDateRange = dueDatePeriod ? getDueDateRange(dueDatePeriod) : null;
-    if (createsWorkplan && !dueDateRange) {
+    if (createsWorkplan && !spreadsheetWorkplan && !dueDateRange) {
       throw new Error(`A valid due-date period is required for Workplan item: ${item.title || item.summary}`);
     }
     let linkedRecordId: string | undefined;
@@ -625,18 +654,18 @@ export async function commitImportBatch(
     ) {
       const newActivity: HouseholdActivity = {
         id: generateFollowUpId('ACT'),
-        householdId: item.extractedData.householdId || updatedDb.households[0]?.id || 'SH-01',
+        householdId: item.extractedData.householdId || '',
         date: item.recordDate || new Date().toISOString().slice(0, 10),
         activityName: item.extractedData.activityName || item.title || 'Group Activity',
         activityType: item.extractedData.activityType || 'Group activity',
         activityCategory: item.extractedData.activityCategory || item.extractedData.activityType,
-        participantCount: item.extractedData.participantCount || 18,
+        participantCount: item.extractedData.participantCount,
         participatingGirlIds: item.extractedData.participatingGirlIds || [],
         description: item.extractedData.description || item.summary,
-        outcome: item.extractedData.outcome || 'Successful completion',
-        challenges: item.extractedData.challenges || 'None reported',
-        supportProvided: item.extractedData.supportProvided || 'Staff facilitation',
-        recommendations: item.extractedData.recommendations || 'Continue scheduled sessions',
+        outcome: item.extractedData.outcome || '',
+        challenges: item.extractedData.challenges || '',
+        supportProvided: item.extractedData.supportProvided || '',
+        recommendations: item.extractedData.recommendations || '',
         furtherActionRequired: item.extractedData.furtherActionRequired || false,
         recordedBy: auditRecord.importedByName,
         createdAt: new Date().toISOString(),
@@ -652,13 +681,19 @@ export async function commitImportBatch(
         id: generateFollowUpId('EY'),
         reportingPeriod: item.extractedData.reportingPeriod || item.reportingPeriod || 'July to September 2026',
         previousEnrolment: item.extractedData.previousEnrolment,
+        enrolled: item.extractedData.enrolled,
+        continuing: item.extractedData.continuing,
         graduates: item.extractedData.graduates,
-        targetEnrolment: item.extractedData.targetEnrolment || 100,
-        teacherCaregiverRatio: item.extractedData.teacherCaregiverRatio || '1:25',
-        teachersRequired: item.extractedData.teachersRequired || 4,
-        communityVolunteers: item.extractedData.communityVolunteers || 6,
-        programmeStartDate: item.extractedData.programmeStartDate || '2026-10-05',
-        feedingProgrammeStartDate: item.extractedData.feedingProgrammeStartDate || '2026-10-12',
+        targetEnrolment: item.extractedData.targetEnrolment,
+        teacherCaregiverRatio: item.extractedData.teacherCaregiverRatio,
+        ratioTarget: item.extractedData.ratioTarget,
+        teachersRequired: item.extractedData.teachersRequired,
+        teacherCount: item.extractedData.teacherCount,
+        caregiverCount: item.extractedData.caregiverCount,
+        communityVolunteers: item.extractedData.communityVolunteers,
+        programmeStartDate: item.extractedData.programmeStartDate,
+        classesStartDate: item.extractedData.classesStartDate,
+        feedingProgrammeStartDate: item.extractedData.feedingProgrammeStartDate,
         notes: item.extractedData.notes || item.summary,
         sourceDocument: auditRecord.fileName,
         createdAt: new Date().toISOString(),
@@ -670,33 +705,173 @@ export async function commitImportBatch(
       await persistEarlyYearsRecordToFirestore(newEarlyYears);
     }
     // 4. Workplan Priority
+    else if (item.targetEntity === 'payroll') {
+      const data = item.extractedData;
+      const monthMatch = String(data.payPeriod || '').match(/^(\d{4})-(\d{2})$/);
+      const specialMatch = String(data.payPeriod || '').match(/^(\d{4})-(LOAN|ARREARS)$/);
+      const year = Number(monthMatch?.[1] || specialMatch?.[1] || new Date().getFullYear());
+      const month = Number(monthMatch?.[2] || 1);
+      const periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+      const now = new Date().toISOString();
+      const payroll: PayrollRecord = {
+        id: generateFollowUpId('PAY'),
+        employeeId: data.employeeId,
+        employeeName: data.employeeName,
+        departmentOrProgramme: data.department || undefined,
+        payPeriod: specialMatch
+          ? `${year}-${String(month).padStart(2, '0')} (${specialMatch[2]} - REVIEW)`
+          : String(data.payPeriod),
+        payPeriodStartDate: periodStart,
+        payPeriodEndDate: periodEnd,
+        applicableSalary: Number(data.amount) || 0,
+        salaryHistoryRecordIds: [],
+        expectedAmount: Number(data.amount) || 0,
+        amountPaid: 0,
+        paymentStatus: 'Pending',
+        notes: [
+          data.notes,
+          specialMatch ? `Imported ${specialMatch[2]} amount; verify treatment before payroll processing.` : 'Imported payroll grid; payment status requires confirmation.',
+        ].filter(Boolean).join(' '),
+        createdBy: auditRecord.importedByName,
+        createdByUid: auditRecord.importedByUid,
+        createdAt: now,
+        updatedBy: auditRecord.importedByName,
+        updatedByUid: auditRecord.importedByUid,
+        updatedAt: now,
+      };
+      if (!updatedDb.payrollRecords) updatedDb.payrollRecords = [];
+      updatedDb.payrollRecords.unshift(payroll);
+      await persistPayrollRecordToFirestore(payroll);
+      linkedRecordId = payroll.id;
+    }
+    else if (item.targetEntity === 'procurementList') {
+      const data = item.extractedData;
+      const now = new Date().toISOString();
+      const sourceItems = Array.isArray(data.items) ? data.items : [];
+      const procurement: ProcurementList = {
+        id: generateFollowUpId('PRC'),
+        title: data.title || item.title || 'Imported procurement list',
+        purpose: data.purpose || 'Imported item list',
+        programmeId: data.programmeId,
+        items: sourceItems.map((source: ProcurementList['items'][number]) => ({ ...source })),
+        totalMWK: sourceItems.reduce(
+          (sum: number, source: ProcurementList['items'][number]) => sum + (source.totalMWK || 0),
+          0,
+        ),
+        status: 'draft',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: auditRecord.importedByName,
+        updatedBy: auditRecord.importedByName,
+      };
+      if (!updatedDb.procurementLists) updatedDb.procurementLists = [];
+      updatedDb.procurementLists.unshift(procurement);
+      await persistPhase2Record('procurementLists', { ...procurement });
+      linkedRecordId = procurement.id;
+    }
+    else if (item.targetEntity === 'projectProjection') {
+      const data = item.extractedData;
+      const now = new Date().toISOString();
+      const projection: ProjectProjection = {
+        id: generateFollowUpId('PRJ'),
+        programmeId: data.programmeId,
+        period: data.period,
+        revenueMWK: Number(data.revenueMWK) || 0,
+        costLines: Array.isArray(data.costLines) ? data.costLines : [],
+        netProfitMWK: typeof data.netProfitMWK === 'number' ? data.netProfitMWK : undefined,
+        assumptions: Array.isArray(data.assumptions) ? data.assumptions : [],
+        createdAt: now,
+        updatedAt: now,
+        createdBy: auditRecord.importedByName,
+        updatedBy: auditRecord.importedByName,
+      };
+      if (!updatedDb.projectProjections) updatedDb.projectProjections = [];
+      updatedDb.projectProjections.unshift(projection);
+      await persistPhase2Record('projectProjections', { ...projection });
+      linkedRecordId = projection.id;
+    }
+    else if (item.targetEntity === 'budget') {
+      const data = item.extractedData;
+      const now = new Date().toISOString();
+      const budget: BudgetItem = {
+        id: generateFollowUpId('BDG'),
+        programmeId: data.programmeId,
+        period: data.period || 'Annual',
+        periodType: data.periodType || 'annual',
+        month: data.month,
+        financialYear: data.financialYear,
+        programme: data.programme || 'Unassigned',
+        category: data.category || 'Other',
+        itemDescription: data.itemDescription || item.title || item.summary,
+        unit: data.unit || 'unit',
+        quantity: Number(data.quantity) || 0,
+        unitCost: Number(data.unitCost) || 0,
+        budgetAmount: Number(data.budgetAmount) || (Number(data.quantity) || 0) * (Number(data.unitCost) || 0),
+        notes: data.notes || item.originalSnippet,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: auditRecord.importedByName,
+        updatedBy: auditRecord.importedByName,
+      };
+      if (!updatedDb.budgets) updatedDb.budgets = [];
+      updatedDb.budgets.unshift(budget);
+      await persistBudgetItemToFirestore(budget);
+      linkedRecordId = budget.id;
+    }
     else if (item.classification === 'WORKPLAN_PRIORITY' || item.targetEntity === 'workplan') {
+      const importedStart = spreadsheetWorkplan && /^\d{4}-\d{2}$/.test(item.extractedData.period || '')
+        ? `${item.extractedData.period}-01`
+        : undefined;
+      const importedEnd = importedStart
+        ? new Date(Date.UTC(Number(importedStart.slice(0, 4)), Number(importedStart.slice(5, 7)), 0)).toISOString().slice(0, 10)
+        : undefined;
+      const startDate = importedStart || dueDateRange?.startDate;
+      const endDate = importedEnd || dueDateRange?.endDate;
+      if (!startDate || !endDate) throw new Error(`Missing schedule dates for Workplan item: ${item.title || item.summary}`);
+      const existingWorkplan = item.matchedId
+        ? updatedDb.workplans?.find((workplan) => workplan.id === item.matchedId)
+        : undefined;
+      const now = new Date().toISOString();
+      const progress = Number(item.extractedData.progress) || 0;
       const newWorkplan: WorkplanItem = {
-        id: generateFollowUpId('WP'),
+        ...(existingWorkplan || {}),
+        id: existingWorkplan?.id || generateFollowUpId('WP'),
         activity: item.extractedData.activity || item.title || 'Workplan Priority',
         objective: item.extractedData.objective || item.summary,
         description: item.extractedData.description || item.summary,
-        period: `${dueDateRange!.startDate} to ${dueDateRange!.endDate}`,
-        periodType: dueDatePeriod?.startsWith('month:') ? 'monthly' : dueDatePeriod?.startsWith('quarter:') ? 'quarterly' : 'project',
+        period: item.extractedData.period || `${startDate} to ${endDate}`,
+        periodType: item.extractedData.periodType || (dueDatePeriod?.startsWith('month:') ? 'monthly' : dueDatePeriod?.startsWith('quarter:') ? 'quarterly' : 'project'),
         dueDatePeriod,
+        programmeId: item.extractedData.programmeId,
+        indicatorId: item.extractedData.indicatorId,
+        costLevel: item.extractedData.costLevel,
         domain: item.extractedData.workplanDomain || 'Programme',
         sourceRecordId: item.extractedData.sourceRecordId,
-        status: item.extractedData.status || 'Planned',
-        progress: 0,
+        status: item.extractedData.status || (progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Planned'),
+        progress,
         responsibleStaffId: item.extractedData.responsibleStaffId || auditRecord.importedByUid,
         responsibleStaffName: item.extractedData.responsibleStaffName || 'NOT PROVIDED IN SOURCE - REQUIRES REVIEW',
         budget: item.extractedData.budget,
-        startDate: dueDateRange!.startDate,
-        endDate: dueDateRange!.endDate,
-        targetCount: item.extractedData.targetCount || 1,
+        startDate,
+        endDate,
+        targetCount: item.extractedData.targetCount ?? 1,
         unit: item.extractedData.unit || 'activities',
+        completedCount: item.extractedData.completedCount,
         location: item.extractedData.location || 'Shine Village, Malawi',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: existingWorkplan?.createdAt || now,
+        updatedAt: now,
+        updatedBy: auditRecord.importedByName,
       };
       if (!updatedDb.workplans) updatedDb.workplans = [];
-      updatedDb.workplans.unshift(newWorkplan);
+      if (existingWorkplan) {
+        const index = updatedDb.workplans.findIndex((workplan) => workplan.id === existingWorkplan.id);
+        updatedDb.workplans[index] = newWorkplan;
+      } else {
+        updatedDb.workplans.unshift(newWorkplan);
+      }
       await persistWorkplanItemToFirestore(newWorkplan);
+      linkedRecordId = newWorkplan.id;
     }
     // 5. Photographic Highlights / Embedded Photos
     else if (item.classification === 'PHOTO_HIGHLIGHT' || item.targetEntity === 'attachment') {

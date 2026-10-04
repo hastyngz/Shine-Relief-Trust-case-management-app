@@ -6,27 +6,19 @@ import { canAccessManagementDashboard } from '../../services/managementAnalytics
 import { assembleSponsorReport, type SponsorReportAudience } from '../../services/sponsorReport';
 import { generateReportNarrative } from '../../services/reportNarrative';
 import { PROGRAMMES, type ProgrammeId } from '../../data/programmes';
-import { generateWordReport, type ReportConfig } from '../../services/reportGenerators';
+import { generateWordReport, reviewReportQuality, type ReportConfig } from '../../services/reportGenerators';
 import { downloadCSV, formatMWK } from '../../utils/export';
+import { qualityScores } from '../../services/qualityRules';
+import { QualityCheckPanel } from '../QualityCheckPanel';
+import { appendReportHistory } from '../../services/firestoreSync';
 
 interface ReportBuilderProps {
   db: AppDatabase;
   onClose: () => void;
 }
 
-const emptyReportDatabase: AppDatabase = {
-  girls: [],
-  households: [],
-  educationalFollowUps: [],
-  healthFollowUps: [],
-  familyFollowUps: [],
-  rentPayments: [],
-  expenses: [],
-  householdActivities: [],
-};
-
 export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => {
-  const { isAdmin, role } = useAuth();
+  const { isAdmin, role, currentUser, staffProfile } = useAuth();
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(new Date().toISOString().slice(0, 10));
   const [programmeId, setProgrammeId] = useState<'ALL' | ProgrammeId>('ALL');
@@ -35,6 +27,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
   const [narrative, setNarrative] = useState('');
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
 
   const report = useMemo(() => assembleSponsorReport(db, {
     fromDate,
@@ -89,42 +82,78 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
       ]),
     },
   ];
+  const qualityConfig: ReportConfig = {
+    title: 'Sponsor and Donor Programme Report',
+    subtitle: `${audience} audience · ${periodLabel}`,
+    periodLabel,
+    generatedBy: 'SHINE Relief Trust',
+    executiveSummary: narrative,
+    structuredTables: tables,
+    donorFacing: audience !== 'Trustee',
+    includeSections: {
+      executiveSummary: true,
+      statistics: false,
+      girlsList: false,
+      householdsList: false,
+      educationalFollowUps: false,
+      healthFollowUps: false,
+      familyFollowUps: false,
+      householdActivities: false,
+      expenditure: false,
+      rentPayments: false,
+      budgets: false,
+      workplans: false,
+      schedules: false,
+      photoGallery: false,
+    },
+  };
+  const reportQualityIssues = reviewReportQuality(db, qualityConfig);
+  const reportQualityScores = qualityScores(reportQualityIssues);
+  const persistQualityAudit = async (format: 'docx' | 'xlsx' | 'pdf' | 'csv') => {
+    if (!currentUser) throw new Error('Sign in is required to record report quality history.');
+    const timestamp = new Date().toISOString();
+    await appendReportHistory({
+      id: `quality_report_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      reportType: 'sponsor-donor',
+      title: qualityConfig.title,
+      reportingPeriod: periodLabel,
+      filters: { audience, programme: programmeId },
+      generatedBy: staffProfile?.fullName || currentUser.email || 'Management user',
+      generatedByUid: currentUser.uid,
+      generatedAt: timestamp,
+      fileType: format,
+      fileName: `SHINE_${audience}_Report_${timestamp.slice(0, 10)}.${format}`,
+      dataSourceReferences: ['sponsorReport', 'programmeLogs', 'workplans', 'budgets'],
+      recordCount: report.programmeCount,
+      photoCount: 0,
+      tableCount: tables.length + 1,
+      status: 'Generated',
+      qualityIssues: reportQualityIssues,
+      qualityScores: reportQualityScores,
+      blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
+    });
+  };
+  const hasQualityBlockers = reportQualityIssues.some((issue) => issue.severity === 'blocker');
+  const ensureQualityOverride = (): boolean => {
+    if (!hasQualityBlockers || blockerOverrideReason.trim().length >= 10) return true;
+    setExportError('Resolve quality blockers or provide a written override reason of at least 10 characters.');
+    return false;
+  };
 
   const exportWord = async () => {
+    if (!ensureQualityOverride()) return;
     setExportError('');
     setExporting(true);
     try {
-      const config: ReportConfig = {
-        title: 'Sponsor and Donor Programme Report',
-        subtitle: `${audience} audience · ${periodLabel}`,
-        periodLabel,
-        generatedBy: 'SHINE Relief Trust',
-        executiveSummary: narrative,
-        structuredTables: tables,
-        includeSections: {
-          executiveSummary: true,
-          statistics: false,
-          girlsList: false,
-          householdsList: false,
-          educationalFollowUps: false,
-          healthFollowUps: false,
-          familyFollowUps: false,
-          householdActivities: false,
-          expenditure: false,
-          rentPayments: false,
-          budgets: false,
-          workplans: false,
-          schedules: false,
-          photoGallery: false,
-        },
-      };
-      const blob = await generateWordReport(emptyReportDatabase, config);
+      const config: ReportConfig = { ...qualityConfig, qualityIssues: reportQualityIssues, qualityScores: reportQualityScores, blockerOverrideReason };
+      const blob = await generateWordReport(db, config);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.docx`;
       link.click();
       URL.revokeObjectURL(url);
+      await persistQualityAudit('docx');
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'The report could not be exported.');
     } finally {
@@ -133,13 +162,25 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
   };
 
   const exportCsv = () => {
+    if (!ensureQualityOverride()) return;
     const rows: Array<Array<string | number>> = [
       ['SHINE Relief Trust', `${audience} report`, periodLabel],
       ['Narrative', narrative],
       [],
       ...tables.flatMap((table) => [[table.title], table.headers, ...table.rows]),
+      ['Quality Issues'],
+      ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'],
+      ['SCORE', 'Quantification', '', `${reportQualityScores.quantification}/100`, ''],
+      ['SCORE', 'Impact evidence', '', `${reportQualityScores.impact}/100`, ''],
+      ['SCORE', 'Data quality', '', `${reportQualityScores.dataQuality}/100`, ''],
+      ...reportQualityIssues.map((issue) => [issue.severity, issue.rule, issue.location, issue.message, issue.suggestedFix || '']),
     ];
     downloadCSV(`SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    void persistQualityAudit('csv').catch((error) => setExportError(error instanceof Error ? error.message : 'Report audit could not be recorded.'));
+  };
+  const printReport = () => {
+    if (!ensureQualityOverride()) return;
+    void persistQualityAudit('pdf').then(() => window.print()).catch((error) => setExportError(error instanceof Error ? error.message : 'Report audit could not be recorded.'));
   };
 
   const generatedNarrative = generateReportNarrative({
@@ -163,7 +204,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
           <button type="button" onClick={exportCsv} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
             <Download className="h-4 w-4" /> Export CSV
           </button>
-          <button type="button" onClick={() => window.print()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
+          <button type="button" onClick={printReport} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
             <Printer className="h-4 w-4" /> Print / Save PDF
           </button>
           <button type="button" disabled={exporting} onClick={() => void exportWord()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-teal-900 px-3 text-xs font-bold text-white disabled:opacity-60">
@@ -201,6 +242,27 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
         </label>
         <p className="text-[11px] text-stone-500">This builder exports aggregate programme, budget, and workplan measures only. It never includes names, photos, health, family, or safeguarding records.</p>
       </section>
+
+      <QualityCheckPanel
+        issues={reportQualityIssues}
+        scores={reportQualityScores}
+        onApplyFix={(issue) => {
+          if (issue.rule !== 'STYLE-UK-01') return;
+          setNarrative((text) => text
+            .replace(/\bcolor\b/gi, 'colour')
+            .replace(/\borganize\b/gi, 'organise')
+            .replace(/\bprogram\b/gi, 'programme')
+            .replace(/\bcenter\b/gi, 'centre')
+            .replace(/\bbehavior\b/gi, 'behaviour')
+            .replace(/\bprioritize\b/gi, 'prioritise'));
+        }}
+      />
+      {hasQualityBlockers && (
+        <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">
+          Written reason for overriding report blockers
+          <textarea value={blockerOverrideReason} onChange={(event) => setBlockerOverrideReason(event.target.value)} minLength={10} className="field mt-2 min-h-20 w-full bg-white" />
+        </label>
+      )}
 
       <article className="report-builder-document rounded-xl border border-stone-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-widest text-teal-800">SHINE Relief Trust · {audience}</p>

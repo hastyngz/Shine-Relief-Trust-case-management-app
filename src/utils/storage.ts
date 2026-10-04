@@ -15,6 +15,8 @@ import {
   ScheduleItem,
   HistoricalCaseRecord,
   ImportAuditRecord,
+  ProcurementList,
+  ProjectProjection,
   EarlyYearsRecord,
   Person,
   MeetingRecord,
@@ -129,6 +131,7 @@ export function getDatabase(): AppDatabase {
       aiSettings: parsed.aiSettings || [],
       historicalRecords: parsed.historicalRecords || [],
       importAudits: parsed.importAudits || [],
+      restrictedImportSources: parsed.restrictedImportSources || [],
       earlyYearsRecords: parsed.earlyYearsRecords || [],
       people: parsed.people || [],
       customPersonTypes: parsed.customPersonTypes || [],
@@ -140,6 +143,8 @@ export function getDatabase(): AppDatabase {
       girlLeaves: parsed.girlLeaves || [],
       programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
       caseReviews: parsed.caseReviews || [],
+      procurementLists: parsed.procurementLists || [],
+      projectProjections: parsed.projectProjections || [],
     };
   } catch (error) {
     console.error('Error reading database from localStorage:', error);
@@ -205,6 +210,7 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       aiSettings: Array.isArray(parsed.aiSettings) ? parsed.aiSettings : [],
       historicalRecords: Array.isArray(parsed.historicalRecords) ? parsed.historicalRecords : [],
       importAudits: Array.isArray(parsed.importAudits) ? parsed.importAudits : [],
+      restrictedImportSources: Array.isArray(parsed.restrictedImportSources) ? parsed.restrictedImportSources : [],
       earlyYearsRecords: Array.isArray(parsed.earlyYearsRecords) ? parsed.earlyYearsRecords : [],
       people: Array.isArray(parsed.people) ? parsed.people : [],
       customPersonTypes: Array.isArray(parsed.customPersonTypes) ? parsed.customPersonTypes : [],
@@ -216,6 +222,8 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       girlLeaves: Array.isArray(parsed.girlLeaves) ? parsed.girlLeaves : [],
       programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
       caseReviews: Array.isArray(parsed.caseReviews) ? parsed.caseReviews : [],
+      procurementLists: Array.isArray(parsed.procurementLists) ? parsed.procurementLists : [],
+      projectProjections: Array.isArray(parsed.projectProjections) ? parsed.projectProjections : [],
     };
     await syncEntireDatabaseToFirestore(validatedDb, true);
     saveDatabase(validatedDb);
@@ -1038,6 +1046,43 @@ export function deleteWorkplanItem(id: string): boolean {
     console.error('Failed to delete workplan item from Firestore:', err)
   );
   return true;
+}
+
+export function addProcurementList(
+  data: Omit<ProcurementList, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>,
+  actor = 'SHINE Staff'
+): ProcurementList {
+  return addPhase2Record<ProcurementList>('procurementLists', 'procurementLists', 'PRC', data, actor);
+}
+
+export function updateProcurementList(
+  id: string,
+  updates: Partial<ProcurementList>,
+  actor = 'SHINE Staff',
+): ProcurementList | null {
+  const db = getDatabase();
+  if (!db.procurementLists) db.procurementLists = [];
+  const index = db.procurementLists.findIndex((record) => record.id === id);
+  if (index < 0) return null;
+  const updated = {
+    ...db.procurementLists[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: actor,
+  };
+  db.procurementLists[index] = updated;
+  saveDatabase(db);
+  persistPhase2Record('procurementLists', { ...updated }).catch((err) =>
+    console.error('Failed to update procurement list:', err)
+  );
+  return updated;
+}
+
+export function addProjectProjection(
+  data: Omit<ProjectProjection, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>,
+  actor = 'SHINE Staff'
+): ProjectProjection {
+  return addPhase2Record<ProjectProjection>('projectProjections', 'projectProjections', 'PRJ', data, actor);
 }
 
 // ----------------------------------------------------------------------

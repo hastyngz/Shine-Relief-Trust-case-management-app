@@ -290,7 +290,7 @@ export function exportHouseholdActivitiesToCSV(
     houseMap.get(item.householdId) || item.householdId,
     item.activityName,
     item.activityType,
-    item.participantCount,
+    item.participantCount ?? '',
     item.description,
     item.outcome || '',
     item.challenges || '',

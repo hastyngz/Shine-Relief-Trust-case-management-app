@@ -391,6 +391,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /procurementLists/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /projectProjections/{id} {
+      allow read: if isManagerOrAdmin();
+      allow create, update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
+    }
+
     // Schedules - Field activity and visit timelines
     match /schedules/{id} {
       allow read: if isStaffActive();
@@ -453,6 +465,13 @@ service cloud.firestore {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff();
       allow update, delete: if isAdmin();
+    }
+
+    match /restrictedImportSources/{id} {
+      allow read: if isManagerOrAdmin();
+      allow create: if isManagerOrStaff();
+      allow update: if isManagerOrAdmin();
+      allow delete: if isAdmin();
     }
 
     // Early Years Programme - Pre-school and ECD programme monitoring

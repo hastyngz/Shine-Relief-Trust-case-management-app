@@ -521,26 +521,39 @@ export function extractChildHouseGirlLines(text: string): Array<{
 
 export function extractEarlyYearsMetrics(text: string): {
   previousEnrolment?: number;
+  enrolled?: number;
+  continuing?: number;
   graduates?: number;
   targetEnrolment?: number;
   teacherCaregiverRatio?: string;
   teachersRequired?: number;
+  teacherCount?: number;
+  caregiverCount?: number;
   communityVolunteers?: number;
   programmeStartDate?: string;
+  classesStartDate?: string;
   feedingProgrammeStartDate?: string;
+  ratioTarget?: string;
   notes?: string;
 } {
   const prevEnrolment = text.match(/previous\s+(?:enrolment|enrollment)\s*(?:was|:)?\s*(\d+)/i)?.[1];
   const graduates = text.match(/(\d+)\s*(?:learners?|children)?\s*(?:graduated|graduates)/i)?.[1] ||
     text.match(/(\d+)\s*(?:graduated|graduates)/i)?.[1];
+  const enrolled = text.match(/(\d+)\s*(?:learners?|children)?\s*(?:currently\s+)?enrolled/i)?.[1] ||
+    text.match(/(?:current\s+)?enrolment\s*(?:is|:)?\s*(\d+)/i)?.[1];
+  const continuing = text.match(/(\d+)\s*(?:learners?|children)?\s*continuing/i)?.[1];
   const targetEnrolment = text.match(/(?:target\s+(?:enrolment|enrollment)|enrol\s+at\s+least|enrolment\s+for\s+the\s+upcoming\s+intake)\s*(?:is\s+at\s+least\s+)?(\d+)/i)?.[1];
   const ratio = text.match(/(\d+:\d+)\s*(?:teacher(?:\s*\/\s*care\s*giver|\s*[- ]to[- ](?:child|caregiver))?\s*)ratio/i)?.[1] ||
     text.match(/teacher(?:\s*\/\s*care\s*giver|\s*[- ]to[- ](?:child|caregiver))?\s*ratio\s*(?:of)?\s*(\d+:\d+)/i)?.[1] ||
     text.match(/ratio\s*(?:of)?\s*(\d+:\d+)/i)?.[1];
   const teachersReq = text.match(/(\d+)\s*(?:qualified\s+)?(?:teachers?|caregivers?)\s*(?:required|needed)/i)?.[1];
+  const teacherCount = text.match(/(?:teachers?|teaching\s+staff)\s*(?:count|:|are|were)?\s*(\d+)/i)?.[1];
+  const caregiverCount = text.match(/(?:caregivers?|care\s+givers?)\s*(?:count|:|are|were)?\s*(\d+)/i)?.[1];
+  const ratioTarget = text.match(/(?:target\s+)?(?:teacher\s*[-/ ]to[-/ ](?:learner|child|caregiver)\s*)?ratio\s*(?:target)?\s*(?:of|:)?\s*(\d+:\d+)/i)?.[1];
   const volunteers = text.match(/(\d+)\s*(?:dedicated\s+)?community\s+volunteers/i)?.[1];
   const programmeStart = text.match(/(?:programme|program)\s+start\s+(?:date\s+)?(?:is\s+)?(?:scheduled\s+for\s+)?([A-Za-z0-9,\s]+\d{4})/i)?.[1];
   const feedingStart = text.match(/feeding\s+(?:programme|program)\s+start\s+(?:date\s+)?(?:is\s+)?(?:scheduled\s+for\s+)?([A-Za-z0-9,\s]+\d{4})/i)?.[1];
+  const classesStart = text.match(/(?:classes|class)\s+start\s+(?:date\s+)?(?:is\s+)?(?:scheduled\s+for\s+)?([A-Za-z0-9,\s]+\d{4})/i)?.[1];
 
   const normalizeDateValue = (value?: string): string | undefined => {
     if (!value) return undefined;
@@ -552,13 +565,19 @@ export function extractEarlyYearsMetrics(text: string): {
 
   return {
     previousEnrolment: prevEnrolment ? parseInt(prevEnrolment, 10) : undefined,
+    enrolled: enrolled ? parseInt(enrolled, 10) : undefined,
+    continuing: continuing ? parseInt(continuing, 10) : undefined,
     graduates: graduates ? parseInt(graduates, 10) : undefined,
     targetEnrolment: targetEnrolment ? parseInt(targetEnrolment, 10) : undefined,
     teacherCaregiverRatio: ratio || undefined,
     teachersRequired: teachersReq ? parseInt(teachersReq, 10) : undefined,
+    teacherCount: teacherCount ? parseInt(teacherCount, 10) : undefined,
+    caregiverCount: caregiverCount ? parseInt(caregiverCount, 10) : undefined,
     communityVolunteers: volunteers ? parseInt(volunteers, 10) : undefined,
     programmeStartDate: normalizeDateValue(programmeStart),
+    classesStartDate: normalizeDateValue(classesStart),
     feedingProgrammeStartDate: normalizeDateValue(feedingStart),
+    ratioTarget: ratioTarget || undefined,
     notes: cleanText(text),
   };
 }
@@ -712,6 +731,46 @@ export async function parseDocxProgressReport(
     extractedImages.map((image) => cleanText(image.caption || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
   );
 
+  const taxonomyHeadings = [
+    'Spiritual Growth',
+    'Community Service',
+    'Creative & Leadership Development',
+    'Personal Development',
+    'Exposure & Mentorship',
+    'Practical Skills Development',
+    'Business & Entrepreneurship Education',
+    'Life Skills & Empowerment',
+    'Housekeeping & Daily Living Skills',
+    'Personal Development & Recreation',
+    'Community & Social Engagement',
+    ...(db.workplans || []).map((item) => item.activity),
+  ];
+  const normalizeHeading = (value: string) => cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const proposedBulletGroups = new Map<number, string>();
+  const proposedGroupByText = new Map<string, string>();
+  bodyNodes.forEach((node, headingIndex) => {
+    const heading = getHeadingText(node);
+    if (!heading) return;
+    const normalizedHeading = normalizeHeading(heading);
+    const matchedHeading = taxonomyHeadings.find((candidate) => {
+      const normalizedCandidate = normalizeHeading(candidate);
+      return normalizedCandidate === normalizedHeading ||
+        (normalizedHeading.length > 6 && normalizedCandidate.includes(normalizedHeading)) ||
+        (normalizedCandidate.length > 6 && normalizedHeading.includes(normalizedCandidate));
+    });
+    if (!matchedHeading) return;
+    for (let index = headingIndex - 1; index >= 0; index -= 1) {
+      const previous = bodyNodes[index] as HTMLElement;
+      if (getHeadingText(bodyNodes[index])) break;
+      const paragraphText = cleanText(previous.textContent || '');
+      const isBullet = previous.tagName.toLowerCase() === 'li' ||
+        /^(?:[•\-*]|\d+[.)])\s*/.test(paragraphText);
+      if (!isBullet) break;
+      proposedBulletGroups.set(index, matchedHeading);
+      proposedGroupByText.set(normalizeHeading(paragraphText), matchedHeading);
+    }
+  });
+
   for (let idx = 0; idx < bodyNodes.length; idx++) {
     const node = bodyNodes[idx];
     const el = node as HTMLElement;
@@ -723,6 +782,8 @@ export async function parseDocxProgressReport(
       currentSection = heading;
       continue;
     }
+    const proposedGrouping = proposedBulletGroups.get(idx);
+    if (proposedGrouping) currentSection = proposedGrouping;
 
     if (/^(?:\d+[.)]\s*)?child house\b/i.test(textContent)) {
       currentSection = 'Child House';
@@ -943,19 +1004,30 @@ export async function parseDocxProgressReport(
         extractedData: {
           reportingPeriod: metadata.reportingPeriod,
           previousEnrolment: earlyYearsMetrics.previousEnrolment,
+          enrolled: earlyYearsMetrics.enrolled,
+          continuing: earlyYearsMetrics.continuing,
           graduates: earlyYearsMetrics.graduates,
-          targetEnrolment: earlyYearsMetrics.targetEnrolment ?? 100,
-          teacherCaregiverRatio: earlyYearsMetrics.teacherCaregiverRatio || '1:25',
-          teachersRequired: earlyYearsMetrics.teachersRequired ?? 4,
-          communityVolunteers: earlyYearsMetrics.communityVolunteers ?? 6,
-          programmeStartDate: earlyYearsMetrics.programmeStartDate || '2026-10-05',
-          feedingProgrammeStartDate: earlyYearsMetrics.feedingProgrammeStartDate || '2026-10-12',
+          targetEnrolment: earlyYearsMetrics.targetEnrolment,
+          teacherCaregiverRatio: earlyYearsMetrics.teacherCaregiverRatio,
+          ratioTarget: earlyYearsMetrics.ratioTarget,
+          teachersRequired: earlyYearsMetrics.teachersRequired,
+          teacherCount: earlyYearsMetrics.teacherCount,
+          caregiverCount: earlyYearsMetrics.caregiverCount,
+          communityVolunteers: earlyYearsMetrics.communityVolunteers,
+          programmeStartDate: earlyYearsMetrics.programmeStartDate,
+          classesStartDate: earlyYearsMetrics.classesStartDate,
+          feedingProgrammeStartDate: earlyYearsMetrics.feedingProgrammeStartDate,
           notes: textContent,
           sourceDocument: file.name,
           createWorkplan,
           workplanAction: pendingActions.join(' '),
           workplanDomain: getWorkplanDomain(`${currentSection} ${textContent}`, 'Early Years'),
         },
+        missingFields: [
+          ...(earlyYearsMetrics.targetEnrolment == null ? ['Target enrolment: NOT PROVIDED IN SOURCE'] : []),
+          ...(earlyYearsMetrics.enrolled == null ? ['Enrolment count: NOT PROVIDED IN SOURCE'] : []),
+          ...(!earlyYearsMetrics.teacherCaregiverRatio ? ['Teacher-caregiver ratio: NOT PROVIDED IN SOURCE'] : []),
+        ],
         isHistorical: false,
         selected: true,
       });
@@ -1049,19 +1121,20 @@ export async function parseDocxProgressReport(
         extractedData: {
           activityName: textContent.slice(0, 70),
           activityType: 'Group activity',
-          participantCount: 15,
+          participantCount: undefined,
           description: textContent,
-          outcome: 'Enhanced sustainability and practical food self-reliance',
-          challenges: 'Maximising solar irrigation water distribution',
-          supportProvided: 'Gardening tools, seeds, solar pump system',
-          recommendations: 'Continue practical agricultural education',
-          householdId: db.households[0]?.id || 'SH-01',
+          outcome: '',
+          challenges: '',
+          supportProvided: '',
+          recommendations: '',
+          householdId: '',
           furtherActionRequired: false,
           activityCategory: detectActivityCategory(textContent, currentSection),
           createWorkplan: pendingActions.length > 0,
           workplanAction: pendingActions.join(' '),
           workplanDomain: getWorkplanDomain(`${currentSection} ${textContent}`),
         },
+        missingFields: ['Participant count: NOT PROVIDED IN SOURCE', 'Household: NOT LINKED IN SOURCE'],
         isHistorical: false,
         selected: true,
       });
@@ -1171,7 +1244,7 @@ export async function parseDocxProgressReport(
       const activityCategory = detectActivityCategory(textContent, currentSection);
       // Extract participant count if mentioned (e.g. "18 girls", "25 participants")
       const countMatch = textContent.match(/(\d+)\s*(?:girls|participants|learners|children|beneficiaries|members)/i);
-      const participantCount = countMatch ? parseInt(countMatch[1], 10) : 18;
+      const participantCount = countMatch ? parseInt(countMatch[1], 10) : undefined;
 
       const actTitle = cleanText(textContent.split('.')[0]);
 
@@ -1194,16 +1267,20 @@ export async function parseDocxProgressReport(
           activityCategory,
           participantCount,
           description: textContent,
-          outcome: 'Successful participation and engagement',
-          challenges: 'None reported in source',
-          supportProvided: 'Staff mentorship and facilitation',
-          recommendations: 'Continue scheduled group development activities',
-          householdId: db.households[0]?.id || 'SH-01',
+          outcome: '',
+          challenges: '',
+          supportProvided: '',
+          recommendations: '',
+          householdId: '',
           furtherActionRequired: false,
           createWorkplan: pendingActions.length > 0,
           workplanAction: pendingActions.join(' '),
           workplanDomain: getWorkplanDomain(`${currentSection} ${textContent}`),
         },
+        missingFields: [
+          ...(participantCount == null ? ['Participant count: NOT PROVIDED IN SOURCE'] : []),
+          'Household: NOT LINKED IN SOURCE',
+        ],
         isHistorical: false,
         selected: true,
       });
@@ -1443,6 +1520,20 @@ export async function parseDocxProgressReport(
       selected: true,
     });
   });
+
+  const itemsWithGroupingProposals = previewItems.map((item) => {
+    const originalText = normalizeHeading(item.originalSnippet || '');
+    const proposedGrouping = proposedGroupByText.get(originalText);
+    if (!proposedGrouping) return item;
+    return {
+      ...item,
+      proposedGrouping,
+      selected: false,
+      warningOrConflict: `Proposed grouping under “${proposedGrouping}”. Confirm this grouping before importing.`,
+      extractedData: { ...item.extractedData, proposedGrouping },
+    };
+  });
+  previewItems.splice(0, previewItems.length, ...itemsWithGroupingProposals);
 
   // Calculate real category counts
   const counts = {

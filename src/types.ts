@@ -489,7 +489,7 @@ export interface HouseholdActivity {
   activityType: HouseholdActivityType;
   activityCategory?: string;
   location?: string;
-  participantCount: number;
+  participantCount?: number;
   participatingGirlIds?: string[];
   description: string;
   outcome: string;
@@ -678,6 +678,8 @@ export type WorkplanStatus = 'Planned' | 'In Progress' | 'Completed' | 'Delayed'
 export interface WorkplanItem {
   id: string;
   programmeId?: ProgrammeId;
+  indicatorId?: string;
+  costLevel?: 'activity' | 'group';
   period: string; // e.g. "Annual 2026", "2026-Q3", "September 2026"
   periodType: WorkplanPeriodType;
   dueDatePeriod?: string;
@@ -706,6 +708,56 @@ export interface WorkplanItem {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+}
+
+export interface ProcurementQuote {
+  supplier: string;
+  amountMWK: number;
+  quotedAt?: string;
+  note?: string;
+}
+
+export interface ProcurementListItem {
+  description: string;
+  specification?: string;
+  quantity: number;
+  unit: string;
+  unitPriceMWK?: number;
+  totalMWK?: number;
+  note?: string;
+  priceStatus: 'quoted' | 'missing' | 'unclear';
+  itemNumber?: string;
+  budgetLineId?: string;
+  quotes?: ProcurementQuote[];
+}
+
+export interface ProcurementList {
+  id: string;
+  title: string;
+  purpose: string;
+  programmeId?: ProgrammeId;
+  items: ProcurementListItem[];
+  totalMWK: number;
+  status: 'draft' | 'approved' | 'purchased';
+  quoteThresholdMWK?: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+
+export interface ProjectProjection {
+  id: string;
+  programmeId: 'fish-chicken' | 'rice-maize-mill' | 'tomato-farming';
+  period: string;
+  revenueMWK: number;
+  costLines: Array<{ label: string; amountMWK?: number; status: 'priced' | 'unpriced' }>;
+  netProfitMWK?: number;
+  assumptions: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
 }
 
 // --------------------------------------------------
@@ -1079,19 +1131,44 @@ export interface ImportAuditRecord {
   relationshipsCreatedCount?: number;
   status: 'completed' | 'cancelled' | 'failed';
   summary?: string;
+  qualityIssues?: Array<{
+    id: string;
+    severity: 'blocker' | 'warning' | 'info';
+    rule: string;
+    message: string;
+    location: string;
+    suggestedFix?: string;
+  }>;
+  qualityScores?: { quantification: number; impact: number; dataQuality: number };
+  blockerOverrideReason?: string;
+  sourceData?: Record<string, unknown>;
+}
+
+export interface RestrictedImportSourceData {
+  id: string;
+  auditId: string;
+  fileName: string;
+  importedAt: string;
+  sourceData: Record<string, unknown>;
 }
 
 export interface EarlyYearsRecord {
   id: string;
   reportingPeriod: string; // e.g. "July to September 2026"
   previousEnrolment?: number;
+  enrolled?: number;
+  continuing?: number;
   graduates?: number;
   targetEnrolment?: number;
   teacherCaregiverRatio?: string; // e.g. "1:25"
   teachersRequired?: number;
+  teacherCount?: number;
+  caregiverCount?: number;
   communityVolunteers?: number;
   programmeStartDate?: string;
+  classesStartDate?: string;
   feedingProgrammeStartDate?: string;
+  ratioTarget?: string;
   notes?: string;
   sourceDocument: string;
   createdAt: string;
@@ -1141,6 +1218,9 @@ export interface ImportPreviewItem {
     | 'activity'
     | 'budget'
     | 'workplan'
+    | 'payroll'
+    | 'procurementList'
+    | 'projectProjection'
     | 'schedule'
     | 'earlyYears'
     | 'attachment'
@@ -1168,6 +1248,7 @@ export interface ImportPreviewItem {
   warningOrConflict?: string;
   missingFields?: string[];
   actionProposed?: string;
+  proposedGrouping?: string;
   photoBase64?: string;
   photoContentType?: string;
   photoCaption?: string;
@@ -1216,6 +1297,7 @@ export interface AppDatabase {
   aiSettings?: AISettings[];
   historicalRecords?: HistoricalCaseRecord[];
   importAudits?: ImportAuditRecord[];
+  restrictedImportSources?: RestrictedImportSourceData[];
   earlyYearsRecords?: EarlyYearsRecord[];
   people?: Person[];
   customPersonTypes?: string[];
@@ -1227,6 +1309,8 @@ export interface AppDatabase {
   girlLeaves?: GirlLeaveRecord[];
   programmeLogs?: ProgrammeLogRecord[];
   caseReviews?: CaseReview[];
+  procurementLists?: ProcurementList[];
+  projectProjections?: ProjectProjection[];
 }
 
 export interface ReportHistoryRecord {
@@ -1247,6 +1331,16 @@ export interface ReportHistoryRecord {
   photoCount: number;
   tableCount: number;
   status: 'Generated';
+  qualityIssues?: Array<{
+    id: string;
+    severity: 'blocker' | 'warning' | 'info';
+    rule: string;
+    message: string;
+    location: string;
+    suggestedFix?: string;
+  }>;
+  qualityScores?: { quantification: number; impact: number; dataQuality: number };
+  blockerOverrideReason?: string;
 }
 
 export type ConversationType = 'direct' | 'group' | 'announcement';

@@ -5,7 +5,9 @@ import { MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, gene
 import { ManagementFilters, canAccessManagementDashboard, projectManagementDatabase } from '../../services/managementAnalytics';
 import { appendEmployeeAuditLog, appendReportHistory, getEmployeeSalaryHistoryForStaff } from '../../services/firestoreSync';
 import { archiveGeneratedReport } from '../../services/attachmentService';
-import { ReportConfig, generateWordReport } from '../../services/reportGenerators';
+import { ReportConfig, generateWordReport, reviewReportQuality } from '../../services/reportGenerators';
+import { qualityScores } from '../../services/qualityRules';
+import { QualityCheckPanel } from '../QualityCheckPanel';
 import { downloadCSV } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -44,6 +46,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[] | undefined>();
   const [salaryLoadFailed, setSalaryLoadFailed] = useState(false);
   const [message, setMessage] = useState('');
+  const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
 
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
@@ -134,6 +137,32 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
 
   const report = buildManagementReportRows(reportId, permittedDb, filters, staff, salaryHistory);
   const rows = report;
+  const reportQualityConfig: ReportConfig = {
+    title: MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId,
+    periodLabel: `${filters.startDate || filters.financialYear || 'All available dates'} to ${filters.endDate || 'present'}`,
+    generatedBy: staffProfile?.fullName || currentUser?.email || 'Management user',
+    structuredTables: [{ title: reportId, headers: rows.headers, rows: rows.rows }],
+    executiveSummary: rows.rows.map((row) => row.map(String).join(': ')).join('\n'),
+    includeSections: {
+      executiveSummary: true, statistics: false, girlsList: false, householdsList: false,
+      educationalFollowUps: false, healthFollowUps: false, familyFollowUps: false,
+      householdActivities: false, expenditure: false, rentPayments: false, budgets: false,
+      workplans: false, schedules: false, photoGallery: false,
+    },
+  };
+  const reportQualityIssues = reviewReportQuality(permittedDb, reportQualityConfig);
+  const reportQualityScores = qualityScores(reportQualityIssues);
+  const qualityAnnexRows = [
+    ['SCORE', 'Quantification', '', `${reportQualityScores.quantification}/100`, ''],
+    ['SCORE', 'Impact evidence', '', `${reportQualityScores.impact}/100`, ''],
+    ['SCORE', 'Data quality', '', `${reportQualityScores.dataQuality}/100`, ''],
+    ...reportQualityIssues.map((issue) => [issue.severity.toUpperCase(), issue.rule, issue.location, issue.message, issue.suggestedFix || '']),
+  ];
+  const ensureQualityOverride = (): boolean => {
+    if (!reportQualityIssues.some((issue) => issue.severity === 'blocker') || blockerOverrideReason.trim().length >= 10) return true;
+    setMessage('Resolve quality blockers or provide a written override reason of at least 10 characters.');
+    return false;
+  };
 
   const recordReportHistory = async (fileType: ReportHistoryRecord['fileType'], fileName: string, title: string, blob: Blob): Promise<boolean> => {
     if (!currentUser) return false;
@@ -163,22 +192,28 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       photoCount: 0,
       tableCount: 1,
       status: 'Generated',
+      qualityIssues: reportQualityIssues,
+      qualityScores: reportQualityScores,
+      blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     };
     await appendReportHistory(record);
     return !!storagePath;
   };
 
   const handleCsvExport = async () => {
+    if (!ensureQualityOverride()) return;
     const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadCSV(`SHINE_${reportId}`, [rows.headers, ...rows.rows]);
-    const csvContent = '\uFEFF' + [rows.headers, ...rows.rows].map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const csvRows = [rows.headers, ...rows.rows, [''], ['Quality Issues'], ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'], ...qualityAnnexRows];
+    downloadCSV(`SHINE_${reportId}`, csvRows);
+    const csvContent = '\uFEFF' + csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const archived = await recordReportHistory('csv', fileName, MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId, new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
     if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'csv', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
     setMessage(`${rows.rows.length} record(s) exported${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
   };
 
   const handleExcelExport = async () => {
-    const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user');
+    if (!ensureQualityOverride()) return;
+    const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
     const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     saveBlob(blob, fileName);
@@ -188,6 +223,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   };
 
   const handleWordSummary = async () => {
+    if (!ensureQualityOverride()) return;
     setMessage('');
     const summary = buildManagementReportRows('management-summary', permittedDb, filters, staff, salaryHistory);
     const narrative = [
@@ -233,6 +269,9 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       dateRange: startDate || endDate ? { start: startDate || undefined, end: endDate || undefined } : undefined,
       selectedHouseholdId: filters.householdId,
       executiveSummary: narrative,
+      qualityIssues: reportQualityIssues,
+      qualityScores: reportQualityScores,
+      blockerOverrideReason,
       recommendationsNotes: followUpNotes,
       selectedPhotoIds: attachments.map((attachment) => attachment.id),
       includeSections: {
@@ -270,6 +309,13 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         <h3 className="text-base font-black text-stone-900">Management reports</h3>
         <p className="text-xs text-stone-500">Exports contain filtered records and figures already stored in SHINE. No values are estimated or generated from mock data.</p>
       </div>
+      <QualityCheckPanel issues={reportQualityIssues} scores={reportQualityScores} />
+      {reportQualityIssues.some((issue) => issue.severity === 'blocker') && (
+        <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">
+          Written reason for overriding report blockers
+          <textarea value={blockerOverrideReason} onChange={(event) => setBlockerOverrideReason(event.target.value)} minLength={10} className="field mt-2 min-h-20 w-full bg-white" />
+        </label>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label className="text-[11px] text-stone-600">Report<select className="field mt-1 w-full" value={reportId} onChange={(event) => selectManagementReport(event.target.value)}>
           {MANAGEMENT_REPORTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}

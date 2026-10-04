@@ -6,7 +6,10 @@ import {
   generateWordReport,
   generateExcelWorkbook,
   generatePdfReport,
+  reviewReportQuality,
 } from '../../services/reportGenerators';
+import { qualityScores } from '../../services/qualityRules';
+import { QualityCheckPanel } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
 import { appendReportHistory, getReportHistory } from '../../services/firestoreSync';
@@ -96,6 +99,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   const [confirmedPreview, setConfirmedPreview] = useState('');
 
   const [executiveNotes, setExecutiveNotes] = useState<string>('');
+  const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
@@ -184,6 +188,33 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       ? db.caseReviews || []
       : (db.caseReviews || []).map(({ health: _health, ...review }) => review),
   };
+  const reportQualityConfig: ReportConfig = {
+    reportType,
+    title: reportTitle,
+    periodLabel: startDate && endDate ? `${startDate} to ${endDate}` : 'Selected reporting period',
+    generatedBy: authorName,
+    executiveSummary: includeExecutiveSummary ? executiveNotes : undefined,
+    includeSections: {
+      executiveSummary: includeExecutiveSummary,
+      statistics: includeStatistics,
+      girlsList: includeGirlsCaseload,
+      householdsList: includeGirlsCaseload,
+      educationalFollowUps: includeEducation,
+      healthFollowUps: canViewHealthRecords && includeHealth,
+      familyFollowUps: includeFamily,
+      householdActivities: includeEducation,
+      expenditure: includeFinances,
+      rentPayments: includeFinances,
+      budgets: includeBudgets,
+      workplans: includeWorkplans,
+      schedules: includeWorkplans,
+      photoGallery: includePhotos && format !== 'xlsx',
+      caseActions: includeCaseActions,
+      caseReviews: canViewCaseReviews && includeCaseReviews,
+    },
+  };
+  const reportQualityIssues = reviewReportQuality(reportDatabase, reportQualityConfig);
+  const reportQualityScores = qualityScores(reportQualityIssues);
 
   const applyCalendarPeriod = (preset: string, year: number, month: number, quarter: number) => {
     const startMonth = preset === 'month' ? month : preset === 'quarter' ? (quarter - 1) * 3 + 1 : 1;
@@ -256,6 +287,10 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       setDownloadSuccess('Select the financial-year start and end dates before generating this annual report.');
       return;
     }
+    if (reportQualityIssues.some((issue) => issue.severity === 'blocker') && blockerOverrideReason.trim().length < 10) {
+      setDownloadSuccess('Resolve quality blockers or provide a written override reason of at least 10 characters.');
+      return;
+    }
     if (confirmedPreview !== previewFingerprint) {
       setConfirmedPreview(previewFingerprint);
       return;
@@ -288,6 +323,9 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       selectedPhotoIds: chosenPhotos.map((attachment) => attachment.id),
       maxPhotos: includePhotos && format !== 'xlsx' ? maxPhotos : 0,
       executiveSummary: includeExecutiveSummary ? executiveNotes : undefined,
+      qualityIssues: reportQualityIssues,
+      qualityScores: reportQualityScores,
+      blockerOverrideReason,
       includeSections: {
         executiveSummary: includeExecutiveSummary,
         statistics: includeStatistics,
@@ -435,6 +473,9 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       photoCount,
       tableCount: previewTables,
       status: 'Generated',
+      qualityIssues: reportQualityIssues,
+      qualityScores: reportQualityScores,
+      blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     };
     await appendReportHistory(record);
     setReportHistory((current) => [record, ...current].slice(0, 100));
@@ -734,6 +775,14 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
             <p className="text-[11px] text-stone-500">Prepared by {authorName} · generated {new Date().toLocaleDateString('en-GB')}</p>
           </section>
 
+          <QualityCheckPanel issues={reportQualityIssues} scores={reportQualityScores} />
+          {reportQualityIssues.some((issue) => issue.severity === 'blocker') && (
+            <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">
+              Written reason for overriding report blockers
+              <textarea value={blockerOverrideReason} onChange={(event) => setBlockerOverrideReason(event.target.value)} minLength={10} className="mt-2 w-full rounded-lg border border-rose-300 bg-white p-2.5" />
+            </label>
+          )}
+
           <section className="space-y-2 border-t border-stone-200 pt-4" aria-label="Recent report history">
             <h4 className="font-bold text-stone-900">Recent report history</h4>
             {reportHistory.length === 0 ? <p className="text-stone-500">No generated reports recorded for this account.</p> : reportHistory.slice(0, 5).map((record) => (
@@ -749,6 +798,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
             <div>
               <label className="block font-bold text-stone-900 mb-1">5. Executive Narrative & Remarks</label>
               <textarea
+                id="report-narrative"
                 rows={3}
                 value={executiveNotes}
                 onChange={(e) => setExecutiveNotes(e.target.value)}

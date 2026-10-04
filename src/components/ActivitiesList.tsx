@@ -138,7 +138,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
       ) : (
         <div className="space-y-4">
           {filteredActivities.map((act) => {
-            const houseName = houseMap.get(act.householdId) || 'Unknown House';
+            const houseName = act.householdId ? houseMap.get(act.householdId) || 'Unknown House' : '';
             return (
               <div
                 key={act.id}
@@ -159,20 +159,22 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
                         <span className="text-xs text-stone-500 font-medium">
                           {formatDate(act.date)}
                         </span>
-                        <button
-                          onClick={() => onSelectHouse(act.householdId)}
-                          className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1 bg-teal-50 px-2 py-0.5 rounded"
-                        >
-                          <Home className="w-3 h-3" />
-                          <span>{houseName}</span>
-                        </button>
+                        {act.householdId && (
+                          <button
+                            onClick={() => onSelectHouse(act.householdId)}
+                            className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1 bg-teal-50 px-2 py-0.5 rounded"
+                          >
+                            <Home className="w-3 h-3" />
+                            <span>{houseName}</span>
+                          </button>
+                        )}
                       </div>
 
                       <h3 className="text-base font-bold text-stone-900 mt-1">
                         {act.activityName}
                       </h3>
                       <p className="text-xs text-stone-500 font-medium">
-                        {act.participantCount} Girls Participated
+                        {act.participantCount == null ? 'Participant count not recorded' : `${act.participantCount} Girls Participated`}
                       </p>
                       {act.location && <p className="text-[11px] text-stone-500">Location: {act.location}</p>}
                     </div>
