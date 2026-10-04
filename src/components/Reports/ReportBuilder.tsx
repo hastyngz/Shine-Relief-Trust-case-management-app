@@ -10,6 +10,7 @@ import { generateWordReport, reviewReportQuality, type ReportConfig } from '../.
 import { downloadCSV, formatMWK } from '../../utils/export';
 import { qualityScores } from '../../services/qualityRules';
 import { QualityCheckPanel } from '../QualityCheckPanel';
+import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { appendReportHistory } from '../../services/firestoreSync';
 
 interface ReportBuilderProps {
@@ -28,6 +29,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
+  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string }>>([]);
 
   const report = useMemo(() => assembleSponsorReport(db, {
     fromDate,
@@ -109,6 +111,10 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
   };
   const reportQualityIssues = reviewReportQuality(db, qualityConfig);
   const reportQualityScores = qualityScores(reportQualityIssues);
+  const auditedQualityIssues = reportQualityIssues.map((issue) => ({
+    ...issue,
+    status: qualityResolutions.find((entry) => entry.issueId === issue.id)?.status || issue.status,
+  }));
   const persistQualityAudit = async (format: 'docx' | 'xlsx' | 'pdf' | 'csv') => {
     if (!currentUser) throw new Error('Sign in is required to record report quality history.');
     const timestamp = new Date().toISOString();
@@ -128,8 +134,9 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
       photoCount: 0,
       tableCount: tables.length + 1,
       status: 'Generated',
-      qualityIssues: reportQualityIssues,
+      qualityIssues: auditedQualityIssues,
       qualityScores: reportQualityScores,
+      qualityResolutions,
       blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     });
   };
@@ -145,7 +152,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
     setExportError('');
     setExporting(true);
     try {
-      const config: ReportConfig = { ...qualityConfig, qualityIssues: reportQualityIssues, qualityScores: reportQualityScores, blockerOverrideReason };
+      const config: ReportConfig = { ...qualityConfig, qualityIssues: auditedQualityIssues, qualityScores: reportQualityScores, blockerOverrideReason };
       const blob = await generateWordReport(db, config);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -246,16 +253,24 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose }) => 
       <QualityCheckPanel
         issues={reportQualityIssues}
         scores={reportQualityScores}
-        onApplyFix={(issue) => {
-          if (issue.rule !== 'STYLE-UK-01') return;
-          setNarrative((text) => text
-            .replace(/\bcolor\b/gi, 'colour')
-            .replace(/\borganize\b/gi, 'organise')
-            .replace(/\bprogram\b/gi, 'programme')
-            .replace(/\bcenter\b/gi, 'centre')
-            .replace(/\bbehavior\b/gi, 'behaviour')
-            .replace(/\bprioritize\b/gi, 'prioritise'));
+        canApproveNarrativeOnly={isAdmin || role === 'Manager'}
+        currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}
+        canOpenIssue={(issue) => issue.target?.kind === 'narrative-section' || issue.target?.kind === 'report-section'}
+        onOpenIssue={(issue) => {
+          if (issue.target?.kind !== 'narrative-section' && issue.target?.kind !== 'report-section') return;
+          const editor = document.getElementById('report-narrative');
+          editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          editor?.focus({ preventScroll: true });
         }}
+        onResolveIssue={(issue, resolution: QualityIssueResolution) => {
+          if (resolution.status !== 'overridden' || resolution.note.trim().length < 10) return false;
+          setQualityResolutions((current) => [
+            ...current.filter((entry) => entry.issueId !== issue.id),
+            { issueId: issue.id, status: resolution.status, note: resolution.note, by: staffProfile?.fullName || currentUser?.email || 'Management user', at: new Date().toISOString() },
+          ]);
+          return true;
+        }}
+        onUndoFix={(issue) => setQualityResolutions((current) => current.filter((entry) => entry.issueId !== issue.id))}
       />
       {hasQualityBlockers && (
         <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">

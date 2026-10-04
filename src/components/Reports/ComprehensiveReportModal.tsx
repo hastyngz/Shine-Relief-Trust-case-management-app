@@ -10,6 +10,7 @@ import {
 } from '../../services/reportGenerators';
 import { qualityScores } from '../../services/qualityRules';
 import { QualityCheckPanel } from '../QualityCheckPanel';
+import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
 import { appendReportHistory, getReportHistory } from '../../services/firestoreSync';
@@ -100,6 +101,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
 
   const [executiveNotes, setExecutiveNotes] = useState<string>('');
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
+  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string }>>([]);
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
@@ -215,6 +217,10 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   };
   const reportQualityIssues = reviewReportQuality(reportDatabase, reportQualityConfig);
   const reportQualityScores = qualityScores(reportQualityIssues);
+  const auditedQualityIssues = reportQualityIssues.map((issue) => ({
+    ...issue,
+    status: qualityResolutions.find((entry) => entry.issueId === issue.id)?.status || issue.status,
+  }));
 
   const applyCalendarPeriod = (preset: string, year: number, month: number, quarter: number) => {
     const startMonth = preset === 'month' ? month : preset === 'quarter' ? (quarter - 1) * 3 + 1 : 1;
@@ -323,7 +329,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       selectedPhotoIds: chosenPhotos.map((attachment) => attachment.id),
       maxPhotos: includePhotos && format !== 'xlsx' ? maxPhotos : 0,
       executiveSummary: includeExecutiveSummary ? executiveNotes : undefined,
-      qualityIssues: reportQualityIssues,
+      qualityIssues: auditedQualityIssues,
       qualityScores: reportQualityScores,
       blockerOverrideReason,
       includeSections: {
@@ -473,8 +479,9 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       photoCount,
       tableCount: previewTables,
       status: 'Generated',
-      qualityIssues: reportQualityIssues,
+      qualityIssues: auditedQualityIssues,
       qualityScores: reportQualityScores,
+      qualityResolutions,
       blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     };
     await appendReportHistory(record);
@@ -775,7 +782,28 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
             <p className="text-[11px] text-stone-500">Prepared by {authorName} · generated {new Date().toLocaleDateString('en-GB')}</p>
           </section>
 
-          <QualityCheckPanel issues={reportQualityIssues} scores={reportQualityScores} />
+          <QualityCheckPanel
+            issues={reportQualityIssues}
+            scores={reportQualityScores}
+            canApproveNarrativeOnly={isAdmin || role === 'Manager'}
+            currentUserName={staffProfile?.fullName || currentUser?.email || authorName}
+            canOpenIssue={(issue) => issue.target?.kind === 'narrative-section' || issue.target?.kind === 'report-section'}
+            onOpenIssue={(issue) => {
+              if (issue.target?.kind !== 'narrative-section' && issue.target?.kind !== 'report-section') return;
+              const editor = document.getElementById('report-narrative');
+              editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              editor?.focus({ preventScroll: true });
+            }}
+            onResolveIssue={(issue, resolution: QualityIssueResolution) => {
+              if (resolution.status !== 'overridden' || resolution.note.trim().length < 10) return false;
+              setQualityResolutions((current) => [
+                ...current.filter((entry) => entry.issueId !== issue.id),
+                { issueId: issue.id, status: resolution.status, note: resolution.note, by: staffProfile?.fullName || currentUser?.email || authorName, at: new Date().toISOString() },
+              ]);
+              return true;
+            }}
+            onUndoFix={(issue) => setQualityResolutions((current) => current.filter((entry) => entry.issueId !== issue.id))}
+          />
           {reportQualityIssues.some((issue) => issue.severity === 'blocker') && (
             <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">
               Written reason for overriding report blockers

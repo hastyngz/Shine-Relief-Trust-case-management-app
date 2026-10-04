@@ -2341,3 +2341,18 @@
 #app-shell[data-mobile-view="foundation"] #dashboard-view [aria-label="Programmes"] .foundation-programme-row:hover {
 	background: color-mix(in srgb, var(--programme-accent) 5%, var(--foundation-bg)) !important;
 }
+
+#app-shell #app-header .header-brand-name,
+#app-shell[data-theme] #app-header .header-brand-name,
+#app-shell[data-animated-glass="true"] #app-header .header-brand-name {
+	color: var(--theme-text-on-primary, #ffffff) !important;
+}
+
+#app-shell #app-header .mobile-header-overflow,
+#app-shell[data-theme] #app-header .mobile-header-overflow,
+#app-shell[data-animated-glass="true"] #app-header .mobile-header-overflow,
+#app-shell #app-header .mobile-header-overflow svg,
+#app-shell[data-theme] #app-header .mobile-header-overflow svg,
+#app-shell[data-animated-glass="true"] #app-header .mobile-header-overflow svg {
+	color: var(--theme-text-on-primary, #ffffff) !important;
+}

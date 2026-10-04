@@ -675,10 +675,26 @@ export interface PayrollRecord {
 export type WorkplanPeriodType = 'annual' | 'quarterly' | 'monthly' | 'project';
 export type WorkplanStatus = 'Planned' | 'In Progress' | 'Completed' | 'Delayed' | 'Cancelled';
 
+export interface IndicatorValidity {
+  checks: string[];
+  source?: { name: string; reference?: string; date?: string };
+  secondSource?: string;
+  checkedBy?: string;
+  checkedByRole?: StaffRole;
+  checkedAt?: string;
+  note?: string;
+}
+
 export interface WorkplanItem {
   id: string;
   programmeId?: ProgrammeId;
   indicatorId?: string;
+  validity?: IndicatorValidity;
+  dataSource?: string;
+  measurementMethod?: string;
+  narrativeOnly?: boolean;
+  narrativeOnlyReason?: string;
+  managerApproved?: boolean;
   costLevel?: 'activity' | 'group';
   period: string; // e.g. "Annual 2026", "2026-Q3", "September 2026"
   periodType: WorkplanPeriodType;
@@ -1138,9 +1154,15 @@ export interface ImportAuditRecord {
     message: string;
     location: string;
     suggestedFix?: string;
+    target?: { kind: 'preview-item' | 'indicator-result' | 'budget-item' | 'workplan-item' | 'narrative-section' | 'report-section'; id: string; field?: string };
+    fix?: { type: 'set-field' | 'choose-option' | 'text-input' | 'confirm' | 'external'; safe: boolean; field?: string; options?: Array<{ value: string; label: string }>; suggestedValue?: unknown; reversible: boolean };
+    status?: 'open' | 'resolved' | 'overridden' | 'pending-approval';
+    context?: string;
+    whyMatters?: string;
   }>;
   qualityScores?: { quantification: number; impact: number; dataQuality: number };
   blockerOverrideReason?: string;
+  qualityResolutions?: Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; field?: string; before?: unknown; after?: unknown }>;
   sourceData?: Record<string, unknown>;
 }
 
@@ -1338,9 +1360,15 @@ export interface ReportHistoryRecord {
     message: string;
     location: string;
     suggestedFix?: string;
+    target?: { kind: 'preview-item' | 'indicator-result' | 'budget-item' | 'workplan-item' | 'narrative-section' | 'report-section'; id: string; field?: string };
+    fix?: { type: 'set-field' | 'choose-option' | 'text-input' | 'confirm' | 'external'; safe: boolean; field?: string; options?: Array<{ value: string; label: string }>; suggestedValue?: unknown; reversible: boolean };
+    status?: 'open' | 'resolved' | 'overridden' | 'pending-approval';
+    context?: string;
+    whyMatters?: string;
   }>;
   qualityScores?: { quantification: number; impact: number; dataQuality: number };
   blockerOverrideReason?: string;
+  qualityResolutions?: Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; field?: string; before?: unknown; after?: unknown }>;
 }
 
 export type ConversationType = 'direct' | 'group' | 'announcement';

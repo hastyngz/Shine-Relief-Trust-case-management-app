@@ -7,6 +7,22 @@ export type QualityIssue = {
   message: string;
   location: string;
   suggestedFix?: string;
+  target?: {
+    kind: 'preview-item' | 'indicator-result' | 'budget-item' | 'workplan-item' | 'narrative-section' | 'report-section';
+    id: string;
+    field?: string;
+  };
+  fix?: {
+    type: 'set-field' | 'choose-option' | 'text-input' | 'confirm' | 'external';
+    safe: boolean;
+    field?: string;
+    options?: Array<{ value: string; label: string }>;
+    suggestedValue?: unknown;
+    reversible: boolean;
+  };
+  status?: 'open' | 'resolved' | 'overridden' | 'pending-approval';
+  context?: string;
+  whyMatters?: string;
 };
 
 type QualityValue = Record<string, unknown>;
@@ -31,6 +47,7 @@ type Node = {
   path: string;
   key: string;
   value: unknown;
+  target?: QualityIssue['target'];
 };
 
 const MAX_NODES = 5000;
@@ -46,26 +63,59 @@ function normalized(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function normalizeSafeText(value: string): string {
+  return value
+    .replace(/\t/g, ' ')
+    .replace(/^\s*(?:[•●▪◦*-]\s*)+/, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function comparableImportValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(comparableImportValue);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !/^(?:id|tempId|sheet|row|rowNumber|sourceRow|createdAt|updatedAt|selected)$/i.test(key))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => [key, comparableImportValue(item)]));
+}
+
+function targetKind(path: string): NonNullable<QualityIssue['target']>['kind'] {
+  if (/budget/i.test(path)) return 'budget-item';
+  if (/workplan/i.test(path)) return 'workplan-item';
+  if (/indicator|result|outcome|impact/i.test(path)) return 'indicator-result';
+  if (/narrative/i.test(path)) return 'narrative-section';
+  if (/section|report/i.test(path)) return 'report-section';
+  return 'preview-item';
+}
+
 function flatten(input: unknown): Node[] {
   const nodes: Node[] = [];
   const seen = new WeakSet<object>();
-  const visit = (value: unknown, path: string, key: string, depth: number): void => {
+  const visit = (value: unknown, path: string, key: string, depth: number, inheritedTarget?: QualityIssue['target']): void => {
     if (nodes.length >= MAX_NODES || depth > MAX_DEPTH) return;
     if (Array.isArray(value)) {
-      value.forEach((item, index) => visit(item, `${path}[${index}]`, key, depth + 1));
+      value.forEach((item, index) => visit(item, `${path}[${index}]`, key, depth + 1, inheritedTarget));
       return;
     }
     if (isRecord(value)) {
       if (seen.has(value)) return;
       seen.add(value);
-      nodes.push({ path: path || 'input', key, value });
+      const stableId = typeof value.tempId === 'string' ? value.tempId : typeof value.id === 'string' ? value.id : undefined;
+      const target = stableId
+        ? { kind: targetKind(path || key), id: stableId }
+        : inheritedTarget;
+      nodes.push({ path: path || 'input', key, value, target });
       for (const [childKey, childValue] of Object.entries(value)) {
         const safeKey = childKey.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'field';
-        visit(childValue, path ? `${path}.${safeKey}` : safeKey, childKey, depth + 1);
+        visit(childValue, path ? `${path}.${safeKey}` : safeKey, childKey, depth + 1, target);
       }
       return;
     }
-    nodes.push({ path: path || 'input', key, value });
+    nodes.push({ path: path || 'input', key, value, target: inheritedTarget });
   };
   visit(input, '', 'input', 0);
   return nodes;
@@ -165,15 +215,64 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   const nodes = flatten(input);
   const issues: QualityIssue[] = [];
   const add = (issue: QualityIssue): void => {
-    if (issues.length < MAX_ISSUES && !issues.some((existing) => existing.id === issue.id)) issues.push(issue);
+    const sourceNode = nodes.find((node) => node.path === issue.location);
+    const target = issue.target || sourceNode?.target;
+    const enriched: QualityIssue = {
+      ...issue,
+      ...(target ? { id: `${issue.rule}:${target.kind}:${target.id}${target.field ? `:${target.field}` : ''}` } : {}),
+      ...(target ? { target } : {}),
+      status: issue.status || 'open',
+    };
+    if (issues.length < MAX_ISSUES && !issues.some((existing) =>
+      existing.rule === enriched.rule && existing.message === enriched.message
+      && (enriched.target
+        ? existing.target?.kind === enriched.target.kind && existing.target.id === enriched.target.id
+          && existing.target.field === enriched.target.field
+        : !existing.target && existing.location === enriched.location))) issues.push(enriched);
   };
 
   const narratives = recordsFor(nodes, /narrative|section/i);
   const activities = recordsFor(nodes, /activit/i);
-  const results = recordsFor(nodes, /result|outcome|impact/i);
+  const results = recordsFor(nodes, /result|outcome|impact/i).filter((entry) =>
+    isRecord(entry.value) && !/\.validity(?:\.|$)/i.test(entry.path));
   const indicators = recordsFor(nodes, /indicator/i);
   const finalReport = root.finalReport === true;
   const narrativeText = narratives.map((entry) => textOf(entry.value).join(' ')).join('\n');
+
+  const importRows = Array.isArray(root.importPreviewRows) ? root.importPreviewRows.filter(isRecord) : [];
+  const seenImportRows = new Set<string>();
+  for (const row of importRows) {
+    const id = typeof row.id === 'string' ? row.id : typeof row.tempId === 'string' ? row.tempId : undefined;
+    if (!id) continue;
+    const fingerprint = JSON.stringify(comparableImportValue(row));
+    if (seenImportRows.has(fingerprint)) {
+      add({
+        ...createIssue('IMPORT-DUPLICATE-EXACT-01', 'warning', 'This preview row exactly duplicates an earlier row; the first row is retained.', `importPreviewRows.${id}`, 'Remove the duplicate row from this preview.'),
+        target: { kind: 'preview-item', id },
+        context: 'Exact duplicate of an earlier preview row.',
+        fix: { type: 'confirm', safe: true, field: '__remove', suggestedValue: 'remove duplicate row', reversible: true },
+      });
+    } else {
+      seenImportRows.add(fingerprint);
+    }
+  }
+
+  for (const node of nodes) {
+    if (typeof node.value !== 'string' || !node.target) continue;
+    const record = nodes.find((candidate) => candidate.path === node.path.slice(0, node.path.lastIndexOf('.')));
+    if (!record || !isRecord(record.value)) continue;
+    const field = node.key;
+    if (!/^(?:title|text|content|description|summary|notes|objective|itemDescription|originalSnippet)$/i.test(field)) continue;
+    const corrected = normalizeSafeText(node.value);
+    if (corrected !== node.value) {
+      add({
+        ...createIssue('IMPORT-TEXT-NORMALIZE-01', 'info', 'Text contains whitespace or formatting that can be normalised safely.', node.path, 'Trim, collapse whitespace, and standardise quotes and dashes.'),
+        target: { ...node.target, field },
+        context: node.value,
+        fix: { type: 'set-field', safe: true, field, suggestedValue: corrected, reversible: true },
+      });
+    }
+  }
 
   for (const entry of narratives) {
     const sectionText = textOf(entry.value).join(' ');
@@ -189,7 +288,12 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     }
     const vague = sectionText.match(/\b(?:various|several|many|some|a number of|a lot of|regularly|different activities|the girls participated|the children took part|numerous|significant)\b[^.!?]*[.!?]?/i)?.[0];
     if (vague) {
-      add(createIssue('QUANT-02', 'warning', 'Narrative includes an unquantified statement.', entry.path, 'Replace it with: “In {period}, {n} {who} took part in {n} {activity type} at {place}.”'));
+      add({
+        ...createIssue('QUANT-02', 'warning', 'Narrative includes an unquantified statement.', entry.path, 'Replace it with: “In {period}, {n} {who} took part in {n} {activity type} at {place}.”'),
+        context: vague,
+        whyMatters: 'Donors need measurable evidence to understand who was reached and what was delivered.',
+        fix: { type: 'text-input', safe: false, field: 'text', reversible: true },
+      });
     }
     if (sectionText.match(/(?:\d+(?:\.\d+)?\s*%|percent)/i) && !/\b(?:n\s*=\s*\d+|\b\d+\s+of\s+\d+|\b\d+\s+(?:girls|children|people|participants|households))\b/i.test(sectionText)) {
       add(createIssue('IMPACT-03', 'warning', 'A percentage is reported without its base number (n).', entry.path, 'Report the numerator and denominator, for example “8 of 20 (40%)”.'));
@@ -218,9 +322,21 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     }
     for (const programmeName of options.programmeNames ?? []) {
       const shortName = programmeName.trim();
-      if (shortName && new RegExp(`\\b${shortName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(sectionText) === false
-        && new RegExp(`\\b(?:the )?${shortName.split(/\s+/)[0]}\\b`, 'i').test(sectionText)) {
-        add(createIssue('NARRATIVE-PROGRAMME-01', 'warning', 'Programme naming may not match the approved programme register.', entry.path, `Use the approved name “${shortName}”.`));
+      const fullNamePresent = shortName && new RegExp(`\\b${shortName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(sectionText);
+      const alias = shortName ? sectionText.match(new RegExp(`\\b(?:the )?${shortName.split(/\s+/)[0]}\\b`, 'i'))?.[0] : undefined;
+      if (shortName && !fullNamePresent && alias) {
+        add({
+          ...createIssue('NARRATIVE-PROGRAMME-01', 'warning', 'Programme naming may not match the approved programme register.', entry.path, `Use the approved name “${shortName}”.`),
+          context: alias,
+          fix: {
+            type: 'choose-option',
+            safe: false,
+            field: 'text',
+            options: (options.programmeNames ?? []).map((name) => ({ value: name, label: name })),
+            suggestedValue: shortName,
+            reversible: true,
+          },
+        });
       }
     }
   }
@@ -270,7 +386,18 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       && record.narrativeOnlyReason.trim().length >= 10
       && record.managerApproved === true;
     if (!hasMapping(record) && !namedMatch && !narrativeOnly) {
-      add(createIssue('QUANT-03', finalReport ? 'blocker' : 'warning', 'Activity is not mapped to a result or manager-approved narrative-only reason.', activity.path, 'Link an indicator result or record a manager-approved narrative-only reason.'));
+      const options = indicators.flatMap((indicator) => {
+        if (!isRecord(indicator.value)) return [];
+        const indicatorRecord = indicator.value;
+        const id = getField(indicatorRecord, ['indicatorId', 'id']);
+        const label = getField(indicatorRecord, ['indicatorName', 'name', 'title', 'indicator']);
+        return id && label ? [{ value: String(id), label: String(label) }] : [];
+      });
+      add({
+        ...createIssue('QUANT-03', finalReport ? 'blocker' : 'warning', 'Activity is not mapped to a result or manager-approved narrative-only reason.', activity.path, 'Link an indicator result or record a manager-approved narrative-only reason.'),
+        context: String(getField(record, ['title', 'activity', 'name']) ?? ''),
+        fix: { type: 'choose-option', safe: false, field: 'indicatorId', options: [...options, { value: 'narrative-only', label: 'Narrative only (requires manager approval)' }], reversible: true },
+      });
     }
   }
 
@@ -309,6 +436,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   const staleDays = Number.isFinite(options.staleAfterDays) ? Math.max(0, options.staleAfterDays as number) : 45;
   for (const entry of results) {
     const record = entry.value as QualityValue;
+    const reported = getNumber(record, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']);
     const evidence = getField(record, ['evidence', 'evidenceNote', 'evidenceSource', 'source', 'verification']);
     const status = String(getField(record, ['verificationStatus', 'evidenceStatus', 'status']) ?? '').toLowerCase();
     if ((evidence === undefined || evidence === null || evidence === '') && record.evidenceRequired !== false) {
@@ -323,15 +451,45 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     } else if (now !== undefined && now - evidenceDate > staleDays * 86400000) {
       add(createIssue('QUANT-06', 'warning', 'Result evidence is older than the configured freshness limit.', entry.path, 'Refresh or revalidate the supporting evidence.'));
     }
-    if (getField(record, ['validity', 'validityCheck', 'validationMethod']) === undefined) {
-      add(createIssue('DQ-VALIDITY', 'info', 'Result has no validity check or validation method recorded.', entry.path, 'Record how the result was validated.'));
+    const validityValue = getField(record, ['validity', 'validityCheck']);
+    const validity = isRecord(validityValue) ? validityValue : undefined;
+    const validityChecks = Array.isArray(validity?.checks) ? validity.checks.map(String) : [];
+    const sourceSeen = isRecord(validity?.source)
+      && Boolean(validity.source.name && (validity.source.reference || validity.source.date));
+    const crossChecked = typeof validity?.secondSource === 'string' && Boolean(validity.secondSource.trim());
+    const definitionMatched = validityChecks.includes('definition-match');
+    const enteredByForValidity = getField(record, ['enteredBy', 'createdBy', 'createdByUid']);
+    const validityCheckedBy = getField(validity || {}, ['checkedBy']);
+    const missingValidity: string[] = [];
+    if (!sourceSeen && !crossChecked) missingValidity.push('a named source or a second-source cross-check');
+    if (!definitionMatched) missingValidity.push('confirmation that the measure, unit, period, and group match the indicator definition');
+    if (typeof validityCheckedBy !== 'string' || !validityCheckedBy.trim()
+      || (enteredByForValidity && enteredByForValidity === validityCheckedBy)) {
+      missingValidity.push('verification by a person other than the data entrant');
+    }
+    const plausible = reported !== undefined
+      && reported >= 0
+      && !(record.unit === '%' && reported > 100)
+      && !(getNumber(record, ['enrolment', 'enrollment', 'populationLimit']) !== undefined
+        && /girl|child|participant/i.test(String(record.unit || ''))
+        && reported > Number(getNumber(record, ['enrolment', 'enrollment', 'populationLimit'])));
+    if (!plausible) missingValidity.push('a value within a plausible range');
+    const validityNote = typeof validity?.note === 'string' ? validity.note.trim() : '';
+    if (missingValidity.length || !validity || !validityNote) {
+      const missing = [...missingValidity, ...(!validityNote ? ['a validation note'] : [])];
+      add({
+        ...createIssue('DQ-VALIDITY', 'warning', `Validity check incomplete: ${missing.join('; ')}.`, entry.path, 'Check the indicator definition and document the source, comparison, plausible range, and review note.'),
+        context: `Indicator: ${String(getField(record, ['indicatorName', 'name', 'title']) ?? 'Not named')} · Definition: ${String(getField(record, ['definition', 'indicatorDefinition']) ?? 'Not recorded')} · Unit: ${String(record.unit ?? 'Not recorded')} · Value: ${reported ?? 'Not recorded'}${plausible ? ' · plausible-range check passed' : ' · plausible-range check failed'}`,
+      });
+    }
+    if (validity?.checkedBy && getField(record, ['enteredBy', 'createdBy', 'createdByUid']) === validity.checkedBy) {
+      add(createIssue('DQ-INTEGRITY', 'warning', 'Validity was checked by the same person who entered the result.', entry.path, 'Ask a second person to review the result where practical.'));
     }
     const enteredBy = getField(record, ['enteredBy', 'createdBy', 'createdByUid']);
     const verifiedBy = getField(record, ['verifiedBy', 'verifiedByUid']);
     if (enteredBy && verifiedBy && enteredBy === verifiedBy) {
       add(createIssue('DQ-INTEGRITY', 'warning', 'Result was entered and verified by the same person.', entry.path, 'Request independent verification where practical.'));
     }
-    const reported = getNumber(record, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']);
     const sampleSize = getNumber(record, ['n', 'sampleSize', 'denominator']);
     if (reported !== undefined && sampleSize === undefined && (reported % 1 !== 0 || record.isPercentage === true || record.unit === '%')) {
       add(createIssue('DQ-PRECISION', 'warning', 'A decimal result has no sample size (n) or stated precision.', entry.path, 'Report the base count (n) and use precision supported by the method.'));
@@ -549,7 +707,13 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     const typedAmount = getNumber(record, ['statedAmount', 'typedAmount', 'amount']);
     const recomputedAmount = getNumber(record, ['recomputedAmount', 'calculatedAmount']);
     if (typedAmount !== undefined && recomputedAmount !== undefined && Math.abs(typedAmount - recomputedAmount) > 0.01) {
-      add(createIssue('FIN-TOTAL-DISAGREEMENT-01', 'warning', `Stated total ${typedAmount}; recomputed total ${recomputedAmount}; difference ${typedAmount - recomputedAmount}.`, entry.path, 'Use the recomputed total after checking all line items.'));
+      add({
+        ...createIssue('FIN-TOTAL-DISAGREEMENT-01', 'warning', `Stated total ${typedAmount}; recomputed total ${recomputedAmount}; difference ${typedAmount - recomputedAmount}.`, entry.path, 'Use the recomputed total after checking all line items.'),
+        fix: { type: 'choose-option', safe: false, field: 'amount', options: [
+          { value: String(recomputedAmount), label: `Use recomputed total (${recomputedAmount})` },
+          { value: 'keep-stated', label: `Keep stated total (${typedAmount}) and explain` },
+        ], suggestedValue: recomputedAmount, reversible: true },
+      });
     }
     const people = getNumber(record, ['beneficiaryCount', 'peopleCount', 'population']);
     const targetPeople = getNumber(record, ['reportTarget', 'workplanTarget', 'targetPeople']);
@@ -571,7 +735,13 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     const stated = getNumber(record, ['statedTotal', 'typedTotal', 'reportedTotal']);
     const recomputed = getNumber(record, ['recomputedTotal', 'calculatedTotal', 'lineItemsTotal']);
     if (stated !== undefined && recomputed !== undefined && Math.abs(stated - recomputed) > 0.01) {
-      add(createIssue('FIN-TOTAL-DISAGREEMENT-01', 'warning', `Stated total ${stated}; recomputed total ${recomputed}; difference ${stated - recomputed}.`, entry.path, 'Recompute the total from the detail lines.'));
+      add({
+        ...createIssue('FIN-TOTAL-DISAGREEMENT-01', 'warning', `Stated total ${stated}; recomputed total ${recomputed}; difference ${stated - recomputed}.`, entry.path, 'Recompute the total from the detail lines.'),
+        fix: { type: 'choose-option', safe: false, field: 'statedTotal', options: [
+          { value: String(recomputed), label: `Use recomputed total (${recomputed})` },
+          { value: 'keep-stated', label: `Keep stated total (${stated}) and explain` },
+        ], suggestedValue: recomputed, reversible: true },
+      });
     }
   }
 

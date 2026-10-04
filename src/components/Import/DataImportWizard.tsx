@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   AppDatabase,
@@ -26,7 +26,9 @@ import {
 import { PROGRAMMES } from '../../data/programmes';
 import { useAuth } from '../../contexts/AuthContext';
 import { QualityCheckPanel } from '../QualityCheckPanel';
+import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { qualityScores, runQualityRules } from '../../services/qualityRules';
+import type { QualityIssue } from '../../services/qualityRules';
 import {
   AlertCircle,
   AlertTriangle,
@@ -329,6 +331,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   // Extracted Document State
   const [reportMetadata, setReportMetadata] = useState<ReportMetadata | null>(null);
   const [previewItems, setPreviewItems] = useState<ImportPreviewItem[]>([]);
+  const previewCardRefs = useRef(new Map<string, HTMLDivElement>());
+  const [highlightedPreviewId, setHighlightedPreviewId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [contactReview, setContactReview] = useState<ContactReviewItem[]>([]);
@@ -342,6 +346,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [spreadsheetKindOverride, setSpreadsheetKindOverride] = useState<SpreadsheetKind | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetImportPreview | null>(null);
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
+  const [qualityDataSource, setQualityDataSource] = useState('');
+  const [qualityCollectionMethod, setQualityCollectionMethod] = useState('');
+  const [qualityCollectionMethodOther, setQualityCollectionMethodOther] = useState('');
+  const [qualityResolutions, setQualityResolutions] = useState<NonNullable<ImportAuditRecord['qualityResolutions']>>([]);
 
   // Editing Item Modal State
   const [editingItem, setEditingItem] = useState<ImportPreviewItem | null>(null);
@@ -352,6 +360,33 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     total: 0,
   });
   const [completedAudit, setCompletedAudit] = useState<ImportAuditRecord | null>(null);
+
+  useEffect(() => {
+    setPreviewItems((current) => {
+      let changed = false;
+      const next = current.map((item) => {
+        if (!item.selected || !['activity', 'workplan'].includes(item.targetEntity) || item.extractedData.indicatorId) return item;
+        const title = String(item.title || '').trim().toLowerCase();
+        const programmeId = item.extractedData.programmeId;
+        if (!title || !programmeId) return item;
+        const matches = (db.workplans || []).filter((workplan) =>
+          workplan.indicatorId && workplan.programmeId === programmeId
+          && workplan.activity.trim().toLowerCase() === title);
+        if (matches.length !== 1) return item;
+        changed = true;
+        return {
+          ...item,
+          extractedData: {
+            ...item.extractedData,
+            indicatorId: matches[0].indicatorId,
+            autoLinkedIndicatorId: matches[0].indicatorId,
+            autoLinkedWorkplanId: matches[0].id,
+          },
+        };
+      });
+      return changed ? next : current;
+    });
+  }, [db.workplans, previewItems]);
 
   const prepareContactReview = async (candidates: ContactCandidate[]) => {
     const existingContacts = await listContacts().catch(() => db.contacts || []);
@@ -652,7 +687,19 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       return;
     }
 
-    const selectedItems = previewItems.filter((i) => i.selected);
+    const selectedItems = previewItems.filter((i) => i.selected).map((item) => {
+      if (!['activity', 'workplan'].includes(item.targetEntity)) return item;
+      return {
+        ...item,
+        extractedData: {
+          ...item.extractedData,
+          ...(qualityDataSource.trim() ? { dataSource: qualityDataSource.trim(), source: qualityDataSource.trim() } : {}),
+          ...((qualityCollectionMethod === 'Other' ? qualityCollectionMethodOther : qualityCollectionMethod).trim()
+            ? { measurementMethod: (qualityCollectionMethod === 'Other' ? qualityCollectionMethodOther : qualityCollectionMethod).trim(), method: (qualityCollectionMethod === 'Other' ? qualityCollectionMethodOther : qualityCollectionMethod).trim() }
+            : {}),
+        },
+      };
+    });
     const selectedPayroll = selectedItems.filter((item) => item.targetEntity === 'payroll');
     if (selectedPayroll.length > 0 && !(isAdmin || role === 'Manager')) {
       alert('Payroll spreadsheet imports are restricted to Administrators and Managers.');
@@ -671,7 +718,15 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       alert(`Select a programme for each selected spreadsheet row (${unresolvedProgrammes.length} unresolved).`);
       return;
     }
-    const importBlockers = importQualityIssues.filter((issue) => issue.severity === 'blocker');
+    const unapprovedNarrativeOnly = selectedItems.filter((item) =>
+      item.extractedData.narrativeOnly === true && item.extractedData.managerApproved !== true);
+    if (unapprovedNarrativeOnly.length > 0) {
+      alert('Narrative-only activities require approval by an Administrator or Manager before they can be imported.');
+      return;
+    }
+    const resolvedQualityIssueIds = new Set(qualityResolutions.map((resolution) => resolution.issueId));
+    const importBlockers = importQualityIssues.filter((issue) =>
+      issue.severity === 'blocker' && !resolvedQualityIssueIds.has(issue.id));
     if (importBlockers.length && blockerOverrideReason.trim().length < 10) {
       alert('Resolve quality blockers or enter a written override reason of at least 10 characters.');
       return;
@@ -735,6 +790,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       errorsCount: selectedItems.filter((i) => i.resultType === 'IMPORT_ERROR').length,
       qualityIssues: importQualityIssues,
       qualityScores: importQualityScores,
+      qualityResolutions,
       blockerOverrideReason: importBlockers.length ? blockerOverrideReason.trim() : undefined,
       sourceData: spreadsheetPreview?.sourceData,
       status: 'completed',
@@ -823,7 +879,21 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const importQualityIssues = useMemo(() => runQualityRules({
     finalReport: false,
     filePeriod: reportMetadata?.reportingPeriod,
+    importPreviewRows: previewItems.filter((item) => item.selected).map((item) => ({
+      id: item.tempId,
+      targetEntity: item.targetEntity,
+      title: item.title,
+      summary: item.summary,
+      extractedData: item.extractedData,
+    })),
+    previewQualityText: previewItems.filter((item) => item.selected).map((item) => ({
+      id: item.tempId,
+      title: item.title,
+      summary: item.summary,
+      text: item.originalSnippet,
+    })),
     narrativeSections: previewItems.filter((item) => item.selected).map((item) => ({
+      id: item.tempId,
       title: item.title,
       text: item.originalSnippet || item.summary,
       headingAfterContent: item.extractedData.headingAfterContent,
@@ -832,14 +902,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     })),
     activities: previewItems.filter((item) => item.selected && (item.targetEntity === 'activity' || item.targetEntity === 'workplan')).map((item) => ({
       ...item.extractedData,
+      id: item.tempId,
       title: item.title,
       description: item.originalSnippet || item.summary,
+      source: qualityDataSource || item.extractedData.source,
+      method: (qualityCollectionMethod === 'Other' ? qualityCollectionMethodOther : qualityCollectionMethod) || item.extractedData.method,
       indicatorId: item.extractedData.indicatorId,
       target: item.extractedData.targetCount,
       actual: item.extractedData.completedCount,
     })),
     budgets: previewItems.filter((item) => item.selected && item.targetEntity === 'budget').map((item) => ({
       ...item.extractedData,
+      id: item.tempId,
       title: item.title,
       description: item.extractedData.itemDescription || item.summary,
       quantity: item.extractedData.quantity,
@@ -849,9 +923,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     })),
     results: previewItems.filter((item) => item.selected && ['activity', 'workplan'].includes(item.targetEntity || '')).map((item) => ({
       ...item.extractedData,
+      id: item.tempId,
       title: item.title,
       actual: item.extractedData.completedCount,
       target: item.extractedData.targetCount,
+      source: qualityDataSource || item.extractedData.source,
+      method: (qualityCollectionMethod === 'Other' ? qualityCollectionMethodOther : qualityCollectionMethod) || item.extractedData.method,
+    })),
+    indicators: previewItems.filter((item) => item.selected && item.targetEntity === 'workplan').map((item) => ({
+      id: item.extractedData.indicatorId || item.tempId,
+      indicatorId: item.extractedData.indicatorId || item.tempId,
+      name: item.extractedData.indicator || item.title,
+      programmeId: item.extractedData.programmeId,
     })),
     identityNames: previewItems.filter((item) => item.selected).flatMap((item) => [
       item.matchedName,
@@ -867,7 +950,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       maxSentenceWords: 35,
       programmeNames: PROGRAMMES.map((programme) => programme.name),
     },
-  }), [previewItems, reportMetadata]);
+  }), [previewItems, reportMetadata, qualityDataSource, qualityCollectionMethod, qualityCollectionMethodOther]);
   const importQualityScores = useMemo(() => qualityScores(importQualityIssues), [importQualityIssues]);
 
   // Tab Filtering
@@ -889,6 +972,159 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
     return true;
   });
+
+  const openImportQualityIssue = (issue: QualityIssue) => {
+    if (issue.target?.kind !== 'preview-item' && issue.target?.kind !== 'narrative-section'
+      && issue.target?.kind !== 'budget-item' && issue.target?.kind !== 'workplan-item'
+      && issue.target?.kind !== 'indicator-result') return;
+    setActiveTab('ALL');
+    setSearchTerm('');
+    window.requestAnimationFrame(() => {
+      const card = previewCardRefs.current.get(issue.target!.id);
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.focus({ preventScroll: true });
+      setHighlightedPreviewId(issue.target!.id);
+      window.setTimeout(() => setHighlightedPreviewId((current) => current === issue.target!.id ? null : current), 2000);
+    });
+  };
+
+  const resolveImportQualityIssue = (issue: QualityIssue, resolution: QualityIssueResolution): boolean => {
+    if (resolution.status === 'overridden') {
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: resolution.status, note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString() },
+      ]);
+      return true;
+    }
+    if (issue.rule === 'DQ-VALIDITY' && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
+      const validity = resolution.value as Record<string, unknown>;
+      const target = previewItems.find((item) => item.tempId === issue.target?.id);
+      if (!target) return false;
+      const patch = (item: ImportPreviewItem) => ({ ...item, extractedData: { ...item.extractedData, validity } });
+      const stillFires = runQualityRules({
+        results: [{
+          ...target.extractedData,
+          id: target.tempId,
+          actual: target.extractedData.actual ?? target.extractedData.completedCount,
+          target: target.extractedData.target ?? target.extractedData.targetCount,
+          validity,
+        }],
+      }).some((candidate) => candidate.rule === 'DQ-VALIDITY');
+      if (stillFires) return false;
+      setPreviewItems((current) => current.map((item) => {
+        if (item.tempId === issue.target?.id) return patch(item);
+        const hasResult = item.selected && ['activity', 'workplan'].includes(item.targetEntity)
+          && (item.extractedData.actual !== undefined || item.extractedData.completedCount !== undefined);
+        return validity.applyToAll === true && hasResult ? patch(item) : item;
+      }));
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'validity', before: target.extractedData.validity, after: validity },
+      ]);
+      return true;
+    }
+    if (issue.rule === 'QUANT-03' && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
+      const value = resolution.value as Record<string, unknown>;
+      const managerApproved = isAdmin || role === 'Manager';
+      const pendingApproval = value.narrativeOnly === true && !managerApproved;
+      const target = previewItems.find((item) => item.tempId === issue.target?.id);
+      if (!target) return false;
+      const extractedData: ImportPreviewItem['extractedData'] = value.indicatorId
+        ? { ...target.extractedData, indicatorId: value.indicatorId }
+        : { ...target.extractedData, narrativeOnly: true, narrativeOnlyReason: value.narrativeOnlyReason, managerApproved };
+      const testActivity = { ...extractedData, id: target.tempId };
+      const stillFires = runQualityRules({ activities: [testActivity] }).some((candidate) => candidate.rule === issue.rule);
+      setPreviewItems((current) => current.map((item) => item.tempId === issue.target?.id ? { ...item, extractedData } : item));
+      if (pendingApproval) {
+        setQualityResolutions((current) => [
+          ...current.filter((entry) => entry.issueId !== issue.id),
+          { issueId: issue.id, status: 'pending-approval', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString() },
+        ]);
+        return false;
+      }
+      if (stillFires) return false;
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'indicatorId', before: target.extractedData.indicatorId, after: extractedData.indicatorId },
+      ]);
+      return true;
+    }
+    if (issue.rule === 'FIN-TOTAL-DISAGREEMENT-01' && issue.target?.id && typeof resolution.value === 'number') {
+      const target = previewItems.find((item) => item.tempId === issue.target?.id);
+      if (!target) return false;
+      const before = target.extractedData.budgetAmount ?? target.extractedData.statedAmount ?? target.extractedData.amount;
+      const extractedData = {
+        ...target.extractedData,
+        budgetAmount: resolution.value,
+        amount: resolution.value,
+        statedAmount: resolution.value,
+        typedAmount: resolution.value,
+      };
+      const stillFires = runQualityRules({ budgets: [{ ...extractedData, id: target.tempId }] })
+        .some((candidate) => candidate.rule === issue.rule);
+      if (stillFires) return false;
+      setPreviewItems((current) => current.map((item) => item.tempId === issue.target?.id ? { ...item, extractedData } : item));
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'budgetAmount', before, after: resolution.value },
+      ]);
+      return true;
+    }
+    if (!['QUANT-02', 'NARRATIVE-PROGRAMME-01'].includes(issue.rule)
+      || typeof resolution.value !== 'string' || !issue.target?.id) return false;
+    const target = previewItems.find((item) => item.tempId === issue.target?.id);
+    if (!target) return false;
+    const sourceText = target.originalSnippet || target.summary;
+    const replacement = issue.rule === 'QUANT-02'
+      ? resolution.value
+      : sourceText.replace(new RegExp(String(issue.context || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), resolution.value);
+    const stillFires = runQualityRules({
+      narrativeSections: [{ id: issue.target.id, text: replacement }],
+      options: { ukSpelling: true, programmeNames: PROGRAMMES.map((programme) => programme.name) },
+    }).some((candidate) => candidate.rule === issue.rule);
+    if (stillFires) return false;
+    setPreviewItems((current) => current.map((item) => item.tempId !== issue.target?.id ? item : {
+      ...item,
+      summary: replacement,
+      originalSnippet: replacement,
+      userNote: resolution.note || item.userNote,
+    }));
+    setQualityResolutions((current) => [
+      ...current.filter((entry) => entry.issueId !== issue.id),
+      { issueId: issue.id, status: resolution.status, note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'text', before: sourceText, after: replacement },
+    ]);
+    return true;
+  };
+
+  const applySafeImportFix = (issue: QualityIssue) => {
+    if (!issue.fix?.safe || issue.fix.reversible !== true || !issue.target?.id || issue.fix.suggestedValue === undefined) return;
+    const field = issue.fix.field || issue.target.field;
+    if (!field) return;
+    const item = previewItems.find((entry) => entry.tempId === issue.target?.id);
+    if (!item) return;
+    if (field === '__remove') {
+      setPreviewItems((current) => current.filter((entry) => entry.tempId !== issue.target?.id));
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: 'resolved', note: 'Removed an exact duplicate preview row; the first matching row remains.', by: activeStaff.fullName, at: new Date().toISOString(), field, before: item },
+      ]);
+      return;
+    }
+    const before = field === 'text' ? item.originalSnippet : field === 'title' ? item.title : field === 'summary' ? item.summary : item.extractedData[field];
+    const after = issue.fix.suggestedValue;
+    setPreviewItems((current) => current.map((entry) => {
+      if (entry.tempId !== issue.target?.id) return entry;
+      if (field === 'text') return { ...entry, originalSnippet: String(after) };
+      if (field === 'title') return { ...entry, title: String(after) };
+      if (field === 'summary') return { ...entry, summary: String(after) };
+      return { ...entry, extractedData: { ...entry.extractedData, [field]: after } };
+    }));
+    setQualityResolutions((current) => [
+      ...current.filter((entry) => entry.issueId !== issue.id),
+      { issueId: issue.id, status: 'resolved', note: 'Applied deterministic reversible text normalisation.', by: activeStaff.fullName, at: new Date().toISOString(), field, before, after },
+    ]);
+  };
 
   return (
     <div className="w-full max-w-full sm:max-w-6xl min-w-0 box-border overflow-x-hidden bg-white rounded-2xl shadow-xl border border-stone-200 mx-auto my-4">
@@ -1124,7 +1360,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                   );
                 })}
               </div>
-              {spreadsheetPreview && (
+              {spreadsheetPreview && previewItems.some((item) => item.selected && ['activity', 'workplan'].includes(item.targetEntity)) && (
                 <div className="mt-3 space-y-2">
                   {spreadsheetPreview.sheetStats.map((sheet) => (
                     <p key={sheet.sheet} className="text-xs text-stone-800">
@@ -1150,7 +1386,65 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             </section>
           )}
 
-          <QualityCheckPanel issues={importQualityIssues} scores={importQualityScores} linkNarrative={false} />
+          {spreadsheetPreview && (
+            <section className="rounded-xl border border-teal-200 bg-teal-50/50 p-4">
+              <h3 className="text-sm font-bold text-stone-900">File-wide result defaults</h3>
+              <p className="mt-1 text-xs text-stone-700">Set the source and collection method once for this import. These are applied to every imported result; only enter details supported by the file.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-stone-800">Data source
+                  <input className="field mt-1 w-full bg-white" value={qualityDataSource} onChange={(event) => setQualityDataSource(event.target.value)} placeholder="e.g. attendance register, school report" />
+                </label>
+                <label className="text-xs font-semibold text-stone-800">Collection method
+                  <select className="field mt-1 w-full bg-white" value={qualityCollectionMethod} onChange={(event) => setQualityCollectionMethod(event.target.value)}>
+                    <option value="">Choose a method</option>
+                    <option>Daily register headcount</option><option>Attendance register</option><option>Receipts</option>
+                    <option>School report</option><option>Bank record</option><option>Observation</option><option>Other</option>
+                  </select>
+                </label>
+                {qualityCollectionMethod === 'Other' && <label className="text-xs font-semibold text-stone-800">Describe the method
+                  <input className="field mt-1 w-full bg-white" value={qualityCollectionMethodOther} onChange={(event) => setQualityCollectionMethodOther(event.target.value)} />
+                </label>}
+              </div>
+            </section>
+          )}
+          <QualityCheckPanel
+            issues={importQualityIssues}
+            scores={importQualityScores}
+            onApplyFix={canEdit ? applySafeImportFix : undefined}
+            onOpenIssue={openImportQualityIssue}
+            onResolveIssue={canEdit ? resolveImportQualityIssue : undefined}
+            canApproveNarrativeOnly={isAdmin || role === 'Manager'}
+            onUndoFix={canEdit ? (issue) => {
+              const resolution = qualityResolutions.find((entry) => entry.issueId === issue.id);
+              if (resolution?.field === '__remove' && resolution.before && typeof resolution.before === 'object'
+                && 'tempId' in resolution.before && typeof resolution.before.tempId === 'string') {
+                const restoredItem = resolution.before as ImportPreviewItem;
+                setPreviewItems((current) => current.some((item) => item.tempId === restoredItem.tempId) ? current : [...current, restoredItem]);
+              }
+              if (resolution && resolution.field && resolution.field !== '__remove' && issue.target?.id) {
+                const field = resolution.field;
+                setPreviewItems((current) => current.map((item) => {
+                  if (item.tempId !== issue.target?.id) return item;
+                  if (field === 'text') return { ...item, originalSnippet: resolution.before === undefined ? undefined : String(resolution.before) };
+                  if (field === 'title') return { ...item, title: resolution.before === undefined ? undefined : String(resolution.before) };
+                  if (field === 'summary') return { ...item, summary: resolution.before === undefined ? '' : String(resolution.before) };
+                  const extractedData = { ...item.extractedData };
+                  if (resolution.before === undefined) delete extractedData[field];
+                  else extractedData[field] = resolution.before;
+                  if (field === 'indicatorId') {
+                    delete extractedData.narrativeOnly;
+                    delete extractedData.narrativeOnlyReason;
+                    delete extractedData.managerApproved;
+                    delete extractedData.autoLinkedIndicatorId;
+                    delete extractedData.autoLinkedWorkplanId;
+                  }
+                  return { ...item, extractedData };
+                }));
+              }
+              setQualityResolutions((current) => current.filter((entry) => entry.issueId !== issue.id));
+            } : undefined}
+            currentUserName={activeStaff.fullName}
+          />
           {importQualityIssues.some((issue) => issue.severity === 'blocker') && (
             <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">
               Written reason for overriding unresolved blockers
@@ -1414,22 +1708,35 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 const isWP = item.classification === 'WORKPLAN_PRIORITY';
                 const isPhoto = item.classification === 'PHOTO_HIGHLIGHT';
                 const isAgr = item.classification === 'AGRICULTURE_PRACTICAL_SKILLS';
-                const selectedActivities = previewItems.filter((entry) => entry.selected && (entry.targetEntity === 'activity' || entry.targetEntity === 'workplan'));
-                const activityIndex = selectedActivities.findIndex((entry) => entry.tempId === item.tempId);
-                const budgetIndex = previewItems.filter((entry) => entry.selected && entry.targetEntity === 'budget').findIndex((entry) => entry.tempId === item.tempId);
-                const resultIndex = selectedActivities.findIndex((entry) => entry.tempId === item.tempId);
-
                 return (
                   <div
                     key={item.tempId}
+                    ref={(element) => {
+                      if (element) previewCardRefs.current.set(item.tempId, element);
+                      else previewCardRefs.current.delete(item.tempId);
+                    }}
+                    data-preview-id={item.tempId}
+                    tabIndex={-1}
                     className={`w-full max-w-full min-w-0 box-border border rounded-xl p-4 transition-all ${
+                      highlightedPreviewId === item.tempId ? 'ring-4 ring-amber-400 ring-offset-2' :
                       item.selected
                         ? 'border-teal-700/60 bg-teal-50/15 shadow-xs'
                         : 'border-stone-200 bg-white opacity-70'
                     }`}
                   >
-                    {activityIndex >= 0 && <><span id={`quality-activities-${activityIndex}`} /><span id={`quality-results-${resultIndex}`} /></>}
-                    {budgetIndex >= 0 && <span id={`quality-budgets-${budgetIndex}`} />}
+                    {item.extractedData.autoLinkedIndicatorId && (
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+                        <span>Exact match linked to indicator {String(item.extractedData.autoLinkedIndicatorId)}.</span>
+                        <button type="button" className="font-bold underline" onClick={() => setPreviewItems((current) => current.map((entry) => {
+                          if (entry.tempId !== item.tempId) return entry;
+                          const extractedData = { ...entry.extractedData };
+                          delete extractedData.indicatorId;
+                          delete extractedData.autoLinkedIndicatorId;
+                          delete extractedData.autoLinkedWorkplanId;
+                          return { ...entry, extractedData };
+                        }))}>Undo link</button>
+                      </div>
+                    )}
                     <div className="flex flex-col sm:flex-row items-start justify-between gap-3 min-w-0">
                       {/* Left: Checkbox + Content */}
                       <div className="flex items-start gap-3 min-w-0 w-full sm:flex-1">

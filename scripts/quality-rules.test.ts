@@ -108,4 +108,61 @@ assert.ok(issueScores.impact < 100);
 assert.ok(issueScores.dataQuality < 100);
 assert.deepEqual(qualityScores(sensitiveFixture), issueScores);
 
+const targetedIssue = runQualityRules({
+  results: [{ id: 'result-stable-1', target: 10 }],
+});
+const target = targetedIssue.find((issue) => issue.rule === 'QUANT-04')?.target;
+assert.deepEqual(target, { kind: 'indicator-result', id: 'result-stable-1' }, 'targets must use stable record ids, not array indexes');
+const duplicateTargetIssues = runQualityRules({
+  results: [{ id: 'same-result', target: 10 }, { id: 'same-result', target: 10 }],
+});
+assert.equal(duplicateTargetIssues.filter((issue) => issue.rule === 'QUANT-04').length, 1, 'identical issues on one target are deduplicated');
+
+const safeTextIssues = runQualityRules({
+  previewQualityText: [{ id: 'preview-safe-1', summary: ' \t•  Activity  “note” — item  ' }],
+});
+const safeTextIssue = safeTextIssues.find((issue) => issue.rule === 'IMPORT-TEXT-NORMALIZE-01');
+assert.equal(safeTextIssue?.target?.id, 'preview-safe-1');
+assert.equal(safeTextIssue?.target?.field, 'summary');
+assert.equal(safeTextIssue?.fix?.safe, true);
+assert.equal(safeTextIssue?.fix?.suggestedValue, 'Activity "note" - item');
+assert.ok(!runQualityRules({ narrativeSections: [{ id: 'narrative-1', text: 'In Q2 2026, 12 girls took part in 4 art sessions at Zomba.' }] })
+  .some((issue) => issue.rule === 'QUANT-02'), 'an issue stops firing after its rule condition is corrected');
+assert.equal(runQualityRules({ narrativeSections: [{ text: 'The girls participated in various activities.' }] })
+  .find((issue) => issue.rule === 'QUANT-02')?.fix?.safe, false, 'vague narrative is never marked safe for automatic fixing');
+
+const validResult = runQualityRules({
+  results: [{
+    id: 'valid-result',
+    indicatorName: 'Attendance',
+    definition: 'Girls attending school during the period',
+    unit: 'girls',
+    actual: 8,
+    target: 10,
+    enrolment: 10,
+    evidenceDate: '2026-10-01',
+    method: 'attendance register',
+    evidenceNote: 'School register, 1 October',
+    enteredBy: 'staff-a',
+    validity: {
+      checks: ['source-seen', 'definition-match'],
+      source: { name: 'Attendance register', reference: '1 October 2026' },
+      checkedBy: 'staff-b',
+      checkedAt: '2026-10-04',
+      note: 'Register checked against the attendance definition.',
+    },
+  }],
+});
+assert.ok(!validResult.some((issue) => issue.rule === 'DQ-VALIDITY'), 'source plus definition match and plausible value passes validity');
+const invalidResult = runQualityRules({
+  results: [{ id: 'invalid-result', indicatorName: 'Attendance', unit: 'girls', actual: 12, enrolment: 10, validity: { checks: [] } }],
+});
+assert.match(invalidResult.find((issue) => issue.rule === 'DQ-VALIDITY')?.message || '', /source|cross-check/i);
+assert.ok(invalidResult.some((issue) => issue.rule === 'DQ-VALIDITY' && issue.message.includes('plausible range')));
+
+const importDefaultResults = runQualityRules({
+  results: [{ id: 'import-default', target: 12, actual: 10, method: 'attendance register', source: 'School attendance report' }],
+});
+assert.ok(!importDefaultResults.some((issue) => issue.rule === 'DQ-RELIABILITY'));
+
 console.log(`Synthetic quality-rules tests passed (${ruleCases.length} rule scenarios).`);

@@ -8,6 +8,7 @@ import { archiveGeneratedReport } from '../../services/attachmentService';
 import { ReportConfig, generateWordReport, reviewReportQuality } from '../../services/reportGenerators';
 import { qualityScores } from '../../services/qualityRules';
 import { QualityCheckPanel } from '../QualityCheckPanel';
+import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { downloadCSV } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -47,6 +48,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const [salaryLoadFailed, setSalaryLoadFailed] = useState(false);
   const [message, setMessage] = useState('');
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
+  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string }>>([]);
 
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
@@ -152,6 +154,10 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   };
   const reportQualityIssues = reviewReportQuality(permittedDb, reportQualityConfig);
   const reportQualityScores = qualityScores(reportQualityIssues);
+  const auditedQualityIssues = reportQualityIssues.map((issue) => ({
+    ...issue,
+    status: qualityResolutions.find((entry) => entry.issueId === issue.id)?.status || issue.status,
+  }));
   const qualityAnnexRows = [
     ['SCORE', 'Quantification', '', `${reportQualityScores.quantification}/100`, ''],
     ['SCORE', 'Impact evidence', '', `${reportQualityScores.impact}/100`, ''],
@@ -192,8 +198,9 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       photoCount: 0,
       tableCount: 1,
       status: 'Generated',
-      qualityIssues: reportQualityIssues,
+      qualityIssues: auditedQualityIssues,
       qualityScores: reportQualityScores,
+      qualityResolutions,
       blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     };
     await appendReportHistory(record);
@@ -269,7 +276,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       dateRange: startDate || endDate ? { start: startDate || undefined, end: endDate || undefined } : undefined,
       selectedHouseholdId: filters.householdId,
       executiveSummary: narrative,
-      qualityIssues: reportQualityIssues,
+      qualityIssues: auditedQualityIssues,
       qualityScores: reportQualityScores,
       blockerOverrideReason,
       recommendationsNotes: followUpNotes,
@@ -309,7 +316,29 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         <h3 className="text-base font-black text-stone-900">Management reports</h3>
         <p className="text-xs text-stone-500">Exports contain filtered records and figures already stored in SHINE. No values are estimated or generated from mock data.</p>
       </div>
-      <QualityCheckPanel issues={reportQualityIssues} scores={reportQualityScores} />
+      <QualityCheckPanel
+        issues={reportQualityIssues}
+        scores={reportQualityScores}
+        canApproveNarrativeOnly
+        currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}
+        onOpenIssue={(issue) => {
+          if (!issue.target) return;
+          const record = Array.from(document.querySelectorAll<HTMLElement>('[data-quality-record-id]'))
+            .find((element) => element.dataset.qualityRecordId === issue.target?.id);
+          const table = record || document.getElementById('management-report-table');
+          table?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          table?.focus({ preventScroll: true });
+        }}
+        onResolveIssue={(issue, resolution: QualityIssueResolution) => {
+          if (resolution.status !== 'overridden' || resolution.note.trim().length < 10) return false;
+          setQualityResolutions((current) => [
+            ...current.filter((entry) => entry.issueId !== issue.id),
+            { issueId: issue.id, status: resolution.status, note: resolution.note, by: staffProfile?.fullName || currentUser?.email || 'Management user', at: new Date().toISOString() },
+          ]);
+          return true;
+        }}
+        onUndoFix={(issue) => setQualityResolutions((current) => current.filter((entry) => entry.issueId !== issue.id))}
+      />
       {reportQualityIssues.some((issue) => issue.severity === 'blocker') && (
         <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">
           Written reason for overriding report blockers
@@ -343,7 +372,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         <button onClick={handleWordSummary} className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-800"><FileText className="h-4 w-4" />Export Word report</button>
       </div>
       {message && <p role="status" className="text-xs text-teal-800">{message}</p>}
-      <div className="overflow-x-auto rounded-lg border border-stone-200">
+      <div id="management-report-table" tabIndex={-1} className="overflow-x-auto rounded-lg border border-stone-200">
         <table className="min-w-full text-left text-xs"><thead className="bg-stone-50"><tr>{rows.headers.map((header) => <th key={header} className="whitespace-nowrap px-3 py-2 font-bold text-stone-600">{header}</th>)}</tr></thead><tbody className="divide-y divide-stone-100">{rows.rows.slice(0, 20).map((row, index) => <tr key={`${reportId}-${index}`}>{row.map((cell, cellIndex) => <td key={cellIndex} className="whitespace-nowrap px-3 py-2 text-stone-700">{cell}</td>)}</tr>)}</tbody></table>
         {rows.rows.length === 0 && <p className="p-4 text-center text-xs text-stone-500">No records match these filters.</p>}
         {rows.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 of {rows.rows.length} rows. CSV includes every matching row.</p>}

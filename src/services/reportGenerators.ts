@@ -116,12 +116,15 @@ export function reviewReportQuality(db: AppDatabase, config: ReportConfig): Qual
     evidenceNote: item.notes,
     evidenceDate: item.updatedAt,
     verificationStatus: item.status === 'Completed' ? 'verified' : 'unverified',
-    method: item.indicatorId ? 'workplan indicator' : undefined,
+    method: item.measurementMethod || (item.indicatorId ? 'workplan indicator' : undefined),
+    source: item.dataSource,
+    validity: item.validity,
   }));
   const summaryText = config.executiveSummary || (config.includeSections.executiveSummary ? buildFactualReportNarrative(db, config) : '');
   const narrativeSections = [
-    ...(summaryText ? [{ title: 'Executive summary', text: summaryText, results: workplanResults }] : []),
+    ...(summaryText ? [{ id: 'report-executive-summary', title: 'Executive summary', text: summaryText, results: workplanResults }] : []),
     ...(config.structuredTables || []).map((table) => ({
+      id: `report-table-${table.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
       title: table.title,
       text: table.rows.map((row) => row.map(String).join(' ')).join('. '),
       results: workplanResults,
