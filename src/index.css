@@ -2266,3 +2266,17 @@
 #app-shell[data-mobile-view="ios"]:has(#dashboard-view) #dashboard-view .shine-card [class~="text-stone-800"] {
 	color: #f1f5f9 !important;
 }
+
+#app-shell #app-header .offline-indicator,
+#app-shell[data-mobile-view="ios"] #app-header .offline-indicator,
+#app-shell[data-mobile-view="foundation"] #app-header .offline-indicator {
+	background: #fef3c7 !important;
+	border-color: #d97706 !important;
+	color: #78350f !important;
+}
+
+#app-shell #app-header .offline-indicator :is(span, svg),
+#app-shell[data-mobile-view="ios"] #app-header .offline-indicator :is(span, svg),
+#app-shell[data-mobile-view="foundation"] #app-header .offline-indicator :is(span, svg) {
+	color: #78350f !important;
+}

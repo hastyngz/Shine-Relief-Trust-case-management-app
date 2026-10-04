@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, DollarSign, LineChart, ListPlus, Mic, Plus, Save, Search, Sparkles, Utensils, X } from 'lucide-react';
 import type { AppDatabase, FeedingProgramLog, MarketPriceRecord, MeetingRecord, WhatIfScenario } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -40,6 +40,7 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
   const [search, setSearch] = useState('');
   const [askQuestion, setAskQuestion] = useState('');
   const [message, setMessage] = useState('');
+  const [updatedAt, setUpdatedAt] = useState(() => new Date());
   const [meetingAudioText, setMeetingAudioText] = useState('');
   const [meetingForm, setMeetingForm] = useState({ title: '', dateTime: `${today()}T10:00`, location: '', attendees: '', minutesText: '', summaryAndOutcomes: '' });
   const [feedingForm, setFeedingForm] = useState({ date: today(), studentsPresent: '', mealsServed: '', foodItems: '', quantities: '', estimatedCost: '', actualCost: '', notes: '' });
@@ -48,13 +49,20 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
   const [scenario, setScenario] = useState<WhatIfScenario>({ id: 'draft', name: 'Scenario', foodPricePercent: 10, fuelPricePercent: 0, transportPercent: 0, studentPopulationPercent: 0, feedingDaysChange: 0, increasedEnrollmentPercent: 0, createdBy: '', createdAt: '' });
   const [aiSettings, setAISettings] = useState(() => db.aiSettings?.[0] || { id: 'default', enabled: true, speechToText: true, textToSpeech: true, documentAnalysis: true, naturalLanguageSearch: true, dailyUsageLimit: 100, updatedByUid: currentUser?.uid || '', updatedAt: new Date().toISOString() });
 
+  useEffect(() => {
+    setUpdatedAt(new Date());
+  }, [db]);
+
   const meetings = db.meetings || [];
   const feedingLogs = db.feedingProgramLogs || [];
   const marketPrices = db.marketPrices || [];
   const earlyYearsRecords = db.earlyYearsRecords || [];
-  const forecast = calculateBudgetForecast(db.budgets || [], 1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100));
-  const feedingInsight = calculateFeedingCostInsight(feedingLogs);
-  const scenarioResult = calculateWhatIfScenario(forecast.forecast, scenario);
+  const forecast = useMemo(
+    () => calculateBudgetForecast(db.budgets || [], 1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100)),
+    [db.budgets, db.forecastSettings]
+  );
+  const feedingInsight = useMemo(() => calculateFeedingCostInsight(feedingLogs), [feedingLogs]);
+  const scenarioResult = useMemo(() => calculateWhatIfScenario(forecast.forecast, scenario), [forecast.forecast, scenario]);
   const budgetCategoryRows = useMemo(() => Array.from(new Set((db.budgets || []).map((item) => item.category))).map((category) => {
     const lines = (db.budgets || []).filter((item) => item.category === category);
     const approved = lines.reduce((sum, item) => sum + item.budgetAmount, 0);
@@ -235,7 +243,10 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
   return <div className="space-y-5 pb-12">
     <header className="flex flex-col gap-3 rounded-2xl bg-teal-950 p-5 text-white sm:flex-row sm:items-center sm:justify-between">
       <div><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-300">Phase 5 operations</p><h1 className="mt-1 text-2xl font-black">Intelligence & operational management</h1><p className="mt-1 max-w-2xl text-xs text-teal-100">Meetings, schedules, feeding, market prices, forecasts, and searchable operational records in one place.</p></div>
-      <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs"><CheckCircle2 className="h-4 w-4 text-emerald-300" />{role || 'Staff'} access</div>
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs"><CheckCircle2 className="h-4 w-4 text-emerald-300" />{role || 'Staff'} access</div>
+        <span className="text-[10px] text-teal-100">Updated {updatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+      </div>
     </header>
     <nav className="space-y-2 rounded-xl border border-stone-200 bg-white p-3">
       {tabGroups.map((group) => <div key={group.label}>

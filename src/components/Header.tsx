@@ -68,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const menuRef = useRef<HTMLDivElement>(null);
   const mobileActionsRef = useRef<HTMLDivElement>(null);
   const visualSettingsRef = useRef<HTMLDivElement>(null);
@@ -87,6 +88,16 @@ export const Header: React.FC<HeaderProps> = ({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const updateOnlineStatus = () => setIsOffline(!navigator.onLine);
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
   }, []);
 
   const handlePasswordReset = async () => {
@@ -140,6 +151,12 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Quick Action Controls, Cloud Status & User Session */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {isOffline && (
+              <div className="offline-indicator inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold" role="status" aria-live="polite" title="This device is offline; local changes will sync when a connection returns.">
+                <CloudOff className="h-3.5 w-3.5" />
+                <span>Offline</span>
+              </div>
+            )}
             {/* Firestore Cloud Status Indicator */}
             <div
               className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${

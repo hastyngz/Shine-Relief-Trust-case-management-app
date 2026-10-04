@@ -71,6 +71,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[] | null>(null);
   const [salaryHistoryError, setSalaryHistoryError] = useState(false);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState(() => new Date());
   const [showAllAttention, setShowAllAttention] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(
     typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
@@ -96,10 +97,13 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     const timer = window.setTimeout(() => setOverviewLoading(false), 0);
     return () => window.clearTimeout(timer);
   }, [db.girls.length, db.households.length, db.importAudits?.length]);
+  useEffect(() => {
+    setUpdatedAt(new Date());
+  }, [db]);
 
   const today = new Date().toISOString().slice(0, 10);
   const range = getPresetRange(preset, customStart, customEnd, new Date());
-  const filters: ManagementFilters = {
+  const filters = useMemo<ManagementFilters>(() => ({
     ...range,
     financialYear: financialYear === 'ALL' ? undefined : financialYear,
     month: month === 'ALL' ? undefined : Number(month),
@@ -109,14 +113,17 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     staffId: staffId === 'ALL' ? undefined : staffId,
     status: taskStatus === 'ALL' ? undefined : taskStatus,
     priority: taskPriority === 'ALL' ? undefined : taskPriority,
-  };
-  const permittedDb = projectManagementDatabase(db, { canViewHealthRecords, canViewCaseReviews, canViewSafeguarding });
-  const programmeFilteredDb = programmeId === 'ALL' ? permittedDb : {
+  }), [range.startDate, range.endDate, financialYear, month, programme, householdId, category, staffId, taskStatus, taskPriority]);
+  const permittedDb = useMemo(
+    () => projectManagementDatabase(db, { canViewHealthRecords, canViewCaseReviews, canViewSafeguarding }),
+    [db, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]
+  );
+  const programmeFilteredDb = useMemo(() => programmeId === 'ALL' ? permittedDb : {
     ...permittedDb,
     budgets: (permittedDb.budgets || []).filter((item) => item.programmeId === programmeId),
     workplans: (permittedDb.workplans || []).filter((item) => item.programmeId === programmeId),
     programmeLogs: (permittedDb.programmeLogs || []).filter((item) => item.programmeId === programmeId),
-  };
+  }, [permittedDb, programmeId]);
   const gratuityByEmployee = useMemo(() => {
     if (!salaryHistory || salaryHistoryError) return undefined;
     const totals: Record<string, number> = {};
@@ -137,11 +144,19 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     }
     return totals;
   }, [salaryHistory, salaryHistoryError, staff, today]);
-  const analytics = buildManagementAnalytics(programmeFilteredDb, filters, staff, today, gratuityByEmployee);
-  const latestImport = [...(db.importAudits || [])].sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0];
-  const latestReportPeriod = [...(db.importAudits || [])]
-    .filter((record) => record.reportingPeriod)
-    .sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0]?.reportingPeriod;
+  const analytics = useMemo(
+    () => buildManagementAnalytics(programmeFilteredDb, filters, staff, today, gratuityByEmployee),
+    [programmeFilteredDb, filters, staff, today, gratuityByEmployee]
+  );
+  const latestImport = useMemo(
+    () => [...(db.importAudits || [])].sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0],
+    [db.importAudits]
+  );
+  const latestReportPeriod = useMemo(
+    () => [...(db.importAudits || [])].filter((record) => record.reportingPeriod)
+      .sort((left, right) => right.importedAt.localeCompare(left.importedAt))[0]?.reportingPeriod,
+    [db.importAudits]
+  );
   const hasOverviewData = db.girls.length > 0 || db.households.length > 0 || !!latestImport;
   const programmes = Array.from(new Set([
     ...(db.budgets || []).map((line) => line.programme),
@@ -170,13 +185,19 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     if (staffSort === 'completed') return b.completedTasks - a.completedTasks;
     return b.overdueTasks - a.overdueTasks;
   });
-  const phase5Feeding = calculateFeedingCostInsight(permittedDb.feedingProgramLogs || [], range.startDate, range.endDate);
-  const phase5Forecast = calculateBudgetForecast(programmeFilteredDb.budgets || [], 1 + ((permittedDb.forecastSettings?.[0]?.inflationPercent || 0) / 100));
+  const phase5Feeding = useMemo(
+    () => calculateFeedingCostInsight(permittedDb.feedingProgramLogs || [], range.startDate, range.endDate),
+    [permittedDb.feedingProgramLogs, range.startDate, range.endDate]
+  );
+  const phase5Forecast = useMemo(
+    () => calculateBudgetForecast(programmeFilteredDb.budgets || [], 1 + ((permittedDb.forecastSettings?.[0]?.inflationPercent || 0) / 100)),
+    [programmeFilteredDb.budgets, permittedDb.forecastSettings]
+  );
   const attentionItems = useMemo(
     () => buildNeedsAttention(permittedDb, today, canViewCaseReviews),
     [permittedDb, today, canViewCaseReviews]
   );
-  const programmePerformance = PROGRAMMES
+  const programmePerformance = useMemo(() => PROGRAMMES
     .filter((item) => programmeId === 'ALL' || item.id === programmeId)
     .map((item) => {
       const summary = summariseProgramme(permittedDb, item.id);
@@ -211,7 +232,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
         openWorkplans,
         yearlyIncome,
       };
-    });
+    }), [permittedDb, programmeId]);
 
   if (!canAccessManagementDashboard(isAdmin, role)) {
     return <div className="rounded-xl border border-rose-200 bg-white p-8 text-center"><h1 className="text-lg font-bold text-stone-900">Management access restricted</h1><p className="mt-2 text-sm text-stone-600">Only Administrators and Managers can view this dashboard.</p></div>;
@@ -222,7 +243,10 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
       <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm" aria-label="Executive Overview">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-3">
           <h1 className="text-base font-black text-stone-900">Executive Overview</h1>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600"><CheckCircle2 className="h-4 w-4 text-emerald-700" />Live operational view</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600"><CheckCircle2 className="h-4 w-4 text-emerald-700" />Live operational view</span>
+            <span className="text-[10px] text-stone-500">Updated {updatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+          </div>
         </div>
         {overviewLoading ? <p className="py-5 text-sm text-stone-600" role="status">Loading executive overview…</p> : !hasOverviewData ? <p className="py-5 text-sm text-stone-600">No operational records or imports are available yet.</p> : <div className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="min-w-0"><p className="text-xs font-semibold text-stone-600">Active girls</p><p className="mt-1 text-xl font-black text-stone-900">{analytics.cases.activeGirls}</p></div>
