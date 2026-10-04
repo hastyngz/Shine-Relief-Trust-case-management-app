@@ -42,6 +42,7 @@ interface NavigationProps {
   onSelectTab: (tab: NavTab) => void;
   girlsCount: number;
   housesCount: number;
+  pendingReviewCount: number;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -49,6 +50,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onSelectTab,
   girlsCount,
   housesCount,
+  pendingReviewCount,
 }) => {
   const { isAdmin, role, allStaff } = useAuth();
   const { totalUnreadCount, unreadMessagesCount } = useMessaging();
@@ -69,7 +71,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'activities', label: 'Group Activities', icon: Sparkles },
     { id: 'contacts', label: 'Contacts', icon: UserRound },
     { id: 'case-management', label: 'Case Management', icon: ClipboardList },
-    { id: 'operations', label: 'Operations & Intelligence', icon: BrainCircuit },
+    { id: 'operations', label: 'Operations', icon: BrainCircuit, count: pendingReviewCount > 0 ? pendingReviewCount : undefined },
     {
       id: 'messages',
       label: 'Messages',

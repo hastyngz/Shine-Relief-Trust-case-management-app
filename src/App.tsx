@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   AppDatabase,
   Girl,
@@ -53,6 +53,7 @@ import { Navigation, NavTab } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
 import { ManagementDashboard } from './components/ManagementDashboard';
 import { canAccessManagementDashboard } from './services/managementAnalytics';
+import { detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from './services/caseIntelligenceService';
 import { GirlsList } from './components/GirlsList';
 import { HouseholdsList } from './components/HouseholdsList';
 import { ActivitiesList } from './components/ActivitiesList';
@@ -177,6 +178,20 @@ function AppContent() {
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
   const [safeguardingCount, setSafeguardingCount] = useState<number>();
+  const pendingOperationsReviewCount = useMemo(() => {
+    const reviewDb = {
+      ...db,
+      healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
+      caseReviews: canViewCaseReviews ? db.caseReviews : [],
+    };
+    const savedSuggestions = reviewDb.intelligenceSuggestions || [];
+    const pendingSuggestions = detectIntelligenceSuggestions(reviewDb).filter((suggestion) =>
+      (savedSuggestions.find((saved) => saved.id === suggestion.id)?.reviewStatus || suggestion.reviewStatus) === 'suggested'
+    ).length;
+    const duplicateCount = findPotentialDuplicates(reviewDb).length;
+    const qualityCount = scanDataQuality(reviewDb).filter((issue) => issue.type !== 'duplicate_candidate').length;
+    return pendingSuggestions + duplicateCount + qualityCount;
+  }, [db, canViewHealthRecords, canViewCaseReviews]);
 
   useEffect(() => {
     if (!currentUser || isSuspended || (!isAdmin && !canViewSafeguarding)) {
@@ -1083,6 +1098,7 @@ function AppContent() {
         onSelectTab={handleSelectTab}
         girlsCount={db.girls.length}
         housesCount={db.households.length}
+        pendingReviewCount={pendingOperationsReviewCount}
       />
 
       {/* Toast Notification Alert */}
