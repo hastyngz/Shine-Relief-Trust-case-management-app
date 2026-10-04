@@ -943,6 +943,25 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       item.extractedData.beneficiaryName,
       ...(item.candidateGirls || []).map((girl) => girl.fullName),
     ]).filter((name): name is string => typeof name === 'string' && !!name.trim()),
+    identityReviews: previewItems.filter((item) => item.selected).flatMap((item) => {
+      if (item.identityResolution) return [];
+      const name = item.matchedName
+        || item.extractedData.employeeName
+        || item.extractedData.personName
+        || item.extractedData.beneficiaryName;
+      if (typeof name !== 'string' || !name.trim()) return [];
+      const candidateLists = [
+        ...(item.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
+        ...(item.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
+        ...(Array.isArray(item.extractedData.matchCandidates) ? item.extractedData.matchCandidates : [])
+          .filter((candidate: unknown): candidate is { id: string; name: string } =>
+            typeof candidate === 'object' && candidate !== null
+            && typeof (candidate as { id?: unknown }).id === 'string'
+            && typeof (candidate as { name?: unknown }).name === 'string'),
+      ];
+      const candidates = Array.from(new Map(candidateLists.map((candidate) => [candidate.id, candidate])).values());
+      return candidates.length ? [{ id: item.tempId, name, candidates }] : [];
+    }),
     options: {
       now: new Date().toISOString(),
       ukSpelling: true,
@@ -994,6 +1013,48 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setQualityResolutions((current) => [
         ...current.filter((entry) => entry.issueId !== issue.id),
         { issueId: issue.id, status: resolution.status, note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString() },
+      ]);
+      return true;
+    }
+    if (issue.rule === 'IDENTITY-FUZZY-01' && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
+      const value = resolution.value as { candidateId?: unknown };
+      const target = previewItems.find((item) => item.tempId === issue.target?.id);
+      if (!target || typeof value.candidateId !== 'string') return false;
+      const candidateList = [
+        ...(target.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
+        ...(target.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
+        ...(Array.isArray(target.extractedData.matchCandidates) ? target.extractedData.matchCandidates : [])
+          .filter((candidate: unknown): candidate is { id: string; name: string } =>
+            typeof candidate === 'object' && candidate !== null
+            && typeof (candidate as { id?: unknown }).id === 'string'
+            && typeof (candidate as { name?: unknown }).name === 'string'),
+      ];
+      const isNewPerson = value.candidateId === 'new-person';
+      const candidate = isNewPerson ? undefined : candidateList.find((person) => person.id === value.candidateId);
+      if (!isNewPerson && !candidate) return false;
+      const identityDecision = isNewPerson ? 'new-person' : 'existing-person';
+      const stillFires = runQualityRules({
+        identityReviews: [{
+          id: target.tempId,
+          name: target.matchedName || target.extractedData.employeeName || target.extractedData.personName || target.extractedData.beneficiaryName,
+          candidates: candidateList,
+          decision: identityDecision,
+        }],
+      }).some((candidateIssue) => candidateIssue.rule === issue.rule);
+      if (stillFires) return false;
+      const updated: ImportPreviewItem = {
+        ...target,
+        matchedId: candidate?.id,
+        matchedName: candidate?.name ?? target.matchedName,
+        identityResolution: identityDecision,
+        ...(target.targetEntity === 'payroll' && candidate ? {
+          extractedData: { ...target.extractedData, employeeId: candidate.id, employeeName: candidate.name },
+        } : {}),
+      };
+      setPreviewItems((current) => current.map((item) => item.tempId === target.tempId ? updated : item));
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'matchedId', before: target.matchedId, after: candidate?.id || 'new-person' },
       ]);
       return true;
     }

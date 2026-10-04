@@ -746,6 +746,43 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   }
 
   const identityRecords = recordsFor(nodes, /identit|person|girl|staff|payroll|budget|narrative|report/i);
+  const identityReviews = Array.isArray(root.identityReviews) ? root.identityReviews.filter(isRecord) : [];
+  for (const review of identityReviews) {
+    const sourceName = typeof review.name === 'string' ? review.name.trim() : '';
+    if (review.decision === 'new-person' || review.decision === 'existing-person') continue;
+    const candidates = Array.isArray(review.candidates)
+      ? review.candidates.filter(isRecord).flatMap((candidate) =>
+        typeof candidate.id === 'string' && typeof candidate.name === 'string'
+          ? [{ id: candidate.id, name: candidate.name }]
+          : [])
+      : [];
+    if (!sourceName || !candidates.length) continue;
+    const possible = matchNameCandidates(sourceName, candidates).possible;
+    const targetId = typeof review.id === 'string' ? review.id : '';
+    if (!possible.length || !targetId) continue;
+    const location = `identityReviews.${targetId}`;
+    add({
+      ...createIssue(
+        'IDENTITY-FUZZY-01',
+        'warning',
+        'Imported person name has possible matches and needs explicit human confirmation; no automatic merge was made.',
+        location,
+        'Select an existing person or explicitly mark this as a new person.',
+      ),
+      target: { kind: 'preview-item', id: targetId, field: 'matchedId' },
+      context: `Imported name: ${sourceName}. ${possible.length} possible match(es) found.`,
+      fix: {
+        type: 'choose-option',
+        safe: false,
+        field: 'matchedId',
+        options: [
+          ...possible.map((candidate) => ({ value: candidate.id, label: candidate.name })),
+          { value: 'new-person', label: 'This is a new person' },
+        ],
+        reversible: true,
+      },
+    });
+  }
   const suppliedNames = Array.isArray(root.identityNames) ? root.identityNames.filter((name): name is string => typeof name === 'string') : [];
   const candidateNames = new Set(suppliedNames);
   for (const entry of identityRecords) {
@@ -758,7 +795,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   const possibleNameMatch = nameCandidates.some((candidate, index) =>
     matchNameCandidates(candidate.name, nameCandidates.slice(index + 1)).possible.length > 0
   );
-  if (possibleNameMatch) {
+  if (possibleNameMatch && identityReviews.length === 0) {
     add(createIssue('IDENTITY-FUZZY-01', 'warning', 'Two person-name records are similar and need human confirmation; no automatic merge was made.', 'identities', 'Ask a manager to confirm whether these records refer to the same person.'));
   }
   const budgetNames = new Set(recordsFor(nodes, /budget/i).map((entry) => getField(entry.value as QualityValue, ['personName', 'fullName', 'employeeName', 'beneficiaryName'])).filter((name): name is string => typeof name === 'string').map(normalized));

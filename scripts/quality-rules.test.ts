@@ -64,6 +64,25 @@ const exampleSentence = runQualityRules({
 });
 assert.ok(exampleSentence.find((issue) => issue.rule === 'QUANT-02')?.suggestedFix?.includes('{period}'));
 
+const fuzzyIdentityIssues = runQualityRules({
+  identityReviews: [{
+    id: 'preview-person-1',
+    name: 'Magret Example',
+    candidates: [{ id: 'girl-1', name: 'Margaret Example' }],
+  }],
+});
+const fuzzyIdentityIssue = fuzzyIdentityIssues.find((issue) => issue.rule === 'IDENTITY-FUZZY-01');
+assert.equal(fuzzyIdentityIssue?.target?.id, 'preview-person-1');
+assert.deepEqual(fuzzyIdentityIssue?.fix?.options?.map((option) => option.value), ['girl-1', 'new-person']);
+assert.ok(!runQualityRules({
+  identityReviews: [{
+    id: 'preview-person-1',
+    name: 'Magret Example',
+    candidates: [{ id: 'girl-1', name: 'Margaret Example' }],
+    decision: 'existing-person',
+  }],
+}).some((issue) => issue.rule === 'IDENTITY-FUZZY-01'));
+
 const sensitiveFixture = {
   finalReport: true,
   options: { now: '2026-10-04T00:00:00.000Z', staleAfterDays: 45, maxReadingGrade: 8, ukSpelling: true },

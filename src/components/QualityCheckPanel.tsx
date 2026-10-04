@@ -233,6 +233,10 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       complete('resolved', { indicatorId: formValue });
       return;
     }
+    if (selectedIssue.rule === 'IDENTITY-FUZZY-01' && formValue) {
+      complete('resolved', { candidateId: formValue });
+      return;
+    }
     if (selectedIssue.rule === 'FIN-TOTAL-DISAGREEMENT-01' && formValue === 'keep-stated') {
       if (note.trim().length < 10) {
         setDialogError('Explain why the stated total is retained (at least 10 characters).');

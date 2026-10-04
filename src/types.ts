@@ -1252,6 +1252,7 @@ export interface ImportPreviewItem {
   classificationLabel?: string;
   matchedId?: string; // e.g. "SG-001", "SH-01", or "PER-001"
   matchedName?: string;
+  identityResolution?: 'existing-person' | 'new-person';
   matchConfidence?: 'exact' | 'high' | 'medium' | 'possible_match' | 'none';
   candidateGirls?: Array<{ id: string; fullName: string; school?: string; classLevel?: string }>;
   candidatePeople?: Array<{ id: string; fullName: string; personType: string; organisation?: string }>;
