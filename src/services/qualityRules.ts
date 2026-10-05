@@ -13,7 +13,7 @@ export type QualityIssue = {
     field?: string;
   };
   fix?: {
-    type: 'set-field' | 'choose-option' | 'text-input' | 'confirm' | 'external';
+    type: 'set-field' | 'choose-option' | 'text-input' | 'number-input' | 'confirm' | 'external';
     safe: boolean;
     field?: string;
     options?: Array<{ value: string; label: string }>;
@@ -224,8 +224,14 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   const add = (issue: QualityIssue): void => {
     const sourceNode = nodes.find((node) => node.path === issue.location);
     const target = issue.target || sourceNode?.target;
+    const sourceSentence = sourceNode
+      ? textOf(sourceNode.value).join(' ').match(/[^.!?]+[.!?]?/)?.[0]?.trim()
+      : undefined;
     const enriched: QualityIssue = {
       ...issue,
+      ...(!issue.context && sourceSentence && /^(?:QUANT|NARRATIVE|IMPACT|BASELINE)/.test(issue.rule)
+        ? { context: sourceSentence }
+        : {}),
       ...(target ? { id: `${issue.rule}:${target.kind}:${target.id}${target.field ? `:${target.field}` : ''}` } : {}),
       ...(target ? { target } : {}),
       status: issue.status || 'open',
@@ -291,7 +297,13 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       && (getNumber(result, ['target', 'planned', 'plannedValue']) ?? 0) > 0
       && getNumber(result, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']) !== undefined);
     if (finalReport ? !hasResultAgainstTarget : !hasResultAgainstTarget && !/\b\d+(?:[,.]\d+)?\s*(?:%|percent|people|girls|children|households|sessions|visits|days|months|years)?\b/i.test(sectionText)) {
-      add(createIssue('QUANT-01', finalReport ? 'blocker' : 'warning', 'Programme section has no quantitative result against a target.', entry.path, 'Add a measured result and its target.'));
+      const section = isRecord(entry.value) ? entry.value : {};
+      const heading = String(getField(section, ['heading', 'title', 'name']) ?? 'This section').trim();
+      add({
+        ...createIssue('QUANT-01', finalReport ? 'blocker' : 'warning', 'Programme section has no quantitative result against a target.', entry.path, 'Add a measured result and its target.'),
+        context: `${heading}: ${sectionText.split(/[.!?]+/).find((sentence) => sentence.trim())?.trim() || sectionText}`,
+        fix: { type: 'number-input', safe: false, field: 'results', reversible: true },
+      });
     }
     const vague = sectionText.match(/\b(?:various|several|many|some|a number of|a lot of|regularly|different activities|the girls participated|the children took part|numerous|significant)\b[^.!?]*[.!?]?/i)?.[0];
     if (vague) {
@@ -299,7 +311,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
         ...createIssue('QUANT-02', 'warning', 'Narrative includes an unquantified statement.', entry.path, 'Replace it with: “In {period}, {n} {who} took part in {n} {activity type} at {place}.”'),
         context: vague,
         whyMatters: 'Donors need measurable evidence to understand who was reached and what was delivered.',
-        fix: { type: 'text-input', safe: false, field: 'text', reversible: true },
+        fix: { type: 'number-input', safe: false, field: 'text', reversible: true },
       });
     }
     if (sectionText.match(/(?:\d+(?:\.\d+)?\s*%|percent)/i) && !/\b(?:n\s*=\s*\d+|\b\d+\s+of\s+\d+|\b\d+\s+(?:girls|children|people|participants|households))\b/i.test(sectionText)) {
@@ -402,7 +414,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       });
       add({
         ...createIssue('QUANT-03', finalReport ? 'blocker' : 'warning', 'Activity is not mapped to a result or manager-approved narrative-only reason.', activity.path, 'Link an indicator result or record a manager-approved narrative-only reason.'),
-        context: String(getField(record, ['title', 'activity', 'name']) ?? ''),
+        context: String(getField(record, ['description', 'summary', 'title', 'activity', 'name']) ?? ''),
         fix: { type: 'choose-option', safe: false, field: 'indicatorId', options: [...options, { value: 'narrative-only', label: 'Narrative only (requires manager approval)' }], reversible: true },
       });
     }
@@ -486,7 +498,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       const missing = [...missingValidity, ...(!validityNote ? ['a validation note'] : [])];
       add({
         ...createIssue('DQ-VALIDITY', 'warning', `Validity check incomplete: ${missing.join('; ')}.`, entry.path, 'Check the indicator definition and document the source, comparison, plausible range, and review note.'),
-        context: `Indicator: ${String(getField(record, ['indicatorName', 'name', 'title']) ?? 'Not named')} · Definition: ${String(getField(record, ['definition', 'indicatorDefinition']) ?? 'Not recorded')} · Unit: ${String(record.unit ?? 'Not recorded')} · Value: ${reported ?? 'Not recorded'}${plausible ? ' · plausible-range check passed' : ' · plausible-range check failed'}`,
+        context: `Measure: ${String(getField(record, ['indicatorName', 'name', 'title']) ?? 'Not named')} · Measure details: ${String(getField(record, ['definition', 'indicatorDefinition']) ?? 'Not recorded')} · Unit: ${String(record.unit ?? 'Not recorded')} · Value: ${reported ?? 'Not recorded'}${plausible ? ' · plausible-range check passed' : ' · plausible-range check failed'}`,
       });
     }
     if (validity?.checkedBy && getField(record, ['enteredBy', 'createdBy', 'createdByUid']) === validity.checkedBy) {
@@ -505,7 +517,11 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       add(createIssue('DQ-PRECISION', 'info', 'Result precision is not described.', entry.path, 'State the rounding rule or precision used.'));
     }
     if (!getField(record, ['method', 'measurementMethod', 'dataCollectionMethod'])) {
-      add(createIssue('DQ-RELIABILITY', 'info', 'Result has no measurement method recorded.', entry.path, 'Record the method so it can be applied consistently in later periods.'));
+      add({
+        ...createIssue('DQ-RELIABILITY', 'info', 'Result has no measurement method recorded.', entry.path, 'Record the method so it can be applied consistently in later periods.'),
+        context: `${reported ?? 'No number'}: ${String(getField(record, ['title', 'activity', 'name', 'indicatorName']) ?? 'Activity')}`,
+        fix: { type: 'choose-option', safe: false, field: 'method', reversible: true },
+      });
     }
   }
 

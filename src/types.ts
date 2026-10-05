@@ -1155,7 +1155,7 @@ export interface ImportAuditRecord {
     location: string;
     suggestedFix?: string;
     target?: { kind: 'preview-item' | 'indicator-result' | 'budget-item' | 'workplan-item' | 'narrative-section' | 'report-section'; id: string; field?: string };
-    fix?: { type: 'set-field' | 'choose-option' | 'text-input' | 'confirm' | 'external'; safe: boolean; field?: string; options?: Array<{ value: string; label: string }>; suggestedValue?: unknown; reversible: boolean };
+    fix?: { type: 'set-field' | 'choose-option' | 'text-input' | 'number-input' | 'confirm' | 'external'; safe: boolean; field?: string; options?: Array<{ value: string; label: string }>; suggestedValue?: unknown; reversible: boolean };
     status?: 'open' | 'resolved' | 'overridden' | 'pending-approval';
     context?: string;
     whyMatters?: string;
@@ -1362,7 +1362,7 @@ export interface ReportHistoryRecord {
     location: string;
     suggestedFix?: string;
     target?: { kind: 'preview-item' | 'indicator-result' | 'budget-item' | 'workplan-item' | 'narrative-section' | 'report-section'; id: string; field?: string };
-    fix?: { type: 'set-field' | 'choose-option' | 'text-input' | 'confirm' | 'external'; safe: boolean; field?: string; options?: Array<{ value: string; label: string }>; suggestedValue?: unknown; reversible: boolean };
+    fix?: { type: 'set-field' | 'choose-option' | 'text-input' | 'number-input' | 'confirm' | 'external'; safe: boolean; field?: string; options?: Array<{ value: string; label: string }>; suggestedValue?: unknown; reversible: boolean };
     status?: 'open' | 'resolved' | 'overridden' | 'pending-approval';
     context?: string;
     whyMatters?: string;

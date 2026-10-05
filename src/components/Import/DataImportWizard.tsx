@@ -1058,6 +1058,33 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       ]);
       return true;
     }
+    if (issue.rule === 'DQ-RELIABILITY' && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
+      const value = resolution.value as { method?: unknown; applyToAll?: unknown };
+      if (typeof value.method !== 'string' || !value.method.trim()) return false;
+      const target = previewItems.find((item) => item.tempId === issue.target?.id);
+      if (!target) return false;
+      const resultItems = previewItems.filter((item) => item.selected
+        && ['activity', 'workplan'].includes(item.targetEntity)
+        && (item.extractedData.actual !== undefined || item.extractedData.completedCount !== undefined));
+      const affectedIds = value.applyToAll === true ? resultItems.map((item) => item.tempId) : [target.tempId];
+      const stillFires = runQualityRules({
+        results: [{
+          ...target.extractedData,
+          id: target.tempId,
+          method: value.method,
+          actual: target.extractedData.actual ?? target.extractedData.completedCount,
+        }],
+      }).some((candidate) => candidate.rule === issue.rule);
+      if (stillFires) return false;
+      setPreviewItems((current) => current.map((item) => affectedIds.includes(item.tempId)
+        ? { ...item, extractedData: { ...item.extractedData, method: value.method } }
+        : item));
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'method', before: target.extractedData.method, after: value.method },
+      ]);
+      return true;
+    }
     if (issue.rule === 'DQ-VALIDITY' && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
       const validity = resolution.value as Record<string, unknown>;
       const target = previewItems.find((item) => item.tempId === issue.target?.id);

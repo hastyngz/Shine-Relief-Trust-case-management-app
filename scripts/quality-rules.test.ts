@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { qualityScores, runQualityRules } from '../src/services/qualityRules';
+import { qualityMessage, qualityMessageCatalogue } from '../src/services/qualityMessages';
 
 const ruleCases: Array<[string, unknown]> = [
   ['QUANT-01', { finalReport: true, narrativeSections: [{ text: 'Activity delivery was completed.' }] }],
@@ -58,6 +59,25 @@ const ruleCases: Array<[string, unknown]> = [
 for (const [rule, input] of ruleCases) {
   assert.ok(runQualityRules(input).some((issue) => issue.rule === rule), `expected ${rule} issue`);
 }
+
+const bannedMessageWords = /\b(?:programme section|indicator|narrative|validity|reliability|quantitative|target result|disaggregation|baseline)\b/i;
+for (const [rule, template] of Object.entries(qualityMessageCatalogue())) {
+  for (const value of Object.values(template)) {
+    if (typeof value === 'string') assert.ok(!bannedMessageWords.test(value), `${rule} contains technical wording: ${value}`);
+    else for (const example of value) assert.ok(!bannedMessageWords.test(example), `${rule} contains technical wording: ${example}`);
+  }
+}
+for (const [rule] of ruleCases) {
+  assert.ok(qualityMessageCatalogue()[rule], `missing plain-language message for ${rule}`);
+}
+
+const activityQuestion = (text: string) => qualityMessage({
+  id: 'question-test', severity: 'warning', rule: 'QUANT-03', message: 'ignored', location: 'test', context: text,
+}).question;
+assert.match(activityQuestion('Cooperative learning: The girls participated in cooperative learning.'), /cooperative learning/i);
+assert.match(activityQuestion('Guest speakers visited the school.'), /guest speakers visited, and how many girls attended/i);
+assert.match(activityQuestion('Field visits: children went to the farm.'), /field visits were made, and how many girls went/i);
+assert.match(activityQuestion('Vocational training: Learners took part.'), /vocational training, and in which courses/i);
 
 const exampleSentence = runQualityRules({
   narrativeSections: [{ text: 'The girls participated in various activities.' }],

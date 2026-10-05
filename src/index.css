@@ -2345,7 +2345,10 @@
 #app-shell #app-header .header-brand-name,
 #app-shell[data-theme] #app-header .header-brand-name,
 #app-shell[data-animated-glass="true"] #app-header .header-brand-name {
-	color: var(--theme-text-on-primary, #ffffff) !important;
+	background: #ffffff !important;
+	border-radius: 0.25rem;
+	color: #042f2e !important;
+	padding: 0.15rem 0.3rem;
 }
 
 #app-shell #app-header .mobile-header-overflow,
@@ -2354,5 +2357,12 @@
 #app-shell #app-header .mobile-header-overflow svg,
 #app-shell[data-theme] #app-header .mobile-header-overflow svg,
 #app-shell[data-animated-glass="true"] #app-header .mobile-header-overflow svg {
-	color: var(--theme-text-on-primary, #ffffff) !important;
+	color: #042f2e !important;
+}
+
+#app-shell #app-header .mobile-header-overflow,
+#app-shell[data-theme] #app-header .mobile-header-overflow,
+#app-shell[data-animated-glass="true"] #app-header .mobile-header-overflow {
+	background: #ffffff !important;
+	border: 1px solid #ffffff;
 }

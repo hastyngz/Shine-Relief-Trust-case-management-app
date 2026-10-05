@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { QualityIssue } from '../services/qualityRules';
+import { qualityMessage } from '../services/qualityMessages';
 
 export interface QualityIssueResolution {
   status: 'resolved' | 'overridden' | 'pending-approval';
@@ -32,7 +33,19 @@ const severityLabel: Record<QualityIssue['severity'], string> = {
 const PAGE_SIZE = 25;
 
 function issueKey(issue: QualityIssue): string {
-  return `${issue.rule}|${issue.message}`;
+  return issue.rule;
+}
+
+function renderIssueQuote(issue: QualityIssue): React.ReactNode {
+  const quote = qualityMessage(issue).quote;
+  if (issue.rule !== 'QUANT-02') return quote;
+  const match = /\b(?:various|several|many|some|regularly|the girls participated)\b/i.exec(quote);
+  if (!match || match.index === undefined) return quote;
+  return <>
+    {quote.slice(0, match.index)}
+    <mark className="rounded bg-amber-200 px-0.5">{match[0]}</mark>
+    {quote.slice(match.index + match[0].length)}
+  </>;
 }
 
 export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
@@ -68,8 +81,11 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   const [validityDefinitionMatched, setValidityDefinitionMatched] = useState(false);
   const [validityCheckedBy, setValidityCheckedBy] = useState('');
   const [applyValidityToAll, setApplyValidityToAll] = useState(false);
+  const [reliabilityMethod, setReliabilityMethod] = useState('');
+  const [applyReliabilityToAll, setApplyReliabilityToAll] = useState(false);
   const [dialogError, setDialogError] = useState('');
   const [confirmBatch, setConfirmBatch] = useState(false);
+  const [showSmallSuggestions, setShowSmallSuggestions] = useState(false);
   const [lastBatch, setLastBatch] = useState<QualityIssue[]>([]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -106,6 +122,10 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     ? allOpen
     : [];
   const filteredIssues = baseItems.filter((issue) =>
+    issue.rule !== 'STYLE-SENTENCE-LENGTH-01'
+    &&
+    (showSmallSuggestions || issue.severity !== 'info')
+    &&
     (severityFilter === 'all' || issue.severity === severityFilter)
     && (ruleFilter === 'all' || issue.rule === ruleFilter));
   const grouped = useMemo(() => {
@@ -124,6 +144,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   const selectedGroup = grouped.find((group) => group.key === expandedGroup);
   const visibleGroupIssues = selectedGroup?.issues.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) || [];
   const rules = Array.from(new Set(issues.map((issue) => issue.rule))).sort();
+  const numberIssues = allOpen.filter((issue) => ['QUANT-01', 'QUANT-02', 'QUANT-03'].includes(issue.rule)).length;
 
   useEffect(() => {
     if (!selectedIssue) return undefined;
@@ -135,6 +156,19 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setSelectedIssue(null);
+        return;
+      }
+      if (selectedIssue.rule === 'DQ-RELIABILITY') {
+        const method = reliabilityMethod === 'other' ? formValue.trim() : reliabilityMethod;
+        if (!method) {
+          setDialogError('Choose how this number was counted.');
+          return;
+        }
+        if (reliabilityMethod === 'other' && !method) {
+          setDialogError('Describe the counting method.');
+          return;
+        }
+        complete('resolved', { method, applyToAll: applyReliabilityToAll });
         return;
       }
       if (event.key !== 'Tab' || !dialogRef.current) return;
@@ -176,6 +210,8 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     setValidityDefinitionMatched(false);
     setValidityCheckedBy('');
     setApplyValidityToAll(false);
+    setReliabilityMethod('');
+    setApplyReliabilityToAll(false);
     setDialogError('');
   };
 
@@ -192,7 +228,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     };
     const stoppedFiring = onResolveIssue?.(selectedIssue, resolution) === true;
     if (!stoppedFiring && status === 'resolved') {
-      setDialogError('The rule still applies. The issue remains open; review the saved value and try again.');
+      setDialogError('This still needs attention. Check the saved change and try again.');
       return;
     }
     setResolved((current) => [
@@ -289,9 +325,13 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         <div>
           <h2 className="text-sm font-bold text-stone-900">Quality check</h2>
           <p className="mt-1 text-xs text-stone-600" aria-live="polite">
-            {allOpen.length ? `${allOpen.length} open issue(s) need review.` : 'No open quality issues detected.'}
+            {numberIssues ? `${numberIssues} activities still need a number.` : allOpen.length ? `${allOpen.length} items still need a check.` : 'No open items need a check.'}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
+            <label className="flex items-center gap-1 text-xs text-stone-700">
+              <input type="checkbox" checked={showSmallSuggestions} onChange={(event) => { setShowSmallSuggestions(event.target.checked); setPage(0); }} />
+              Show small suggestions
+            </label>
             <label className="text-xs text-stone-700">Severity
               <select className="ml-1 rounded border border-stone-300 p-1" value={severityFilter} onChange={(event) => { setSeverityFilter(event.target.value); setPage(0); }}>
                 <option value="all">All</option><option value="blocker">Blocker</option><option value="warning">Warning</option><option value="info">Info</option>
@@ -304,7 +344,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
             </label>
             <label className="text-xs text-stone-700">Status
               <select className="ml-1 rounded border border-stone-300 p-1" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(0); }}>
-                <option value="open">Open</option><option value="pending-approval">Pending approval</option><option value="resolved">Resolved / overridden</option>
+                <option value="open">Open</option><option value="pending-approval">Needs manager approval</option><option value="resolved">Fixed</option>
               </select>
             </label>
           </div>
@@ -334,12 +374,13 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         <article key={group.key} className="mt-3 rounded-lg border border-stone-200 p-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold text-stone-900">{group.issues[0].rule}: {group.issues[0].message}</p>
-              <p className="mt-1 text-[11px] text-stone-600">{severityLabel[group.severity]} · {group.issues.length} record(s)</p>
+              <p className="text-xs font-semibold text-stone-900">{qualityMessage(group.issues[0]).title}</p>
+              <p className="mt-1 text-[11px] text-stone-600">{group.issues.length} item{group.issues.length === 1 ? '' : 's'} · {severityLabel[group.severity]} <span className="ml-1 text-stone-400">Ref: {group.issues[0].rule}</span></p>
+              <p className="mt-1 break-words text-[11px] text-stone-600">“{renderIssueQuote(group.issues[0])}”</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="rounded border border-stone-400 px-2 py-1 text-xs font-semibold" onClick={() => { setExpandedGroup(group.key); setPage(0); }}>
-                Review one by one
+                Fix these one by one
               </button>
               {group.safeFixes.length > 0 && (
                 <button type="button" className="rounded border border-teal-700 px-2 py-1 text-xs font-bold text-teal-900" onClick={() => { setExpandedGroup(group.key); setConfirmBatch(true); }}>
@@ -353,12 +394,11 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
               {visibleGroupIssues.map((issue) => (
                 <div key={issue.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-2 text-xs">
                   <div className="min-w-0">
-                    <p className="break-words text-stone-800">{issue.context || issue.location}</p>
-                    {issue.suggestedFix && <p className="mt-1 text-stone-500">{issue.suggestedFix}</p>}
+                    <p className="break-words text-stone-800">“{renderIssueQuote(issue)}”</p>
+                    {issue.target && onOpenIssue && canOpenIssue?.(issue) !== false && <button type="button" className="mt-1 text-[11px] text-teal-800 underline" onClick={() => onOpenIssue(issue)}>Show in document</button>}
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    {issue.target && onOpenIssue && canOpenIssue?.(issue) !== false && <button type="button" className="underline" onClick={() => onOpenIssue(issue)}>Go to record</button>}
-                    <button type="button" className="rounded bg-teal-800 px-2 py-1 font-semibold text-white" onClick={() => openDialog(issue)}>Review / fix</button>
+                    <button type="button" className="rounded bg-teal-800 px-2 py-1 font-semibold text-white" onClick={() => openDialog(issue)}>{qualityMessage(issue).buttonLabel}</button>
                   </div>
                 </div>
               ))}
@@ -420,15 +460,18 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       {selectedIssue && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
           <div ref={dialogRef} className="max-h-[100dvh] min-h-[70dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 text-stone-900 shadow-xl sm:min-h-0 sm:max-w-xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="quality-dialog-title" aria-describedby="quality-dialog-description" tabIndex={-1}>
-            <h3 id="quality-dialog-title" className="text-base font-bold">{selectedIssue.rule} · Review quality issue</h3>
-            <p id="quality-dialog-description" className="mt-2 text-sm">{selectedIssue.message}</p>
-            {selectedIssue.context && <blockquote className="mt-3 rounded border-l-4 border-amber-500 bg-amber-50 p-3 text-sm">{selectedIssue.context}</blockquote>}
-            <p className="mt-2 text-xs text-stone-600">{selectedIssue.whyMatters || selectedIssue.suggestedFix || 'Review the source record and correct or document the result.'}</p>
+            <h3 id="quality-dialog-title" className="text-base font-bold">{qualityMessage(selectedIssue).title}</h3>
+            <p className="mt-1 text-[10px] text-stone-400">Ref: {selectedIssue.rule}</p>
+            <p id="quality-dialog-description" className="mt-2 text-sm">{qualityMessage(selectedIssue).why}</p>
+            <blockquote className="mt-3 rounded border-l-4 border-amber-500 bg-amber-50 p-3 text-sm">{renderIssueQuote(selectedIssue)}</blockquote>
+            {selectedIssue.target && onOpenIssue && canOpenIssue?.(selectedIssue) !== false && <button type="button" className="mt-2 text-xs text-teal-800 underline" onClick={() => onOpenIssue(selectedIssue)}>Show in document</button>}
+            <p className="mt-3 text-sm font-semibold">{qualityMessage(selectedIssue).question}</p>
+            <ul className="mt-1 list-inside list-disc text-xs text-stone-600">{qualityMessage(selectedIssue).examples.map((example) => <li key={example}>{example}</li>)}</ul>
             {selectedIssue.rule === 'DQ-VALIDITY' ? (
               <div className="mt-4 space-y-3">
-                <label className="block text-xs font-semibold">Source document
+                <label className="block text-xs font-semibold">Where did this number come from?
                   <select className="mt-1 w-full rounded border p-2" value={validitySource} onChange={(event) => setValiditySource(event.target.value)}>
-                    <option value="">Choose source</option><option>Attendance register</option><option>Receipt</option><option>School report</option><option>Bank record</option><option>Other</option>
+                    <option value="">Choose source</option><option>Attendance register</option><option>Receipt</option><option>School report</option><option>Bank record</option><option>A photo or signed list</option><option>Other</option>
                   </select>
                 </label>
                 <label className="block text-xs font-semibold">Document reference or date<input className="mt-1 w-full rounded border p-2" value={validityReference} onChange={(event) => setValidityReference(event.target.value)} /></label>
@@ -437,20 +480,37 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                     <option value="">No second source</option><option>Attendance register</option><option>Receipt</option><option>School report</option><option>Bank record</option><option>Observation</option>
                   </select>
                 </label>
-                <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={validityDefinitionMatched} onChange={(event) => setValidityDefinitionMatched(event.target.checked)} />The result measures the same unit, period, and group as the indicator definition.</label>
+                <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={validityDefinitionMatched} onChange={(event) => setValidityDefinitionMatched(event.target.checked)} />This number counts what the activity says: {qualityMessage(selectedIssue).quote}</label>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={selectedIssue.context?.includes('plausible-range check passed') || false} readOnly />Plausible range check (computed from the result and shown above).</label>
-                <label className="block text-xs font-semibold">Second checker name / role<input className="mt-1 w-full rounded border p-2" value={validityCheckedBy} onChange={(event) => setValidityCheckedBy(event.target.value)} /></label>
+                <label className="block text-xs font-semibold">Did someone else check it? Enter their name<input className="mt-1 w-full rounded border p-2" value={validityCheckedBy} onChange={(event) => setValidityCheckedBy(event.target.value)} /></label>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={applyValidityToAll} onChange={(event) => setApplyValidityToAll(event.target.checked)} />Apply this check to all results from this source/import.</label>
               </div>
-            ) : selectedIssue.rule === 'QUANT-02' ? (
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold">Period<input className="mt-1 w-full rounded border p-2" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
-                <label className="text-xs font-semibold">Number of people<input className="mt-1 w-full rounded border p-2" inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} /></label>
-                <label className="text-xs font-semibold">Who / unit<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} /></label>
-                <label className="text-xs font-semibold">Number of activities<input className="mt-1 w-full rounded border p-2" inputMode="numeric" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
-                <label className="text-xs font-semibold">Activity type<input className="mt-1 w-full rounded border p-2" value={activityType} onChange={(event) => setActivityType(event.target.value)} /></label>
-                <label className="text-xs font-semibold">Place<input className="mt-1 w-full rounded border p-2" value={place} onChange={(event) => setPlace(event.target.value)} /></label>
+            ) : selectedIssue.rule === 'DQ-RELIABILITY' ? (
+              <div className="mt-4 space-y-3">
+                <label className="block text-xs font-semibold">How was it counted?
+                  <select className="mt-1 w-full rounded border p-2" value={reliabilityMethod} onChange={(event) => setReliabilityMethod(event.target.value)}>
+                    <option value="">Choose one</option>
+                    <option>Daily register</option><option>Attendance register</option><option>Receipts</option>
+                    <option>School report</option><option>Bank record</option><option>I counted them myself</option><option value="other">Other</option>
+                  </select>
+                </label>
+                {reliabilityMethod === 'other' && <label className="block text-xs font-semibold">Describe how it was counted<textarea className="mt-1 w-full rounded border p-2" rows={2} value={formValue} onChange={(event) => setFormValue(event.target.value)} /></label>}
+                <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={applyReliabilityToAll} onChange={(event) => setApplyReliabilityToAll(event.target.checked)} />Apply to all results from this source</label>
               </div>
+            ) : selectedIssue.rule === 'QUANT-02' ? (
+              <>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-semibold">Period<input className="mt-1 w-full rounded border p-2" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Number of people<input className="mt-1 w-full rounded border p-2" inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Who / unit<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Number of activities<input className="mt-1 w-full rounded border p-2" inputMode="numeric" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Activity type<input className="mt-1 w-full rounded border p-2" value={activityType} onChange={(event) => setActivityType(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Place<input className="mt-1 w-full rounded border p-2" value={place} onChange={(event) => setPlace(event.target.value)} /></label>
+                </div>
+                <p className="mt-2 rounded bg-stone-50 p-2 text-xs text-stone-600" aria-live="polite">Preview: {period && count && who && activityCount && activityType && place
+                  ? `In ${period}, ${count} ${who} took part in ${activityCount} ${activityType} at ${place}.`
+                  : 'Add the missing details to see the corrected sentence.'}</p>
+              </>
             ) : selectedIssue.fix?.options ? (
               <label className="mt-4 block text-xs font-semibold">Correct value
                 <select className="mt-1 w-full rounded border p-2" value={formValue} onChange={(event) => setFormValue(event.target.value)}>
