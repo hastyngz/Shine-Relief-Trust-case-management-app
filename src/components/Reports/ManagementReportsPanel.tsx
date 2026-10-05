@@ -3,7 +3,7 @@ import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 import type { AppDatabase, ReportHistoryRecord, SalaryHistoryRecord, StaffUser } from '../../types';
 import { MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportWorkbook } from '../../services/managementReports';
 import { ManagementFilters, canAccessManagementDashboard, projectManagementDatabase } from '../../services/managementAnalytics';
-import { appendEmployeeAuditLog, appendReportHistory, getEmployeeSalaryHistoryForStaff } from '../../services/firestoreSync';
+import { appendEmployeeAuditLog, appendReportExport, appendReportHistory, getEmployeeSalaryHistoryForStaff } from '../../services/firestoreSync';
 import { archiveGeneratedReport } from '../../services/attachmentService';
 import { ReportConfig, generateWordReport, reviewReportQuality } from '../../services/reportGenerators';
 import { qualityScores } from '../../services/qualityRules';
@@ -12,6 +12,8 @@ import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { downloadCSV } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
 import type { QualityIssue } from '../../services/qualityRules';
+import { qualityMessage } from '../../services/qualityMessages';
+import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
 
 interface ManagementReportsPanelProps {
   db: AppDatabase;
@@ -50,7 +52,8 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const [salaryLoadFailed, setSalaryLoadFailed] = useState(false);
   const [message, setMessage] = useState('');
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
-  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string }>>([]);
+  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; before?: unknown; after?: unknown }>>([]);
+  const [fixedReportVersion, setFixedReportVersion] = useState(0);
 
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
@@ -173,6 +176,49 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     if (!reportQualityIssues.some((issue) => issue.severity === 'blocker') || blockerOverrideReason.trim().length >= 10) return true;
     setMessage('Resolve quality blockers or provide a written override reason of at least 10 characters.');
     return false;
+  };
+  const downloadFixedReport = async (format: FixedReportFormat, draft: boolean) => {
+    if (!currentUser || !canAccessManagementDashboard(isAdmin, role)) throw new Error('Your account cannot download this report.');
+    const openIssues = auditedQualityIssues.filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden');
+    const openProblems = openIssues.map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title }));
+    const sections = [
+      { title: 'Report overview', text: `${MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId}\n${reportQualityConfig.periodLabel}` },
+      { title: 'Records', text: [rows.headers.join(' | '), ...rows.rows.map((row) => row.map(String).join(' | '))].join('\n') },
+    ];
+    const changes = qualityResolutions.filter((entry) => entry.before !== undefined && entry.after !== undefined).map((entry) => ({
+      section: entry.issueId,
+      originalText: String(entry.before),
+      newText: String(entry.after),
+      by: entry.by,
+      at: entry.at,
+      reason: entry.note,
+    }));
+    const blob = await createFixedReport({ title: reportQualityConfig.title, sections, changes, openProblems, format, draft });
+    const generatedAt = new Date().toISOString();
+    const extension = format === 'marked-docx' ? 'docx' : format;
+    const fileName = `${fixedReportFileName(reportQualityConfig.title)}.${extension}`;
+    const hash = await sha256Blob(blob);
+    const version = Math.max(fixedReportVersion + 1, nextReportExportVersion(reportId));
+    await appendReportExport({
+      id: `fixed_report_${currentUser.uid}_${Date.now()}`,
+      reportType: reportId,
+      title: reportQualityConfig.title,
+      fileName,
+      format,
+      version,
+      hash,
+      openProblems,
+      overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+        issueId: entry.issueId, reason: entry.note, by: entry.by, at: entry.at,
+      })),
+      generatedBy: staffProfile?.fullName || currentUser.email || 'Management user',
+      generatedByUid: currentUser.uid,
+      generatedAt,
+      draft,
+      finalLocked: !draft,
+    });
+    saveBlob(blob, fileName);
+    setFixedReportVersion(version);
   };
 
   const recordReportHistory = async (fileType: ReportHistoryRecord['fileType'], fileName: string, title: string, blob: Blob): Promise<boolean> => {
@@ -324,6 +370,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       <QualityCheckPanel
         issues={auditedQualityIssues}
         scores={reportQualityScores}
+        onDownloadFixedReport={downloadFixedReport}
         canApproveNarrativeOnly
         currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}
         onOpenIssue={(issue) => {

@@ -9,9 +9,11 @@ import { PROGRAMMES, type ProgrammeId } from '../../data/programmes';
 import { generateWordReport, reviewReportQuality, type ReportConfig } from '../../services/reportGenerators';
 import { downloadCSV, formatMWK } from '../../utils/export';
 import { qualityScores } from '../../services/qualityRules';
+import { qualityMessage } from '../../services/qualityMessages';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
-import { appendReportHistory } from '../../services/firestoreSync';
+import { appendReportExport, appendReportHistory } from '../../services/firestoreSync';
+import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
 import type { QualityIssue } from '../../services/qualityRules';
 
 interface ReportBuilderProps {
@@ -31,7 +33,8 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
-  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string }>>([]);
+  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; before?: unknown; after?: unknown }>>([]);
+  const [fixedReportVersion, setFixedReportVersion] = useState(0);
 
   const report = useMemo(() => assembleSponsorReport(db, {
     fromDate,
@@ -173,6 +176,71 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
     }
   };
 
+  const downloadFixedReport = async (format: FixedReportFormat, draft: boolean) => {
+    if (!currentUser || !canAccessManagementDashboard(isAdmin, role)) throw new Error('You do not have permission to download this report.');
+    const openProblems = auditedQualityIssues
+      .filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden')
+      .map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title }));
+    const changes = (hideIdentifyingDetails ? [] : qualityResolutions)
+      .filter((entry) => entry.status === 'resolved' && entry.before !== undefined && entry.after !== undefined).map((entry) => {
+      const issue = auditedQualityIssues.find((candidate) => candidate.id === entry.issueId);
+      return {
+        section: issue?.target?.id || issue?.context || 'Report',
+        originalText: String(entry.before),
+        newText: String(entry.after),
+        by: entry.by,
+        at: entry.at,
+        reason: entry.note || 'Reviewed and corrected.',
+      };
+    });
+    const sections = [
+      ...(!hideIdentifyingDetails ? [{ title: 'Executive summary', text: narrative }] : []),
+      ...tables.map((table) => ({
+        title: table.title,
+        text: [table.headers.join(' | '), ...table.rows.map((row) => row.map(String).join(' | '))].join('\n'),
+      })),
+    ];
+    const blob = await createFixedReport({
+      title: qualityConfig.title,
+      sections,
+      changes,
+      openProblems,
+      format,
+      draft,
+    });
+    const timestamp = new Date().toISOString();
+    const extension = format === 'marked-docx' ? 'docx' : format;
+    const fileName = `${fixedReportFileName('SHINE Sponsor and Donor Programme Report')}.${extension}`;
+    const hash = await sha256Blob(blob);
+    const by = staffProfile?.fullName || currentUser.email || 'Management user';
+    const version = Math.max(fixedReportVersion + 1, nextReportExportVersion('sponsor-donor'));
+    await appendReportExport({
+      id: `fixed_report_${currentUser.uid}_${Date.now()}`,
+      reportType: 'sponsor-donor',
+      title: qualityConfig.title,
+      fileName,
+      format,
+      version,
+      hash,
+      openProblems,
+      overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+        issueId: entry.issueId, reason: entry.note, by: entry.by, at: entry.at,
+      })),
+      generatedBy: by,
+      generatedByUid: currentUser.uid,
+      generatedAt: timestamp,
+      draft,
+      finalLocked: !draft,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    setFixedReportVersion(version);
+  };
+
   const exportCsv = () => {
     if (!ensureQualityOverride()) return;
     const rows: Array<Array<string | number>> = [
@@ -258,6 +326,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
       <QualityCheckPanel
         issues={auditedQualityIssues}
         scores={reportQualityScores}
+        onDownloadFixedReport={downloadFixedReport}
         canApproveNarrativeOnly={isAdmin || role === 'Manager'}
         currentUserName={staffProfile?.fullName || currentUser?.email || 'Management user'}
         canOpenIssue={(issue) => ['narrative-section', 'report-section', 'budget-item', 'workplan-item', 'indicator-result'].includes(issue.target?.kind || '')}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { QualityIssue } from '../services/qualityRules';
 import { qualityMessage } from '../services/qualityMessages';
+import type { FixedReportFormat } from '../services/qualityFixedReport';
 
 export interface QualityIssueResolution {
   status: 'resolved' | 'overridden' | 'pending-approval';
@@ -18,10 +19,13 @@ interface QualityCheckPanelProps {
   canOpenIssue?: (issue: QualityIssue) => boolean;
   onResolveIssue?: (issue: QualityIssue, resolution: QualityIssueResolution) => boolean;
   onUndoFix?: (issue: QualityIssue) => void;
+  onApprovePendingIssue?: (issue: QualityIssue) => boolean;
   currentUserName?: string;
   canApproveNarrativeOnly?: boolean;
   className?: string;
   linkNarrative?: boolean;
+  onDownloadFixedReport?: (format: FixedReportFormat, draft: boolean) => void | Promise<void>;
+  onDownloadOriginal?: () => void;
 }
 
 const severityOrder: QualityIssue['severity'][] = ['blocker', 'warning', 'info'];
@@ -48,6 +52,13 @@ function renderIssueQuote(issue: QualityIssue): React.ReactNode {
   </>;
 }
 
+function groupCountLabel(issue: QualityIssue, count: number): string {
+  if (issue.rule === 'QUANT-03') return `${count} activit${count === 1 ? 'y has' : 'ies have'} no number`;
+  if (issue.rule === 'QUANT-02') return `${count} sentence${count === 1 ? '' : 's'} say a vague word`;
+  if (issue.rule === 'QUANT-01') return `${count} section${count === 1 ? '' : 's'} need a number`;
+  return `${count} item${count === 1 ? '' : 's'}`;
+}
+
 export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   issues,
   scores,
@@ -56,9 +67,12 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   canOpenIssue,
   onResolveIssue,
   onUndoFix,
+  onApprovePendingIssue,
   currentUserName = 'Current user',
   canApproveNarrativeOnly = false,
   className = '',
+  onDownloadFixedReport,
+  onDownloadOriginal,
 }) => {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -86,8 +100,12 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   const [dialogError, setDialogError] = useState('');
   const [confirmBatch, setConfirmBatch] = useState(false);
   const [showSmallSuggestions, setShowSmallSuggestions] = useState(false);
+  const [exportFormat, setExportFormat] = useState<FixedReportFormat>('docx');
+  const [draftExport, setDraftExport] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [lastBatch, setLastBatch] = useState<QualityIssue[]>([]);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const batchDialogRef = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
   const resolvedIds = useMemo(() => new Set(resolved.map(({ issue }) => issue.id)), [resolved]);
@@ -96,7 +114,12 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     .filter((issue) => issue.status === 'resolved' || issue.status === 'overridden')
     .map((issue) => ({
       issue,
-      resolution: { status: issue.status as 'resolved' | 'overridden', note: issue.resolution?.note || '' },
+      resolution: {
+        status: issue.status as 'resolved' | 'overridden',
+        note: issue.resolution?.note || '',
+        before: issue.resolution?.before,
+        after: issue.resolution?.after,
+      },
       by: issue.resolution?.by || 'Recorded user',
       at: issue.resolution?.at || '',
     }));
@@ -143,36 +166,26 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   }, [filteredIssues, onApplyFix]);
   const selectedGroup = grouped.find((group) => group.key === expandedGroup);
   const visibleGroupIssues = selectedGroup?.issues.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) || [];
-  const rules = Array.from(new Set(issues.map((issue) => issue.rule))).sort();
+  const rules = Array.from(new Map(issues.map((issue) => [issue.rule, qualityMessage(issue).title])).entries());
   const numberIssues = allOpen.filter((issue) => ['QUANT-01', 'QUANT-02', 'QUANT-03'].includes(issue.rule)).length;
+  const openProblemCount = allOpen.length;
 
   useEffect(() => {
-    if (!selectedIssue) return undefined;
+    if (!selectedIssue && !confirmBatch) return undefined;
+    const activeDialog = selectedIssue ? dialogRef : batchDialogRef;
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => {
-      const first = dialogRef.current?.querySelector<HTMLElement>('button, input, select, textarea');
+      const first = activeDialog.current?.querySelector<HTMLElement>('button, input, select, textarea');
       first?.focus();
     });
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setSelectedIssue(null);
+        if (selectedIssue) setSelectedIssue(null);
+        else setConfirmBatch(false);
         return;
       }
-      if (selectedIssue.rule === 'DQ-RELIABILITY') {
-        const method = reliabilityMethod === 'other' ? formValue.trim() : reliabilityMethod;
-        if (!method) {
-          setDialogError('Choose how this number was counted.');
-          return;
-        }
-        if (reliabilityMethod === 'other' && !method) {
-          setDialogError('Describe the counting method.');
-          return;
-        }
-        complete('resolved', { method, applyToAll: applyReliabilityToAll });
-        return;
-      }
-      if (event.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+      if (event.key !== 'Tab' || !activeDialog.current) return;
+      const focusable = Array.from(activeDialog.current.querySelectorAll<HTMLElement>(
         'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
       ));
       if (!focusable.length) return;
@@ -192,7 +205,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
       previousFocus.current?.focus();
     };
-  }, [selectedIssue]);
+  }, [selectedIssue, confirmBatch]);
 
   const openDialog = (issue: QualityIssue) => {
     setSelectedIssue(issue);
@@ -242,6 +255,15 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
 
   const submitForm = () => {
     if (!selectedIssue) return;
+    if (selectedIssue.rule === 'DQ-RELIABILITY') {
+      const method = reliabilityMethod === 'other' ? formValue.trim() : reliabilityMethod;
+      if (!method) {
+        setDialogError(reliabilityMethod === 'other' ? 'Describe the counting method.' : 'Choose how this number was counted.');
+        return;
+      }
+      complete('resolved', { method, applyToAll: applyReliabilityToAll });
+      return;
+    }
     if (selectedIssue.rule === 'DQ-VALIDITY') {
       if ((!validitySource.trim() || !validityReference.trim()) && !validitySecondSource.trim()) {
         setDialogError('Name and reference/date for a source, or choose a second source.');
@@ -253,6 +275,10 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       }
       if (!validityCheckedBy.trim() || !note.trim()) {
         setDialogError('Enter the second checker and a validation note.');
+        return;
+      }
+      if (validityCheckedBy.trim().toLocaleLowerCase() === currentUserName.trim().toLocaleLowerCase()) {
+        setDialogError('The checker must be a different person from the person entering this check.');
         return;
       }
       complete('resolved', {
@@ -285,7 +311,15 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       return;
     }
     if (selectedIssue.rule === 'QUANT-03' && formValue) {
-      complete('resolved', { indicatorId: formValue });
+      if (formValue !== 'narrative-only' && (!count.trim() || !Number.isFinite(Number(count)) || Number(count) < 0)) {
+        setDialogError('Enter the checked number before saving.');
+        return;
+      }
+      complete('resolved', {
+        indicatorId: formValue === 'narrative-only' ? undefined : formValue,
+        actual: formValue === 'narrative-only' ? undefined : Number(count),
+        unit: who.trim() || undefined,
+      });
       return;
     }
     if (selectedIssue.rule === 'IDENTITY-FUZZY-01' && formValue) {
@@ -304,12 +338,20 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       complete('resolved', Number(formValue));
       return;
     }
-    if (selectedIssue.rule === 'QUANT-02') {
+    if (selectedIssue.rule === 'QUANT-01' || selectedIssue.rule === 'QUANT-02') {
       if (!period.trim() || !who.trim() || !count.trim() || !activityCount.trim() || !activityType.trim() || !place.trim()) {
         setDialogError('Complete each field to rebuild the quantified sentence.');
         return;
       }
-      complete('resolved', `In ${period.trim()}, ${count.trim()} ${who.trim()} took part in ${activityCount.trim()} ${activityType.trim()} at ${place.trim()}.`);
+      complete('resolved', {
+        sentence: `In ${period.trim()}, ${count.trim()} ${who.trim()} took part in ${activityCount.trim()} ${activityType.trim()} at ${place.trim()}.`,
+        actual: Number(count),
+        activityCount: Number(activityCount),
+        who: who.trim(),
+        period: period.trim(),
+        activity: `${activityCount.trim()} ${activityType.trim()}`,
+        place: place.trim(),
+      });
       return;
     }
     if (selectedIssue.severity !== 'blocker' && !formValue.trim() && !note.trim()) {
@@ -339,7 +381,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
             </label>
             <label className="text-xs text-stone-700">Rule
               <select className="ml-1 max-w-40 rounded border border-stone-300 p-1" value={ruleFilter} onChange={(event) => { setRuleFilter(event.target.value); setPage(0); }}>
-                <option value="all">All rules</option>{rules.map((rule) => <option key={rule} value={rule}>{rule}</option>)}
+                <option value="all">All issue types</option>{rules.map(([rule, title]) => <option key={rule} value={rule}>{title}</option>)}
               </select>
             </label>
             <label className="text-xs text-stone-700">Status
@@ -348,6 +390,34 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
               </select>
             </label>
           </div>
+          {onDownloadFixedReport && (
+            <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3">
+              <label className="text-xs font-semibold text-stone-800">Download fixed report
+                <select className="mt-1 block rounded border border-stone-300 bg-white p-2" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as FixedReportFormat)}>
+                  <option value="docx">Word (.docx)</option>
+                  <option value="pdf">PDF</option>
+                  <option value="marked-docx">Word with changes marked</option>
+                  <option value="xlsx">Changes list (.xlsx)</option>
+                </select>
+              </label>
+              {openProblemCount > 0 && (
+                <label className="flex items-center gap-2 pb-2 text-xs font-semibold text-amber-900">
+                  <input type="checkbox" checked={draftExport} onChange={(event) => setDraftExport(event.target.checked)} />
+                  Download DRAFT with {openProblemCount} open {openProblemCount === 1 ? 'problem' : 'problems'}
+                </label>
+              )}
+              <button type="button" className="rounded bg-teal-800 px-3 py-2 text-xs font-bold text-white" onClick={async () => {
+                setExportError('');
+                try {
+                  await onDownloadFixedReport(exportFormat, draftExport);
+                } catch (error) {
+                  setExportError(error instanceof Error ? error.message : 'The report could not be downloaded.');
+                }
+              }}>Download fixed report</button>
+              {onDownloadOriginal && <button type="button" className="rounded border border-stone-400 px-3 py-2 text-xs font-semibold" onClick={onDownloadOriginal}>Download original</button>}
+              {exportError && <p className="w-full text-xs font-semibold text-rose-800" role="alert">{exportError}</p>}
+            </div>
+          )}
           {lastBatch.length > 0 && onUndoFix && (
             <button type="button" className="mt-3 rounded border border-emerald-700 px-3 py-1.5 text-xs font-semibold text-emerald-900" onClick={() => {
               lastBatch.forEach((issue) => onUndoFix(issue));
@@ -375,7 +445,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-xs font-semibold text-stone-900">{qualityMessage(group.issues[0]).title}</p>
-              <p className="mt-1 text-[11px] text-stone-600">{group.issues.length} item{group.issues.length === 1 ? '' : 's'} · {severityLabel[group.severity]} <span className="ml-1 text-stone-400">Ref: {group.issues[0].rule}</span></p>
+              <p className="mt-1 text-[11px] text-stone-600">{groupCountLabel(group.issues[0], group.issues.length)} · {severityLabel[group.severity]} <span className="ml-1 text-stone-400">Ref: {group.issues[0].rule}</span></p>
               <p className="mt-1 break-words text-[11px] text-stone-600">“{renderIssueQuote(group.issues[0])}”</p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -418,9 +488,9 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         (severityFilter === 'all' || issue.severity === severityFilter)
         && (ruleFilter === 'all' || issue.rule === ruleFilter)).map(({ issue, resolution, by, at }) => (
         <article key={issue.id} className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs">
-          <p className="font-semibold">{issue.rule}: {issue.message}</p>
+          <p className="font-semibold">{qualityMessage(issue).title} <span className="text-[10px] font-normal text-stone-400">Ref: {issue.rule}</span></p>
           <p className="mt-1">Reviewed by {by}{at ? ` at ${new Date(at).toLocaleString()}` : ''}. {resolution.note}</p>
-          {issue.resolution?.before !== undefined && <p className="mt-1">Before: {String(issue.resolution.before)} · after: {String(issue.resolution.after)}</p>}
+          {resolution.before !== undefined && <p className="mt-1">Before: {String(resolution.before)} · after: {String(resolution.after)}</p>}
           {onUndoFix && <button type="button" className="mt-2 underline" onClick={() => { onUndoFix(issue); setResolved((items) => items.filter((item) => item.issue.id !== issue.id)); }}>Undo</button>}
         </article>
       ))}
@@ -428,18 +498,24 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         (severityFilter === 'all' || issue.severity === severityFilter)
         && (ruleFilter === 'all' || issue.rule === ruleFilter)).map(({ issue, resolution, by, at }) => (
         <article key={issue.id} className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs">
-          <p className="font-semibold">Pending manager approval · {issue.rule}</p>
+          <p className="font-semibold">Pending manager approval · {qualityMessage(issue).title}</p>
           <p className="mt-1">{resolution.note} · submitted by {by}{at ? ` at ${new Date(at).toLocaleString()}` : ''}.</p>
           {onUndoFix && <button type="button" className="mt-2 underline" onClick={() => { onUndoFix(issue); setResolved((items) => items.filter((item) => item.issue.id !== issue.id)); }}>Undo request</button>}
+          {canApproveNarrativeOnly && onApprovePendingIssue && <button type="button" className="ml-3 mt-2 font-semibold text-teal-900 underline" onClick={() => {
+            if (!onApprovePendingIssue(issue)) return;
+            setResolved((items) => items.map((item) => item.issue.id === issue.id
+              ? { ...item, resolution: { ...item.resolution, status: 'resolved' }, by: currentUserName, at: new Date().toISOString() }
+              : item));
+          }}>Approve as manager</button>}
         </article>
       ))}
 
       {confirmBatch && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="presentation">
-          <section className="max-h-[95dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 text-stone-900 shadow-xl sm:max-w-xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="quality-batch-title">
+          <section ref={batchDialogRef} className="max-h-[95dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 text-stone-900 shadow-xl sm:max-w-xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="quality-batch-title" tabIndex={-1}>
             <h3 id="quality-batch-title" className="text-base font-bold">Review safe changes</h3>
             <p className="mt-2 text-sm">Only fixes marked safe and reversible will be applied.</p>
-            <ul className="mt-3 max-h-60 space-y-2 overflow-y-auto text-xs">{(selectedGroup?.safeFixes || []).map((issue) => <li key={issue.id} className="rounded border p-2"><strong>{issue.rule}</strong> · {issue.context || issue.location} → {String(issue.fix?.suggestedValue)}<span className="block text-stone-500">{issue.suggestedFix}</span></li>)}</ul>
+            <ul className="mt-3 max-h-60 space-y-2 overflow-y-auto text-xs">{(selectedGroup?.safeFixes || []).map((issue) => <li key={issue.id} className="rounded border p-2">            <span className="text-[10px] text-stone-400">Ref: {issue.rule}</span> · {qualityMessage(issue).quote} → {String(issue.fix?.suggestedValue)}<span className="block text-stone-500">{issue.suggestedFix}</span></li>)}</ul>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className="rounded border px-3 py-2 text-sm" onClick={() => setConfirmBatch(false)}>Cancel</button>
               <button type="button" className="rounded bg-teal-800 px-3 py-2 text-sm font-bold text-white" onClick={() => {
@@ -459,11 +535,14 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
 
       {selectedIssue && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-          <div ref={dialogRef} className="max-h-[100dvh] min-h-[70dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 text-stone-900 shadow-xl sm:min-h-0 sm:max-w-xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="quality-dialog-title" aria-describedby="quality-dialog-description" tabIndex={-1}>
+          <div ref={dialogRef} className="max-h-[100dvh] min-h-[100dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 text-stone-900 shadow-xl sm:min-h-0 sm:max-w-xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="quality-dialog-title" aria-describedby="quality-dialog-description" tabIndex={-1}>
             <h3 id="quality-dialog-title" className="text-base font-bold">{qualityMessage(selectedIssue).title}</h3>
             <p className="mt-1 text-[10px] text-stone-400">Ref: {selectedIssue.rule}</p>
             <p id="quality-dialog-description" className="mt-2 text-sm">{qualityMessage(selectedIssue).why}</p>
             <blockquote className="mt-3 rounded border-l-4 border-amber-500 bg-amber-50 p-3 text-sm">{renderIssueQuote(selectedIssue)}</blockquote>
+            {selectedIssue.rule === 'NARRATIVE-TENSE-01' && typeof selectedIssue.fix?.suggestedValue === 'string' && (
+              <p className="mt-2 rounded bg-emerald-50 p-2 text-xs text-emerald-950">Suggested correction: {selectedIssue.fix.suggestedValue}</p>
+            )}
             {selectedIssue.target && onOpenIssue && canOpenIssue?.(selectedIssue) !== false && <button type="button" className="mt-2 text-xs text-teal-800 underline" onClick={() => onOpenIssue(selectedIssue)}>Show in document</button>}
             <p className="mt-3 text-sm font-semibold">{qualityMessage(selectedIssue).question}</p>
             <ul className="mt-1 list-inside list-disc text-xs text-stone-600">{qualityMessage(selectedIssue).examples.map((example) => <li key={example}>{example}</li>)}</ul>
@@ -483,7 +562,22 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={validityDefinitionMatched} onChange={(event) => setValidityDefinitionMatched(event.target.checked)} />This number counts what the activity says: {qualityMessage(selectedIssue).quote}</label>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={selectedIssue.context?.includes('plausible-range check passed') || false} readOnly />Plausible range check (computed from the result and shown above).</label>
                 <label className="block text-xs font-semibold">Did someone else check it? Enter their name<input className="mt-1 w-full rounded border p-2" value={validityCheckedBy} onChange={(event) => setValidityCheckedBy(event.target.value)} /></label>
+                <p className="text-[11px] text-stone-500">Entered by: {currentUserName}. The checker must be someone else.</p>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={applyValidityToAll} onChange={(event) => setApplyValidityToAll(event.target.checked)} />Apply this check to all results from this source/import.</label>
+              </div>
+            ) : selectedIssue.rule === 'QUANT-03' ? (
+              <div className="mt-4 space-y-3">
+                <label className="block text-xs font-semibold">Choose the matching activity or result
+                  <select className="mt-1 w-full rounded border p-2" value={formValue} onChange={(event) => setFormValue(event.target.value)}>
+                    <option value="">Choose one</option>{selectedIssue.fix?.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                {formValue && formValue !== 'narrative-only' && (
+                  <>
+                    <label className="block text-xs font-semibold">Checked number<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" value={count} onChange={(event) => setCount(event.target.value)} /></label>
+                    <label className="block text-xs font-semibold">What does it count?<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} placeholder="girls, sessions, visits" /></label>
+                  </>
+                )}
               </div>
             ) : selectedIssue.rule === 'DQ-RELIABILITY' ? (
               <div className="mt-4 space-y-3">
@@ -497,13 +591,13 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                 {reliabilityMethod === 'other' && <label className="block text-xs font-semibold">Describe how it was counted<textarea className="mt-1 w-full rounded border p-2" rows={2} value={formValue} onChange={(event) => setFormValue(event.target.value)} /></label>}
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={applyReliabilityToAll} onChange={(event) => setApplyReliabilityToAll(event.target.checked)} />Apply to all results from this source</label>
               </div>
-            ) : selectedIssue.rule === 'QUANT-02' ? (
+            ) : selectedIssue.rule === 'QUANT-01' || selectedIssue.rule === 'QUANT-02' ? (
               <>
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-xs font-semibold">Period<input className="mt-1 w-full rounded border p-2" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">Number of people<input className="mt-1 w-full rounded border p-2" inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">Who / unit<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">Number of activities<input className="mt-1 w-full rounded border p-2" inputMode="numeric" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">How many people?<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Who? (girls, children, learners, staff, or teachers)<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">How many sessions / activities?<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" inputMode="numeric" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
                   <label className="text-xs font-semibold">Activity type<input className="mt-1 w-full rounded border p-2" value={activityType} onChange={(event) => setActivityType(event.target.value)} /></label>
                   <label className="text-xs font-semibold">Place<input className="mt-1 w-full rounded border p-2" value={place} onChange={(event) => setPlace(event.target.value)} /></label>
                 </div>
@@ -522,6 +616,12 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                 <textarea className="mt-1 w-full rounded border p-2" rows={3} value={formValue} onChange={(event) => setFormValue(event.target.value)} />
               </label>
             ) : null}
+            {selectedIssue.fix?.field === 'text' && formValue.trim() && !['QUANT-01', 'QUANT-02'].includes(selectedIssue.rule) && (
+              <p className="mt-2 rounded bg-stone-50 p-2 text-xs text-stone-700" aria-live="polite">Preview: {formValue}</p>
+            )}
+            {selectedIssue.rule === 'NARRATIVE-PROGRAMME-01' && typeof selectedIssue.fix?.suggestedValue === 'string' && (
+              <button type="button" className="mt-2 rounded bg-teal-800 px-3 py-2 text-xs font-bold text-white" onClick={() => complete('resolved', selectedIssue.fix?.suggestedValue)}>Use the approved name</button>
+            )}
             <label className="mt-3 block text-xs font-semibold">Note or reason
               <textarea className="mt-1 w-full rounded border p-2" rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </label>
@@ -533,7 +633,8 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <button type="button" className="rounded border px-3 py-2 text-xs" onClick={() => setSelectedIssue(null)}>Skip</button>
-                {selectedIssue.severity !== 'blocker' && <button type="button" className="rounded border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-900" onClick={() => complete('overridden', formValue || undefined)}>Override with reason</button>}
+                {selectedIssue.severity !== 'blocker' && selectedIssue.rule !== 'QUANT-03' && <button type="button" className="rounded border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-900" onClick={() => complete('overridden', { decision: 'reviewed' })}>Reviewed (with reason)</button>}
+                {selectedIssue.severity !== 'blocker' && selectedIssue.rule !== 'QUANT-03' && <button type="button" className="rounded border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-900" onClick={() => complete('overridden', { decision: 'override' })}>Override with reason</button>}
                 <button type="button" className="rounded bg-teal-800 px-3 py-2 text-xs font-bold text-white" onClick={submitForm}>{selectedIssue.fix?.safe ? 'Save fix' : 'Save fix / reviewed'}</button>
               </div>
             </div>

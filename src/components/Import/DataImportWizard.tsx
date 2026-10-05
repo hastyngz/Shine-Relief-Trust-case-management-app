@@ -29,6 +29,10 @@ import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { qualityScores, runQualityRules } from '../../services/qualityRules';
 import type { QualityIssue } from '../../services/qualityRules';
+import { qualityMessage } from '../../services/qualityMessages';
+import { appendReportExport } from '../../services/firestoreSync';
+import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { correctImportPreviewText, exactPreviewDuplicateKey, type SafeTextChange } from '../../services/safeTextCorrections';
 import {
   AlertCircle,
   AlertTriangle,
@@ -90,10 +94,9 @@ interface ContactReviewItem {
 
 function spreadsheetLineToPreview(
   line: ImportedSpreadsheetLine,
-  index: number,
   existingWorkplans: AppDatabase['workplans'] = [],
 ): ImportPreviewItem {
-  const id = `spreadsheet_${line.sheet}_${line.row}_${index}`;
+  const id = `spreadsheet_${line.sheet}_${line.row}`;
   if (line.kind === 'budget') {
     return {
       tempId: id,
@@ -332,6 +335,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [reportMetadata, setReportMetadata] = useState<ReportMetadata | null>(null);
   const [previewItems, setPreviewItems] = useState<ImportPreviewItem[]>([]);
   const previewCardRefs = useRef(new Map<string, HTMLDivElement>());
+  const automaticChangeKeys = useRef(new Set<string>());
+  const automaticDuplicateKeys = useRef(new Set<string>());
   const [highlightedPreviewId, setHighlightedPreviewId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -350,6 +355,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [qualityCollectionMethod, setQualityCollectionMethod] = useState('');
   const [qualityCollectionMethodOther, setQualityCollectionMethodOther] = useState('');
   const [qualityResolutions, setQualityResolutions] = useState<NonNullable<ImportAuditRecord['qualityResolutions']>>([]);
+  const [automaticChanges, setAutomaticChanges] = useState<Array<SafeTextChange & { id: string; tempId: string; by: 'automatic'; at: string }>>([]);
+  const [automaticDuplicateRemovals, setAutomaticDuplicateRemovals] = useState<Array<{ id: string; removed: ImportPreviewItem; keptTempId: string; restoreBeforeId?: string; by: 'automatic'; at: string }>>([]);
 
   // Editing Item Modal State
   const [editingItem, setEditingItem] = useState<ImportPreviewItem | null>(null);
@@ -388,6 +395,60 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     });
   }, [db.workplans, previewItems]);
 
+  useEffect(() => {
+    const changes: Array<SafeTextChange & { id: string; tempId: string; by: 'automatic'; at: string }> = [];
+    const next = previewItems.map((item) => {
+      if (!item.selected) return item;
+      const itemChanges = correctImportPreviewText(item);
+      const unapplied = itemChanges.filter((change) => {
+        const key = `${item.tempId}|${change.field}|${change.before}|${change.after}`;
+        if (automaticChangeKeys.current.has(key)) return false;
+        automaticChangeKeys.current.add(key);
+        changes.push({
+          ...change,
+          id: `auto:${key}`,
+          tempId: item.tempId,
+          by: 'automatic',
+          at: new Date().toISOString(),
+        });
+        return true;
+      });
+      if (!unapplied.length) return item;
+      return unapplied.reduce((updated, change) => ({ ...updated, [change.field]: change.after }), item);
+    });
+    const firstByFingerprint = new Map<string, ImportPreviewItem>();
+    const duplicateIds = new Set<string>();
+    const removals: Array<{ id: string; removed: ImportPreviewItem; keptTempId: string; restoreBeforeId?: string; by: 'automatic'; at: string }> = [];
+    for (const [index, item] of next.entries()) {
+      if (!item.selected) continue;
+      const fingerprint = exactPreviewDuplicateKey(item);
+      const first = firstByFingerprint.get(fingerprint);
+      if (!first) {
+        firstByFingerprint.set(fingerprint, item);
+        continue;
+      }
+      const key = `${item.tempId}|${fingerprint}`;
+      if (automaticDuplicateKeys.current.has(key)) continue;
+      automaticDuplicateKeys.current.add(key);
+      duplicateIds.add(item.tempId);
+      removals.push({
+        id: `auto-duplicate:${key}`,
+        removed: item,
+        keptTempId: first.tempId,
+        restoreBeforeId: next.slice(index + 1).find((candidate) => !duplicateIds.has(candidate.tempId))?.tempId,
+        by: 'automatic',
+        at: new Date().toISOString(),
+      });
+    }
+    if (changes.length || removals.length) {
+      setPreviewItems(next.filter((item) => !duplicateIds.has(item.tempId)));
+    }
+    if (changes.length) {
+      setAutomaticChanges((current) => [...current, ...changes]);
+    }
+    if (removals.length) setAutomaticDuplicateRemovals((current) => [...current, ...removals]);
+  }, [previewItems]);
+
   const prepareContactReview = async (candidates: ContactCandidate[]) => {
     const existingContacts = await listContacts().catch(() => db.contacts || []);
     setContactReview(candidates.map((candidate) => {
@@ -412,6 +473,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
 
     setSelectedFile(file);
+    automaticChangeKeys.current.clear();
+    automaticDuplicateKeys.current.clear();
+    setAutomaticChanges([]);
+    setAutomaticDuplicateRemovals([]);
+    setQualityResolutions([]);
     setParseError(null);
     setDiagnosticReason(null);
     setIsParsing(true);
@@ -447,8 +513,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             throw new Error('Payroll spreadsheet imports are restricted to Administrators and Managers.');
           }
           setSpreadsheetPreview(analysis.spreadsheetImportPreview);
-          setPreviewItems(analysis.spreadsheetImportPreview.lines.map((line, index) =>
-            spreadsheetLineToPreview(line, index, db.workplans || [])
+          setPreviewItems(analysis.spreadsheetImportPreview.          lines.map((line) =>
+            spreadsheetLineToPreview(line, db.workplans || [])
           ));
           await prepareContactReview([]);
           setStep('review');
@@ -488,6 +554,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   // Load sample report for direct browser testing
   const handleLoadSampleReport = async () => {
     setIsParsing(true);
+    automaticChangeKeys.current.clear();
+    automaticDuplicateKeys.current.clear();
+    setAutomaticChanges([]);
+    setAutomaticDuplicateRemovals([]);
+    setQualityResolutions([]);
     setParseError(null);
     setDiagnosticReason(null);
     try {
@@ -790,7 +861,29 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       errorsCount: selectedItems.filter((i) => i.resultType === 'IMPORT_ERROR').length,
       qualityIssues: importQualityIssues,
       qualityScores: importQualityScores,
-      qualityResolutions,
+      qualityResolutions: [
+        ...qualityResolutions,
+        ...automaticChanges.map((change) => ({
+          issueId: change.id,
+          status: 'resolved' as const,
+          note: change.reason,
+          by: change.by,
+          at: change.at,
+          field: change.field,
+          before: change.before,
+          after: change.after,
+        })),
+        ...automaticDuplicateRemovals.map((change) => ({
+          issueId: change.id,
+          status: 'resolved' as const,
+          note: 'Removed an exact duplicate preview row and kept the first copy.',
+          by: change.by,
+          at: change.at,
+          field: '__remove',
+          before: `${change.removed.title}: ${change.removed.summary}`,
+          after: `Duplicate of ${change.keptTempId}; first copy retained.`,
+        })),
+      ],
       blockerOverrideReason: importBlockers.length ? blockerOverrideReason.trim() : undefined,
       sourceData: spreadsheetPreview?.sourceData,
       status: 'completed',
@@ -826,8 +919,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
     const parsed = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff);
     setSpreadsheetPreview(parsed);
-    setPreviewItems(parsed.lines.map((line, index) =>
-      spreadsheetLineToPreview(line, index, db.workplans || [])
+    setPreviewItems(parsed.lines.map((line) =>
+      spreadsheetLineToPreview(line, db.workplans || [])
     ));
   };
 
@@ -1081,7 +1174,57 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         : item));
       setQualityResolutions((current) => [
         ...current.filter((entry) => entry.issueId !== issue.id),
-        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'method', before: target.extractedData.method, after: value.method },
+        {
+          issueId: issue.id,
+          status: 'resolved',
+          note: resolution.note,
+          by: activeStaff.fullName,
+          at: new Date().toISOString(),
+          field: 'method',
+          before: Object.fromEntries(affectedIds.map((id) => [id, previewItems.find((item) => item.tempId === id)?.extractedData.method])),
+          after: { method: value.method, applyToAll: value.applyToAll === true, affectedIds },
+        },
+      ]);
+      return true;
+    }
+    if (['QUANT-01', 'QUANT-02'].includes(issue.rule) && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
+      const value = resolution.value as { sentence?: unknown; actual?: unknown; activityCount?: unknown; period?: unknown; who?: unknown; activity?: unknown; place?: unknown };
+      if (typeof value.sentence !== 'string' || typeof value.actual !== 'number' || !Number.isFinite(value.actual)) return false;
+      const target = previewItems.find((item) => item.tempId === issue.target?.id);
+      if (!target) return false;
+      const extractedData: ImportPreviewItem['extractedData'] = {
+        ...target.extractedData,
+        actual: value.actual,
+        completedCount: value.actual,
+        countUnit: typeof value.who === 'string' ? value.who : 'people',
+        activityCount: value.activityCount,
+        reportingPeriod: value.period,
+        activityDescription: value.activity,
+        place: value.place,
+      };
+      const stillFires = runQualityRules({
+        finalReport: false,
+        narrativeSections: [{ id: target.tempId, title: target.title, text: value.sentence }],
+        activities: [{ ...extractedData, id: target.tempId, title: target.title, description: value.sentence }],
+        results: [{ ...extractedData, id: target.tempId, title: target.title, actual: value.actual }],
+      }).some((candidate) => candidate.rule === issue.rule);
+      if (stillFires) return false;
+      const before = target.originalSnippet || target.summary;
+      setPreviewItems((current) => current.map((item) => item.tempId === target.tempId
+        ? { ...item, summary: value.sentence as string, originalSnippet: value.sentence as string, extractedData }
+        : item));
+      setQualityResolutions((current) => [
+        ...current.filter((entry) => entry.issueId !== issue.id),
+        {
+          issueId: issue.id,
+          status: 'resolved',
+          note: resolution.note,
+          by: activeStaff.fullName,
+          at: new Date().toISOString(),
+          field: 'quantifiedActivity',
+          before: { text: before, extractedData: target.extractedData },
+          after: { text: value.sentence, extractedData },
+        },
       ]);
       return true;
     }
@@ -1090,6 +1233,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       const target = previewItems.find((item) => item.tempId === issue.target?.id);
       if (!target) return false;
       const patch = (item: ImportPreviewItem) => ({ ...item, extractedData: { ...item.extractedData, validity } });
+      const resultItems = previewItems.filter((item) => item.selected
+        && ['activity', 'workplan'].includes(item.targetEntity)
+        && (item.extractedData.actual !== undefined || item.extractedData.completedCount !== undefined));
+      const affectedIds = validity.applyToAll === true ? resultItems.map((item) => item.tempId) : [target.tempId];
       const stillFires = runQualityRules({
         results: [{
           ...target.extractedData,
@@ -1097,6 +1244,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           actual: target.extractedData.actual ?? target.extractedData.completedCount,
           target: target.extractedData.target ?? target.extractedData.targetCount,
           validity,
+          enteredBy: activeStaff.fullName,
         }],
       }).some((candidate) => candidate.rule === 'DQ-VALIDITY');
       if (stillFires) return false;
@@ -1108,7 +1256,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       }));
       setQualityResolutions((current) => [
         ...current.filter((entry) => entry.issueId !== issue.id),
-        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'validity', before: target.extractedData.validity, after: validity },
+        {
+          issueId: issue.id,
+          status: 'resolved',
+          note: resolution.note,
+          by: activeStaff.fullName,
+          at: new Date().toISOString(),
+          field: 'validity',
+          before: Object.fromEntries(affectedIds.map((id) => [id, previewItems.find((item) => item.tempId === id)?.extractedData.validity])),
+          after: { validity, applyToAll: validity.applyToAll === true, affectedIds },
+        },
       ]);
       return true;
     }
@@ -1118,8 +1275,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       const pendingApproval = value.narrativeOnly === true && !managerApproved;
       const target = previewItems.find((item) => item.tempId === issue.target?.id);
       if (!target) return false;
-      const extractedData: ImportPreviewItem['extractedData'] = value.indicatorId
-        ? { ...target.extractedData, indicatorId: value.indicatorId }
+      const collectedMethod = (qualityCollectionMethod === 'Other' ? qualityCollectionMethodOther : qualityCollectionMethod).trim();
+      const extractedData: ImportPreviewItem['extractedData'] = typeof value.indicatorId === 'string' && value.indicatorId
+        ? {
+          ...target.extractedData,
+          indicatorId: value.indicatorId,
+          ...(typeof value.actual === 'number' && Number.isFinite(value.actual) ? { actual: value.actual, completedCount: value.actual } : {}),
+          ...(typeof value.unit === 'string' && value.unit.trim() ? { countUnit: value.unit.trim() } : {}),
+          ...(qualityDataSource.trim() ? { dataSource: qualityDataSource.trim(), source: qualityDataSource.trim() } : {}),
+          ...(collectedMethod ? { measurementMethod: collectedMethod, method: collectedMethod } : {}),
+        }
         : { ...target.extractedData, narrativeOnly: true, narrativeOnlyReason: value.narrativeOnlyReason, managerApproved };
       const testActivity = { ...extractedData, id: target.tempId };
       const stillFires = runQualityRules({ activities: [testActivity] }).some((candidate) => candidate.rule === issue.rule);
@@ -1159,7 +1324,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       ]);
       return true;
     }
-    if (!['QUANT-02', 'NARRATIVE-PROGRAMME-01'].includes(issue.rule)
+    if (!['QUANT-02', 'NARRATIVE-PROGRAMME-01', 'NARRATIVE-TRUNCATED-01', 'NARRATIVE-TENSE-01'].includes(issue.rule)
       || typeof resolution.value !== 'string' || !issue.target?.id) return false;
     const target = previewItems.find((item) => item.tempId === issue.target?.id);
     if (!target) return false;
@@ -1212,6 +1377,142 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       ...current.filter((entry) => entry.issueId !== issue.id),
       { issueId: issue.id, status: 'resolved', note: 'Applied deterministic reversible text normalisation.', by: activeStaff.fullName, at: new Date().toISOString(), field, before, after },
     ]);
+  };
+
+  const approveNarrativeOnlyIssue = (issue: QualityIssue): boolean => {
+    if (!(isAdmin || role === 'Manager') || issue.rule !== 'QUANT-03' || !issue.target?.id) return false;
+    const target = previewItems.find((item) => item.tempId === issue.target?.id);
+    if (!target || target.extractedData.narrativeOnly !== true
+      || typeof target.extractedData.narrativeOnlyReason !== 'string'
+      || target.extractedData.narrativeOnlyReason.trim().length < 10) return false;
+    const extractedData = { ...target.extractedData, managerApproved: true };
+    if (runQualityRules({ activities: [{ ...extractedData, id: target.tempId }] }).some((entry) => entry.rule === issue.rule)) return false;
+    setPreviewItems((current) => current.map((item) => item.tempId === target.tempId ? { ...item, extractedData } : item));
+    setQualityResolutions((current) => [
+      ...current.filter((entry) => entry.issueId !== issue.id),
+      {
+        issueId: issue.id,
+        status: 'resolved',
+        note: target.extractedData.narrativeOnlyReason as string,
+        by: activeStaff.fullName,
+        at: new Date().toISOString(),
+        field: 'managerApproved',
+        before: target.extractedData.managerApproved,
+        after: true,
+      },
+    ]);
+    return true;
+  };
+
+  const downloadFixedImportReport = async (format: FixedReportFormat, draft: boolean) => {
+    if (!selectedFile || !canEdit) throw new Error('Choose a file and check your access before downloading a fixed copy.');
+    const openIssues = importQualityIssues.filter((issue) => {
+      const resolution = qualityResolutions.find((entry) => entry.issueId === issue.id);
+      return !resolution || !['resolved', 'overridden'].includes(resolution.status);
+    });
+    const openProblems = openIssues.map((issue) => ({
+      severity: issue.severity,
+      text: qualityMessage(issue).title,
+    }));
+    const changeValueText = (value: unknown, field?: string): string => {
+      if (field === 'quantifiedActivity' && value && typeof value === 'object' && 'text' in value) {
+        return String((value as { text: unknown }).text);
+      }
+      if (field === 'method') {
+        if (value && typeof value === 'object' && 'method' in value) return String((value as { method: unknown }).method);
+        if (value && typeof value === 'object') return Object.values(value).map((entry) => String(entry || 'No method recorded')).join('; ');
+      }
+      if (field === 'validity' && value && typeof value === 'object') {
+        if ('validity' in value) {
+          const validity = (value as { validity: Record<string, unknown> }).validity;
+          const source = validity.source && typeof validity.source === 'object' ? validity.source as Record<string, unknown> : {};
+          return [source.name, source.reference, validity.secondSource, validity.checkedAt].filter(Boolean).map(String).join(' · ');
+        }
+        return Object.values(value).map((entry) => {
+          if (!entry || typeof entry !== 'object') return 'No source recorded';
+          const record = entry as Record<string, unknown>;
+          const source = record.source && typeof record.source === 'object' ? record.source as Record<string, unknown> : {};
+          return [source.name, source.reference, record.secondSource].filter(Boolean).map(String).join(' · ') || 'No source recorded';
+        }).join('; ');
+      }
+      return String(value);
+    };
+    const changes = [
+      ...automaticChanges.map((change) => ({
+        section: previewItems.find((item) => item.tempId === change.tempId)?.title || 'Imported section',
+        originalText: change.before,
+        newText: change.after,
+        by: change.by,
+        at: change.at,
+        reason: change.reason,
+      })),
+      ...qualityResolutions.filter((entry) => entry.before !== undefined && entry.after !== undefined).map((entry) => ({
+        section: previewItems.find((item) => item.tempId === importQualityIssues.find((issue) => issue.id === entry.issueId)?.target?.id)?.title || 'Imported section',
+        originalText: changeValueText(entry.before, entry.field),
+        newText: changeValueText(entry.after, entry.field),
+        by: entry.by,
+        at: entry.at,
+        reason: entry.note || 'Reviewed and corrected.',
+      })),
+      ...automaticDuplicateRemovals.map((change) => ({
+        section: change.removed.title || 'Imported row',
+        originalText: `${change.removed.title}: ${change.removed.summary}`,
+        newText: `Duplicate removed; first copy (${change.keptTempId}) retained.`,
+        by: change.by,
+        at: change.at,
+        reason: 'Removed an exact duplicate row.',
+      })),
+    ];
+    const sections = previewItems.filter((item) => item.selected).map((item) => ({
+      title: item.title || 'Imported section',
+      text: item.originalSnippet || item.summary || '',
+    }));
+    const blob = await createFixedReport({
+      title: `${selectedFile.name.replace(/\.[^.]+$/, '')} - fixed copy`,
+      sections,
+      changes,
+      openProblems,
+      format,
+      draft,
+    });
+    const timestamp = new Date().toISOString();
+    const extension = format === 'marked-docx' ? 'docx' : format;
+    const fileName = `${fixedReportFileName(selectedFile.name)}.${extension}`;
+    const hash = await sha256Blob(blob);
+    await appendReportExport({
+      id: `fixed_import_${activeStaff.uid}_${Date.now()}`,
+      reportType: 'import-fixed',
+      title: selectedFile.name,
+      fileName,
+      format,
+      version: nextReportExportVersion('import-fixed'),
+      hash,
+      openProblems,
+      overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+        issueId: entry.issueId, reason: entry.note, by: entry.by, at: entry.at,
+      })),
+      generatedBy: activeStaff.fullName,
+      generatedByUid: activeStaff.uid,
+      generatedAt: timestamp,
+      draft,
+      finalLocked: !draft,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadOriginalImport = () => {
+    if (!selectedFile) return;
+    const url = URL.createObjectURL(selectedFile);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = selectedFile.name;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -1474,19 +1775,19 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             </section>
           )}
 
-          {spreadsheetPreview && (
+          {previewItems.some((item) => item.selected && ['activity', 'workplan'].includes(item.targetEntity)) && (
             <section className="rounded-xl border border-teal-200 bg-teal-50/50 p-4">
               <h3 className="text-sm font-bold text-stone-900">File-wide result defaults</h3>
               <p className="mt-1 text-xs text-stone-700">Set the source and collection method once for this import. These are applied to every imported result; only enter details supported by the file.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold text-stone-800">Data source
+                <label className="text-xs font-semibold text-stone-800">Where did these numbers come from?
                   <input className="field mt-1 w-full bg-white" value={qualityDataSource} onChange={(event) => setQualityDataSource(event.target.value)} placeholder="e.g. attendance register, school report" />
                 </label>
-                <label className="text-xs font-semibold text-stone-800">Collection method
+                <label className="text-xs font-semibold text-stone-800">How were they counted?
                   <select className="field mt-1 w-full bg-white" value={qualityCollectionMethod} onChange={(event) => setQualityCollectionMethod(event.target.value)}>
                     <option value="">Choose a method</option>
                     <option>Daily register headcount</option><option>Attendance register</option><option>Receipts</option>
-                    <option>School report</option><option>Bank record</option><option>Observation</option><option>Other</option>
+                    <option>School report</option><option>Bank record</option><option>I counted them myself</option><option>Other</option>
                   </select>
                 </label>
                 {qualityCollectionMethod === 'Other' && <label className="text-xs font-semibold text-stone-800">Describe the method
@@ -1495,6 +1796,44 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               </div>
             </section>
           )}
+          <section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4" aria-label="Automatic text changes">
+            <h3 className="text-sm font-bold text-emerald-950">{automaticChanges.length + automaticDuplicateRemovals.length} automatic changes made - review</h3>
+            {automaticChanges.length + automaticDuplicateRemovals.length === 0 ? (
+              <p className="mt-1 text-xs text-emerald-900">No automatic changes were needed.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {automaticChanges.map((change) => (
+                  <li key={change.id} className="rounded border border-emerald-200 bg-white p-2 text-xs">
+                    <p className="font-semibold">{change.reason}</p>
+                    <p className="mt-1 break-words text-stone-700">Before: {change.before}</p>
+                    <p className="break-words text-stone-700">After: {change.after}</p>
+                    <button type="button" className="mt-1 font-semibold text-teal-800 underline" onClick={() => {
+                      setPreviewItems((current) => current.map((item) => item.tempId === change.tempId
+                        ? { ...item, [change.field]: change.before }
+                        : item));
+                      setAutomaticChanges((current) => current.filter((entry) => entry.id !== change.id));
+                    }}>Undo</button>
+                  </li>
+                ))}
+                {automaticDuplicateRemovals.map((change) => (
+                  <li key={change.id} className="rounded border border-emerald-200 bg-white p-2 text-xs">
+                    <p className="font-semibold">Removed an exact duplicate row · kept the first matching row</p>
+                    <p className="mt-1 break-words text-stone-700">Before: {change.removed.title} · {change.removed.summary}</p>
+                    <p className="break-words text-stone-700">After: one copy remains ({change.keptTempId})</p>
+                    <button type="button" className="mt-1 font-semibold text-teal-800 underline" onClick={() => {
+                      setPreviewItems((current) => {
+                        if (current.some((item) => item.tempId === change.removed.tempId)) return current;
+                        const insertAt = change.restoreBeforeId ? current.findIndex((item) => item.tempId === change.restoreBeforeId) : -1;
+                        if (insertAt < 0) return [...current, change.removed];
+                        return [...current.slice(0, insertAt), change.removed, ...current.slice(insertAt)];
+                      });
+                      setAutomaticDuplicateRemovals((current) => current.filter((entry) => entry.id !== change.id));
+                    }}>Undo</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           <QualityCheckPanel
             issues={importQualityIssues.map((issue) => {
               const resolution = qualityResolutions.find((entry) => entry.issueId === issue.id);
@@ -1507,9 +1846,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               };
             })}
             scores={importQualityScores}
+            currentUserName={activeStaff.fullName}
+            onDownloadFixedReport={canEdit ? downloadFixedImportReport : undefined}
+            onDownloadOriginal={canEdit ? downloadOriginalImport : undefined}
             onApplyFix={canEdit ? applySafeImportFix : undefined}
             onOpenIssue={openImportQualityIssue}
             onResolveIssue={canEdit ? resolveImportQualityIssue : undefined}
+            onApprovePendingIssue={canEdit && (isAdmin || role === 'Manager') ? approveNarrativeOnlyIssue : undefined}
             canApproveNarrativeOnly={isAdmin || role === 'Manager'}
             onUndoFix={canEdit ? (issue) => {
               const resolution = qualityResolutions.find((entry) => entry.issueId === issue.id);
@@ -1518,9 +1861,34 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 const restoredItem = resolution.before as ImportPreviewItem;
                 setPreviewItems((current) => current.some((item) => item.tempId === restoredItem.tempId) ? current : [...current, restoredItem]);
               }
+              if (resolution?.field === 'quantifiedActivity' && resolution.before && typeof resolution.before === 'object'
+                && 'text' in resolution.before && 'extractedData' in resolution.before && issue.target?.id) {
+                const before = resolution.before as { text: string; extractedData: ImportPreviewItem['extractedData'] };
+                setPreviewItems((current) => current.map((item) => item.tempId === issue.target?.id
+                  ? { ...item, summary: before.text, originalSnippet: before.text, extractedData: before.extractedData }
+                  : item));
+              }
+              if ((resolution?.field === 'method' || resolution?.field === 'validity')
+                && resolution.before && typeof resolution.before === 'object'
+                && resolution.after && typeof resolution.after === 'object'
+                && 'affectedIds' in resolution.after) {
+                const affectedIds = (resolution.after as { affectedIds: unknown }).affectedIds;
+                if (Array.isArray(affectedIds) && affectedIds.every((id): id is string => typeof id === 'string')) {
+                  const before = resolution.before as Record<string, unknown>;
+                  const field = resolution.field;
+                  setPreviewItems((current) => current.map((item) => {
+                    if (!affectedIds.includes(item.tempId)) return item;
+                    const extractedData = { ...item.extractedData };
+                    if (before[item.tempId] === undefined) delete extractedData[field];
+                    else extractedData[field] = before[item.tempId];
+                    return { ...item, extractedData };
+                  }));
+                }
+              }
               if (resolution && resolution.field && resolution.field !== '__remove' && issue.target?.id) {
                 const field = resolution.field;
                 setPreviewItems((current) => current.map((item) => {
+                  if (field === 'quantifiedActivity' || field === 'method' || field === 'validity') return item;
                   if (item.tempId !== issue.target?.id) return item;
                   if (field === 'text') return { ...item, originalSnippet: resolution.before === undefined ? undefined : String(resolution.before) };
                   if (field === 'title') return { ...item, title: resolution.before === undefined ? undefined : String(resolution.before) };
@@ -1540,7 +1908,6 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               }
               setQualityResolutions((current) => current.filter((entry) => entry.issueId !== issue.id));
             } : undefined}
-            currentUserName={activeStaff.fullName}
           />
           {importQualityIssues.some((issue) => issue.severity === 'blocker') && (
             <label className="block rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs font-semibold text-rose-950">

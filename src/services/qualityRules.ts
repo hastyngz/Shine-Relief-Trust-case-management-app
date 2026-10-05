@@ -1,4 +1,5 @@
 import { matchNameCandidates } from './spreadsheetImport/nameMatcher';
+import { pastTenseReportedActivities } from './safeTextCorrections';
 
 export type QualityIssue = {
   id: string;
@@ -329,11 +330,22 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       add(createIssue('NARRATIVE-VOICE-01', 'info', 'Narrative shifts between first-person and third-person voice.', entry.path, 'Use one reporting voice consistently.'));
     }
     if (/\b(?:was|were|had)\b/i.test(sectionText) && /\b(?:is|are|has|have)\b/i.test(sectionText)) {
-      add(createIssue('NARRATIVE-TENSE-01', 'info', 'Narrative may mix past and present tense.', entry.path, 'Use past tense for completed reporting-period activities.'));
+      const sentence = sectionText.match(/[^.!?]+(?:\b(?:is|are|has|have)\b)[^.!?]*[.!?]?/i)?.[0]?.trim() || sectionText;
+      const corrected = pastTenseReportedActivities(sentence);
+      add({
+        ...createIssue('NARRATIVE-TENSE-01', 'info', 'Narrative may mix past and present tense.', entry.path, 'Use past tense for completed reporting-period activities.'),
+        context: sentence,
+        fix: { type: 'text-input', safe: false, field: 'text', suggestedValue: corrected !== sentence ? corrected : undefined, reversible: true },
+      });
     }
     const lastChar = sectionText.trim().slice(-1);
     if (sectionText.trim().length > 0 && !/[.!?…'”")\]]/.test(lastChar)) {
-      add(createIssue('NARRATIVE-TRUNCATED-01', 'warning', 'Narrative may end with a truncated sentence.', entry.path, 'Review the final sentence against the source document.'));
+      const finalSentence = sectionText.match(/[^.!?]+$/)?.[0]?.trim() || sectionText.trim();
+      add({
+        ...createIssue('NARRATIVE-TRUNCATED-01', 'warning', 'Narrative may end with a truncated sentence.', entry.path, 'Review the final sentence against the source document.'),
+        context: finalSentence,
+        fix: { type: 'text-input', safe: false, field: 'text', suggestedValue: finalSentence, reversible: true },
+      });
     }
     if (Number.isFinite(options.maxSentenceWords)) {
       const tooLong = sectionText.split(/[.!?]+/).some((sentence) => words(sentence).length > (options.maxSentenceWords as number));

@@ -54,18 +54,21 @@ const CATALOGUE: Record<string, MessageTemplate> = {
   },
   'DQ-RELIABILITY': {
     title: 'We don’t know how this number was counted.',
+    question: 'How was this number counted?',
     why: 'The counting method helps readers understand where the number came from.',
     examples: ['Counted from the daily register', 'I counted them myself'],
     buttonLabel: 'Record how it was counted',
   },
   'DQ-VALIDITY': {
     title: 'We can’t tell where this number came from.',
+    question: 'Where did this number come from?',
     why: 'A source and a second check help confirm the number is supported.',
     examples: ['Attendance register, checked by another person', 'School report and matching activity'],
     buttonLabel: 'Check this number',
   },
   'FIN-TOTAL-DISAGREEMENT-01': {
     title: 'The total doesn’t match the lines.',
+    question: 'Which total should we use?',
     why: 'Check the lines before choosing which total to keep.',
     examples: ['Use the recomputed total', 'Keep mine and explain'],
     buttonLabel: 'Review totals',
@@ -357,6 +360,15 @@ function activityQuestion(quote: string): string {
   return `How many ${who} took part in ${activity}?`;
 }
 
+function sectionQuestion(quote: string): string {
+  const text = sentenceFor(quote);
+  const heading = text.match(/^([^:]+):/)?.[1]?.trim()
+    || text.match(/(?:participated in|took part in|practised|practiced)\s+([^.!?]+)/i)?.[1]?.trim()
+    || 'this activity';
+  const month = text.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b(?:\s+\d{4})?/i)?.[0];
+  return `How many girls took part in ${heading}${month ? ` in ${month}` : ''}?`;
+}
+
 export function qualityMessage(issue: QualityIssue): QualityMessage {
   const template = CATALOGUE[issue.rule] || friendlyFallback;
   const validityValue = issue.rule === 'DQ-VALIDITY'
@@ -369,9 +381,12 @@ export function qualityMessage(issue: QualityIssue): QualityMessage {
     ? `${validityValue[2].trim()}: ${validityValue[1].trim()}`
     : totals
       ? `Stated: ${totals[1].trim()}; recomputed: ${totals[2].trim()}`
-    : issue.context?.trim() || issue.location;
-  const question = template.question
-    || (issue.rule === 'QUANT-03' ? activityQuestion(quote) : issue.rule === 'NARRATIVE-TRUNCATED-01' ? 'Please finish the sentence' : 'What should be changed or checked?');
+    : issue.context?.trim() || 'The original record needs a check.';
+  const question = issue.rule === 'QUANT-03'
+    ? activityQuestion(quote)
+    : issue.rule === 'QUANT-01'
+      ? sectionQuestion(quote)
+      : template.question || (issue.rule === 'NARRATIVE-TRUNCATED-01' ? 'Please finish the sentence' : 'What should be changed or checked?');
   return { ...template, quote: sentenceFor(quote), question };
 }
 

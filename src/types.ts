@@ -1372,6 +1372,23 @@ export interface ReportHistoryRecord {
   qualityResolutions?: Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; field?: string; before?: unknown; after?: unknown }>;
 }
 
+export interface ReportExportRecord {
+  id: string;
+  reportType: string;
+  title: string;
+  fileName: string;
+  format: 'docx' | 'pdf' | 'marked-docx' | 'xlsx' | 'csv';
+  version: number;
+  hash: string;
+  openProblems: Array<{ severity: 'blocker' | 'warning' | 'info'; text: string }>;
+  overrides: Array<{ issueId: string; reason: string; by: string; at: string }>;
+  generatedBy: string;
+  generatedByUid: string;
+  generatedAt: string;
+  draft: boolean;
+  finalLocked: boolean;
+}
+
 export type ConversationType = 'direct' | 'group' | 'announcement';
 
 export interface ParticipantDetail {

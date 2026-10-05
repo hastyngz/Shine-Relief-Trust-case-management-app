@@ -162,6 +162,23 @@ async function run() {
     await assertFails(setDoc(doc(worker, 'reportHistory/report-bad-path'), { id: 'report-bad-path', reportType: 'comprehensive', title: 'Bad path', reportingPeriod: '2026-01', filters: {}, generatedBy: 'worker', generatedByUid: 'worker', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'docx', fileName: 'report.docx', storagePath: 'reports/manager/report-bad-path/report.docx', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
     await assertFails(updateDoc(doc(worker, 'reportHistory/report-worker'), { title: 'Changed' }));
     await assertFails(setDoc(doc(viewer, 'reportHistory/report-viewer'), { id: 'report-viewer', reportType: 'comprehensive', title: 'Viewer report', reportingPeriod: '2026-01', filters: {}, generatedBy: 'viewer', generatedByUid: 'viewer', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'pdf', fileName: 'report.pdf', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
+    await assertSucceeds(setDoc(doc(worker, 'reportExports/fixed-export-worker'), {
+      id: 'fixed-export-worker', reportType: 'import-fixed', title: 'Fixed report',
+      fileName: 'source - fixed - 2026-10-05.docx', format: 'docx', version: 1,
+      hash: 'a'.repeat(64), openProblems: [], overrides: [], generatedBy: 'Worker',
+      generatedByUid: 'worker', generatedAt: '2026-10-05T12:00:00.000Z',
+      draft: false, finalLocked: true,
+    }));
+    await assertSucceeds(getDoc(doc(manager, 'reportExports/fixed-export-worker')));
+    await assertFails(getDoc(doc(viewer, 'reportExports/fixed-export-worker')));
+    await assertFails(setDoc(doc(viewer, 'reportExports/fixed-export-viewer'), {
+      id: 'fixed-export-viewer', reportType: 'import-fixed', title: 'Fixed report',
+      fileName: 'source - fixed.docx', format: 'docx', version: 1,
+      hash: 'b'.repeat(64), openProblems: [], overrides: [], generatedBy: 'Viewer',
+      generatedByUid: 'viewer', generatedAt: '2026-10-05T12:00:00.000Z',
+      draft: false, finalLocked: true,
+    }));
+    await assertFails(updateDoc(doc(worker, 'reportExports/fixed-export-worker'), { finalLocked: false }));
     await assertFails(setDoc(doc(manager, 'employeeSalaryHistory/salary-2'), { salaryAmount: 130000 }));
 
     console.log('Firestore rules tests passed.');

@@ -9,11 +9,13 @@ import {
   reviewReportQuality,
 } from '../../services/reportGenerators';
 import { qualityScores } from '../../services/qualityRules';
+import { qualityMessage } from '../../services/qualityMessages';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
-import { appendReportHistory, getReportHistory } from '../../services/firestoreSync';
+import { appendReportExport, appendReportHistory, getReportHistory } from '../../services/firestoreSync';
+import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
 import type { QualityIssue } from '../../services/qualityRules';
 import {
   FileDown,
@@ -104,7 +106,8 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
 
   const [executiveNotes, setExecutiveNotes] = useState<string>('');
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
-  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string }>>([]);
+  const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; before?: unknown; after?: unknown }>>([]);
+  const [fixedReportVersion, setFixedReportVersion] = useState(0);
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
@@ -448,6 +451,55 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
     canViewCaseReviews && includeCaseReviews && previewData.caseReviews.length > 0,
   ].filter(Boolean).length;
   const previewFingerprint = JSON.stringify({ format, previewConfig, executiveNotes });
+  const downloadFixedReport = async (fixedFormat: FixedReportFormat, draft: boolean) => {
+    if (!currentUser || !canGenerateReports) throw new Error('Your account cannot download this report.');
+    const openIssues = auditedQualityIssues.filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden');
+    const openProblems = openIssues.map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title }));
+    const sections = [
+      { title: 'Report overview', text: `${reportTitle}\n${previewConfig.periodLabel}` },
+      ...(includeStatistics ? [{ title: 'Statistics', text: `${previewRecords} records are included across ${previewTables} report sections.` }] : []),
+      ...(includeGirlsCaseload ? [{ title: 'Girls and households', text: `${previewData.girls.length} girl records and ${previewData.households.length} household records are included.` }] : []),
+      ...(includeEducation ? [{ title: 'Education and activities', text: `${previewData.edu.length} education records and ${previewData.activities.length} activity records are included.` }] : []),
+      ...(canViewHealthRecords && includeHealth ? [{ title: 'Health', text: `${previewData.health.length} health records are included.` }] : []),
+      ...(includeFamily ? [{ title: 'Family', text: `${previewData.family.length} family records are included.` }] : []),
+      ...(includeFinances ? [{ title: 'Finances', text: `${previewData.expenses.length} expense records and ${previewData.rent.length} rent records are included.` }] : []),
+      ...(includeBudgets ? [{ title: 'Budgets', text: `${previewData.budgets.length} budget records are included.` }] : []),
+      ...(includeWorkplans ? [{ title: 'Workplans', text: `${previewData.workplans.length} workplan records and ${previewData.schedules.length} schedule records are included.` }] : []),
+      ...(includeCaseActions ? [{ title: 'Case actions', text: `${previewData.caseActions.length} case action records are included.` }] : []),
+      ...(canViewCaseReviews && includeCaseReviews ? [{ title: 'Case reviews', text: `${previewData.caseReviews.length} case review records are included.` }] : []),
+    ];
+    const blob = await createFixedReport({ title: reportTitle, sections, changes: [], openProblems, format: fixedFormat, draft });
+    const timestamp = new Date().toISOString();
+    const extension = fixedFormat === 'marked-docx' ? 'docx' : fixedFormat;
+    const fileName = `${fixedReportFileName(reportTitle)}.${extension}`;
+    const hash = await sha256Blob(blob);
+    const version = Math.max(fixedReportVersion + 1, nextReportExportVersion(reportType));
+    await appendReportExport({
+      id: `fixed_report_${currentUser.uid}_${Date.now()}`,
+      reportType,
+      title: reportTitle,
+      fileName,
+      format: fixedFormat,
+      version,
+      hash,
+      openProblems,
+      overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+        issueId: entry.issueId, reason: entry.note, by: entry.by, at: new Date().toISOString(),
+      })),
+      generatedBy: authorName,
+      generatedByUid: currentUser.uid,
+      generatedAt: timestamp,
+      draft,
+      finalLocked: !draft,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    setFixedReportVersion(version);
+  };
   const selectedFilterLabels = [
     selectedHouseholdId !== 'ALL' ? `Household: ${db.households.find((item) => item.id === selectedHouseholdId)?.name || selectedHouseholdId}` : '',
     selectedGirlId !== 'ALL' ? `Girl: ${db.girls.find((item) => item.id === selectedGirlId)?.fullName || selectedGirlId}` : '',
@@ -791,6 +843,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
           <QualityCheckPanel
             issues={auditedQualityIssues}
             scores={reportQualityScores}
+            onDownloadFixedReport={downloadFixedReport}
             canApproveNarrativeOnly={isAdmin || role === 'Manager'}
             currentUserName={staffProfile?.fullName || currentUser?.email || authorName}
             canOpenIssue={(issue) => ['narrative-section', 'report-section', 'budget-item', 'workplan-item', 'indicator-result'].includes(issue.target?.kind || '')}

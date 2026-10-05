@@ -46,6 +46,7 @@ import {
   ProgrammeLogRecord,
   CaseReview,
   ReportHistoryRecord,
+  ReportExportRecord,
   MeetingRecord,
   FeedingProgramLog,
   MarketPriceRecord,
@@ -145,6 +146,7 @@ export const COLLECTIONS = {
   EMPLOYEE_SALARY_HISTORY: 'employeeSalaryHistory',
   EMPLOYEE_AUDIT_LOGS: 'employeeAuditLogs',
   REPORT_HISTORY: 'reportHistory',
+  REPORT_EXPORTS: 'reportExports',
   PROCUREMENT_LISTS: 'procurementLists',
   PROJECT_PROJECTIONS: 'projectProjections',
 } as const;
@@ -223,6 +225,17 @@ export async function appendEmployeeAuditLog(event: Record<string, any>): Promis
 
 export async function appendReportHistory(record: ReportHistoryRecord): Promise<void> {
   await setDoc(doc(firestore, COLLECTIONS.REPORT_HISTORY, record.id), sanitizeForFirestore(record));
+}
+
+export async function appendReportExport(record: ReportExportRecord): Promise<void> {
+  const key = 'shine-report-exports';
+  const current = JSON.parse(localStorage.getItem(key) || '[]') as ReportExportRecord[];
+  localStorage.setItem(key, JSON.stringify([...current.filter((entry) => entry.id !== record.id), record].slice(-500)));
+  void setDoc(doc(firestore, COLLECTIONS.REPORT_EXPORTS, record.id), sanitizeForFirestore(record))
+    .catch((error) => {
+      console.error('Report export audit sync failed; the audit remains saved on this device:', error);
+      updateSyncStatus('error');
+    });
 }
 
 export async function getReportHistory(uid: string, canReadAll: boolean): Promise<ReportHistoryRecord[]> {

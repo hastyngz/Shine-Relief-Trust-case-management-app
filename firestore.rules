@@ -328,6 +328,24 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /reportExports/{exportId} {
+      allow read: if isManagerOrAdmin() || (
+        isStaffActive() && resource.data.generatedByUid == request.auth.uid
+      );
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.id == exportId &&
+        request.resource.data.generatedByUid == request.auth.uid &&
+        request.resource.data.hash is string &&
+        request.resource.data.format in ['docx', 'pdf', 'marked-docx', 'xlsx', 'csv'] &&
+        request.resource.data.finalLocked is bool &&
+        request.resource.data.keys().hasOnly([
+          'id', 'reportType', 'title', 'fileName', 'format', 'version', 'hash',
+          'openProblems', 'overrides', 'generatedBy', 'generatedByUid',
+          'generatedAt', 'draft', 'finalLocked'
+        ]);
+      allow update, delete: if false;
+    }
+
     // Contact details are private staff data. Edits remain attributable and contacts are archived, never deleted.
     match /contacts/{contactId} {
       allow read: if isStaffActive();

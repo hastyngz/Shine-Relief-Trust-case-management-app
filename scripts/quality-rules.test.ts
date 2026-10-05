@@ -78,6 +78,20 @@ assert.match(activityQuestion('Cooperative learning: The girls participated in c
 assert.match(activityQuestion('Guest speakers visited the school.'), /guest speakers visited, and how many girls attended/i);
 assert.match(activityQuestion('Field visits: children went to the farm.'), /field visits were made, and how many girls went/i);
 assert.match(activityQuestion('Vocational training: Learners took part.'), /vocational training, and in which courses/i);
+assert.match(qualityMessage({
+  id: 'section-question', severity: 'warning', rule: 'QUANT-01', message: 'ignored', location: 'test',
+  context: 'Cooperative learning: The girls participated in cooperative learning in September.',
+}).question, /cooperative learning in september/i);
+const stableTargetIssue = runQualityRules({
+  narrativeSections: [{ id: 'preview-stable-42', text: 'The girls participated in various activities.' }],
+}).find((issue) => issue.rule === 'QUANT-02');
+assert.equal(stableTargetIssue?.target?.id, 'preview-stable-42');
+const rebuiltActivityText = 'In September 2026, 8 girls took part in 6 cooperative learning sessions at Zomba.';
+assert.ok(!runQualityRules({
+  narrativeSections: [{ id: 'preview-stable-42', text: rebuiltActivityText }],
+  activities: [{ id: 'preview-stable-42', indicatorId: 'result-1', actual: 8, method: 'Attendance register' }],
+  results: [{ id: 'preview-stable-42', actual: 8, method: 'Attendance register' }],
+}).some((issue) => issue.rule === 'QUANT-02'));
 
 const exampleSentence = runQualityRules({
   narrativeSections: [{ text: 'The girls participated in various activities.' }],
