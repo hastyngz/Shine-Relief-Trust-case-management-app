@@ -1277,6 +1277,7 @@ export type DocxClassification =
   | 'GENERAL_REPORT_INFO'
   | 'PHOTO_HIGHLIGHT'
   | 'CONTACT_DIRECTORY_RECORD'
+  | 'STAFF_PAYROLL_RECORD'
   | 'UNCLASSIFIED_REVIEW';
 
 export interface ImportPreviewItem {

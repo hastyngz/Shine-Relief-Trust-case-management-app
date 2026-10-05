@@ -225,8 +225,8 @@ function spreadsheetLineToPreview(
       tempId: id,
       resultType: line.status === 'matched' ? 'CONFLICT' : 'NEW_RECORD',
       targetEntity: 'employee',
-      classification: 'UNCLASSIFIED_REVIEW',
-      classificationLabel: 'Employee / payroll history',
+      classification: 'STAFF_PAYROLL_RECORD',
+      classificationLabel: 'Staff Payroll / Salary Record',
       isDateUnknown: true,
       title: line.employeeName,
       summary: `${line.department || 'Department not supplied'} · ${line.salaryHistory.length} monthly salary entries · latest MWK ${line.currentSalary.toLocaleString()}`,
@@ -251,7 +251,7 @@ function spreadsheetLineToPreview(
       tempId: id,
       resultType: line.status === 'matched' ? 'NEW_RECORD' : 'POSSIBLE_DUPLICATE_PERSON',
       targetEntity: 'payroll',
-      classification: 'BUDGET_FINANCIAL',
+      classification: 'STAFF_PAYROLL_RECORD',
       classificationLabel: line.specialType ? `${line.specialType} payment · review required` : 'Payroll payment',
       matchedId: line.employeeId,
       matchedName: line.employeeName,
@@ -328,6 +328,7 @@ const CLASSIFICATION_OPTIONS: Array<{ value: DocxClassification; label: string }
   { value: 'GENERAL_REPORT_INFO', label: 'L. General Report Information' },
   { value: 'PHOTO_HIGHLIGHT', label: 'M. Pictorial Highlight (Photo)' },
   { value: 'UNCLASSIFIED_REVIEW', label: 'N. Unclassified / Requires Review' },
+  { value: 'STAFF_PAYROLL_RECORD', label: 'O. Staff Payroll / Salary Record' },
 ];
 
 export const DataImportWizard: React.FC<DataImportWizardProps> = ({

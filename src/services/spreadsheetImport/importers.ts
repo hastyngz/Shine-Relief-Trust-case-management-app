@@ -154,6 +154,12 @@ function normalized(value: unknown): string {
   return text(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+export function isValidPayrollEmployeeName(value: unknown): boolean {
+  const name = text(value);
+  if (!name || number(name) !== undefined || !/[a-z]{2}/i.test(name)) return false;
+  return !/^(?:(?:grand|sub)\s*)?(?:total|subtotal)\b|^(?:payments?|summary|summaries)\b/i.test(name);
+}
+
 function number(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   const cleaned = text(value).replace(/[,\sMWK]/gi, '');
@@ -540,11 +546,8 @@ function parsePayrollRows(
   const labelledNameIndex = columnIndex(headers, [/employee/, /staff/, /name/, /personnel/]);
   const monthColumns = findMonthColumns(headers);
   const labelledGroupIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
-  const isCredibleName = (value: unknown) => {
-    const name = text(value);
-    return /[a-z]{2}/i.test(name) && number(name) === undefined
-      && !/^(?:bank credit|total|grand total|subtotal|salary|wages?|farm|mill|house mums?|driver|watchmen?|administration|admistration|teachers?|ministry|grad?uity)$/i.test(name);
-  };
+  const isCredibleName = (value: unknown) => isValidPayrollEmployeeName(value)
+    && !/^(?:bank credit|salary|wages?|farm|mill|house mums?|driver|watchmen?|administration|admistration|teachers?|ministry|grad?uity)$/i.test(text(value));
   const nameScores = (labelledNameIndex >= 0 ? [labelledNameIndex] : [1, 2, 0]).map((index) => ({
     index,
     score: rows.slice(headerIndex + 1, headerIndex + 50).filter((row) =>
@@ -602,7 +605,9 @@ function parsePayrollRows(
     const groupLabel = groupIndex >= 0 ? text(row[groupIndex]) : '';
     const name = text(row[nameIndex]);
     if (isGroupHeading(groupLabel, row)) currentGroup = groupLabel;
-    if (!name || /^(?:bank credit|total|grand total|subtotal)\b/i.test(name) || isGratuitySection(currentGroup)) return;
+    if (!isValidPayrollEmployeeName(name)
+      || /^(?:bank credit|salary|wages?|farm|mill|house mums?|driver|watchmen?|administration|admistration|teachers?|ministry|grad?uity)\b/i.test(name)
+      || isGratuitySection(currentGroup)) return;
     monthColumns.forEach(({ index, month }) => {
       if (number(row[index]) !== undefined && number(row[index])! > 0) workbookLatestMonth = Math.max(workbookLatestMonth, month);
     });
@@ -628,20 +633,18 @@ function parsePayrollRows(
     if (monthlyAmounts.length === 0 && specialAmounts.length === 0) {
       return;
     }
-    if (/^(?:bank credit|total|grand total|subtotal|salary|wages?|construction|materials?)\b/i.test(employeeSourceName)) {
+    if (!isValidPayrollEmployeeName(employeeSourceName)
+      || /^(?:bank credit|salary|wages?|construction|materials?)\b/i.test(employeeSourceName)) {
       skipped += 1;
       return;
     }
     if (!employeeSourceName || monthlyAmounts.length === 0 && specialAmounts.length === 0) {
       skipped += 1;
-      if (!employeeSourceName) {
-        output.push({ kind: 'unmapped', sheet: sheetName, row: sourceRow, reason: 'Payroll amount has no employee name', values: row });
-      }
       return;
     }
     const nameParts = employeeSourceName.split(/\r?\n|;| \| /).map((part) => part.trim()).filter(Boolean);
     const employeeName = nameParts[0];
-    if (!/[a-z]{2}/i.test(employeeName) || /^\d+$/.test(employeeName)) {
+    if (!isValidPayrollEmployeeName(employeeName)) {
       skipped += 1;
       return;
     }

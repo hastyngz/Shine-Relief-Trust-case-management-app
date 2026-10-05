@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook, detectSpreadsheetKind } from '../src/services/spreadsheetImport/detector';
-import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
+import { createSpreadsheetImportPreview, isValidPayrollEmployeeName } from '../src/services/spreadsheetImport/importers';
 import { matchNameCandidates } from '../src/services/spreadsheetImport/nameMatcher';
 import { extractEarlyYearsMetrics } from '../src/services/docxParserService';
 
@@ -120,6 +120,34 @@ assert.equal(payrollEmployees[0].salaryHistory.length, 3);
 assert.ok(payrollEmployees[0].otherPayrollAmounts.some((line) => line.type === 'loan'));
 assert.ok(payrollEmployees[0].otherPayrollAmounts.some((line) => line.type === 'arrears'));
 
+assert.equal(isValidPayrollEmployeeName('PAYMENTS'), false);
+assert.equal(isValidPayrollEmployeeName('TOTAL SALARY'), false);
+assert.equal(isValidPayrollEmployeeName('123456'), false);
+assert.equal(isValidPayrollEmployeeName('Jane Synthetic'), true);
+const payrollWithSummaryRows = workbook([
+  ['', 'Employee Name', 'January 2026', 'February 2026'],
+  ['', 'PAYMENTS', 1244000, 1244000],
+  ['', '', 1244000, 1244000],
+  ['', '12345', 10000, 10000],
+  ['', 'SUMMARY - STAFF', 1244000, 1244000],
+  ['', 'Jane Synthetic', 50000, 55000],
+], 'PAYMENTS');
+const summaryRowsPreview = createSpreadsheetImportPreview(
+  payrollWithSummaryRows,
+  analyzeSpreadsheetWorkbook(payrollWithSummaryRows),
+  'payroll-grid',
+);
+assert.deepEqual(
+  summaryRowsPreview.lines.filter((line) => line.kind === 'employee').map((line) => line.employeeName),
+  ['Jane Synthetic'],
+  'totals, blank names, numeric names, and summary labels do not become employee records',
+);
+assert.equal(
+  summaryRowsPreview.lines.filter((line) => line.kind === 'unmapped').length,
+  0,
+  'summary and nameless payroll rows are dropped before preview rather than sent to unclassified review',
+);
+
 const matrixPayrollWorkbook = workbook([
   ['Employees, salary 2026'],
   ['', '', '', 'SEPTMBER 2026'],
@@ -180,7 +208,11 @@ for (const fileName of [
   assert.ok(detectedEmployees.some((employee) => employee.department), 'staff group should carry to employee rows');
   assert.ok(detectedEmployees.some((employee) => employee.salaryHistory.length > 1), 'month-by-month salary history should be captured');
   assert.ok(detectedEmployees.every((employee) => employee.salaryHistory.every((entry) => entry.amount > 0)), 'blank/zero cells must not become salary entries');
-  assert.ok(fixturePreview.lines.some((line) => line.kind === 'unmapped'), 'amount-only subtotal/unnamed rows should be ignored rather than made employees');
+  assert.equal(
+    fixturePreview.lines.some((line) => line.kind === 'unmapped' && /payroll amount has no employee name/i.test(line.reason)),
+    false,
+    'amount-only payroll rows are dropped rather than staged as unmapped review rows',
+  );
   assert.equal(fixturePreview.lines.filter((line) => line.kind === 'employee').some((employee) =>
     /^(?:farm|mill|house mums|driver|watchmen|admistration|bank credit|total|grand total|subtotal)$/i.test(employee.employeeName)), false);
   assert.equal(fixturePreview.lines.some((line) => line.kind !== 'unmapped' && line.sheet === 'Sheet2'), false, 'unrelated Sheet2 must not generate employee or payroll rows');
