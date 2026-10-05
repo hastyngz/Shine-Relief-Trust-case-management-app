@@ -5,6 +5,7 @@ import { correctImportPreviewText, exactPreviewDuplicateKey } from '../src/servi
 import {
   assertFixedReportCanDownload,
   createFixedReport,
+  formatFixedReportChangeValue,
   fixedReportFileName,
   type FixedReportInput,
 } from '../src/services/qualityFixedReport';
@@ -56,6 +57,22 @@ const base: FixedReportInput = {
   draft: false,
 };
 assert.equal(fixedReportFileName('activity report.docx', new Date('2026-10-05T12:00:00.000Z')), 'activity report - fixed - 2026-10-05');
+const quantitativeChange = formatFixedReportChangeValue({
+  text: 'The team reached the community.',
+  extractedData: {
+    actual: 12,
+    countUnit: 'people',
+    activityCount: 3,
+    reportingPeriod: 'September 2026',
+    activityDescription: 'Outreach visits',
+    place: 'Zomba',
+    indicatorId: 'IND-1',
+  },
+}, 'quantifiedActivity');
+assert.match(quantitativeChange, /Actual: 12/);
+assert.match(quantitativeChange, /Activity count: 3/);
+assert.match(quantitativeChange, /Period: September 2026/);
+assert.match(quantitativeChange, /Indicator: IND-1/);
 
 const marked = await createFixedReport(base);
 const archive = await JSZip.loadAsync(await marked.arrayBuffer());
@@ -104,6 +121,22 @@ const changesWorkbook = await createFixedReport({ ...base, format: 'xlsx' });
 const workbook = XLSX.read(await changesWorkbook.arrayBuffer(), { type: 'array' });
 assert.equal(workbook.Sheets.Changes?.['A2']?.v, 'Activities');
 assert.equal(workbook.Sheets.Changes?.['F2']?.v, 'Added the checked count.');
+const quantitativeWorkbook = await createFixedReport({
+  ...base,
+  format: 'xlsx',
+  changes: [{
+    ...base.changes[0],
+    originalText: formatFixedReportChangeValue({
+      text: 'Before.',
+      extractedData: { actual: 4, countUnit: 'people', activityCount: 1 },
+    }, 'quantifiedActivity'),
+    newText: quantitativeChange,
+    reason: 'Corrected quantified activity details.',
+  }],
+});
+const quantitativeSheet = XLSX.read(await quantitativeWorkbook.arrayBuffer(), { type: 'array' }).Sheets.Changes;
+assert.match(String(quantitativeSheet?.['C2']?.v), /Activity count: 3/);
+assert.match(String(quantitativeSheet?.['C2']?.v), /Period: September 2026/);
 
 assert.throws(() => assertFixedReportCanDownload({
   openProblems: [{ severity: 'blocker', text: 'A required check remains.' }],

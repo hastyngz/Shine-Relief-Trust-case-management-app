@@ -64,6 +64,67 @@ export interface FixedReportInput {
   identifyingValues?: string[];
 }
 
+export function formatFixedReportChangeValue(value: unknown, field?: string): string {
+  if (field === 'quantifiedActivity' && value && typeof value === 'object') {
+    const change = value as {
+      text?: unknown;
+      extractedData?: Record<string, unknown>;
+    };
+    const data = change.extractedData;
+    const details = data ? [
+      ['Indicator', data.indicatorId],
+      ['Actual', data.actual ?? data.completedCount],
+      ['Target', data.target ?? data.targetCount],
+      ['Unit', data.countUnit],
+      ['Activity count', data.activityCount],
+      ['Period', data.reportingPeriod],
+      ['Activity', data.activityDescription],
+      ['Place', data.place],
+      ['Data source', data.dataSource ?? data.source],
+      ['Measurement method', data.measurementMethod ?? data.method],
+      ['Narrative only', data.narrativeOnly],
+      ['Narrative-only reason', data.narrativeOnlyReason],
+      ['Manager approved', data.managerApproved],
+    ].filter(([, entry]) => entry !== undefined && entry !== null && entry !== '')
+      .map(([label, entry]) => `${label}: ${String(entry)}`)
+      : [];
+    return [
+      typeof change.text === 'string' && change.text ? `Narrative: ${change.text}` : '',
+      ...details,
+    ].filter(Boolean).join('\n') || 'No quantitative details recorded.';
+  }
+  if (field === 'method' && value && typeof value === 'object') {
+    const method = value as { method?: unknown; affectedIds?: unknown; applyToAll?: unknown };
+    if (typeof method.method === 'string') return `Measurement method: ${method.method}`;
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key, entry]) => !/ids?$/i.test(key) && entry !== undefined)
+      .map(([key, entry]) => `${key}: ${String(entry)}`).join('\n');
+  }
+  if (field === 'validity' && value && typeof value === 'object') {
+    const validityValue = value as Record<string, unknown>;
+    const validity = validityValue.validity && typeof validityValue.validity === 'object'
+      ? validityValue.validity as Record<string, unknown>
+      : validityValue;
+    const source = validity.source && typeof validity.source === 'object'
+      ? validity.source as Record<string, unknown>
+      : {};
+    const details = [
+      ['Source', source.name],
+      ['Reference', source.reference],
+      ['Second source', validity.secondSource],
+      ['Checked by', validity.checkedBy],
+      ['Checked at', validity.checkedAt],
+      ['Note', validity.note],
+    ].filter(([, entry]) => entry !== undefined && entry !== null && entry !== '')
+      .map(([label, entry]) => `${label}: ${String(entry)}`);
+    if (details.length) return details.join('\n');
+  }
+  if (typeof value === 'string') return value;
+  if (value === undefined) return '';
+  if (value && typeof value === 'object') return JSON.stringify(value, null, 2);
+  return String(value);
+}
+
 export function fixedReportFileName(originalName: string, date = new Date()): string {
   const base = originalName.replace(/\.[^.]+$/, '').trim() || 'Report';
   return `${base} - fixed - ${date.toISOString().slice(0, 10)}`;

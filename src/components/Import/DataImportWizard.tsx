@@ -31,7 +31,7 @@ import { qualityScores, runQualityRules } from '../../services/qualityRules';
 import type { QualityIssue } from '../../services/qualityRules';
 import { qualityMessage } from '../../services/qualityMessages';
 import { appendReportExport } from '../../services/firestoreSync';
-import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { createFixedReport, fixedReportFileName, formatFixedReportChangeValue, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
 import { correctImportPreviewText, exactPreviewDuplicateKey, type SafeTextChange } from '../../services/safeTextCorrections';
 import {
   AlertCircle,
@@ -1419,7 +1419,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       if (pendingApproval) {
         setQualityResolutions((current) => [
           ...current.filter((entry) => entry.issueId !== issue.id),
-          { issueId: issue.id, status: 'pending-approval', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString() },
+          {
+            issueId: issue.id,
+            status: 'pending-approval',
+            note: resolution.note,
+            by: activeStaff.fullName,
+            at: new Date().toISOString(),
+            field: 'quantifiedActivity',
+            before: { text: target.originalSnippet || target.summary, extractedData: target.extractedData },
+            after: { text: sentence || target.originalSnippet || target.summary, extractedData },
+          },
         ]);
         return false;
       }
@@ -1523,6 +1532,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       || target.extractedData.narrativeOnlyReason.trim().length < 10) return false;
     const extractedData = { ...target.extractedData, managerApproved: true };
     if (runQualityRules({ activities: [{ ...extractedData, id: target.tempId }] }).some((entry) => entry.rule === issue.rule)) return false;
+    const previousResolution = qualityResolutions.find((entry) => entry.issueId === issue.id);
     setPreviewItems((current) => current.map((item) => item.tempId === target.tempId ? { ...item, extractedData } : item));
     setQualityResolutions((current) => [
       ...current.filter((entry) => entry.issueId !== issue.id),
@@ -1532,9 +1542,17 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         note: target.extractedData.narrativeOnlyReason as string,
         by: activeStaff.fullName,
         at: new Date().toISOString(),
-        field: 'managerApproved',
-        before: target.extractedData.managerApproved,
-        after: true,
+        field: previousResolution?.field || 'quantifiedActivity',
+        before: previousResolution?.before ?? {
+          text: target.originalSnippet || target.summary,
+          extractedData: { ...target.extractedData, managerApproved: false },
+        },
+        after: previousResolution?.after && typeof previousResolution.after === 'object'
+          ? {
+            ...(previousResolution.after as Record<string, unknown>),
+            extractedData,
+          }
+          : { text: target.originalSnippet || target.summary, extractedData },
       },
     ]);
     return true;
@@ -1550,29 +1568,6 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       severity: issue.severity,
       text: qualityMessage(issue).title,
     }));
-    const changeValueText = (value: unknown, field?: string): string => {
-      if (field === 'quantifiedActivity' && value && typeof value === 'object' && 'text' in value) {
-        return String((value as { text: unknown }).text);
-      }
-      if (field === 'method') {
-        if (value && typeof value === 'object' && 'method' in value) return String((value as { method: unknown }).method);
-        if (value && typeof value === 'object') return Object.values(value).map((entry) => String(entry || 'No method recorded')).join('; ');
-      }
-      if (field === 'validity' && value && typeof value === 'object') {
-        if ('validity' in value) {
-          const validity = (value as { validity: Record<string, unknown> }).validity;
-          const source = validity.source && typeof validity.source === 'object' ? validity.source as Record<string, unknown> : {};
-          return [source.name, source.reference, validity.secondSource, validity.checkedAt].filter(Boolean).map(String).join(' · ');
-        }
-        return Object.values(value).map((entry) => {
-          if (!entry || typeof entry !== 'object') return 'No source recorded';
-          const record = entry as Record<string, unknown>;
-          const source = record.source && typeof record.source === 'object' ? record.source as Record<string, unknown> : {};
-          return [source.name, source.reference, record.secondSource].filter(Boolean).map(String).join(' · ') || 'No source recorded';
-        }).join('; ');
-      }
-      return String(value);
-    };
     const changes = [
       ...automaticChanges.map((change) => ({
         section: previewItems.find((item) => item.tempId === change.tempId)?.title || 'Imported section',
@@ -1584,8 +1579,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       })),
       ...qualityResolutions.filter((entry) => entry.before !== undefined && entry.after !== undefined).map((entry) => ({
         section: previewItems.find((item) => item.tempId === importQualityIssues.find((issue) => issue.id === entry.issueId)?.target?.id)?.title || 'Imported section',
-        originalText: changeValueText(entry.before, entry.field),
-        newText: changeValueText(entry.after, entry.field),
+        originalText: formatFixedReportChangeValue(entry.before, entry.field),
+        newText: formatFixedReportChangeValue(entry.after, entry.field),
         by: entry.by,
         at: entry.at,
         reason: entry.note || 'Reviewed and corrected.',
@@ -1937,7 +1932,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             </section>
           )}
           <section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4" aria-label="Automatic text changes">
-            <h3 className="text-sm font-bold text-emerald-950">{automaticChanges.length + automaticDuplicateRemovals.length} automatic changes made - review</h3>
+            <details>
+              <summary className="cursor-pointer list-none text-sm font-bold text-emerald-950">
+                {automaticChanges.length + automaticDuplicateRemovals.length} automatic changes made - review
+                <span className="ml-2 text-xs font-semibold text-emerald-800">Expand to see each change</span>
+              </summary>
             {automaticChanges.length + automaticDuplicateRemovals.length === 0 ? (
               <p className="mt-1 text-xs text-emerald-900">No automatic changes were needed.</p>
             ) : (
@@ -1973,6 +1972,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 ))}
               </ul>
             )}
+            </details>
           </section>
           <QualityCheckPanel
             issues={importQualityIssues.map((issue) => {
