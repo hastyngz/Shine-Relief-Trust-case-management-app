@@ -115,6 +115,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [caption, setCaption] = useState('');
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
   const [category, setCategory] = useState<AttachmentCategory>(
     defaultCategory || CATEGORY_OPTIONS[targetType]?.[0] || 'Supporting Document'
   );
@@ -133,6 +134,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
     setError(null);
     const newFiles = Array.from(selectedFiles);
     setFiles((prev) => [...prev, ...newFiles]);
+    if (newFiles.some((file) => file.type.startsWith('image/'))) setConsentConfirmed(false);
 
     // Create preview URLs
     const newUrls = newFiles.map((file) => URL.createObjectURL(file));
@@ -141,7 +143,9 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
 
   const removeFile = (index: number) => {
     URL.revokeObjectURL(previewUrls[index]);
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    const remainingFiles = files.filter((_, i) => i !== index);
+    setFiles(remainingFiles);
+    if (!remainingFiles.some((file) => file.type.startsWith('image/'))) setConsentConfirmed(false);
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -149,6 +153,11 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
     e.preventDefault();
     if (files.length === 0) {
       setError('Please take a photo or select an image to upload.');
+      return;
+    }
+
+    if (files.some((file) => file.type.startsWith('image/')) && !consentConfirmed) {
+      setError('Please confirm that everyone shown has given permission for these photos to be stored.');
       return;
     }
 
@@ -176,6 +185,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
           caption: caption.trim() || undefined,
           category,
           date,
+          consent: file.type.startsWith('image/') ? consentConfirmed : undefined,
           user: {
             uid: currentUser.uid,
             fullName: staffProfile?.fullName || currentUser.displayName || undefined,
@@ -194,6 +204,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
       setFiles([]);
       setPreviewUrls([]);
       setCaption('');
+      setConsentConfirmed(false);
       onClose();
     } catch (err: any) {
       console.error('Upload photo error:', err);
@@ -385,6 +396,20 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
               className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm text-stone-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-700"
             />
           </div>
+
+          {files.some((file) => file.type.startsWith('image/')) && (
+            <label className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+              <input
+                type="checkbox"
+                checked={consentConfirmed}
+                onChange={(event) => setConsentConfirmed(event.target.checked)}
+                disabled={uploading}
+                required
+                className="mt-0.5 accent-teal-800"
+              />
+              <span>I confirm everyone shown has given permission for these photos to be stored. The confirmation and date will be recorded.</span>
+            </label>
+          )}
 
           {/* Mobile optimization reminder */}
           <div className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-[11px] text-stone-600">

@@ -89,6 +89,8 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   const [activityCount, setActivityCount] = useState('');
   const [activityType, setActivityType] = useState('');
   const [place, setPlace] = useState('');
+  const [quant03KeepOriginal, setQuant03KeepOriginal] = useState(false);
+  const [quantKeepOriginal, setQuantKeepOriginal] = useState(false);
   const [validitySource, setValiditySource] = useState('');
   const [validityReference, setValidityReference] = useState('');
   const [validitySecondSource, setValiditySecondSource] = useState('');
@@ -217,6 +219,8 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     setActivityCount('');
     setActivityType('');
     setPlace('');
+    setQuant03KeepOriginal(false);
+    setQuantKeepOriginal(false);
     setValiditySource('');
     setValidityReference('');
     setValiditySecondSource('');
@@ -270,14 +274,12 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         return;
       }
       if (!validityDefinitionMatched) {
-        setDialogError('Confirm that the value matches the indicator definition, unit, period, and group.');
+        setDialogError('Confirm that the value matches what this activity counts, including its unit, period, and group.');
         return;
       }
-      if (!validityCheckedBy.trim() || !note.trim()) {
-        setDialogError('Enter the second checker and a validation note.');
-        return;
-      }
-      if (validityCheckedBy.trim().toLocaleLowerCase() === currentUserName.trim().toLocaleLowerCase()) {
+      const enteredBy = selectedIssue.enteredBy || currentUserName;
+      if (validityCheckedBy.trim()
+        && validityCheckedBy.trim().toLocaleLowerCase() === enteredBy.trim().toLocaleLowerCase()) {
         setDialogError('The checker must be a different person from the person entering this check.');
         return;
       }
@@ -300,7 +302,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     }
     if (selectedIssue.rule === 'QUANT-03' && formValue === 'narrative-only') {
       if (note.trim().length < 10) {
-        setDialogError('A narrative-only reason must be at least 10 characters.');
+        setDialogError('Explain why no number can be recorded (at least 10 characters).');
         return;
       }
       complete(canApproveNarrativeOnly ? 'resolved' : 'pending-approval', {
@@ -315,10 +317,28 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         setDialogError('Enter the checked number before saving.');
         return;
       }
+      if (formValue !== 'narrative-only' && !who.trim()) {
+        setDialogError('Say what the number counts.');
+        return;
+      }
+      if (formValue !== 'narrative-only' && !quant03KeepOriginal && (!period.trim() || !activityType.trim())) {
+        setDialogError('Enter the reporting period and activity for the corrected sentence, or keep the original wording.');
+        return;
+      }
+      const sentence = formValue !== 'narrative-only' && !quant03KeepOriginal
+        ? activityCount.trim()
+          ? `In ${period.trim()}, ${activityCount.trim()} ${activityType.trim()} took place, with ${count.trim()} ${who.trim()} attending${place.trim() ? ` at ${place.trim()}` : ''}.`
+          : `In ${period.trim()}, ${count.trim()} ${who.trim()} took part in ${activityType.trim()}${place.trim() ? ` at ${place.trim()}` : ''}.`
+        : undefined;
       complete('resolved', {
         indicatorId: formValue === 'narrative-only' ? undefined : formValue,
         actual: formValue === 'narrative-only' ? undefined : Number(count),
         unit: who.trim() || undefined,
+        sentence,
+        period: period.trim() || undefined,
+        activityCount: activityCount.trim() ? Number(activityCount) : undefined,
+        activity: activityType.trim() || undefined,
+        place: place.trim() || undefined,
       });
       return;
     }
@@ -339,17 +359,23 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
       return;
     }
     if (selectedIssue.rule === 'QUANT-01' || selectedIssue.rule === 'QUANT-02') {
-      if (!period.trim() || !who.trim() || !count.trim() || !activityCount.trim() || !activityType.trim() || !place.trim()) {
-        setDialogError('Complete each field to rebuild the quantified sentence.');
+      if (!period.trim() || !who.trim() || !count.trim() || !activityType.trim()
+        || !Number.isFinite(Number(count)) || Number(count) < 0
+        || (activityCount.trim() && (!Number.isFinite(Number(activityCount)) || Number(activityCount) < 0))) {
+        setDialogError('Enter a period, a valid count, who or what it counts, and the activity.');
         return;
       }
+      const sentence = quantKeepOriginal ? undefined : activityCount.trim()
+        ? `In ${period.trim()}, ${activityCount.trim()} ${activityType.trim()} took place, with ${count.trim()} ${who.trim()} attending${place.trim() ? ` at ${place.trim()}` : ''}.`
+        : `In ${period.trim()}, ${count.trim()} ${who.trim()} took part in ${activityType.trim()}${place.trim() ? ` at ${place.trim()}` : ''}.`;
       complete('resolved', {
-        sentence: `In ${period.trim()}, ${count.trim()} ${who.trim()} took part in ${activityCount.trim()} ${activityType.trim()} at ${place.trim()}.`,
+        sentence,
+        keepOriginal: quantKeepOriginal,
         actual: Number(count),
-        activityCount: Number(activityCount),
+        activityCount: activityCount.trim() ? Number(activityCount) : undefined,
         who: who.trim(),
         period: period.trim(),
-        activity: `${activityCount.trim()} ${activityType.trim()}`,
+        activity: activityType.trim(),
         place: place.trim(),
       });
       return;
@@ -543,6 +569,9 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
             {selectedIssue.rule === 'NARRATIVE-TENSE-01' && typeof selectedIssue.fix?.suggestedValue === 'string' && (
               <p className="mt-2 rounded bg-emerald-50 p-2 text-xs text-emerald-950">Suggested correction: {selectedIssue.fix.suggestedValue}</p>
             )}
+            {selectedIssue.rule === 'NARRATIVE-PROGRAMME-01' && typeof selectedIssue.fix?.suggestedValue === 'string' && (
+              <p className="mt-2 rounded bg-emerald-50 p-2 text-xs text-emerald-950">Found: {selectedIssue.context}. Approved name: {selectedIssue.fix.suggestedValue}.</p>
+            )}
             {selectedIssue.target && onOpenIssue && canOpenIssue?.(selectedIssue) !== false && <button type="button" className="mt-2 text-xs text-teal-800 underline" onClick={() => onOpenIssue(selectedIssue)}>Show in document</button>}
             <p className="mt-3 text-sm font-semibold">{qualityMessage(selectedIssue).question}</p>
             <ul className="mt-1 list-inside list-disc text-xs text-stone-600">{qualityMessage(selectedIssue).examples.map((example) => <li key={example}>{example}</li>)}</ul>
@@ -562,7 +591,8 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={validityDefinitionMatched} onChange={(event) => setValidityDefinitionMatched(event.target.checked)} />This number counts what the activity says: {qualityMessage(selectedIssue).quote}</label>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={selectedIssue.context?.includes('plausible-range check passed') || false} readOnly />Plausible range check (computed from the result and shown above).</label>
                 <label className="block text-xs font-semibold">Did someone else check it? Enter their name<input className="mt-1 w-full rounded border p-2" value={validityCheckedBy} onChange={(event) => setValidityCheckedBy(event.target.value)} /></label>
-                <p className="text-[11px] text-stone-500">Entered by: {currentUserName}. The checker must be someone else.</p>
+                <p className="text-[11px] text-stone-500">Entered by: {selectedIssue.enteredBy || currentUserName}. The checker must be someone else.</p>
+                <label className="block text-xs font-semibold">Optional note about this check<textarea className="mt-1 w-full rounded border p-2" rows={2} value={note} onChange={(event) => setNote(event.target.value)} /></label>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={applyValidityToAll} onChange={(event) => setApplyValidityToAll(event.target.checked)} />Apply this check to all results from this source/import.</label>
               </div>
             ) : selectedIssue.rule === 'QUANT-03' ? (
@@ -576,6 +606,18 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                   <>
                     <label className="block text-xs font-semibold">Checked number<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" value={count} onChange={(event) => setCount(event.target.value)} /></label>
                     <label className="block text-xs font-semibold">What does it count?<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} placeholder="girls, sessions, visits" /></label>
+                    <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={quant03KeepOriginal} onChange={(event) => setQuant03KeepOriginal(event.target.checked)} />Keep the original wording and store the checked number in the linked result.</label>
+                    {!quant03KeepOriginal && <>
+                      <label className="block text-xs font-semibold">Reporting period<input className="mt-1 w-full rounded border p-2" value={period} onChange={(event) => setPeriod(event.target.value)} placeholder="September 2026" /></label>
+                      <label className="block text-xs font-semibold">Activity<input className="mt-1 w-full rounded border p-2" value={activityType} onChange={(event) => setActivityType(event.target.value)} placeholder="guest speaker visits" /></label>
+                      <label className="block text-xs font-semibold">How many activities? (if different)<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
+                      <label className="block text-xs font-semibold">Place (optional)<input className="mt-1 w-full rounded border p-2" value={place} onChange={(event) => setPlace(event.target.value)} /></label>
+                      <p className="rounded bg-stone-50 p-2 text-xs" aria-live="polite">Preview: {period && count && who && activityType
+                        ? activityCount
+                          ? `In ${period}, ${activityCount} ${activityType} took place, with ${count} ${who} attending${place ? ` at ${place}` : ''}.`
+                          : `In ${period}, ${count} ${who} took part in ${activityType}${place ? ` at ${place}` : ''}.`
+                        : 'Add the missing details to see the corrected sentence.'}</p>
+                    </>}
                   </>
                 )}
               </div>
@@ -596,14 +638,17 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-xs font-semibold">Period<input className="mt-1 w-full rounded border p-2" value={period} onChange={(event) => setPeriod(event.target.value)} /></label>
                   <label className="text-xs font-semibold">How many people?<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">Who? (girls, children, learners, staff, or teachers)<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">How many sessions / activities?<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" inputMode="numeric" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">Activity type<input className="mt-1 w-full rounded border p-2" value={activityType} onChange={(event) => setActivityType(event.target.value)} /></label>
-                  <label className="text-xs font-semibold">Place<input className="mt-1 w-full rounded border p-2" value={place} onChange={(event) => setPlace(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Who or what does the number count?<input className="mt-1 w-full rounded border p-2" value={who} onChange={(event) => setWho(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Activity<input className="mt-1 w-full rounded border p-2" value={activityType} onChange={(event) => setActivityType(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">How many sessions / activities? (optional)<input className="mt-1 w-full rounded border p-2" type="number" min="0" step="1" inputMode="numeric" value={activityCount} onChange={(event) => setActivityCount(event.target.value)} /></label>
+                  <label className="text-xs font-semibold">Place (optional)<input className="mt-1 w-full rounded border p-2" value={place} onChange={(event) => setPlace(event.target.value)} /></label>
                 </div>
-                <p className="mt-2 rounded bg-stone-50 p-2 text-xs text-stone-600" aria-live="polite">Preview: {period && count && who && activityCount && activityType && place
-                  ? `In ${period}, ${count} ${who} took part in ${activityCount} ${activityType} at ${place}.`
-                  : 'Add the missing details to see the corrected sentence.'}</p>
+                <label className="mt-3 flex items-start gap-2 text-xs"><input type="checkbox" checked={quantKeepOriginal} onChange={(event) => setQuantKeepOriginal(event.target.checked)} />Keep the original wording and store the checked number in the linked result.</label>
+                {!quantKeepOriginal && <p className="mt-2 rounded bg-stone-50 p-2 text-xs text-stone-600" aria-live="polite">Preview: {period && count && who && activityType
+                  ? activityCount
+                    ? `In ${period}, ${activityCount} ${activityType} took place, with ${count} ${who} attending${place ? ` at ${place}` : ''}.`
+                    : `In ${period}, ${count} ${who} took part in ${activityType}${place ? ` at ${place}` : ''}.`
+                  : 'Add the missing details to see the corrected sentence.'}</p>}
               </>
             ) : selectedIssue.fix?.options ? (
               <label className="mt-4 block text-xs font-semibold">Correct value

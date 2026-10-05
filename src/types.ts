@@ -539,6 +539,9 @@ export interface PhotoAttachment {
   storagePath: string; // path in Firebase Storage
   downloadUrl: string; // secure download URL
   caption?: string;
+  consent?: boolean;
+  consentCheckedAt?: string;
+  consentCheckedBy?: string;
   category: AttachmentCategory;
   date: string; // YYYY-MM-DD
   uploadedBy: {

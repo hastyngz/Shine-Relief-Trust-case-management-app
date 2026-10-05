@@ -29,6 +29,7 @@ export type QualityIssue = {
     before?: unknown;
     after?: unknown;
   };
+  enteredBy?: string;
   context?: string;
   whyMatters?: string;
 };
@@ -230,9 +231,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       : undefined;
     const enriched: QualityIssue = {
       ...issue,
-      ...(!issue.context && sourceSentence && /^(?:QUANT|NARRATIVE|IMPACT|BASELINE)/.test(issue.rule)
-        ? { context: sourceSentence }
-        : {}),
+      ...(!issue.context && sourceSentence ? { context: sourceSentence } : {}),
       ...(target ? { id: `${issue.rule}:${target.kind}:${target.id}${target.field ? `:${target.field}` : ''}` } : {}),
       ...(target ? { target } : {}),
       status: issue.status || 'open',
@@ -427,7 +426,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       add({
         ...createIssue('QUANT-03', finalReport ? 'blocker' : 'warning', 'Activity is not mapped to a result or manager-approved narrative-only reason.', activity.path, 'Link an indicator result or record a manager-approved narrative-only reason.'),
         context: String(getField(record, ['description', 'summary', 'title', 'activity', 'name']) ?? ''),
-        fix: { type: 'choose-option', safe: false, field: 'indicatorId', options: [...options, { value: 'narrative-only', label: 'Narrative only (requires manager approval)' }], reversible: true },
+        fix: { type: 'choose-option', safe: false, field: 'indicatorId', options: [...options, { value: 'narrative-only', label: 'This is a description only; no number is possible (manager approval needed)' }], reversible: true },
       });
     }
   }
@@ -494,10 +493,9 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     const missingValidity: string[] = [];
     if (!sourceSeen && !crossChecked) missingValidity.push('a named source or a second-source cross-check');
     if (!definitionMatched) missingValidity.push('confirmation that the measure, unit, period, and group match the indicator definition');
-    if (typeof validityCheckedBy !== 'string' || !validityCheckedBy.trim()
-      || (enteredByForValidity && enteredByForValidity === validityCheckedBy)) {
-      missingValidity.push('verification by a person other than the data entrant');
-    }
+    const sameChecker = typeof validityCheckedBy === 'string' && Boolean(validityCheckedBy.trim())
+      && enteredByForValidity && String(enteredByForValidity).trim().toLocaleLowerCase() === validityCheckedBy.trim().toLocaleLowerCase();
+    if (sameChecker) missingValidity.push('verification by a person other than the data entrant');
     const plausible = reported !== undefined
       && reported >= 0
       && !(record.unit === '%' && reported > 100)
@@ -505,12 +503,11 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
         && /girl|child|participant/i.test(String(record.unit || ''))
         && reported > Number(getNumber(record, ['enrolment', 'enrollment', 'populationLimit'])));
     if (!plausible) missingValidity.push('a value within a plausible range');
-    const validityNote = typeof validity?.note === 'string' ? validity.note.trim() : '';
-    if (missingValidity.length || !validity || !validityNote) {
-      const missing = [...missingValidity, ...(!validityNote ? ['a validation note'] : [])];
+    if (missingValidity.length || !validity) {
       add({
-        ...createIssue('DQ-VALIDITY', 'warning', `Validity check incomplete: ${missing.join('; ')}.`, entry.path, 'Check the indicator definition and document the source, comparison, plausible range, and review note.'),
+        ...createIssue('DQ-VALIDITY', 'warning', `Validity check incomplete: ${missingValidity.join('; ')}.`, entry.path, 'Check that the source is recorded and the value matches what the activity counts.'),
         context: `Measure: ${String(getField(record, ['indicatorName', 'name', 'title']) ?? 'Not named')} · Measure details: ${String(getField(record, ['definition', 'indicatorDefinition']) ?? 'Not recorded')} · Unit: ${String(record.unit ?? 'Not recorded')} · Value: ${reported ?? 'Not recorded'}${plausible ? ' · plausible-range check passed' : ' · plausible-range check failed'}`,
+        enteredBy: typeof enteredByForValidity === 'string' ? enteredByForValidity : undefined,
       });
     }
     if (validity?.checkedBy && getField(record, ['enteredBy', 'createdBy', 'createdByUid']) === validity.checkedBy) {

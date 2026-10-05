@@ -9,6 +9,7 @@ export interface PendingPhoto {
   caption?: string;
   category?: AttachmentCategory;
   date?: string;
+  consent?: boolean;
 }
 
 interface FormPhotoSectionProps {
@@ -155,6 +156,17 @@ export const FormPhotoSection: React.FC<FormPhotoSectionProps> = ({
                     placeholder="Optional caption..."
                     className="w-full px-2 py-0.5 text-[11px] border border-stone-200 rounded bg-stone-50 focus:bg-white focus:outline-none"
                   />
+                  {item.file.type.startsWith('image/') && (
+                    <label className="flex items-start gap-1.5 text-[10px] text-amber-900">
+                      <input
+                        type="checkbox"
+                        checked={item.consent === true}
+                        onChange={(event) => updatePhoto(idx, { consent: event.target.checked })}
+                        className="mt-0.5 accent-teal-800"
+                      />
+                      <span>Everyone shown has agreed to this photo being stored.</span>
+                    </label>
+                  )}
                   <div className="text-[10px] text-stone-400">
                     {formatBytes(item.file.size)}
                   </div>

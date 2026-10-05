@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import JSZip from 'jszip';
+import * as XLSX from 'xlsx';
 import type { AppDatabase } from '../src/types';
 import { generateReportNarrative } from '../src/services/reportNarrative';
 import { assembleSponsorReport } from '../src/services/sponsorReport';
+import { filterDataForReport, generateExcelWorkbook, generatePdfReport, generateWordReport, type ReportConfig } from '../src/services/reportGenerators';
 
 const emptyDb: AppDatabase = {
   girls: [],
@@ -82,6 +85,54 @@ assert.equal(fishReport.actual, 90);
 assert.equal(fishReport.girlsSupported, 1);
 assert.equal(JSON.stringify(fishReport).includes('Sensitive Example Name'), false);
 assert.equal(JSON.stringify(fishReport).includes('guardianInfo'), false);
+
+const privacyConfig: ReportConfig = {
+  title: 'Privacy check',
+  periodLabel: '2026',
+  generatedBy: 'Manager',
+  blockerOverrideReason: 'Approved for a test fixture.',
+  hideIdentifyingDetails: true,
+  structuredTables: [{
+    title: 'Imported details',
+    headers: ['Name', 'School', 'Summary'],
+    rows: [['Sensitive Example Name', 'Example School', 'Sensitive Example Name attended Example School']],
+  }],
+  includeSections: {
+    executiveSummary: true,
+    statistics: true,
+    girlsList: true,
+    householdsList: true,
+    educationalFollowUps: true,
+    healthFollowUps: true,
+    familyFollowUps: true,
+    householdActivities: true,
+    expenditure: true,
+    rentPayments: true,
+    budgets: true,
+    workplans: true,
+    schedules: true,
+    photoGallery: true,
+  },
+};
+const privacyData = filterDataForReport(sourceDb, privacyConfig);
+assert.equal(privacyData.girls[0].fullName, 'Girl 1');
+assert.equal(privacyData.girls[0].school, '');
+assert.equal(privacyData.health.length, 0);
+assert.equal(privacyData.family.length, 0);
+assert.equal(privacyData.photos.length, 0);
+const privacyDoc = await generateWordReport(sourceDb, privacyConfig);
+const privacyDocArchive = await JSZip.loadAsync(await privacyDoc.arrayBuffer());
+const privacyDocXml = await privacyDocArchive.file('word/document.xml')?.async('string');
+assert.ok(!privacyDocXml?.includes('Sensitive Example Name'));
+assert.ok(!privacyDocXml?.includes('Example School'));
+assert.ok(privacyDocXml?.includes('[hidden]'));
+const privacyWorkbook = XLSX.read(generateExcelWorkbook(sourceDb, privacyConfig), { type: 'array' });
+assert.ok(!JSON.stringify(privacyWorkbook.Sheets).includes('Sensitive Example Name'));
+assert.ok(!JSON.stringify(privacyWorkbook.Sheets).includes('Example School'));
+const privacyPdf = await generatePdfReport(sourceDb, privacyConfig);
+const privacyPdfText = await privacyPdf.text();
+assert.ok(!privacyPdfText.includes('Sensitive Example Name'));
+assert.ok(!privacyPdfText.includes('Example School'));
 
 const noLogReport = assembleSponsorReport(emptyDb, {
   ...baseOptions,

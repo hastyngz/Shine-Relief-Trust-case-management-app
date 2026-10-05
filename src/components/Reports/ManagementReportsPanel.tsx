@@ -9,11 +9,10 @@ import { ReportConfig, generateWordReport, reviewReportQuality } from '../../ser
 import { qualityScores } from '../../services/qualityRules';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
-import { downloadCSV } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
 import type { QualityIssue } from '../../services/qualityRules';
 import { qualityMessage } from '../../services/qualityMessages';
-import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
 
 interface ManagementReportsPanelProps {
   db: AppDatabase;
@@ -183,7 +182,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     const openProblems = openIssues.map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title }));
     const sections = [
       { title: 'Report overview', text: `${MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId}\n${reportQualityConfig.periodLabel}` },
-      { title: 'Records', text: [rows.headers.join(' | '), ...rows.rows.map((row) => row.map(String).join(' | '))].join('\n') },
+      { title: 'Records', text: '', table: { headers: rows.headers, rows: rows.rows } },
     ];
     const changes = qualityResolutions.filter((entry) => entry.before !== undefined && entry.after !== undefined).map((entry) => ({
       section: entry.issueId,
@@ -258,26 +257,61 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     return !!storagePath;
   };
 
+  const recordReportExport = async (format: 'docx' | 'xlsx' | 'csv', fileName: string, title: string, blob: Blob) => {
+    if (!currentUser) throw new Error('Sign in is required to record this report download.');
+    await appendReportExport(await createReportExportRecord(blob, {
+      reportType: reportId,
+      title,
+      fileName,
+      format,
+      openProblems: auditedQualityIssues
+        .filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden')
+        .map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
+      overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+        issueId: entry.issueId, reason: entry.note, by: entry.by, at: entry.at,
+      })),
+      generatedBy: staffProfile?.fullName || currentUser.email || 'Management user',
+      generatedByUid: currentUser.uid,
+      draft: false,
+      finalLocked: true,
+    }));
+  };
+
   const handleCsvExport = async () => {
     if (!ensureQualityOverride()) return;
-    const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.csv`;
-    const csvRows = [rows.headers, ...rows.rows, [''], ['Quality Issues'], ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'], ...qualityAnnexRows];
-    downloadCSV(`SHINE_${reportId}`, csvRows);
-    const csvContent = '\uFEFF' + csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    const archived = await recordReportHistory('csv', fileName, MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId, new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
-    if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'csv', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
-    setMessage(`${rows.rows.length} record(s) exported${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
+    try {
+      const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.csv`;
+      const csvRows = [rows.headers, ...rows.rows, [''], ['Quality Issues'], ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'], ...qualityAnnexRows];
+      const csvContent = '\uFEFF' + csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
+      await recordReportExport('csv', fileName, title, blob);
+      saveBlob(blob, fileName);
+      const archived = await recordReportHistory('csv', fileName, title, blob);
+      if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'csv', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
+      setMessage(`${rows.rows.length} record(s) exported${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
+    } catch (error) {
+      console.error('Management CSV export failed:', error);
+      setMessage(error instanceof Error ? error.message : 'The spreadsheet could not be downloaded.');
+    }
   };
 
   const handleExcelExport = async () => {
     if (!ensureQualityOverride()) return;
-    const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
-    const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    saveBlob(blob, fileName);
-    const archived = await recordReportHistory('xlsx', fileName, MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId, blob);
-    if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'xlsx', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
-    setMessage(`${rows.rows.length} record(s) exported to Excel${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
+    try {
+      const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
+      const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
+      await recordReportExport('xlsx', fileName, title, blob);
+      saveBlob(blob, fileName);
+      const archived = await recordReportHistory('xlsx', fileName, title, blob);
+      if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'xlsx', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
+      setMessage(`${rows.rows.length} record(s) exported to Excel${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
+    } catch (error) {
+      console.error('Management spreadsheet export failed:', error);
+      setMessage(error instanceof Error ? error.message : 'The spreadsheet could not be downloaded.');
+    }
   };
 
   const handleWordSummary = async () => {
@@ -352,6 +386,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     try {
       const blob = await generateWordReport(permittedDb, config);
       const fileName = `SHINE_Management_Summary_${new Date().toISOString().slice(0, 10)}.docx`;
+      await recordReportExport('docx', fileName, `SHINE ${reportTitle}`, blob);
       saveBlob(blob, fileName);
       const archived = await recordReportHistory('docx', fileName, `SHINE ${reportTitle}`, blob);
       if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'docx', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));

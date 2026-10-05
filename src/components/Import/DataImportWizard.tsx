@@ -1189,9 +1189,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
     if (['QUANT-01', 'QUANT-02'].includes(issue.rule) && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
       const value = resolution.value as { sentence?: unknown; actual?: unknown; activityCount?: unknown; period?: unknown; who?: unknown; activity?: unknown; place?: unknown };
-      if (typeof value.sentence !== 'string' || typeof value.actual !== 'number' || !Number.isFinite(value.actual)) return false;
+      if ((value.sentence !== undefined && typeof value.sentence !== 'string')
+        || typeof value.actual !== 'number' || !Number.isFinite(value.actual)) return false;
       const target = previewItems.find((item) => item.tempId === issue.target?.id);
       if (!target) return false;
+      const sentence = typeof value.sentence === 'string' ? value.sentence : target.originalSnippet || target.summary;
       const extractedData: ImportPreviewItem['extractedData'] = {
         ...target.extractedData,
         actual: value.actual,
@@ -1202,16 +1204,26 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         activityDescription: value.activity,
         place: value.place,
       };
+      const result = {
+        ...extractedData,
+        id: target.tempId,
+        actual: value.actual,
+        target: Number(target.extractedData.target ?? target.extractedData.targetCount) || undefined,
+      };
       const stillFires = runQualityRules({
         finalReport: false,
-        narrativeSections: [{ id: target.tempId, title: target.title, text: value.sentence }],
-        activities: [{ ...extractedData, id: target.tempId, title: target.title, description: value.sentence }],
-        results: [{ ...extractedData, id: target.tempId, title: target.title, actual: value.actual }],
+        narrativeSections: [{ id: target.tempId, title: target.title, text: sentence, results: [result] }],
+        activities: [{ ...extractedData, id: target.tempId, title: target.title, description: sentence }],
+        results: [result],
       }).some((candidate) => candidate.rule === issue.rule);
       if (stillFires) return false;
       const before = target.originalSnippet || target.summary;
       setPreviewItems((current) => current.map((item) => item.tempId === target.tempId
-        ? { ...item, summary: value.sentence as string, originalSnippet: value.sentence as string, extractedData }
+        ? {
+          ...item,
+          ...(typeof value.sentence === 'string' ? { summary: sentence, originalSnippet: sentence } : {}),
+          extractedData,
+        }
         : item));
       setQualityResolutions((current) => [
         ...current.filter((entry) => entry.issueId !== issue.id),
@@ -1223,7 +1235,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           at: new Date().toISOString(),
           field: 'quantifiedActivity',
           before: { text: before, extractedData: target.extractedData },
-          after: { text: value.sentence, extractedData },
+          after: { text: sentence, extractedData },
         },
       ]);
       return true;
@@ -1282,13 +1294,23 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           indicatorId: value.indicatorId,
           ...(typeof value.actual === 'number' && Number.isFinite(value.actual) ? { actual: value.actual, completedCount: value.actual } : {}),
           ...(typeof value.unit === 'string' && value.unit.trim() ? { countUnit: value.unit.trim() } : {}),
+          ...(typeof value.period === 'string' && value.period.trim() ? { reportingPeriod: value.period.trim() } : {}),
+          ...(typeof value.activityCount === 'number' && Number.isFinite(value.activityCount) ? { activityCount: value.activityCount } : {}),
+          ...(typeof value.activity === 'string' && value.activity.trim() ? { activityDescription: value.activity.trim() } : {}),
+          ...(typeof value.place === 'string' && value.place.trim() ? { place: value.place.trim() } : {}),
           ...(qualityDataSource.trim() ? { dataSource: qualityDataSource.trim(), source: qualityDataSource.trim() } : {}),
           ...(collectedMethod ? { measurementMethod: collectedMethod, method: collectedMethod } : {}),
         }
         : { ...target.extractedData, narrativeOnly: true, narrativeOnlyReason: value.narrativeOnlyReason, managerApproved };
+      const sentence = typeof value.sentence === 'string' && value.sentence.trim() ? value.sentence.trim() : undefined;
+      const updatedTarget = {
+        ...target,
+        ...(sentence ? { summary: sentence, originalSnippet: sentence } : {}),
+        extractedData,
+      };
       const testActivity = { ...extractedData, id: target.tempId };
       const stillFires = runQualityRules({ activities: [testActivity] }).some((candidate) => candidate.rule === issue.rule);
-      setPreviewItems((current) => current.map((item) => item.tempId === issue.target?.id ? { ...item, extractedData } : item));
+      setPreviewItems((current) => current.map((item) => item.tempId === issue.target?.id ? updatedTarget : item));
       if (pendingApproval) {
         setQualityResolutions((current) => [
           ...current.filter((entry) => entry.issueId !== issue.id),
@@ -1299,7 +1321,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       if (stillFires) return false;
       setQualityResolutions((current) => [
         ...current.filter((entry) => entry.issueId !== issue.id),
-        { issueId: issue.id, status: 'resolved', note: resolution.note, by: activeStaff.fullName, at: new Date().toISOString(), field: 'indicatorId', before: target.extractedData.indicatorId, after: extractedData.indicatorId },
+        {
+          issueId: issue.id,
+          status: 'resolved',
+          note: resolution.note,
+          by: activeStaff.fullName,
+          at: new Date().toISOString(),
+          field: 'quantifiedActivity',
+          before: { text: target.originalSnippet || target.summary, extractedData: target.extractedData },
+          after: { text: sentence || target.originalSnippet || target.summary, extractedData },
+        },
       ]);
       return true;
     }
@@ -1463,10 +1494,14 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         reason: 'Removed an exact duplicate row.',
       })),
     ];
-    const sections = previewItems.filter((item) => item.selected).map((item) => ({
-      title: item.title || 'Imported section',
-      text: item.originalSnippet || item.summary || '',
-    }));
+    const sections = previewItems.filter((item) => item.selected).map((item) => {
+      const text = item.originalSnippet || item.summary || '';
+      return {
+        title: item.title || 'Imported section',
+        text,
+        paragraphs: text.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean),
+      };
+    });
     const blob = await createFixedReport({
       title: `${selectedFile.name.replace(/\.[^.]+$/, '')} - fixed copy`,
       sections,

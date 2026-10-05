@@ -106,6 +106,7 @@ export interface UploadAttachmentParams {
   caption?: string;
   category: AttachmentCategory;
   date?: string; // YYYY-MM-DD
+  consent?: boolean;
   user: {
     uid: string;
     fullName?: string;
@@ -122,7 +123,10 @@ export interface UploadAttachmentParams {
 export async function uploadPhotoAttachment(
   params: UploadAttachmentParams
 ): Promise<PhotoAttachment> {
-  const { file, targetType, targetId, caption, category, date, user } = params;
+  const { file, targetType, targetId, caption, category, date, consent, user } = params;
+  if (file.type.startsWith('image/') && consent !== true) {
+    throw new Error('Photo consent must be confirmed before uploading an image.');
+  }
 
   // 1. Optimize/compress image for bandwidth & storage efficiency
   const optimizedFile = await compressImage(file, {
@@ -165,6 +169,11 @@ export async function uploadPhotoAttachment(
     storagePath,
     downloadUrl,
     caption: caption?.trim() || undefined,
+    ...(file.type.startsWith('image/') && consent === true ? {
+      consent: true,
+      consentCheckedAt: new Date().toISOString(),
+      consentCheckedBy: user.fullName || user.email,
+    } : {}),
     category,
     date: date || new Date().toISOString().slice(0, 10),
     uploadedBy: {

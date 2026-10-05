@@ -687,12 +687,19 @@ function AppContent() {
     onFirstSuccess?: (url: string) => void
   ) => {
     if (!photos || photos.length === 0 || !currentUser) return;
-    showToast(`Uploading ${photos.length} photo attachment(s)...`);
+    const photosToUpload = photos.filter((photo) =>
+      !photo.file.type.startsWith('image/') || photo.consent === true);
+    const skippedCount = photos.length - photosToUpload.length;
+    if (!photosToUpload.length) {
+      showToast(`Skipped ${skippedCount} photo(s) without consent confirmation.`);
+      return;
+    }
+    showToast(`${skippedCount ? `Skipped ${skippedCount} without consent. ` : ''}Uploading ${photosToUpload.length} attachment(s)...`);
 
     (async () => {
       let firstUploadedUrl: string | null = null;
-      for (let i = 0; i < photos.length; i++) {
-        const p = photos[i];
+      for (let i = 0; i < photosToUpload.length; i++) {
+        const p = photosToUpload[i];
         try {
           const res = await uploadPhotoAttachment({
             file: p.file,
@@ -701,6 +708,7 @@ function AppContent() {
             caption: p.caption,
             category: p.category || 'Supporting Document',
             date: p.date,
+            consent: p.file.type.startsWith('image/') ? p.consent : undefined,
             user: {
               uid: currentUser.uid,
               fullName: staffProfile?.fullName || currentUser.displayName || auditActor,

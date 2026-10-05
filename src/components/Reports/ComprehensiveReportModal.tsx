@@ -15,7 +15,7 @@ import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
 import { appendReportExport, appendReportHistory, getReportHistory } from '../../services/firestoreSync';
-import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat, type FixedReportSection } from '../../services/qualityFixedReport';
 import type { QualityIssue } from '../../services/qualityRules';
 import {
   FileDown,
@@ -101,6 +101,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   const [includeCaseReviews, setIncludeCaseReviews] = useState(false);
   const [includePhotos, setIncludePhotos] = useState<boolean>(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  const [hideIdentifyingDetails, setHideIdentifyingDetails] = useState(true);
   const [maxPhotos, setMaxPhotos] = useState(10);
   const [confirmedPreview, setConfirmedPreview] = useState('');
 
@@ -166,7 +167,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
     if (selectedGirlId !== 'ALL' && linkedGirlId !== selectedGirlId) return false;
     if (selectedHouseholdId !== 'ALL' && linkedHouseholdId !== selectedHouseholdId) return false;
     return true;
-  }).filter((attachment) => /^image\/(jpeg|png)$/i.test(attachment.contentType));
+  }).filter((attachment) => attachment.consent === true && /^image\/(jpeg|png)$/i.test(attachment.contentType));
 
   const programmeOptions = Array.from(new Set([
     ...(db.budgets || []).map((item) => item.programme),
@@ -201,6 +202,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
     title: reportTitle,
     periodLabel: startDate && endDate ? `${startDate} to ${endDate}` : 'Selected reporting period',
     generatedBy: authorName,
+    hideIdentifyingDetails,
     executiveSummary: includeExecutiveSummary ? executiveNotes : undefined,
     includeSections: {
       executiveSummary: includeExecutiveSummary,
@@ -331,6 +333,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       subtitle: reportSubtitle,
       periodLabel: safePeriodLabel,
       generatedBy: authorName,
+      hideIdentifyingDetails,
       dateRange: startDate || endDate ? { start: startDate, end: endDate } : undefined,
       selectedHouseholdId: selectedHouseholdId !== 'ALL' ? selectedHouseholdId : undefined,
       selectedGirlId: selectedGirlId !== 'ALL' ? selectedGirlId : undefined,
@@ -374,6 +377,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       if (format === 'docx') {
         const blob = await generateWordReport(reportDb, { ...config, photoImageData: imageData });
         const archived = await persistReportHistory('docx', fileName, chosenPhotos.length, blob);
+        await persistReportExportAudit('docx', fileName, blob);
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'Word document securely archived and downloaded.' : 'Word document downloaded; secure archiving was unavailable.');
       } else if (format === 'xlsx') {
@@ -382,11 +386,13 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         });
         const archived = await persistReportHistory('xlsx', fileName, 0, blob);
+        await persistReportExportAudit('xlsx', fileName, blob);
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'Excel workbook securely archived and downloaded.' : 'Excel workbook downloaded; secure archiving was unavailable.');
       } else {
         const blob = generatePdfReport(reportDb, { ...config, photoImageData: imageData });
         const archived = await persistReportHistory('pdf', fileName, chosenPhotos.length, blob);
+        await persistReportExportAudit('pdf', fileName, blob);
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'PDF report securely archived and downloaded.' : 'PDF report downloaded; secure archiving was unavailable.');
       }
@@ -455,20 +461,81 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
     if (!currentUser || !canGenerateReports) throw new Error('Your account cannot download this report.');
     const openIssues = auditedQualityIssues.filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden');
     const openProblems = openIssues.map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title }));
-    const sections = [
+    const aggregateSections = [
       { title: 'Report overview', text: `${reportTitle}\n${previewConfig.periodLabel}` },
       ...(includeStatistics ? [{ title: 'Statistics', text: `${previewRecords} records are included across ${previewTables} report sections.` }] : []),
       ...(includeGirlsCaseload ? [{ title: 'Girls and households', text: `${previewData.girls.length} girl records and ${previewData.households.length} household records are included.` }] : []),
       ...(includeEducation ? [{ title: 'Education and activities', text: `${previewData.edu.length} education records and ${previewData.activities.length} activity records are included.` }] : []),
-      ...(canViewHealthRecords && includeHealth ? [{ title: 'Health', text: `${previewData.health.length} health records are included.` }] : []),
-      ...(includeFamily ? [{ title: 'Family', text: `${previewData.family.length} family records are included.` }] : []),
+      ...(canViewHealthRecords && includeHealth ? [{ title: 'Health', text: `${previewData.health.length} health records are included.`, sensitivity: 'health' as const }] : []),
+      ...(includeFamily ? [{ title: 'Family', text: `${previewData.family.length} family records are included.`, sensitivity: 'family' as const }] : []),
       ...(includeFinances ? [{ title: 'Finances', text: `${previewData.expenses.length} expense records and ${previewData.rent.length} rent records are included.` }] : []),
       ...(includeBudgets ? [{ title: 'Budgets', text: `${previewData.budgets.length} budget records are included.` }] : []),
       ...(includeWorkplans ? [{ title: 'Workplans', text: `${previewData.workplans.length} workplan records and ${previewData.schedules.length} schedule records are included.` }] : []),
-      ...(includeCaseActions ? [{ title: 'Case actions', text: `${previewData.caseActions.length} case action records are included.` }] : []),
-      ...(canViewCaseReviews && includeCaseReviews ? [{ title: 'Case reviews', text: `${previewData.caseReviews.length} case review records are included.` }] : []),
+      ...(includeCaseActions ? [{ title: 'Case actions', text: `${previewData.caseActions.length} case action records are included.`, sensitivity: 'safeguarding' as const }] : []),
+      ...(canViewCaseReviews && includeCaseReviews ? [{ title: 'Case reviews', text: `${previewData.caseReviews.length} case review records are included.`, sensitivity: 'safeguarding' as const }] : []),
     ];
-    const blob = await createFixedReport({ title: reportTitle, sections, changes: [], openProblems, format: fixedFormat, draft });
+    const recordSection = (title: string, records: unknown[], sensitivity?: 'health' | 'family' | 'psychosocial' | 'safeguarding') => {
+      const rows = records.filter((record): record is Record<string, unknown> =>
+        typeof record === 'object' && record !== null && !Array.isArray(record));
+      const headers = Array.from(new Set(rows.flatMap((record) => Object.keys(record))));
+      return {
+        title,
+        text: '',
+        sensitivity,
+        table: {
+          headers,
+          rows: rows.map((record) => headers.map((key) => {
+            const value = record[key];
+            return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
+          })),
+        },
+      };
+    };
+    const detailedSections = [
+      ...((includeGirlsCaseload && previewData.girls.length) ? [recordSection('Girls', previewData.girls)] : []),
+      ...((includeGirlsCaseload && previewData.households.length) ? [recordSection('Households', previewData.households)] : []),
+      ...((includeEducation && previewData.edu.length) ? [recordSection('Education follow-ups', previewData.edu)] : []),
+      ...((includeEducation && previewData.activities.length) ? [recordSection('Activities', previewData.activities)] : []),
+      ...((canViewHealthRecords && includeHealth && previewData.health.length) ? [recordSection('Health follow-ups', previewData.health, 'health')] : []),
+      ...((includeFamily && previewData.family.length) ? [recordSection('Family follow-ups', previewData.family, 'family')] : []),
+      ...((includeFinances && previewData.expenses.length) ? [recordSection('Expenses', previewData.expenses)] : []),
+      ...((includeFinances && previewData.rent.length) ? [recordSection('Rent payments', previewData.rent)] : []),
+      ...((includeBudgets && previewData.budgets.length) ? [recordSection('Budgets', previewData.budgets)] : []),
+      ...((includeWorkplans && previewData.workplans.length) ? [recordSection('Workplans', previewData.workplans)] : []),
+      ...((includeWorkplans && previewData.schedules.length) ? [recordSection('Schedules', previewData.schedules)] : []),
+      ...((includeCaseActions && previewData.caseActions.length) ? [recordSection('Case actions', previewData.caseActions, 'safeguarding')] : []),
+      ...((canViewCaseReviews && includeCaseReviews && previewData.caseReviews.length) ? [recordSection('Case reviews', previewData.caseReviews, 'safeguarding')] : []),
+    ];
+    const sections: FixedReportSection[] = hideIdentifyingDetails ? aggregateSections : [
+      ...aggregateSections.filter((section) => !['Girls and households', 'Education and activities', 'Health', 'Family', 'Finances', 'Budgets', 'Workplans', 'Case actions', 'Case reviews'].includes(section.title)),
+      ...detailedSections,
+    ];
+    if (!hideIdentifyingDetails && includePhotos && fixedFormat !== 'xlsx') {
+      const selectedPhotos = scopedAttachments.filter((attachment) => selectedPhotoIds.includes(attachment.id));
+      if (selectedPhotos.some((photo) => !photo.caption?.trim())) {
+        throw new Error('Add a descriptive caption to each selected photo before including it in the fixed report.');
+      }
+      const images = await Promise.all(selectedPhotos.map(async (photo) => ({
+        data: await getAuthorizedReportImage(photo, canViewHealthRecords),
+        type: photo.contentType.toLowerCase() === 'image/png' ? 'png' as const : 'jpg' as const,
+        altText: photo.caption!.trim(),
+        consent: photo.consent === true,
+      })));
+      if (images.length) sections.push({ title: 'Approved photos', text: '', sensitivity: 'photo', images });
+    }
+    const blob = await createFixedReport({
+      title: reportTitle,
+      sections,
+      changes: [],
+      openProblems,
+      format: fixedFormat,
+      draft,
+      hideIdentifyingDetails,
+      identifyingValues: [
+        ...db.girls.flatMap((girl) => [girl.fullName, girl.school || '']),
+        ...db.households.map((household) => household.name),
+      ],
+    });
     const timestamp = new Date().toISOString();
     const extension = fixedFormat === 'marked-docx' ? 'docx' : fixedFormat;
     const fileName = `${fixedReportFileName(reportTitle)}.${extension}`;
@@ -542,9 +609,34 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
       qualityResolutions,
       blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     };
+
     await appendReportHistory(record);
     setReportHistory((current) => [record, ...current].slice(0, 100));
     return !!storagePath;
+  };
+
+  const persistReportExportAudit = async (fileType: 'docx' | 'xlsx' | 'pdf', fileName: string, blob: Blob) => {
+    if (!currentUser) throw new Error('Sign in is required to record this report download.');
+    const record = await createReportExportRecord(blob, {
+      reportType,
+      title: reportTitle,
+      fileName,
+      format: fileType,
+      openProblems: auditedQualityIssues
+        .filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden')
+        .map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
+      overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+        issueId: entry.issueId,
+        reason: entry.note,
+        by: entry.by,
+        at: entry.at,
+      })),
+      generatedBy: staffProfile?.fullName || currentUser.email || 'Report user',
+      generatedByUid: currentUser.uid,
+      draft: false,
+      finalLocked: true,
+    });
+    await appendReportExport(record);
   };
 
   const downloadArchivedReport = async (record: ReportHistoryRecord) => {
@@ -777,8 +869,6 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
                 { label: 'Workplans & Targets', checked: includeWorkplans, set: setIncludeWorkplans },
                 { label: 'Case Actions', checked: includeCaseActions, set: setIncludeCaseActions },
                 ...(canViewCaseReviews ? [{ label: 'Case Reviews', checked: includeCaseReviews, set: setIncludeCaseReviews }] : []),
-                { label: 'Case Actions', checked: includeCaseActions, set: setIncludeCaseActions },
-                ...(canViewCaseReviews ? [{ label: 'Case Reviews', checked: includeCaseReviews, set: setIncludeCaseReviews }] : []),
                 { label: 'Photos & Attachments', checked: includePhotos, set: (checked: boolean) => {
                   setIncludePhotos(checked);
                   if (checked && selectedPhotoIds.length === 0) {
@@ -800,6 +890,11 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
                 </label>
               ))}
             </div>
+            <label className="mt-4 flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs font-semibold text-stone-800">
+              <input type="checkbox" checked={hideIdentifyingDetails} onChange={(event) => setHideIdentifyingDetails(event.target.checked)} />
+              Hide identifying details in the fixed copy
+            </label>
+            <p className="mt-1 text-[11px] text-stone-600">When on, the fixed copy uses aggregate summaries and leaves out names, schools, health, family, case-review, and safeguarding details.</p>
           </div>
 
           {includePhotos && format !== 'xlsx' && (
@@ -807,7 +902,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-stone-900">Authorized report photos</h4>
-                  <p className="text-[11px] text-stone-500">Only selected JPEG and PNG images are loaded through Firebase Storage access rules.</p>
+                  <p className="text-[11px] text-stone-500">Only selected JPEG and PNG images with recorded consent are loaded through Firebase Storage access rules. Add a descriptive caption for accessible alt text.</p>
                 </div>
                 <label className="text-[11px] font-semibold text-stone-600">Maximum photos
                   <input type="number" min={0} max={50} value={maxPhotos} onChange={(event) => setMaxPhotos(Math.max(0, Math.min(50, Number(event.target.value) || 0)))} className="field mt-1 block w-24" />

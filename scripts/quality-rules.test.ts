@@ -207,6 +207,44 @@ const validResult = runQualityRules({
   }],
 });
 assert.ok(!validResult.some((issue) => issue.rule === 'DQ-VALIDITY'), 'source plus definition match and plausible value passes validity');
+const minimumValidityCheck = runQualityRules({
+  results: [{
+    id: 'minimum-validity',
+    actual: 6,
+    target: 8,
+    unit: 'girls',
+    validity: {
+      checks: ['definition-match'],
+      source: { name: 'Attendance register', reference: 'September 2026' },
+    },
+  }],
+});
+assert.ok(!minimumValidityCheck.some((issue) => issue.rule === 'DQ-VALIDITY'), 'source plus the definition check is sufficient without an optional checker name or note');
+const secondSourceValidity = runQualityRules({
+  results: [{
+    id: 'second-source-validity',
+    actual: 6,
+    target: 8,
+    unit: 'girls',
+    validity: { checks: ['definition-match'], secondSource: 'School report' },
+  }],
+});
+assert.ok(!secondSourceValidity.some((issue) => issue.rule === 'DQ-VALIDITY'), 'a second source plus the definition check passes');
+const sameCheckerValidity = runQualityRules({
+  results: [{
+    id: 'same-checker-validity',
+    actual: 6,
+    target: 8,
+    unit: 'girls',
+    enteredBy: 'staff-a',
+    validity: {
+      checks: ['definition-match'],
+      source: { name: 'Attendance register', reference: 'September 2026' },
+      checkedBy: 'staff-a',
+    },
+  }],
+});
+assert.ok(sameCheckerValidity.some((issue) => issue.rule === 'DQ-VALIDITY' && issue.enteredBy === 'staff-a'), 'a checker cannot be the person who entered the result');
 const invalidResult = runQualityRules({
   results: [{ id: 'invalid-result', indicatorName: 'Attendance', unit: 'girls', actual: 12, enrolment: 10, validity: { checks: [] } }],
 });

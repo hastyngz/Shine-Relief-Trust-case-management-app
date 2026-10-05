@@ -7,13 +7,13 @@ import { assembleSponsorReport, type SponsorReportAudience } from '../../service
 import { generateReportNarrative } from '../../services/reportNarrative';
 import { PROGRAMMES, type ProgrammeId } from '../../data/programmes';
 import { generateWordReport, reviewReportQuality, type ReportConfig } from '../../services/reportGenerators';
-import { downloadCSV, formatMWK } from '../../utils/export';
+import { formatMWK } from '../../utils/export';
 import { qualityScores } from '../../services/qualityRules';
 import { qualityMessage } from '../../services/qualityMessages';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { appendReportExport, appendReportHistory } from '../../services/firestoreSync';
-import { createFixedReport, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
 import type { QualityIssue } from '../../services/qualityRules';
 
 interface ReportBuilderProps {
@@ -94,6 +94,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
     subtitle: `${audience} audience · ${periodLabel}`,
     periodLabel,
     generatedBy: 'SHINE Relief Trust',
+    hideIdentifyingDetails,
     executiveSummary: narrative,
     structuredTables: tables,
     donorFacing: audience !== 'Trustee',
@@ -162,10 +163,28 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
     try {
       const config: ReportConfig = { ...qualityConfig, qualityIssues: auditedQualityIssues, qualityScores: reportQualityScores, blockerOverrideReason };
       const blob = await generateWordReport(db, config);
+      if (!currentUser) throw new Error('Sign in is required to record this report download.');
+      const fileName = `SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.docx`;
+      await appendReportExport(await createReportExportRecord(blob, {
+        reportType: 'sponsor-donor',
+        title: qualityConfig.title,
+        fileName,
+        format: 'docx',
+        openProblems: auditedQualityIssues
+          .filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden')
+          .map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
+        overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+          issueId: entry.issueId, reason: entry.note, by: entry.by, at: entry.at,
+        })),
+        generatedBy: staffProfile?.fullName || currentUser.email || 'Management user',
+        generatedByUid: currentUser.uid,
+        draft: false,
+        finalLocked: true,
+      }));
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.docx`;
+      link.download = fileName;
       link.click();
       URL.revokeObjectURL(url);
       await persistQualityAudit('docx');
@@ -195,10 +214,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
     });
     const sections = [
       ...(!hideIdentifyingDetails ? [{ title: 'Executive summary', text: narrative }] : []),
-      ...tables.map((table) => ({
-        title: table.title,
-        text: [table.headers.join(' | '), ...table.rows.map((row) => row.map(String).join(' | '))].join('\n'),
-      })),
+      ...tables.map((table) => ({ title: table.title, text: '', table })),
     ];
     const blob = await createFixedReport({
       title: qualityConfig.title,
@@ -207,6 +223,11 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
       openProblems,
       format,
       draft,
+      hideIdentifyingDetails,
+      identifyingValues: [
+        ...db.girls.flatMap((girl) => [girl.fullName, girl.school || '']),
+        ...db.households.map((household) => household.name),
+      ],
     });
     const timestamp = new Date().toISOString();
     const extension = format === 'marked-docx' ? 'docx' : format;
@@ -243,6 +264,10 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
 
   const exportCsv = () => {
     if (!ensureQualityOverride()) return;
+    if (!currentUser) {
+      setExportError('Sign in is required to record this report download.');
+      return;
+    }
     const rows: Array<Array<string | number>> = [
       ['SHINE Relief Trust', `${audience} report`, periodLabel],
       ['Narrative', narrative],
@@ -253,10 +278,46 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
       ['SCORE', 'Quantification', '', `${reportQualityScores.quantification}/100`, ''],
       ['SCORE', 'Impact evidence', '', `${reportQualityScores.impact}/100`, ''],
       ['SCORE', 'Data quality', '', `${reportQualityScores.dataQuality}/100`, ''],
-      ...reportQualityIssues.map((issue) => [issue.severity, issue.rule, issue.location, issue.message, issue.suggestedFix || '']),
+      ...reportQualityIssues.map((issue) => [
+        issue.severity,
+        issue.rule,
+        hideIdentifyingDetails ? '' : issue.location,
+        hideIdentifyingDetails ? qualityMessage(issue).title : issue.message,
+        hideIdentifyingDetails ? '' : issue.suggestedFix || '',
+      ]),
     ];
-    downloadCSV(`SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.csv`, rows);
-    void persistQualityAudit('csv').catch((error) => setExportError(error instanceof Error ? error.message : 'Report audit could not be recorded.'));
+    const csv = `\uFEFF${rows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const fileName = `SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+    void (async () => {
+      try {
+        await appendReportExport(await createReportExportRecord(blob, {
+          reportType: 'sponsor-donor',
+          title: qualityConfig.title,
+          fileName,
+          format: 'csv',
+          openProblems: auditedQualityIssues
+            .filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden')
+            .map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
+          overrides: qualityResolutions.filter((entry) => entry.status === 'overridden').map((entry) => ({
+            issueId: entry.issueId, reason: entry.note, by: entry.by, at: entry.at,
+          })),
+          generatedBy: staffProfile?.fullName || currentUser.email || 'Management user',
+          generatedByUid: currentUser.uid,
+          draft: false,
+          finalLocked: true,
+        }));
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+        await persistQualityAudit('csv');
+      } catch (error) {
+        setExportError(error instanceof Error ? error.message : 'The report could not be downloaded.');
+      }
+    })();
   };
   const printReport = () => {
     if (!ensureQualityOverride()) return;

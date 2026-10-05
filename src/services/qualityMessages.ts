@@ -381,7 +381,7 @@ export function qualityMessage(issue: QualityIssue): QualityMessage {
     ? `${validityValue[2].trim()}: ${validityValue[1].trim()}`
     : totals
       ? `Stated: ${totals[1].trim()}; recomputed: ${totals[2].trim()}`
-    : issue.context?.trim() || 'The original record needs a check.';
+    : issue.context?.trim() || issue.message;
   const question = issue.rule === 'QUANT-03'
     ? activityQuestion(quote)
     : issue.rule === 'QUANT-01'

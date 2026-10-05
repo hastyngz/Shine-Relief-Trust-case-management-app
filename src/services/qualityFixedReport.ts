@@ -5,21 +5,38 @@ import {
   Footer,
   Header,
   HeadingLevel,
+  ImageRun,
   PageNumber,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TableOfContents,
   TextRun,
 } from 'docx';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
+import type { ReportExportRecord } from '../types';
 
 export type FixedReportFormat = 'docx' | 'pdf' | 'marked-docx' | 'xlsx';
 export type ReportExportFormat = FixedReportFormat | 'csv';
 
+export interface FixedReportImage {
+  data: Uint8Array;
+  type: 'png' | 'jpg';
+  altText: string;
+  consent: boolean;
+}
+
 export interface FixedReportSection {
   title: string;
   text: string;
+  paragraphs?: string[];
+  table?: { headers: string[]; rows: Array<Array<string | number>> };
+  images?: FixedReportImage[];
+  sensitivity?: 'health' | 'family' | 'psychosocial' | 'safeguarding' | 'photo';
+  identifyingValues?: string[];
 }
 
 export interface FixedReportChange {
@@ -43,6 +60,8 @@ export interface FixedReportInput {
   openProblems: FixedReportProblem[];
   format: FixedReportFormat;
   draft: boolean;
+  hideIdentifyingDetails?: boolean;
+  identifyingValues?: string[];
 }
 
 export function fixedReportFileName(originalName: string, date = new Date()): string {
@@ -56,6 +75,20 @@ export function nextReportExportVersion(reportType: string): number {
     record.reportType === reportType && typeof record.version === 'number' ? Math.max(max, record.version) : max, 0) + 1;
 }
 
+export async function createReportExportRecord(
+  blob: Blob,
+  details: Omit<ReportExportRecord, 'id' | 'version' | 'hash' | 'generatedAt'>,
+): Promise<ReportExportRecord> {
+  const generatedAt = new Date().toISOString();
+  return {
+    ...details,
+    id: `report_export_${details.generatedByUid}_${Date.now()}`,
+    version: nextReportExportVersion(details.reportType),
+    hash: await sha256Blob(blob),
+    generatedAt,
+  };
+}
+
 export function assertFixedReportCanDownload(input: Pick<FixedReportInput, 'openProblems' | 'draft'>): void {
   const blockers = input.openProblems.filter((problem) => problem.severity === 'blocker');
   if (blockers.length && !input.draft) {
@@ -63,8 +96,109 @@ export function assertFixedReportCanDownload(input: Pick<FixedReportInput, 'open
   }
 }
 
+function sanitizeText(text: string, sensitiveValues: string[]): string {
+  return sensitiveValues.filter(Boolean).reduce((result, value) => result.replace(
+    new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+    '[hidden]',
+  ), text);
+}
+
+function visibleSections(input: FixedReportInput): FixedReportSection[] {
+  return input.sections
+    .filter((section) => !input.hideIdentifyingDetails
+      || (!['health', 'family', 'psychosocial', 'safeguarding', 'photo'].includes(section.sensitivity || '')
+        && !/\b(?:health|medical|family|psychosocial|safeguarding|photo|photograph)\b/i.test(section.title)))
+    .map((section) => {
+      const sensitiveValues = [...(input.identifyingValues || []), ...(section.identifyingValues || [])];
+      return {
+        ...section,
+        title: input.hideIdentifyingDetails ? sanitizeText(section.title, sensitiveValues) : section.title,
+        text: input.hideIdentifyingDetails ? sanitizeText(section.text, sensitiveValues) : section.text,
+        paragraphs: section.paragraphs?.map((text) => input.hideIdentifyingDetails ? sanitizeText(text, sensitiveValues) : text),
+        table: section.table && {
+          headers: section.table.headers.map((text) => input.hideIdentifyingDetails ? sanitizeText(text, sensitiveValues) : text),
+          rows: section.table.rows.map((row) => row.map((value) => input.hideIdentifyingDetails
+            ? sanitizeText(String(value), sensitiveValues)
+            : value)),
+        },
+        images: section.images?.filter((image) => !input.hideIdentifyingDetails && image.consent),
+      };
+    });
+}
+
+function privacySafeInput(input: FixedReportInput): FixedReportInput {
+  if (!input.hideIdentifyingDetails) return input;
+  const globalValues = input.identifyingValues || [];
+  const clean = (text: string, values = globalValues) => sanitizeText(text, values);
+  const sections = visibleSections(input).map((section) => {
+    const values = [...globalValues, ...(section.identifyingValues || [])];
+    return {
+      ...section,
+      title: clean(section.title, values),
+      text: clean(section.text, values),
+      paragraphs: section.paragraphs?.map((text) => clean(text, values)),
+      table: section.table && {
+        headers: section.table.headers.map((text) => clean(text, values)),
+        rows: section.table.rows.map((row) => row.map((value) => clean(String(value), values))),
+      },
+    };
+  });
+  return {
+    ...input,
+    title: clean(input.title),
+    sections,
+    changes: input.changes.map((change) => {
+      const values = [
+        ...globalValues,
+        ...(input.sections.find((section) => section.title === change.section)?.identifyingValues || []),
+      ];
+      return {
+        ...change,
+        section: clean(change.section, values),
+        originalText: clean(change.originalText, values),
+        newText: clean(change.newText, values),
+        by: clean(change.by),
+        reason: clean(change.reason, values),
+      };
+    }),
+    openProblems: input.openProblems.map((problem) => ({ ...problem, text: clean(problem.text) })),
+  };
+}
+
+function tableRows(table: NonNullable<FixedReportSection['table']>): Table {
+  const rows = [table.headers, ...table.rows].map((row, rowIndex) => new TableRow({
+    children: row.map((value) => new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(value), bold: rowIndex === 0 })],
+      })],
+    })),
+  }));
+  return new Table({ rows });
+}
+
+function markedRuns(text: string, sectionTitle: string, input: FixedReportInput): TextRun[] {
+  const changes = input.format === 'marked-docx'
+    ? input.changes.filter((change) => change.section === sectionTitle && change.newText && text.includes(change.newText))
+      .sort((left, right) => text.indexOf(left.newText) - text.indexOf(right.newText))
+    : [];
+  if (!changes.length) return [new TextRun({ text })];
+  const runs: TextRun[] = [];
+  let cursor = 0;
+  for (const change of changes) {
+    const start = text.indexOf(change.newText, cursor);
+    if (start < 0) continue;
+    if (start > cursor) runs.push(new TextRun({ text: text.slice(cursor, start) }));
+    runs.push(new TextRun({ text: `Was: ${change.originalText}`, strike: true, color: '9A3412' }));
+    runs.push(new TextRun({ text: `  Now: ${change.newText}`, highlight: 'yellow' }));
+    cursor = start + change.newText.length;
+  }
+  if (cursor < text.length) runs.push(new TextRun({ text: text.slice(cursor) }));
+  return runs;
+}
+
 function paragraphs(input: FixedReportInput): FileChild[] {
   const items: FileChild[] = [];
+  const sections = visibleSections(input);
   if (input.draft) {
     items.push(new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -76,22 +210,24 @@ function paragraphs(input: FixedReportInput): FileChild[] {
   items.push(new Paragraph({ text: 'Contents', heading: HeadingLevel.HEADING_1 }));
   items.push(new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-3' }));
   items.push(new Paragraph({ text: 'Report', heading: HeadingLevel.HEADING_1 }));
-  input.sections.forEach((section) => {
-    items.push(new Paragraph({ text: section.title, heading: HeadingLevel.HEADING_2 }));
-    for (const text of section.text.split(/\n+/).filter(Boolean)) {
-      if (input.format === 'marked-docx') {
-        const change = input.changes.find((item) => item.section === section.title && item.newText === text);
-        if (change) {
-          items.push(new Paragraph({
-            children: [
-              new TextRun({ text: `Was: ${change.originalText}`, strike: true, color: '9A3412' }),
-              new TextRun({ text: `  Now: ${change.newText}`, highlight: 'yellow' }),
-            ],
-          }));
-          continue;
-        }
-      }
-      items.push(new Paragraph({ text }));
+  sections.forEach((section, index) => {
+    items.push(new Paragraph({ text: `${index + 1}. ${section.title}`, heading: HeadingLevel.HEADING_2 }));
+    for (const text of (section.paragraphs || section.text.split(/\n+/)).filter(Boolean)) {
+      items.push(new Paragraph({ children: markedRuns(text, section.title, input) }));
+    }
+    if (section.table?.headers.length) items.push(tableRows(section.table));
+    for (const image of section.images || []) {
+      if (!image.altText.trim()) throw new Error(`An image in "${section.title}" needs alt text before export.`);
+      items.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new ImageRun({
+          data: image.data,
+          type: image.type,
+          transformation: { width: 420, height: 280 },
+          altText: { name: image.altText, description: image.altText },
+        })],
+      }));
+      items.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: image.altText, italics: true })] }));
     }
   });
   if (input.changes.length) {
@@ -150,6 +286,32 @@ function pdfDocument(input: FixedReportInput): Blob {
       y += size * 0.48 + 2;
     }
   };
+  const writeTable = (table: NonNullable<FixedReportSection['table']>) => {
+    if (!table.headers.length) return;
+    const rows = [table.headers, ...table.rows];
+    const columnWidth = (pageWidth - 32) / table.headers.length;
+    rows.forEach((row, rowIndex) => {
+      const cells = table.headers.map((_, columnIndex) => pdf.splitTextToSize(
+        String(row[columnIndex] ?? ''),
+        Math.max(12, columnWidth - 6),
+      ) as string[]);
+      const rowHeight = Math.max(18, ...cells.map((lines) => lines.length * 5 + 8));
+      if (y + rowHeight > pageHeight - 20) {
+        pdf.addPage();
+        y = 18;
+      }
+      cells.forEach((lines, columnIndex) => {
+        const x = 16 + columnIndex * columnWidth;
+        pdf.setDrawColor(190, 190, 190);
+        pdf.setFillColor(...(rowIndex === 0 ? [235, 242, 239] as [number, number, number] : [255, 255, 255] as [number, number, number]));
+        pdf.rect(x, y - 4, columnWidth, rowHeight, 'FD');
+        pdf.setFont('helvetica', rowIndex === 0 ? 'bold' : 'normal');
+        pdf.setFontSize(8);
+        pdf.text(lines, x + 3, y + 3);
+      });
+      y += rowHeight;
+    });
+  };
   if (input.draft) {
     pdf.setTextColor(185, 28, 28);
     write('DRAFT', 20, true);
@@ -157,10 +319,25 @@ function pdfDocument(input: FixedReportInput): Blob {
   }
   write(input.title, 18, true);
   write('Contents', 14, true);
-  input.sections.forEach((section, index) => write(`${index + 1}. ${section.title}`));
-  input.sections.forEach((section) => {
+  const sections = visibleSections(input);
+  sections.forEach((section, index) => write(`${index + 1}. ${section.title}`));
+  sections.forEach((section) => {
     write(section.title, 14, true);
-    write(section.text);
+    for (const text of (section.paragraphs || section.text.split(/\n+/)).filter(Boolean)) write(text);
+    if (section.table) writeTable(section.table);
+    for (const image of section.images || []) {
+      if (!image.altText.trim()) throw new Error(`An image in "${section.title}" needs alt text before export.`);
+      const properties = pdf.getImageProperties(image.data);
+      const width = Math.min(pageWidth - 32, 150);
+      const height = width * (properties.height / properties.width);
+      if (y + height + 14 > pageHeight - 20) {
+        pdf.addPage();
+        y = 18;
+      }
+      pdf.addImage(image.data, image.type === 'jpg' ? 'JPEG' : 'PNG', 16, y, width, height);
+      y += height + 4;
+      write(`Image description: ${image.altText}`, 9);
+    }
   });
   if (input.changes.length) {
     write('Changes made', 14, true);
@@ -170,6 +347,8 @@ function pdfDocument(input: FixedReportInput): Blob {
     }
   }
   if (input.draft && input.openProblems.length) {
+    pdf.addPage();
+    y = 18;
     write('Open problems', 14, true);
     input.openProblems.forEach((problem) => write(`${problem.severity.toUpperCase()}: ${problem.text}`));
   }
@@ -208,10 +387,11 @@ function changesWorkbook(input: FixedReportInput): Blob {
 }
 
 export async function createFixedReport(input: FixedReportInput): Promise<Blob> {
-  assertFixedReportCanDownload(input);
-  if (input.format === 'pdf') return pdfDocument(input);
-  if (input.format === 'xlsx') return changesWorkbook(input);
-  return wordDocument(input);
+  const safeInput = privacySafeInput(input);
+  assertFixedReportCanDownload(safeInput);
+  if (safeInput.format === 'pdf') return pdfDocument(safeInput);
+  if (safeInput.format === 'xlsx') return changesWorkbook(safeInput);
+  return wordDocument(safeInput);
 }
 
 export async function sha256Blob(blob: Blob): Promise<string> {
