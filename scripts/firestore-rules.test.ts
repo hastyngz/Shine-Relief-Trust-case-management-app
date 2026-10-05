@@ -81,6 +81,12 @@ async function seedData() {
     });
     await setDoc(doc(firestore, 'payrollRecords/payroll-manager'), { id: 'payroll-manager', employeeId: 'manager', expectedAmount: 100000, amountPaid: 0 });
     await setDoc(doc(firestore, 'payrollRecords/payroll-worker'), { id: 'payroll-worker', employeeId: 'worker', expectedAmount: 80000, amountPaid: 80000 });
+    await setDoc(doc(firestore, 'employees/employee-1'), {
+      id: 'employee-1',
+      fullName: 'Employee One',
+      employmentStatus: 'Active',
+      createdBy: 'manager',
+    });
     await setDoc(doc(firestore, 'contacts/contact-1'), {
       id: 'contact-1', type: 'person', name: 'Contact One', category: 'volunteer', aliases: [],
       phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
@@ -140,6 +146,22 @@ async function run() {
     await assertFails(getDoc(doc(viewer, 'payrollRecords/payroll-manager')));
     await assertFails(getDoc(doc(worker, 'payrollRecords/payroll-manager')));
     await assertSucceeds(getDoc(doc(worker, 'payrollRecords/payroll-worker')));
+    await assertSucceeds(getDoc(doc(manager, 'employees/employee-1')));
+    await assertSucceeds(getDoc(doc(admin, 'employees/employee-1')));
+    await assertFails(getDoc(doc(viewer, 'employees/employee-1')));
+    await assertFails(getDoc(doc(worker, 'employees/employee-1')));
+    await assertSucceeds(setDoc(doc(manager, 'employees/employee-2'), {
+      id: 'employee-2',
+      fullName: 'Employee Two',
+      employmentStatus: 'Active',
+      createdBy: 'manager',
+    }));
+    await assertFails(setDoc(doc(worker, 'employees/employee-3'), {
+      id: 'employee-3',
+      fullName: 'Employee Three',
+      employmentStatus: 'Active',
+      createdBy: 'worker',
+    }));
     await assertFails(setDoc(doc(worker, 'employeeSalaryHistory/salary-2'), {
       id: 'salary-2', employeeId: 'worker', effectiveDate: '2026-07-01', salaryAmount: 120000,
       salaryFrequency: 'Monthly', auditMetadata: { createdByUid: 'worker', createdAt: '2026-09-27T00:00:00.000Z' },

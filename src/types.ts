@@ -117,6 +117,26 @@ export interface StaffUser {
   employmentPeriods?: EmploymentPeriod[];
 }
 
+export interface EmployeeRecord {
+  id: string;
+  fullName: string;
+  department?: string;
+  positionTitle?: string;
+  sourceYear?: number;
+  employmentStatus?: EmploymentStatus;
+  salaryMWK: number;
+  latestSalaryPeriod?: string;
+  latestWorkbookPaymentPeriod?: string;
+  salaryHistoryRecordIds?: string[];
+  otherPayrollAmounts?: Array<{ type: string; amount: number; payPeriod?: string; sourceReference?: string }>;
+  needsEmploymentReview?: boolean;
+  source?: { fileName: string; importedAt: string; importedByUid: string; importedByName: string };
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+
 export interface Girl {
   id: string; // e.g. "SG-001"
   fullName: string;
@@ -489,6 +509,8 @@ export interface HouseholdExpense {
   datePaid?: string;
   paymentMethod?: string;
   paymentReference?: string;
+  allowancesMWK?: number;
+  deductionsMWK?: number;
   auditTrail?: Array<{
     action: 'created' | 'updated' | 'payment-status-changed';
     by: string;
@@ -681,6 +703,8 @@ export interface PayrollRecord {
   paymentStatus: PayrollPaymentStatus;
   paymentMethod?: PayrollPaymentMethod;
   paymentReference?: string;
+  allowancesMWK?: number;
+  deductionsMWK?: number;
   notes?: string;
   budgetId?: string;
   budgetLineId?: string;
@@ -1168,6 +1192,13 @@ export interface ImportAuditRecord {
   existingPeopleMatchedCount?: number;
   possibleDuplicatesCount?: number;
   relationshipsCreatedCount?: number;
+  employeesDetectedCount?: number;
+  employeesAddedCount?: number;
+  existingEmployeesMatchedCount?: number;
+  employeesNeedingReviewCount?: number;
+  payrollRecordsDetectedCount?: number;
+  payrollRecordsImportedCount?: number;
+  payrollRowsIgnoredCount?: number;
   status: 'completed' | 'cancelled' | 'failed';
   summary?: string;
   qualityIssues?: Array<{
@@ -1264,6 +1295,7 @@ export interface ImportPreviewItem {
     | 'budget'
     | 'workplan'
     | 'payroll'
+    | 'employee'
     | 'procurementList'
     | 'projectProjection'
     | 'schedule'
@@ -1332,6 +1364,7 @@ export interface AppDatabase {
   budgets?: BudgetItem[];
   annualBudgets?: AnnualBudgetPlan[];
   payrollRecords?: PayrollRecord[];
+  employees?: EmployeeRecord[];
   workplans?: WorkplanItem[];
   schedules?: ScheduleItem[];
   meetings?: MeetingRecord[];

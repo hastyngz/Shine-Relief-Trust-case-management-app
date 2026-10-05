@@ -199,6 +199,43 @@ export async function getUserNotificationPreferences(
   };
 }
 
+export async function notifyPayrollProcessors(params: {
+  period: string;
+  actorName: string;
+  staff: StaffUser[];
+  message: string;
+}): Promise<void> {
+  const processors = params.staff.filter((person) =>
+    person.status === 'Active' &&
+    (person.role === 'Administrator' || person.role === 'Manager') &&
+    !!person.uid,
+  );
+  const recipients = await Promise.all(processors.map(async (person) => ({
+    person,
+    preferences: await getUserNotificationPreferences(person.uid),
+  })));
+  const now = new Date().toISOString();
+  await Promise.all(recipients
+    .filter(({ preferences }) => preferences.followUpReminders)
+    .map(async ({ person }) => {
+      const id = `notif_payroll_${params.period}_${person.uid}`;
+      const notification: StaffNotification = {
+        id,
+        userId: person.uid,
+        type: 'followup_reminder',
+        title: `${params.period} payroll needs to be processed`,
+        message: params.message.slice(0, 160),
+        source: 'Payroll task',
+        priority: 'important',
+        isRead: false,
+        createdAt: now,
+        createdBy: params.actorName,
+        relatedRecordTitle: `Payroll ${params.period}`,
+      };
+      await setDoc(doc(firestore, COLLECTIONS.NOTIFICATIONS, id), sanitizeForFirestore(notification));
+    }));
+}
+
 export async function saveUserNotificationPreferences(
   prefs: UserNotificationPreferences
 ): Promise<void> {

@@ -4,7 +4,7 @@ import { qualityMessage, qualityMessageCatalogue } from '../src/services/quality
 import { toggleQualityGroup } from '../src/components/QualityCheckPanel';
 
 const ruleCases: Array<[string, unknown]> = [
-  ['QUANT-01', { finalReport: true, narrativeSections: [{ text: 'Several girls participated in group sessions.' }] }],
+  ['QUANT-01', { finalReport: true, narrativeSections: [{ text: 'Staff were trained in group sessions.' }] }],
   ['QUANT-02', { narrativeSections: [{ text: 'The girls participated in various activities.' }] }],
   ['QUANT-03', { finalReport: true, activities: [{ id: 'session-activity', description: 'Children attended group sessions.' }] }],
   ['QUANT-04', { results: [{ target: 100, actual: 40 }] }],
@@ -109,7 +109,7 @@ assert.ok(!ordinaryCaseNotes.some((issue) => ['QUANT-01', 'QUANT-02', 'QUANT-03'
   'ordinary case-management events and non-numerical records must not be flagged for missing counts or checks');
 assert.ok(runQualityRules({
   narrativeSections: [{ id: 'genuine-count', text: 'Cooperative learning: The girls participated in cooperative learning in September.' }],
-}).some((issue) => issue.rule === 'QUANT-01'), 'genuine activities that need counts remain flagged');
+}).some((issue) => issue.rule === 'QUANT-02'), 'the sentence-level check takes precedence over a section-level count warning');
 const rebuiltActivityText = 'In September 2026, 8 girls took part in 6 cooperative learning sessions at Zomba.';
 assert.ok(!runQualityRules({
   narrativeSections: [{ id: 'preview-stable-42', text: rebuiltActivityText }],
@@ -132,6 +132,8 @@ const fuzzyIdentityIssues = runQualityRules({
 const fuzzyIdentityIssue = fuzzyIdentityIssues.find((issue) => issue.rule === 'IDENTITY-FUZZY-01');
 assert.equal(fuzzyIdentityIssue?.target?.id, 'preview-person-1');
 assert.deepEqual(fuzzyIdentityIssue?.fix?.options?.map((option) => option.value), ['girl-1', 'new-person']);
+assert.deepEqual(fuzzyIdentityIssue?.candidateA, { id: 'preview-person-1', name: 'Magret Example' });
+assert.deepEqual(fuzzyIdentityIssue?.candidateB, { id: 'girl-1', name: 'Margaret Example' });
 assert.ok(!runQualityRules({
   identityReviews: [{
     id: 'preview-person-1',
@@ -140,6 +142,20 @@ assert.ok(!runQualityRules({
     decision: 'existing-person',
   }],
 }).some((issue) => issue.rule === 'IDENTITY-FUZZY-01'));
+
+const repeatedQuantIssues = runQualityRules({
+  narrativeSections: [{ id: 'same-text-block', text: 'Several girls participated in various activities.' }],
+  activities: [{ id: 'same-text-block', description: 'Several girls participated in various activities.' }],
+});
+assert.deepEqual(repeatedQuantIssues.filter((issue) => /^QUANT-0[123]$/.test(issue.rule)).map((issue) => issue.rule), ['QUANT-03']);
+assert.ok(repeatedQuantIssues.find((issue) => issue.rule === 'QUANT-03')?.nodeId === 'same-text-block');
+const structuralOverviewIssues = runQualityRules({
+  narrativeSections: [{ id: 'overview-block', text: 'Several girls participated in various activities.', isOverviewParagraph: true }],
+  overviewSections: [{ id: 'overview-impact', text: 'Attendance improved during the programme.', isOverviewParagraph: true }],
+  activities: [{ id: 'header-block', description: 'Several girls participated in various activities.', isHeader: true }],
+});
+assert.ok(!structuralOverviewIssues.some((issue) => /^QUANT-0[123]$/.test(issue.rule)));
+assert.ok(structuralOverviewIssues.some((issue) => issue.rule === 'IMPACT-02'), 'structural flags suppress quant forms without disabling other narrative checks');
 
 const sensitiveFixture = {
   finalReport: true,
@@ -167,7 +183,7 @@ const issues = runQualityRules(sensitiveFixture);
 assert.deepEqual(sensitiveFixture, originalFixture, 'rules must not mutate input');
 assert.ok(issues.every((issue) => issue.id && issue.location && issue.message));
 assert.ok(!issues.some((issue) => issue.message.includes('team@example.invalid')), 'messages must not expose sensitive values');
-assert.ok(issues.some((issue) => issue.rule === 'QUANT-01' && issue.severity === 'blocker'));
+assert.ok(issues.some((issue) => issue.rule === 'QUANT-02' && issue.severity === 'warning'));
 assert.ok(issues.some((issue) => issue.rule === 'FIN-TOTAL-DISAGREEMENT-01' && issue.message.includes('difference')));
 
 const definedAcronym = runQualityRules({

@@ -28,7 +28,7 @@ export interface SpreadsheetAnalysis {
 }
 
 const MONTH_NAMES =
-  /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i;
+  /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?|t?mb?er)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i;
 
 function normalize(value: unknown): string {
   return String(value ?? '')
@@ -52,14 +52,14 @@ function hasHeader(rows: string[][], pattern: RegExp, lookahead = 30): boolean {
   return rows.slice(0, lookahead).some((row) => row.some((cell) => pattern.test(cell)));
 }
 
-function detectRows(rows: string[][]): SpreadsheetKind {
+function detectRows(rows: string[][], sheetName = ''): SpreadsheetKind {
   const allText = rows.flat().join(' ');
+  const documentLabel = `${sheetName} ${allText}`;
   const hasMonths = MONTH_NAMES.test(allText);
   const hasMonthColumns = rows.some((row) => row.filter((cell) => MONTH_NAMES.test(cell)).length >= 2);
+  const payrollSheetName = /\b(payments?|payroll|salar(?:y|ies)|staff|employees?)\b/i.test(sheetName);
   const hasCost = hasHeader(rows, /\b(cost|unit cost|amount|price|budget)\b/);
   const hasQuantity = hasHeader(rows, /\b(qty|quantity)\b/);
-  const hasStaffName = hasHeader(rows, /\b(employee|staff|payee|name of staff|personnel)\b/);
-
   const workplanHeaders = [
     /\bkey priority area\b/,
     /\boutcome\b/,
@@ -82,7 +82,11 @@ function detectRows(rows: string[][]): SpreadsheetKind {
     return 'profit-loss';
   }
 
-  if (hasStaffName && hasMonths && hasHeader(rows, /\b(salary|wage|payroll|gross pay|net pay)\b/)) {
+  if (
+    hasMonths &&
+    (/\b(employee|staff|payroll|salary|wage|gross pay|net pay)\b/i.test(documentLabel) ||
+      (payrollSheetName && hasMonthColumns))
+  ) {
     return 'payroll-grid';
   }
 
@@ -121,7 +125,7 @@ function getSheetCells(sheet: XLSX.WorkSheet): SpreadsheetCell[] {
 }
 
 export function detectSpreadsheetKind(workbook: XLSX.WorkBook): SpreadsheetKind {
-  const kinds = workbook.SheetNames.map((name) => detectRows(worksheetRows(workbook.Sheets[name])));
+  const kinds = workbook.SheetNames.map((name) => detectRows(worksheetRows(workbook.Sheets[name]), name));
   const preference: SpreadsheetKind[] = [
     'workplan-matrix',
     'payroll-grid',
@@ -144,4 +148,3 @@ export function analyzeSpreadsheetWorkbook(workbook: XLSX.WorkBook): Spreadsheet
   });
   return { detectedKind: detectSpreadsheetKind(workbook), sheets };
 }
-

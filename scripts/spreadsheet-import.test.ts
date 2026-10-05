@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook, detectSpreadsheetKind } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
 import { matchNameCandidates } from '../src/services/spreadsheetImport/nameMatcher';
 import { extractEarlyYearsMetrics } from '../src/services/docxParserService';
 
-function workbook(rows: Array<Array<string | number>>): XLSX.WorkBook {
+function workbook(rows: Array<Array<string | number>>, sheetName = 'Sheet1'): XLSX.WorkBook {
   const result = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(result, XLSX.utils.aoa_to_sheet(rows), 'Sheet1');
+  XLSX.utils.book_append_sheet(result, XLSX.utils.aoa_to_sheet(rows), sheetName);
   return result;
 }
 
@@ -112,10 +113,90 @@ const payrollPreview = createSpreadsheetImportPreview(
   'payroll-grid',
 );
 const payrollLines = payrollPreview.lines.filter((line) => line.kind === 'payroll');
-assert.equal(payrollLines.length, 5);
-assert.ok(payrollLines.some((line) => line.kind === 'payroll' && line.payPeriod.endsWith('-09')));
-assert.ok(payrollLines.some((line) => line.kind === 'payroll' && line.specialType === 'loan'));
-assert.ok(payrollLines.every((line) => line.kind !== 'payroll' || line.status !== 'matched'));
+const payrollEmployees = payrollPreview.lines.filter((line) => line.kind === 'employee');
+assert.equal(payrollLines.length, 0);
+assert.equal(payrollEmployees.length, 1);
+assert.equal(payrollEmployees[0].salaryHistory.length, 3);
+assert.ok(payrollEmployees[0].otherPayrollAmounts.some((line) => line.type === 'loan'));
+assert.ok(payrollEmployees[0].otherPayrollAmounts.some((line) => line.type === 'arrears'));
+
+const matrixPayrollWorkbook = workbook([
+  ['Employees, salary 2026'],
+  ['', '', '', 'SEPTMBER 2026'],
+  ['', 'FARM', '', ''],
+  ['', '', 'Synthetic Farm Employee', 150000],
+  ['', 'BANK CREDIT', '', 150000],
+  ['', 'MILL', '', ''],
+  ['', '', 'Synthetic Mill Employee', 125000],
+], 'Employees salary 2026');
+assert.equal(detectSpreadsheetKind(matrixPayrollWorkbook), 'payroll-grid');
+const matrixPayrollPreview = createSpreadsheetImportPreview(
+  matrixPayrollWorkbook,
+  analyzeSpreadsheetWorkbook(matrixPayrollWorkbook),
+  'payroll-grid',
+);
+const matrixPayrollLines = matrixPayrollPreview.lines.filter((line) => line.kind === 'employee');
+assert.equal(matrixPayrollLines.length, 2);
+assert.deepEqual(matrixPayrollLines.map((line) => [line.employeeName, line.department, line.currentSalary]), [
+  ['Synthetic Farm Employee', 'FARM', 150000],
+  ['Synthetic Mill Employee', 'MILL', 125000],
+]);
+
+const repeatedEmployeePayrollWorkbook = workbook([
+  ['Payroll 2026'],
+  ['', '', '', 'August 2026', 'September 2026'],
+  ['', 'TEACHERS'],
+  ['', '', 'Synthetic Employee', 115000, 120000],
+  ['', 'GRADUITY'],
+  ['', '', 'Synthetic Employee', 0, 50000],
+], 'Payroll 2026');
+const repeatedEmployeePreview = createSpreadsheetImportPreview(
+  repeatedEmployeePayrollWorkbook,
+  analyzeSpreadsheetWorkbook(repeatedEmployeePayrollWorkbook),
+  'payroll-grid',
+  [],
+  [],
+  'Payroll 2026.xlsx',
+);
+const repeatedEmployee = repeatedEmployeePreview.lines.find((line) => line.kind === 'employee');
+assert.equal(repeatedEmployeePreview.lines.filter((line) => line.kind === 'employee').length, 1);
+assert.equal(repeatedEmployee?.salaryHistory.length, 2);
+assert.ok(repeatedEmployee?.otherPayrollAmounts.some((amount) =>
+  amount.type === 'gratuity' && amount.amount === 50000 && amount.payPeriod === '2026-09'));
+
+for (const fileName of [
+  'scripts/fixtures/only sep employees salary 2026.xlsx',
+  'scripts/fixtures/SHINE RELEIF SLARY TEMPLATE JUNE 2026-1.xlsx',
+  'scripts/fixtures/SEPTEMBER SHINE RELEIF SLARY TEMPLATE JUNE 2026-1.xlsx',
+]) {
+  const fixtureWorkbook = XLSX.read(fs.readFileSync(fileName), { cellFormula: true });
+  const fixtureAnalysis = analyzeSpreadsheetWorkbook(fixtureWorkbook);
+  assert.equal(fixtureAnalysis.detectedKind, 'payroll-grid', `${fileName} should be detected as payroll`);
+  const fixturePreview = createSpreadsheetImportPreview(
+    fixtureWorkbook, fixtureAnalysis, fixtureAnalysis.detectedKind, [], [], fileName,
+  );
+  const detectedEmployees = fixturePreview.lines.filter((line) => line.kind === 'employee');
+  assert.ok(detectedEmployees.length > 0, `${fileName} should produce employee preview rows`);
+  assert.ok(detectedEmployees.some((employee) => employee.department), 'staff group should carry to employee rows');
+  assert.ok(detectedEmployees.some((employee) => employee.salaryHistory.length > 1), 'month-by-month salary history should be captured');
+  assert.ok(detectedEmployees.every((employee) => employee.salaryHistory.every((entry) => entry.amount > 0)), 'blank/zero cells must not become salary entries');
+  assert.ok(fixturePreview.lines.some((line) => line.kind === 'unmapped'), 'amount-only subtotal/unnamed rows should be ignored rather than made employees');
+  assert.equal(fixturePreview.lines.filter((line) => line.kind === 'employee').some((employee) =>
+    /^(?:farm|mill|house mums|driver|watchmen|admistration|bank credit|total|grand total|subtotal)$/i.test(employee.employeeName)), false);
+  assert.equal(fixturePreview.lines.some((line) => line.kind !== 'unmapped' && line.sheet === 'Sheet2'), false, 'unrelated Sheet2 must not generate employee or payroll rows');
+  const varyingSalaryEmployee = detectedEmployees.find((employee) =>
+    new Set(employee.salaryHistory.map((entry) => entry.amount)).size > 1);
+  assert.ok(varyingSalaryEmployee, 'monthly salary changes should remain visible in salary history');
+  assert.equal(varyingSalaryEmployee.currentSalary, varyingSalaryEmployee.salaryHistory.at(-1)?.amount);
+  if (fileName.includes('SHINE RELEIF')) {
+    const formerEmployee = detectedEmployees.find((employee) => employee.employeeName === 'Moses Yohane');
+    assert.equal(formerEmployee?.employmentStatus, 'Completed', 'a former employee without the latest salary month should be kept for history only');
+    assert.ok(formerEmployee?.salaryHistory.length, 'former employees retain earlier monthly salary history');
+    const gratuityRecipient = detectedEmployees.find((employee) => employee.otherPayrollAmounts.some((item) => item.type === 'gratuity'));
+    assert.ok(gratuityRecipient, 'gratuity section rows remain linked to their named employees');
+    assert.ok(gratuityRecipient?.otherPayrollAmounts.some((item) => item.payPeriod), 'monthly gratuity periods remain distinguishable');
+  }
+}
 
 const aliasMatch = matchNameCandidates('Magret Synthetic', [{ id: 'staff-1', name: 'Margaret Synthetic' }]);
 assert.equal(aliasMatch.exact.length, 0);

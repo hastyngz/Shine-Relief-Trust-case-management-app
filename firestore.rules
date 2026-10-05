@@ -402,6 +402,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /employees/{id} {
+      allow read: if isManagerOrAdmin();
+      allow create: if isManagerOrAdmin() &&
+        request.resource.data.id == id &&
+        request.resource.data.createdBy == getStaffDoc(request.auth.uid).data.fullName;
+      allow update: if isManagerOrAdmin() &&
+        request.resource.data.id == resource.data.id;
+      allow delete: if isAdmin();
+    }
+
     // Workplans - Strategic and operational work planning
     match /workplans/{id} {
       allow read: if isStaffActive();

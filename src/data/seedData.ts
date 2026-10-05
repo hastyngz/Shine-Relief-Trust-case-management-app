@@ -18,6 +18,7 @@ export const INITIAL_DATABASE: AppDatabase = {
   budgets: [],
   annualBudgets: [],
   payrollRecords: [],
+  employees: [],
   workplans: [],
   schedules: [],
   historicalRecords: [],

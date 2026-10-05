@@ -31,9 +31,18 @@ export interface ExtractedImageItem {
   sectionHeading?: string;
 }
 
+export interface DocumentStructureNode {
+  id: string;
+  title: string;
+  text: string;
+  isHeader: boolean;
+  isOverviewParagraph: boolean;
+}
+
 export interface ParsedDocxReportResult {
   metadata: ReportMetadata;
   items: ImportPreviewItem[];
+  documentStructure: DocumentStructureNode[];
   images: ExtractedImageItem[];
   rawText: string;
   rawHtml: string;
@@ -657,6 +666,16 @@ export async function parseDocxProgressReport(
   const metadata = extractReportMetadata(rawText, file.name, doc);
 
   const previewItems: ImportPreviewItem[] = [];
+  const documentStructure: DocumentStructureNode[] = [];
+  if (metadata.executiveSummary?.trim()) {
+    documentStructure.push({
+      id: 'document-executive-summary',
+      title: 'Executive Summary',
+      text: metadata.executiveSummary.trim(),
+      isHeader: false,
+      isOverviewParagraph: true,
+    });
+  }
 
   // 1. Add General Report Information / Metadata item
   previewItems.push({
@@ -779,6 +798,13 @@ export async function parseDocxProgressReport(
     // 1. Check if heading
     const heading = getHeadingText(node);
     if (heading) {
+      documentStructure.push({
+        id: `document-header-${idx}`,
+        title: heading,
+        text: heading,
+        isHeader: true,
+        isOverviewParagraph: false,
+      });
       currentSection = heading;
       continue;
     }
@@ -795,6 +821,15 @@ export async function parseDocxProgressReport(
     }
 
     if (textContent.length === 0) continue;
+    if (/^(?:executive summary|executive overview|overview|introduction|report summary)$/i.test(currentSection)) {
+      documentStructure.push({
+        id: `document-overview-${idx}`,
+        title: currentSection,
+        text: textContent,
+        isHeader: false,
+        isOverviewParagraph: true,
+      });
+    }
 
     // -------------------------------------------------------------
     // A. DETECT INDIVIDUAL GIRL HISTORICAL RECORDS & TRANSITIONS
@@ -1521,7 +1556,14 @@ export async function parseDocxProgressReport(
     });
   });
 
-  const itemsWithGroupingProposals = previewItems.map((item) => {
+  const itemsWithStructureFlags = previewItems.map((item) => {
+    const isOverviewParagraph = documentStructure.some((node) =>
+      node.isOverviewParagraph && node.text === item.originalSnippet
+    );
+    if (!isOverviewParagraph) return item;
+    return { ...item, extractedData: { ...item.extractedData, isOverviewParagraph: true } };
+  });
+  const itemsWithGroupingProposals = itemsWithStructureFlags.map((item) => {
     const originalText = normalizeHeading(item.originalSnippet || '');
     const proposedGrouping = proposedGroupByText.get(originalText);
     if (!proposedGrouping) return item;
@@ -1552,6 +1594,7 @@ export async function parseDocxProgressReport(
   return {
     metadata,
     items: previewItems,
+    documentStructure,
     images: extractedImages,
     rawText,
     rawHtml,

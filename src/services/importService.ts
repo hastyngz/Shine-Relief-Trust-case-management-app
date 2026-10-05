@@ -20,6 +20,8 @@ import {
   ProjectProjection,
   StaffUser,
   PayrollRecord,
+  EmployeeRecord,
+  SalaryHistoryRecord,
 } from '../types';
 import { generateFollowUpId, generatePersonId, saveDatabase } from '../utils/storage';
 import {
@@ -37,6 +39,9 @@ import {
   persistEarlyYearsRecordToFirestore,
   persistPersonToFirestore,
   persistImportAuditToFirestore,
+  persistEmployeeRecordToFirestore,
+  persistEmployeeSalaryHistoryToFirestore,
+  appendEmployeeAuditLog,
 } from './firestoreSync';
 import { parseDocxProgressReport, ParsedDocxReportResult } from './docxParserService';
 import {
@@ -69,6 +74,7 @@ export async function parseExcelFile(
   file: File,
   excludedNames: string[] = [],
   staff: StaffUser[] = [],
+  employees: EmployeeRecord[] = [],
 ): Promise<FileAnalysisResult> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, {
@@ -78,7 +84,9 @@ export async function parseExcelFile(
     cellText: true,
   });
   const spreadsheetAnalysis = analyzeSpreadsheetWorkbook(workbook);
-  const spreadsheetImportPreview = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff);
+  const spreadsheetImportPreview = createSpreadsheetImportPreview(
+    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff, employees, file.name,
+  );
   const sheetNames = workbook.SheetNames;
   const primarySheet = workbook.Sheets[sheetNames[0]];
   const rawRows: Array<Record<string, any>> = XLSX.utils.sheet_to_json(primarySheet, { defval: '' });
@@ -594,6 +602,7 @@ export async function commitImportBatch(
     procurementLists: [...(db.procurementLists || [])],
     projectProjections: [...(db.projectProjections || [])],
     payrollRecords: [...(db.payrollRecords || [])],
+    employees: [...(db.employees || [])],
     earlyYearsRecords: [...(db.earlyYearsRecords || [])],
     attachments: [...(db.attachments || [])],
     historicalRecords: [...(db.historicalRecords || [])],
@@ -604,6 +613,9 @@ export async function commitImportBatch(
   let processed = 0;
   const total = approvedItems.length + approvedContacts.length;
   const auditId = generateFollowUpId('AUD');
+  let importedEmployees = 0;
+  let matchedEmployees = 0;
+  let importedPayrollRecords = 0;
 
   for (const item of approvedItems) {
     if (!item.selected) continue;
@@ -704,7 +716,180 @@ export async function commitImportBatch(
       updatedDb.earlyYearsRecords.unshift(newEarlyYears);
       await persistEarlyYearsRecordToFirestore(newEarlyYears);
     }
-    // 4. Workplan Priority
+    else if (item.targetEntity === 'employee') {
+      const data = item.extractedData;
+      const employeeId = data.matchedEmployeeId || item.matchedId || generateFollowUpId('EMP');
+      const now = new Date().toISOString();
+      const existingIndex = updatedDb.employees!.findIndex((employee) => employee.id === employeeId);
+      const existingEmployee = existingIndex >= 0 ? updatedDb.employees![existingIndex] : undefined;
+      const importedSalaryPeriod = String(data.latestSourcePeriod || '');
+      const importedPaymentPeriod = String(data.latestWorkbookPaymentPeriod || '');
+      const useImportedSalary = Boolean(Number(data.currentSalary) > 0
+        && (!existingEmployee?.latestSalaryPeriod || importedSalaryPeriod >= existingEmployee.latestSalaryPeriod));
+      const useImportedEmploymentStatus = Boolean(importedPaymentPeriod
+        && (!existingEmployee?.latestWorkbookPaymentPeriod || importedPaymentPeriod >= existingEmployee.latestWorkbookPaymentPeriod));
+      const importedOtherAmounts = Array.isArray(data.otherPayrollAmounts)
+        ? data.otherPayrollAmounts as Array<{ type: string; amount: number; payPeriod?: string; sourceReference?: string }>
+        : [];
+      const employee: EmployeeRecord = {
+        ...existingEmployee,
+        id: employeeId,
+        fullName: String(data.employeeName || item.title || '').trim(),
+        department: data.department || existingEmployee?.department,
+        positionTitle: data.positionTitle || existingEmployee?.positionTitle,
+        sourceYear: Number(data.sourceYear) || existingEmployee?.sourceYear,
+        employmentStatus: useImportedEmploymentStatus
+          ? data.employmentStatus
+          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active',
+        needsEmploymentReview: false,
+        salaryMWK: useImportedSalary ? Number(data.currentSalary) : existingEmployee?.salaryMWK || 0,
+        latestSalaryPeriod: useImportedSalary ? importedSalaryPeriod : existingEmployee?.latestSalaryPeriod,
+        latestWorkbookPaymentPeriod: useImportedEmploymentStatus
+          ? importedPaymentPeriod
+          : existingEmployee?.latestWorkbookPaymentPeriod,
+        otherPayrollAmounts: Array.from(new Map([
+          ...(existingEmployee?.otherPayrollAmounts || []),
+          ...importedOtherAmounts,
+        ].map((amount) => [amount.sourceReference || `${amount.type}|${amount.payPeriod || ''}|${amount.amount}`, amount])).values()),
+        source: {
+          fileName: auditRecord.fileName,
+          importedAt: now,
+          importedByUid: auditRecord.importedByUid,
+          importedByName: auditRecord.importedByName,
+        },
+        createdAt: existingEmployee?.createdAt || now,
+        updatedAt: now,
+        createdBy: existingEmployee?.createdBy || auditRecord.importedByName,
+        updatedBy: auditRecord.importedByName,
+      };
+      if (existingIndex >= 0) updatedDb.employees![existingIndex] = employee;
+      else updatedDb.employees!.unshift(employee);
+      importedEmployees += existingIndex >= 0 ? 0 : 1;
+      matchedEmployees += data.matchedEmployeeId ? 1 : 0;
+
+      const history = Array.isArray(data.salaryHistory)
+        ? data.salaryHistory as Array<{ payPeriod: string; amount: number }>
+        : [];
+      const importedSalaryIds = new Set(employee.salaryHistoryRecordIds || []);
+      let previousSalary: number | undefined;
+      let currentSalaryHistoryRecordId: string | undefined;
+      for (const entry of history) {
+        const periodMatch = entry.payPeriod.match(/^(\d{4})-(\d{2})$/);
+        if (!periodMatch || !Number.isFinite(entry.amount) || entry.amount <= 0) continue;
+        const effectiveDate = `${entry.payPeriod}-01`;
+        const salaryId = `SAL-${employeeId}-${entry.payPeriod}`;
+        const latestPriorSalary = previousSalary;
+        if (latestPriorSalary !== entry.amount && !importedSalaryIds.has(salaryId)) {
+          const salaryRecord: SalaryHistoryRecord = {
+            id: salaryId,
+            employeeId,
+            effectiveDate,
+            salaryAmount: entry.amount,
+            salaryFrequency: 'Monthly',
+            previousSalary: latestPriorSalary,
+            reasonForChange: `Imported from ${auditRecord.fileName}`,
+            recordedBy: auditRecord.importedByName,
+            recordedDate: now,
+            notes: 'Historical salary amount from payroll spreadsheet; amount is not treated as proof of payment.',
+            auditMetadata: {
+              createdAt: now,
+              createdByUid: auditRecord.importedByUid,
+            },
+          };
+          await persistEmployeeSalaryHistoryToFirestore(salaryRecord);
+          currentSalaryHistoryRecordId = salaryId;
+          importedSalaryIds.add(salaryId);
+        }
+        if (latestPriorSalary !== entry.amount && !currentSalaryHistoryRecordId) {
+          currentSalaryHistoryRecordId = salaryId;
+        }
+        previousSalary = entry.amount;
+
+        const existingPayment = updatedDb.payrollRecords!.find((record) =>
+          record.employeeId === employeeId && record.payPeriod === entry.payPeriod);
+        if (!existingPayment) {
+          const month = Number(periodMatch[2]);
+          const payment: PayrollRecord = {
+            id: `PAY-${employeeId}-${entry.payPeriod}`,
+            employeeId,
+            employeeName: employee.fullName,
+            departmentOrProgramme: employee.department,
+            payPeriod: entry.payPeriod,
+            payPeriodStartDate: `${entry.payPeriod}-01`,
+            payPeriodEndDate: new Date(Date.UTC(Number(periodMatch[1]), month, 0)).toISOString().slice(0, 10),
+            applicableSalary: entry.amount,
+            salaryHistoryRecordIds: currentSalaryHistoryRecordId ? [currentSalaryHistoryRecordId] : [],
+            expectedAmount: entry.amount,
+            amountPaid: 0,
+            paymentStatus: 'Pending',
+            notes: `Imported from ${auditRecord.fileName}; confirmation required. No payment date or paid status was supplied.`,
+            createdBy: auditRecord.importedByName,
+            createdByUid: auditRecord.importedByUid,
+            createdAt: now,
+            updatedBy: auditRecord.importedByName,
+            updatedByUid: auditRecord.importedByUid,
+            updatedAt: now,
+          };
+          updatedDb.payrollRecords!.unshift(payment);
+          await persistPayrollRecordToFirestore(payment);
+          importedPayrollRecords += 1;
+        }
+      }
+      const sourceYear = Number(data.sourceYear) || Number(auditRecord.fileName.match(/\b20\d{2}\b/)?.[0]) || new Date().getFullYear();
+      for (const special of importedOtherAmounts) {
+        if (!['loan', 'arrears', 'gratuity'].includes(special.type) || !Number.isFinite(special.amount) || special.amount <= 0) continue;
+        const payPeriod = `${special.payPeriod || String(sourceYear)}-${special.type.toUpperCase()}`;
+        if (updatedDb.payrollRecords!.some((record) => record.employeeId === employeeId && record.payPeriod === payPeriod)) continue;
+        const nowForSpecial = new Date().toISOString();
+        const periodStart = special.payPeriod && /^\d{4}-\d{2}$/.test(special.payPeriod)
+          ? `${special.payPeriod}-01`
+          : `${sourceYear}-01-01`;
+        const periodEnd = special.payPeriod && /^\d{4}-\d{2}$/.test(special.payPeriod)
+          ? new Date(Date.UTC(Number(special.payPeriod.slice(0, 4)), Number(special.payPeriod.slice(5, 7)), 0)).toISOString().slice(0, 10)
+          : `${sourceYear}-12-31`;
+        const sourceSuffix = special.sourceReference
+          ? `-${special.sourceReference.replace(/[^A-Za-z0-9-]/g, '-').slice(-48)}`
+          : '';
+        const specialRecord: PayrollRecord = {
+          id: `PAY-${employeeId}-${payPeriod}${sourceSuffix}`,
+          employeeId,
+          employeeName: employee.fullName,
+          departmentOrProgramme: employee.department,
+          payPeriod,
+          payPeriodStartDate: periodStart,
+          payPeriodEndDate: periodEnd,
+          applicableSalary: 0,
+          salaryHistoryRecordIds: [],
+          expectedAmount: special.amount,
+          amountPaid: 0,
+          paymentStatus: 'Pending',
+          notes: `Imported ${special.type} amount from ${auditRecord.fileName}; requires staff review and is not treated as a confirmed payment.`,
+          createdBy: auditRecord.importedByName,
+          createdByUid: auditRecord.importedByUid,
+          createdAt: nowForSpecial,
+          updatedBy: auditRecord.importedByName,
+          updatedByUid: auditRecord.importedByUid,
+          updatedAt: nowForSpecial,
+        };
+        updatedDb.payrollRecords!.unshift(specialRecord);
+        await persistPayrollRecordToFirestore(specialRecord);
+        importedPayrollRecords += 1;
+      }
+      employee.salaryHistoryRecordIds = Array.from(importedSalaryIds);
+      await persistEmployeeRecordToFirestore(employee);
+      await appendEmployeeAuditLog({
+        employeeId,
+        action: existingEmployee ? 'employee_import_updated' : 'employee_import_created',
+        actorUid: auditRecord.importedByUid,
+        actorName: auditRecord.importedByName,
+        sourceFile: auditRecord.fileName,
+        payrollRecordsImported: history.filter((entry) => !db.payrollRecords?.some((record) =>
+          record.employeeId === employeeId && record.payPeriod === entry.payPeriod)).length,
+        timestamp: now,
+      });
+      linkedRecordId = employeeId;
+    }
+    // 4. Payroll payment record
     else if (item.targetEntity === 'payroll') {
       const data = item.extractedData;
       const monthMatch = String(data.payPeriod || '').match(/^(\d{4})-(\d{2})$/);
@@ -1225,6 +1410,14 @@ export async function commitImportBatch(
     existingPeopleMatchedCount,
     possibleDuplicatesCount,
     relationshipsCreatedCount,
+    employeesDetectedCount: auditRecord.employeesDetectedCount ?? approvedItems.filter((item) => item.targetEntity === 'employee').length,
+    employeesAddedCount: importedEmployees,
+    existingEmployeesMatchedCount: matchedEmployees,
+    employeesNeedingReviewCount: auditRecord.employeesNeedingReviewCount ?? approvedItems.filter((item) =>
+      item.targetEntity === 'employee' && item.extractedData.status === 'ambiguous').length,
+    payrollRecordsDetectedCount: auditRecord.payrollRecordsDetectedCount ?? approvedItems.filter((item) =>
+      item.targetEntity === 'employee').reduce((total, item) => total + (Array.isArray(item.extractedData.salaryHistory) ? item.extractedData.salaryHistory.length : 0), 0),
+    payrollRecordsImportedCount: importedPayrollRecords,
   };
   updatedDb.importAudits?.unshift(finalAudit);
   await persistImportAuditToFirestore(finalAudit);

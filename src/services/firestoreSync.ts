@@ -58,6 +58,7 @@ import {
   ProjectProjection,
   RestrictedImportSourceData,
   ContactRecord,
+  EmployeeRecord,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -111,6 +112,7 @@ export const COLLECTIONS = {
   BUDGETS: 'budgets',
   ANNUAL_BUDGETS: 'annualBudgets',
   PAYROLL_RECORDS: 'payrollRecords',
+  EMPLOYEES: 'employees',
   WORKPLANS: 'workplans',
   SCHEDULES: 'schedules',
   MEETINGS: 'meetings',
@@ -212,6 +214,14 @@ export async function persistEmployeeSalaryHistoryToFirestore(record: SalaryHist
   await setDoc(
     doc(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY, record.id),
     sanitizeForFirestore(record)
+  );
+}
+
+export async function persistEmployeeRecordToFirestore(record: EmployeeRecord): Promise<void> {
+  await setDoc(
+    doc(firestore, COLLECTIONS.EMPLOYEES, record.id),
+    sanitizeForFirestore(record),
+    { merge: true },
   );
 }
 
@@ -956,6 +966,13 @@ export async function syncEntireDatabaseToFirestore(
       });
     }
 
+    if (db.employees) {
+      db.employees.forEach((employee) => operations.push({
+        ref: doc(firestore, COLLECTIONS.EMPLOYEES, employee.id),
+        data: sanitizeForFirestore(employee),
+      }));
+    }
+
     if (db.workplans) {
       db.workplans.forEach((w) => {
         operations.push({
@@ -1235,6 +1252,7 @@ export function initFirestoreListeners(
     budgets: [],
     annualBudgets: [],
     payrollRecords: [],
+    employees: [],
     workplans: [],
     schedules: [],
     meetings: [],
@@ -1262,7 +1280,7 @@ export function initFirestoreListeners(
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 36;
+  const TOTAL_COLLECTIONS = 37;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -1278,6 +1296,7 @@ export function initFirestoreListeners(
       budgets: [...(liveState.budgets || [])],
       annualBudgets: [...(liveState.annualBudgets || [])],
       payrollRecords: [...(liveState.payrollRecords || [])],
+      employees: [...(liveState.employees || [])],
       workplans: [...(liveState.workplans || [])],
       schedules: [...(liveState.schedules || [])],
       meetings: [...(liveState.meetings || [])],
@@ -1366,6 +1385,7 @@ export function initFirestoreListeners(
   handleCollection<BudgetItem>(COLLECTIONS.BUDGETS, 'budgets');
   handleCollection<AnnualBudgetPlan>(COLLECTIONS.ANNUAL_BUDGETS, 'annualBudgets');
   handleCollection<PayrollRecord>(COLLECTIONS.PAYROLL_RECORDS, 'payrollRecords');
+  handleCollection<EmployeeRecord>(COLLECTIONS.EMPLOYEES, 'employees');
   handleCollection<WorkplanItem>(COLLECTIONS.WORKPLANS, 'workplans');
   handleCollection<ScheduleItem>(COLLECTIONS.SCHEDULES, 'schedules');
   handleCollection<MeetingRecord>(COLLECTIONS.MEETINGS, 'meetings');

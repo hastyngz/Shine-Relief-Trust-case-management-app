@@ -16,7 +16,7 @@ import {
 } from '../../services/importService';
 import { ContactCandidate, ConfirmedContactCandidate, listContacts, matchContactCandidate } from '../../services/contactsService';
 import { ACTIVITY_CATEGORY_OPTIONS, DueDatePeriodChoice, getDueDateRange, serializeDueDatePeriod } from '../../services/ingestionRules';
-import { ReportMetadata } from '../../services/docxParserService';
+import { DocumentStructureNode, ReportMetadata } from '../../services/docxParserService';
 import { SpreadsheetAnalysis, SpreadsheetKind } from '../../services/spreadsheetImport/detector';
 import {
   createSpreadsheetImportPreview,
@@ -220,6 +220,32 @@ function spreadsheetLineToPreview(
       selected: true,
     };
   }
+  if (line.kind === 'employee') {
+    return {
+      tempId: id,
+      resultType: line.status === 'matched' ? 'CONFLICT' : 'NEW_RECORD',
+      targetEntity: 'employee',
+      classification: 'UNCLASSIFIED_REVIEW',
+      classificationLabel: 'Employee / payroll history',
+      isDateUnknown: true,
+      title: line.employeeName,
+      summary: `${line.department || 'Department not supplied'} · ${line.salaryHistory.length} monthly salary entries · latest MWK ${line.currentSalary.toLocaleString()}`,
+      originalSnippet: `${line.sheet}!row ${line.row}`,
+      matchedId: line.matchedEmployeeId,
+      matchedName: line.matchCandidates.find((candidate) => candidate.id === line.matchedEmployeeId)?.name,
+      extractedData: { ...line, spreadsheetKind: 'payroll-grid' },
+      isHistorical: !line.latestSourcePeriod,
+      selected: line.status !== 'ambiguous',
+      warningOrConflict: line.employmentStatus === 'Completed'
+        ? `No salary was recorded in the latest workbook payment month (${line.latestWorkbookPaymentPeriod || 'not recorded'}). Last recorded salary: ${line.latestSourcePeriod || 'not recorded'}. Import as a former employee with historical payroll only.`
+        : line.status === 'matched'
+          ? 'Exact existing staff/employee match found. Confirm the update to preserve this employee’s salary history.'
+          : line.status === 'ambiguous'
+            ? 'Possible name match found. Review the candidates before adding or updating any employee.'
+            : undefined,
+      missingFields: [],
+    };
+  }
   if (line.kind === 'payroll') {
     return {
       tempId: id,
@@ -333,6 +359,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
   // Extracted Document State
   const [reportMetadata, setReportMetadata] = useState<ReportMetadata | null>(null);
+  const [documentStructure, setDocumentStructure] = useState<DocumentStructureNode[]>([]);
   const [previewItems, setPreviewItems] = useState<ImportPreviewItem[]>([]);
   const previewCardRefs = useRef(new Map<string, HTMLDivElement>());
   const automaticChangeKeys = useRef(new Set<string>());
@@ -471,8 +498,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setDiagnosticReason('File extension must be .docx, .xlsx, or .xls.');
       return;
     }
-
     setSelectedFile(file);
+    setDocumentStructure([]);
     automaticChangeKeys.current.clear();
     automaticDuplicateKeys.current.clear();
     setAutomaticChanges([]);
@@ -490,6 +517,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         }
 
         setReportMetadata(analysis.docxResult.metadata);
+        setDocumentStructure(analysis.docxResult.documentStructure);
         setSpreadsheetAnalysis(null);
         setSpreadsheetKindOverride(null);
         setSpreadsheetPreview(null);
@@ -498,8 +526,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         setStep('review');
       } else {
         // Excel file
-        const analysis = await parseExcelFile(file, db.girls.map((girl) => girl.fullName), allStaff);
+        const analysis = await parseExcelFile(file, db.girls.map((girl) => girl.fullName), allStaff, db.employees || []);
         setSpreadsheetAnalysis(analysis.spreadsheetAnalysis || null);
+        setDocumentStructure([]);
         setSpreadsheetKindOverride(null);
         if (
           analysis.spreadsheetImportPreview &&
@@ -576,6 +605,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         throw new Error('No structured report sections could be detected in this Word document.');
       }
       setReportMetadata(analysis.docxResult.metadata);
+      setDocumentStructure(analysis.docxResult.documentStructure);
       setSpreadsheetAnalysis(null);
       setSpreadsheetKindOverride(null);
       setSpreadsheetPreview(null);
@@ -772,8 +802,15 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       };
     });
     const selectedPayroll = selectedItems.filter((item) => item.targetEntity === 'payroll');
-    if (selectedPayroll.length > 0 && !(isAdmin || role === 'Manager')) {
+    const selectedEmployees = selectedItems.filter((item) => item.targetEntity === 'employee');
+    if ((selectedPayroll.length > 0 || selectedEmployees.length > 0) && !(isAdmin || role === 'Manager')) {
       alert('Payroll spreadsheet imports are restricted to Administrators and Managers.');
+      return;
+    }
+    const unresolvedEmployeeMatches = selectedEmployees.filter((item) =>
+      item.extractedData.status === 'ambiguous' && !item.extractedData.matchedEmployeeId && !item.identityResolution);
+    if (unresolvedEmployeeMatches.length > 0) {
+      alert(`Review each ambiguous employee name and choose an existing employee or explicitly add it as a separate employee (${unresolvedEmployeeMatches.length} unresolved).`);
       return;
     }
     const unmatchedPayroll = selectedPayroll.filter((item) => !item.extractedData.employeeId);
@@ -859,6 +896,14 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       duplicatesCount: selectedItems.filter((i) => i.resultType === 'POSSIBLE_DUPLICATE').length,
       conflictsCount: selectedItems.filter((i) => i.resultType === 'CONFLICT').length,
       errorsCount: selectedItems.filter((i) => i.resultType === 'IMPORT_ERROR').length,
+      employeesDetectedCount: countEmployees,
+      employeesAddedCount: selectedEmployees.filter((item) => !item.extractedData.matchedEmployeeId).length,
+      existingEmployeesMatchedCount: selectedEmployees.filter((item) => !!item.extractedData.matchedEmployeeId).length,
+      employeesNeedingReviewCount: previewItems.filter((item) => item.targetEntity === 'employee' && item.extractedData.status === 'ambiguous').length,
+      payrollRecordsDetectedCount: previewItems.filter((item) => item.targetEntity === 'employee')
+        .reduce((sum, item) => sum + (Array.isArray(item.extractedData.salaryHistory) ? item.extractedData.salaryHistory.length : 0), 0),
+      payrollRecordsImportedCount: 0,
+      payrollRowsIgnoredCount: spreadsheetPreview?.sheetStats.reduce((sum, sheet) => sum + sheet.skipped, 0) || 0,
       qualityIssues: importQualityIssues,
       qualityScores: importQualityScores,
       qualityResolutions: [
@@ -948,6 +993,48 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }));
   };
 
+  const handleEmployeeMatch = (tempId: string, employeeId: string) => {
+    if (!employeeId || employeeId === 'new-employee') {
+      setPreviewItems((current) => current.map((item) => item.tempId !== tempId ? item : {
+        ...item,
+        resultType: 'NEW_RECORD',
+        identityResolution: 'new-person',
+        matchedId: undefined,
+        matchedName: undefined,
+        selected: true,
+        warningOrConflict: 'This will be added as a separate employee record; no existing employee will be merged.',
+        extractedData: { ...item.extractedData, matchedEmployeeId: undefined },
+      }));
+      return;
+    }
+    const employee = [
+      ...allStaff.map((person) => ({ id: person.id, name: person.fullName })),
+      ...(db.employees || []).map((person) => ({ id: person.id, name: person.fullName })),
+    ].find((candidate) => candidate.id === employeeId);
+    if (!employee) return;
+    setPreviewItems((current) => current.map((item) => item.tempId !== tempId ? item : {
+      ...item,
+      resultType: 'CONFLICT',
+      matchedId: employee.id,
+      matchedName: employee.name,
+      identityResolution: 'existing-person',
+      selected: true,
+      warningOrConflict: `Update existing employee ${employee.name}; imported salary history will be preserved.`,
+      extractedData: { ...item.extractedData, matchedEmployeeId: employee.id },
+    }));
+  };
+
+  const handleEmployeeEmploymentReview = (tempId: string, employmentStatus: 'Active' | 'Completed') => {
+    setPreviewItems((current) => current.map((item) => item.tempId !== tempId ? item : {
+      ...item,
+      extractedData: { ...item.extractedData, employmentStatus },
+      isHistorical: employmentStatus !== 'Active',
+      warningOrConflict: employmentStatus === 'Completed'
+        ? 'This employee will be imported with historical payroll, but will not appear in current payroll.'
+        : undefined,
+    }));
+  };
+
   // Counts for Review Tabs
   const totalCount = previewItems.length;
   const countHistoricalGirls = previewItems.filter(
@@ -963,9 +1050,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   ).length;
   const countPhotos = previewItems.filter((i) => i.classification === 'PHOTO_HIGHLIGHT').length;
   const countUnclassified = previewItems.filter(
-    (i) => i.classification === 'UNCLASSIFIED_REVIEW' || !i.classification
+    (i) => i.targetEntity !== 'employee' && (i.classification === 'UNCLASSIFIED_REVIEW' || !i.classification)
   ).length;
   const countContacts = contactReview.length;
+  const countEmployees = previewItems.filter((item) => item.targetEntity === 'employee').length;
 
   const selectedCount = previewItems.filter((i) => i.selected).length + contactReview.filter((item) => item.confirmed && (item.status !== 'possible' || item.contactId)).length;
 
@@ -985,14 +1073,19 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       summary: item.summary,
       text: item.originalSnippet,
     })),
-    narrativeSections: previewItems.filter((item) => item.selected).map((item) => ({
-      id: item.tempId,
-      title: item.title,
-      text: item.originalSnippet || item.summary,
-      headingAfterContent: item.extractedData.headingAfterContent,
-      sectionNumber: item.extractedData.sectionNumber,
-      expectedSectionNumber: item.extractedData.expectedSectionNumber,
-    })),
+    narrativeSections: [
+      ...previewItems.filter((item) => item.selected).map((item) => ({
+        id: item.tempId,
+        title: item.title,
+        text: item.originalSnippet || item.summary,
+        isHeader: item.extractedData.isHeader === true,
+        isOverviewParagraph: item.extractedData.isOverviewParagraph === true,
+        headingAfterContent: item.extractedData.headingAfterContent,
+        sectionNumber: item.extractedData.sectionNumber,
+        expectedSectionNumber: item.extractedData.expectedSectionNumber,
+      })),
+    ],
+    documentStructure,
     activities: previewItems.filter((item) => item.selected && (item.targetEntity === 'activity' || item.targetEntity === 'workplan')).map((item) => ({
       ...item.extractedData,
       id: item.tempId,
@@ -1062,12 +1155,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       maxSentenceWords: 35,
       programmeNames: PROGRAMMES.map((programme) => programme.name),
     },
-  }), [previewItems, reportMetadata, qualityDataSource, qualityCollectionMethod, qualityCollectionMethodOther]);
+  }), [previewItems, reportMetadata, documentStructure, qualityDataSource, qualityCollectionMethod, qualityCollectionMethodOther]);
   const importQualityScores = useMemo(() => qualityScores(importQualityIssues), [importQualityIssues]);
 
   // Tab Filtering
   const filteredItems = previewItems.filter((item) => {
     // Category Tab
+    if (activeTab === 'EMPLOYEES' && item.targetEntity !== 'employee') return false;
     if (activeTab === 'HISTORICAL' && item.classification !== 'INDIVIDUAL_GIRL_HISTORICAL' && item.resultType !== 'HISTORICAL_RECORD') return false;
     if (activeTab === 'ACTIVITIES' && item.classification !== 'GROUP_ACTIVITY' && item.classification !== 'PROGRAMME_ACTIVITY') return false;
     if (activeTab === 'EARLY_YEARS' && item.classification !== 'EARLY_YEARS_RECORD') return false;
@@ -1110,9 +1204,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       return true;
     }
     if (issue.rule === 'IDENTITY-FUZZY-01' && issue.target?.id && resolution.value && typeof resolution.value === 'object') {
-      const value = resolution.value as { candidateId?: unknown };
+      const value = resolution.value as { candidateId?: unknown; decision?: unknown };
       const target = previewItems.find((item) => item.tempId === issue.target?.id);
-      if (!target || typeof value.candidateId !== 'string') return false;
+      const samePerson = value.decision === 'same-person';
+      const differentPeople = value.decision === 'different-people';
+      if (!target || (!samePerson && !differentPeople) || (samePerson && typeof value.candidateId !== 'string')) return false;
       const candidateList = [
         ...(target.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
         ...(target.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
@@ -1122,10 +1218,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             && typeof (candidate as { id?: unknown }).id === 'string'
             && typeof (candidate as { name?: unknown }).name === 'string'),
       ];
-      const isNewPerson = value.candidateId === 'new-person';
-      const candidate = isNewPerson ? undefined : candidateList.find((person) => person.id === value.candidateId);
-      if (!isNewPerson && !candidate) return false;
-      const identityDecision = isNewPerson ? 'new-person' : 'existing-person';
+      const candidate = samePerson ? candidateList.find((person) => person.id === value.candidateId) : undefined;
+      if (samePerson && !candidate) return false;
+      const identityDecision = samePerson ? 'existing-person' : 'new-person';
       const stillFires = runQualityRules({
         identityReviews: [{
           id: target.tempId,
@@ -1138,10 +1233,20 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       const updated: ImportPreviewItem = {
         ...target,
         matchedId: candidate?.id,
-        matchedName: candidate?.name ?? target.matchedName,
+        matchedName: candidate?.name,
         identityResolution: identityDecision,
+        ...(target.targetEntity === 'person' ? {
+          resultType: samePerson ? 'EXISTING_PERSON_MATCHED' : 'NEW_PERSON',
+          matchedPersonAction: samePerson ? 'ADD_TO_EXISTING_PERSON' : 'REGISTER_PERSON',
+        } : {}),
         ...(target.targetEntity === 'payroll' && candidate ? {
           extractedData: { ...target.extractedData, employeeId: candidate.id, employeeName: candidate.name },
+        } : {}),
+        ...(target.targetEntity === 'employee' ? {
+          extractedData: { ...target.extractedData, matchedEmployeeId: candidate?.id },
+          identityResolution: samePerson ? 'existing-person' : 'new-person',
+          resultType: samePerson ? 'CONFLICT' : 'NEW_RECORD',
+          selected: true,
         } : {}),
       };
       setPreviewItems((current) => current.map((item) => item.tempId === target.tempId ? updated : item));
@@ -1995,7 +2100,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           )}
 
           {/* Category Filter Cards with Real Calculated Counts */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2">
             <button
               onClick={() => setActiveTab('ALL')}
               className={`p-2.5 rounded-xl border text-left transition-all ${
@@ -2078,6 +2183,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             >
               <p className="text-[10px] font-semibold text-indigo-700 uppercase">Photos</p>
               <p className="text-base font-black text-indigo-900 mt-0.5">{countPhotos}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('EMPLOYEES')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'EMPLOYEES'
+                  ? 'border-cyan-600 bg-cyan-50 shadow-xs'
+                  : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-cyan-800 uppercase">Employees / Payroll</p>
+              <p className="text-base font-black text-cyan-950 mt-0.5">{countEmployees}</p>
             </button>
 
             <div className="p-2.5 rounded-xl border border-teal-200 bg-teal-50 text-left">
@@ -2445,6 +2562,57 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                             </label>
                           )}
 
+                          {item.targetEntity === 'employee' && (
+                            <div className="space-y-3 rounded-lg border border-cyan-200 bg-cyan-50/60 p-3 text-xs">
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-stone-800">
+                                <span>Group: <strong>{item.extractedData.department || 'Not supplied'}</strong></span>
+                                <span>Position: <strong>{item.extractedData.positionTitle || 'Needs staff review'}</strong></span>
+                                <span>Latest salary: <strong>MWK {Number(item.extractedData.currentSalary || 0).toLocaleString()}</strong></span>
+                                <span>Months with amounts: <strong>{item.extractedData.salaryHistory?.length || 0}</strong></span>
+                              </div>
+                              <label className="block max-w-md font-semibold text-stone-700">
+                                Existing employee match
+                                <select
+                                  value={item.extractedData.matchedEmployeeId || (item.extractedData.status === 'unmatched' ? 'new-employee' : '')}
+                                  onChange={(event) => handleEmployeeMatch(item.tempId, event.target.value)}
+                                  className="field mt-1 w-full bg-white"
+                                >
+                                  <option value="">Choose employee action</option>
+                                  <option value="new-employee">Add as a separate employee (do not merge)</option>
+                                  {(item.extractedData.matchCandidates || []).map((candidate: { id: string; name: string }) => (
+                                    <option key={candidate.id} value={candidate.id}>{candidate.name} ({candidate.id})</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-stone-800">
+                                Employment status
+                                <select
+                                  value={item.extractedData.employmentStatus || 'Completed'}
+                                  onChange={(event) => handleEmployeeEmploymentReview(item.tempId, event.target.value as 'Active' | 'Completed')}
+                                  className="field ml-2 bg-white"
+                                >
+                                  <option value="Active">Currently employed at SHINE</option>
+                                  <option value="Completed">Former employee · historical only</option>
+                                </select>
+                              </label>
+                              <details>
+                                <summary className="cursor-pointer font-semibold text-cyan-950">Review monthly salary history</summary>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {(item.extractedData.salaryHistory || []).map((entry: { payPeriod: string; amount: number }) => (
+                                    <span key={entry.payPeriod} className="rounded bg-white px-2 py-1">
+                                      {entry.payPeriod}: MWK {Number(entry.amount).toLocaleString()}
+                                    </span>
+                                  ))}
+                                  {(item.extractedData.otherPayrollAmounts || []).map((entry: { type: string; amount: number }, index: number) => (
+                                    <span key={`${entry.type}-${index}`} className="rounded bg-amber-50 px-2 py-1 text-amber-900">
+                                      {entry.type} · review: MWK {Number(entry.amount).toLocaleString()}
+                                    </span>
+                                  ))}
+                                </div>
+                              </details>
+                            </div>
+                          )}
+
                           {/* Missing Fields Indicators */}
                           {item.missingFields && item.missingFields.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 pt-1">
@@ -2694,6 +2862,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 setSelectedFile(null);
                 setPreviewItems([]);
                 setReportMetadata(null);
+                setDocumentStructure([]);
                 setStep('upload');
               }}
               className="px-4 py-2 border border-stone-300 rounded-xl text-xs font-semibold text-stone-700 hover:bg-stone-100 cursor-pointer"

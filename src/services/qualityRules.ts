@@ -4,10 +4,13 @@ import { findProgrammeNameAliases } from '../data/programmes';
 
 export type QualityIssue = {
   id: string;
+  nodeId?: string;
   severity: 'blocker' | 'warning' | 'info';
   rule: string;
   message: string;
   location: string;
+  candidateA?: { id: string; name: string };
+  candidateB?: { id: string; name: string };
   suggestedFix?: string;
   target?: {
     kind: 'preview-item' | 'indicator-result' | 'budget-item' | 'workplan-item' | 'narrative-section' | 'report-section';
@@ -240,6 +243,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       : undefined;
     const enriched: QualityIssue = {
       ...issue,
+      nodeId: target?.id || issue.location,
       ...(!issue.context && sourceSentence ? { context: sourceSentence } : {}),
       ...(target ? { id: `${issue.rule}:${target.kind}:${target.id}${target.field ? `:${target.field}` : ''}` } : {}),
       ...(target ? { target } : {}),
@@ -297,11 +301,13 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   }
 
   for (const entry of narratives) {
+    const section = entry.value as QualityValue;
+    const structuralOverview = section.isHeader === true || section.isOverviewParagraph === true;
     const sectionText = textOf(entry.value).join(' ');
     if (!sectionText.trim()) continue;
-    const requiresCount = isCountRelevantActivity(sectionText);
+    const requiresCount = !structuralOverview && isCountRelevantActivity(sectionText);
     const sectionSentences = sectionText.split(/(?<=[.!?])\s+/);
-    const countMissingSentence = sectionSentences.find((sentence) =>
+    const countMissingSentence = structuralOverview ? undefined : sectionSentences.find((sentence) =>
       isCountRelevantActivity(sentence) && !/\b\d+(?:[,.]\d+)?\b/.test(sentence));
     const sectionResults = Array.isArray((entry.value as QualityValue).results)
       ? (entry.value as QualityValue).results as unknown[]
@@ -419,6 +425,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   const knownIndicators = indicators.flatMap((entry) => textOf(entry.value).map((text) => text.toLowerCase()));
   for (const activity of activities) {
     const record = activity.value as QualityValue;
+    if (record.isHeader === true || record.isOverviewParagraph === true) continue;
     const activityText = textOf(record).join(' ').toLowerCase();
     const namedMatch = knownIndicators.some((indicator) => indicator && activityText.includes(indicator));
     const narrativeOnly = record.narrativeOnly === true
@@ -808,6 +815,8 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     const possible = matchNameCandidates(sourceName, candidates).possible;
     const targetId = typeof review.id === 'string' ? review.id : '';
     if (!possible.length || !targetId) continue;
+    const candidateA = { id: targetId, name: sourceName };
+    const candidateB = possible[0];
     const location = `identityReviews.${targetId}`;
     add({
       ...createIssue(
@@ -818,6 +827,8 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
         'Select an existing person or explicitly mark this as a new person.',
       ),
       target: { kind: 'preview-item', id: targetId, field: 'matchedId' },
+      candidateA,
+      candidateB,
       context: `Imported name: ${sourceName}. ${possible.length} possible match(es) found.`,
       fix: {
         type: 'choose-option',
@@ -840,11 +851,16 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   }
   const nameList = [...candidateNames].slice(0, 500);
   const nameCandidates = nameList.map((name, index) => ({ id: String(index), name }));
-  const possibleNameMatch = nameCandidates.some((candidate, index) =>
-    matchNameCandidates(candidate.name, nameCandidates.slice(index + 1)).possible.length > 0
-  );
+  const possibleNameMatch = nameCandidates.flatMap((candidate, index) =>
+    matchNameCandidates(candidate.name, nameCandidates.slice(index + 1)).possible
+      .map((match) => [candidate, match] as const)
+  )[0];
   if (possibleNameMatch && identityReviews.length === 0) {
-    add(createIssue('IDENTITY-FUZZY-01', 'warning', 'Two person-name records are similar and need human confirmation; no automatic merge was made.', 'identities', 'Ask a manager to confirm whether these records refer to the same person.'));
+    add({
+      ...createIssue('IDENTITY-FUZZY-01', 'warning', 'Two person-name records are similar and need human confirmation; no automatic merge was made.', 'identities', 'Ask a manager to confirm whether these records refer to the same person.'),
+      candidateA: possibleNameMatch[0],
+      candidateB: possibleNameMatch[1],
+    });
   }
   const budgetNames = new Set(recordsFor(nodes, /budget/i).map((entry) => getField(entry.value as QualityValue, ['personName', 'fullName', 'employeeName', 'beneficiaryName'])).filter((name): name is string => typeof name === 'string').map(normalized));
   const narrativeNames = new Set(recordsFor(nodes, /narrative|report/i).map((entry) => getField(entry.value as QualityValue, ['personName', 'fullName', 'employeeName', 'beneficiaryName'])).filter((name): name is string => typeof name === 'string').map(normalized));
@@ -865,7 +881,18 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     } else if (title) titles.set(title, content);
   }
 
-  return issues;
+  const quantPriority: Record<string, number> = { 'QUANT-03': 3, 'QUANT-02': 2, 'QUANT-01': 1 };
+  const quantByNode = new Map<string, QualityIssue>();
+  for (const issue of issues) {
+    if (!(issue.rule in quantPriority)) continue;
+    const nodeId = issue.nodeId || issue.location;
+    const existing = quantByNode.get(nodeId);
+    if (!existing || quantPriority[issue.rule] > quantPriority[existing.rule]) {
+      quantByNode.set(nodeId, issue);
+    }
+  }
+  return issues.filter((issue) => !(issue.rule in quantPriority)
+    || quantByNode.get(issue.nodeId || issue.location) === issue).slice(0, MAX_ISSUES);
 }
 
 export function qualityScores(input: QualityRulesInput | QualityIssue[]): {

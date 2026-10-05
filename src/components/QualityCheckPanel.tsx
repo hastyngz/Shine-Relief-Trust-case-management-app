@@ -56,6 +56,21 @@ function renderIssueQuote(issue: QualityIssue): React.ReactNode {
   </>;
 }
 
+function renderIdentityPrompt(issue: QualityIssue): React.ReactNode {
+  if (issue.rule !== 'IDENTITY-FUZZY-01' || !issue.candidateA || !issue.candidateB) return null;
+  return (
+    <p className="mt-2 text-xs font-medium text-stone-800">
+      Are Candidate A <strong>{issue.candidateA.name}</strong> and Candidate B <strong>{issue.candidateB.name}</strong> the same person?
+    </p>
+  );
+}
+
+function canDecideIdentity(issue: QualityIssue): boolean {
+  return issue.rule === 'IDENTITY-FUZZY-01'
+    && issue.target?.kind === 'preview-item'
+    && Boolean(issue.candidateA && issue.candidateB);
+}
+
 function groupCountLabel(issue: QualityIssue, count: number): string {
   if (issue.rule === 'QUANT-03') return `${count} activit${count === 1 ? 'y has' : 'ies have'} no number`;
   if (issue.rule === 'QUANT-02') return `${count} sentence${count === 1 ? '' : 's'} say a vague word`;
@@ -104,6 +119,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
   const [reliabilityMethod, setReliabilityMethod] = useState('');
   const [applyReliabilityToAll, setApplyReliabilityToAll] = useState(false);
   const [dialogError, setDialogError] = useState('');
+  const [identityDecisionError, setIdentityDecisionError] = useState('');
   const [confirmBatch, setConfirmBatch] = useState(false);
   const [showSmallSuggestions, setShowSmallSuggestions] = useState(false);
   const [exportFormat, setExportFormat] = useState<FixedReportFormat>('docx');
@@ -235,7 +251,6 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     setApplyReliabilityToAll(false);
     setDialogError('');
   };
-
   const complete = (status: QualityIssueResolution['status'], value?: unknown) => {
     if (!selectedIssue) return;
     if ((status === 'overridden' || (status === 'pending-approval' && selectedIssue.severity === 'blocker')) && note.trim().length < 10) {
@@ -259,6 +274,26 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
     const queue = selectedGroup?.issues || filteredIssues;
     const next = queue[queue.findIndex((issue) => issue.id === selectedIssue.id) + 1];
     setSelectedIssue(next || null);
+  };
+
+  const decideIdentity = (issue: QualityIssue, samePerson: boolean) => {
+    setIdentityDecisionError('');
+    const resolution: QualityIssueResolution = {
+      status: 'resolved',
+      note: samePerson ? 'Confirmed as the same person; use Candidate B as the canonical record.' : 'Confirmed as different people; keep Candidate A separate.',
+      value: {
+        decision: samePerson ? 'same-person' : 'different-people',
+        ...(samePerson && issue.candidateB ? { candidateId: issue.candidateB.id } : {}),
+      },
+    };
+    if (onResolveIssue?.(issue, resolution) !== true) {
+      setIdentityDecisionError('The decision could not be saved. Check your permissions and try again.');
+      return;
+    }
+    setResolved((current) => [
+      ...current.filter((item) => item.issue.id !== issue.id),
+      { issue, resolution, by: currentUserName, at: new Date().toISOString() },
+    ]);
   };
 
   const submitForm = () => {
@@ -344,10 +379,6 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         activity: activityType.trim() || undefined,
         place: place.trim() || undefined,
       });
-      return;
-    }
-    if (selectedIssue.rule === 'IDENTITY-FUZZY-01' && formValue) {
-      complete('resolved', { candidateId: formValue });
       return;
     }
     if (selectedIssue.rule === 'FIN-TOTAL-DISAGREEMENT-01' && formValue === 'keep-stated') {
@@ -476,9 +507,23 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
             <div>
               <p className="text-xs font-semibold text-stone-900">{qualityMessage(group.issues[0]).title}</p>
               <p className="mt-1 text-[11px] text-stone-600">{groupCountLabel(group.issues[0], group.issues.length)} · {severityLabel[group.severity]} <span className="ml-1 text-stone-400">Ref: {group.issues[0].rule}</span></p>
-              <p className="mt-1 break-words text-[11px] text-stone-600">“{renderIssueQuote(group.issues[0])}”</p>
+              {group.issues[0].rule === 'IDENTITY-FUZZY-01'
+                ? renderIdentityPrompt(group.issues[0])
+                : <p className="mt-1 break-words text-[11px] text-stone-600">“{renderIssueQuote(group.issues[0])}”</p>}
             </div>
             <div className="flex flex-wrap gap-2">
+              {canDecideIdentity(group.issues[0]) && onResolveIssue && (
+                <>
+                  <button type="button" className="rounded bg-teal-800 px-3 py-1.5 text-xs font-bold text-white" onClick={() => decideIdentity(group.issues[0], true)}>Yes (Merge Records)</button>
+                  <button type="button" className="rounded border border-stone-500 px-3 py-1.5 text-xs font-bold text-stone-800" onClick={() => decideIdentity(group.issues[0], false)}>No (Different People)</button>
+                </>
+              )}
+              {canDecideIdentity(group.issues[0]) && identityDecisionError && (
+                <p role="alert" className="w-full text-xs font-semibold text-rose-800">{identityDecisionError}</p>
+              )}
+              {group.issues[0].rule === 'IDENTITY-FUZZY-01' && !canDecideIdentity(group.issues[0]) && (
+                <p className="w-full text-xs text-stone-600">Resolve this match in Import review so the selected records can be merged safely.</p>
+              )}
               <button type="button" className="rounded border border-stone-400 px-2 py-1 text-xs font-semibold" aria-expanded={expandedGroup === group.key} onClick={() => { setExpandedGroup((current) => toggleQualityGroup(current, group.key)); setPage(0); }}>
                 Fix these one by one
               </button>
@@ -494,11 +539,20 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
               {visibleGroupIssues.map((issue) => (
                 <div key={issue.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-2 text-xs">
                   <div className="min-w-0">
-                    <p className="break-words text-stone-800">“{renderIssueQuote(issue)}”</p>
+                    {issue.rule === 'IDENTITY-FUZZY-01'
+                      ? renderIdentityPrompt(issue)
+                      : <p className="break-words text-stone-800">“{renderIssueQuote(issue)}”</p>}
                     {issue.target && onOpenIssue && canOpenIssue?.(issue) !== false && <button type="button" className="mt-1 text-[11px] text-teal-800 underline" onClick={() => onOpenIssue(issue)}>Show in document</button>}
                   </div>
-                  <div className="flex shrink-0 gap-2">
-                    <button type="button" className="rounded bg-teal-800 px-2 py-1 font-semibold text-white" onClick={() => openDialog(issue)}>{qualityMessage(issue).buttonLabel}</button>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {canDecideIdentity(issue) && onResolveIssue ? (
+                      <>
+                        <button type="button" className="rounded bg-teal-800 px-3 py-1.5 font-bold text-white" onClick={() => decideIdentity(issue, true)}>Yes (Merge Records)</button>
+                        <button type="button" className="rounded border border-stone-500 px-3 py-1.5 font-bold text-stone-800" onClick={() => decideIdentity(issue, false)}>No (Different People)</button>
+                      </>
+                    ) : issue.rule !== 'IDENTITY-FUZZY-01' ? (
+                      <button type="button" className="rounded bg-teal-800 px-2 py-1 font-semibold text-white" onClick={() => openDialog(issue)}>{qualityMessage(issue).buttonLabel}</button>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -570,6 +624,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
             <p className="mt-1 text-[10px] text-stone-400">Ref: {selectedIssue.rule}</p>
             <p id="quality-dialog-description" className="mt-2 text-sm">{qualityMessage(selectedIssue).why}</p>
             <blockquote className="mt-3 rounded border-l-4 border-amber-500 bg-amber-50 p-3 text-sm">{renderIssueQuote(selectedIssue)}</blockquote>
+            {renderIdentityPrompt(selectedIssue)}
             {selectedIssue.rule === 'NARRATIVE-TENSE-01' && typeof selectedIssue.fix?.suggestedValue === 'string' && (
               <p className="mt-2 rounded bg-emerald-50 p-2 text-xs text-emerald-950">Suggested correction: {selectedIssue.fix.suggestedValue}</p>
             )}

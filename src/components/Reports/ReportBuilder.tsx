@@ -403,6 +403,13 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
           editor?.focus({ preventScroll: true });
         }}
         onResolveIssue={(issue, resolution: QualityIssueResolution) => {
+          if (issue.rule === 'IDENTITY-FUZZY-01' && resolution.status === 'resolved') {
+            setQualityResolutions((current) => [
+              ...current.filter((entry) => entry.issueId !== issue.id),
+              { issueId: issue.id, status: resolution.status, note: resolution.note, by: staffProfile?.fullName || currentUser?.email || 'Management user', at: new Date().toISOString() },
+            ]);
+            return true;
+          }
           if (resolution.status !== 'overridden' || resolution.note.trim().length < 10) return false;
           setQualityResolutions((current) => [
             ...current.filter((entry) => entry.issueId !== issue.id),

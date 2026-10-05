@@ -121,6 +121,7 @@ export function getDatabase(): AppDatabase {
       budgets: parsed.budgets || [],
       annualBudgets: parsed.annualBudgets || [],
       payrollRecords: parsed.payrollRecords || [],
+      employees: parsed.employees || [],
       workplans: parsed.workplans || [],
       schedules: parsed.schedules || [],
       meetings: parsed.meetings || [],
@@ -200,6 +201,7 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
       annualBudgets: Array.isArray(parsed.annualBudgets) ? parsed.annualBudgets : [],
       payrollRecords: Array.isArray(parsed.payrollRecords) ? parsed.payrollRecords : [],
+      employees: Array.isArray(parsed.employees) ? parsed.employees : [],
       workplans: Array.isArray(parsed.workplans) ? parsed.workplans : [],
       schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
       meetings: Array.isArray(parsed.meetings) ? parsed.meetings : [],
@@ -639,13 +641,14 @@ function addPhase2Record<T extends Phase2TrackedRecord>(
   collectionName: string,
   prefix: string,
   data: Omit<T, keyof Phase2TrackedRecord>,
-  actor: string
+  actor: string,
+  stableId?: string,
 ): T {
   const db = getDatabase();
   const now = new Date().toISOString();
   const record = {
     ...data,
-    id: generateFollowUpId(prefix),
+    id: stableId || generateFollowUpId(prefix),
     createdAt: now,
     updatedAt: now,
     createdBy: actor,
@@ -663,14 +666,19 @@ function addPhase2Record<T extends Phase2TrackedRecord>(
 }
 
 export function addCaseAction(
-  data: Omit<CaseAction, keyof Phase2TrackedRecord | 'createdByUid' | 'updatedByUid'>,
+  data: Omit<CaseAction, keyof Phase2TrackedRecord | 'createdByUid' | 'updatedByUid' | 'id'> & { id?: string },
   actor: { uid: string; name: string }
 ): CaseAction {
+  if (data.id) {
+    const existing = (getDatabase().caseActions || []).find((action) => action.id === data.id);
+    if (existing) return existing;
+  }
+  const { id, ...actionData } = data;
   const record = addPhase2Record<CaseAction>('caseActions', 'caseActions', 'ACTN', {
-    ...data,
+    ...actionData,
     createdByUid: actor.uid,
     updatedByUid: actor.uid,
-  }, actor.name);
+  }, actor.name, id);
   appendCaseActionAudit({
     action: 'created',
     recordId: record.id,
@@ -950,10 +958,14 @@ export function addPayrollRecord(
 ): PayrollRecord {
   const db = getDatabase();
   if (!db.payrollRecords) db.payrollRecords = [];
+  const existing = db.payrollRecords.find((item) =>
+    item.employeeId === record.employeeId &&
+    (item.payPeriod === record.payPeriod || item.payPeriodStartDate === record.payPeriodStartDate));
+  if (existing) return existing;
   const now = new Date().toISOString();
   const newRecord: PayrollRecord = {
     ...record,
-    id: record.id || generateFollowUpId('PAY'),
+    id: record.id || `PAY-${encodeURIComponent(record.employeeId)}-${record.payPeriod}`,
     createdAt: now,
     updatedAt: now,
     createdBy: record.createdBy || auditActor || 'SHINE Staff',
