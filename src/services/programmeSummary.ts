@@ -73,6 +73,8 @@ export function summariseProgramme(db: AppDatabase, id: ProgrammeId): ProgrammeS
     }
     case 'shine-village':
       return { value: String(logs.length), label: 'recorded activities' };
+    case 'fish-farming':
+    case 'chicken-farming':
     case 'fish-chicken':
     case 'rice-maize-mill':
     case 'tomato-farming': {

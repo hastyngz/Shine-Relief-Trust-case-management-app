@@ -1,5 +1,6 @@
 import { matchNameCandidates } from './spreadsheetImport/nameMatcher';
 import { pastTenseReportedActivities } from './safeTextCorrections';
+import { findProgrammeNameAliases } from '../data/programmes';
 
 export type QualityIssue = {
   id: string;
@@ -181,6 +182,14 @@ function words(text: string): string[] {
   return text.match(/\b[\p{L}]+(?:['’-][\p{L}]+)*\b/gu) ?? [];
 }
 
+function isCountRelevantActivity(text: string): boolean {
+  if (/\b(?:changed|transferred|moved)\s+(?:her|his|their\s+)?school\b/i.test(text)
+    || /\btravel(?:led|ed)\b.{0,60}\b(?:school|clinic|office|home)\b/i.test(text)) return false;
+  return /\b(?:girls|children|learners|students|participants|beneficiaries|staff|teachers)\b.{0,100}\b(?:participated|took part|attended|joined|received|completed|were trained|were taught)\b/i.test(text)
+    || /\b(?:sessions?|workshops?|lessons?|meetings?|guest speakers?|field visits?|training courses?|classes?|distributions?)\b.{0,100}\b(?:held|conducted|delivered|provided|attended|visited|took place|completed)\b/i.test(text)
+    || /:\s*[^.!?]{0,180}\b(?:girls|children|learners|students|participants|beneficiaries)\b.{0,80}\b(?:participated|took part|attended|joined|received)\b/i.test(text);
+}
+
 function syllables(word: string): number {
   const normalizedWord = word.toLowerCase().replace(/(?:e|es)$/i, '');
   const groups = normalizedWord.match(/[aeiouy]+/g)?.length ?? 1;
@@ -290,23 +299,29 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   for (const entry of narratives) {
     const sectionText = textOf(entry.value).join(' ');
     if (!sectionText.trim()) continue;
+    const requiresCount = isCountRelevantActivity(sectionText);
+    const sectionSentences = sectionText.split(/(?<=[.!?])\s+/);
+    const countMissingSentence = sectionSentences.find((sentence) =>
+      isCountRelevantActivity(sentence) && !/\b\d+(?:[,.]\d+)?\b/.test(sentence));
     const sectionResults = Array.isArray((entry.value as QualityValue).results)
       ? (entry.value as QualityValue).results as unknown[]
       : [];
     const hasResultAgainstTarget = sectionResults.some((result) => isRecord(result)
       && (getNumber(result, ['target', 'planned', 'plannedValue']) ?? 0) > 0
       && getNumber(result, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']) !== undefined);
-    if (finalReport ? !hasResultAgainstTarget : !hasResultAgainstTarget && !/\b\d+(?:[,.]\d+)?\s*(?:%|percent|people|girls|children|households|sessions|visits|days|months|years)?\b/i.test(sectionText)) {
+    if (requiresCount && !hasResultAgainstTarget && countMissingSentence) {
       const section = isRecord(entry.value) ? entry.value : {};
       const heading = String(getField(section, ['heading', 'title', 'name']) ?? 'This section').trim();
       add({
         ...createIssue('QUANT-01', finalReport ? 'blocker' : 'warning', 'Programme section has no quantitative result against a target.', entry.path, 'Add a measured result and its target.'),
-        context: `${heading}: ${sectionText.split(/[.!?]+/).find((sentence) => sentence.trim())?.trim() || sectionText}`,
+        context: `${heading}: ${countMissingSentence.trim()}`,
         fix: { type: 'number-input', safe: false, field: 'results', reversible: true },
       });
     }
-    const vague = sectionText.match(/\b(?:various|several|many|some|a number of|a lot of|regularly|different activities|the girls participated|the children took part|numerous|significant)\b[^.!?]*[.!?]?/i)?.[0];
-    if (vague) {
+    const vague = sectionSentences.find((sentence) =>
+      /\b(?:various|several|many|some|a number of|a lot of|regularly|different activities|the girls participated|the children took part|numerous|significant)\b/i.test(sentence)
+      && isCountRelevantActivity(sentence));
+    if (vague && requiresCount) {
       add({
         ...createIssue('QUANT-02', 'warning', 'Narrative includes an unquantified statement.', entry.path, 'Replace it with: “In {period}, {n} {who} took part in {n} {activity type} at {place}.”'),
         context: vague,
@@ -350,24 +365,19 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       const tooLong = sectionText.split(/[.!?]+/).some((sentence) => words(sentence).length > (options.maxSentenceWords as number));
       if (tooLong) add(createIssue('STYLE-SENTENCE-LENGTH-01', 'info', 'A sentence exceeds the configured word limit.', entry.path, 'Split long sentences into shorter statements.'));
     }
-    for (const programmeName of options.programmeNames ?? []) {
-      const shortName = programmeName.trim();
-      const fullNamePresent = shortName && new RegExp(`\\b${shortName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(sectionText);
-      const alias = shortName ? sectionText.match(new RegExp(`\\b(?:the )?${shortName.split(/\s+/)[0]}\\b`, 'i'))?.[0] : undefined;
-      if (shortName && !fullNamePresent && alias) {
-        add({
-          ...createIssue('NARRATIVE-PROGRAMME-01', 'warning', 'Programme naming may not match the approved programme register.', entry.path, `Use the approved name “${shortName}”.`),
-          context: alias,
-          fix: {
-            type: 'choose-option',
-            safe: false,
-            field: 'text',
-            options: (options.programmeNames ?? []).map((name) => ({ value: name, label: name })),
-            suggestedValue: shortName,
-            reversible: true,
-          },
-        });
-      }
+    for (const { alias, approvedName } of findProgrammeNameAliases(sectionText, options.programmeNames)) {
+      add({
+        ...createIssue('NARRATIVE-PROGRAMME-01', 'warning', 'Programme naming may not match the approved programme register.', entry.path, `Use the approved name “${approvedName}”.`),
+        context: alias,
+        fix: {
+          type: 'choose-option',
+          safe: true,
+          field: 'text',
+          options: (options.programmeNames ?? []).map((name) => ({ value: name, label: name })),
+          suggestedValue: approvedName,
+          reversible: true,
+        },
+      });
     }
   }
 
@@ -415,7 +425,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
       && typeof record.narrativeOnlyReason === 'string'
       && record.narrativeOnlyReason.trim().length >= 10
       && record.managerApproved === true;
-    if (!hasMapping(record) && !namedMatch && !narrativeOnly) {
+    if (isCountRelevantActivity(activityText) && !hasMapping(record) && !namedMatch && !narrativeOnly) {
       const options = indicators.flatMap((indicator) => {
         if (!isRecord(indicator.value)) return [];
         const indicatorRecord = indicator.value;
@@ -467,6 +477,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   for (const entry of results) {
     const record = entry.value as QualityValue;
     const reported = getNumber(record, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']);
+    if (reported === undefined) continue;
     const evidence = getField(record, ['evidence', 'evidenceNote', 'evidenceSource', 'source', 'verification']);
     const status = String(getField(record, ['verificationStatus', 'evidenceStatus', 'status']) ?? '').toLowerCase();
     if ((evidence === undefined || evidence === null || evidence === '') && record.evidenceRequired !== false) {
@@ -496,8 +507,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
     const sameChecker = typeof validityCheckedBy === 'string' && Boolean(validityCheckedBy.trim())
       && enteredByForValidity && String(enteredByForValidity).trim().toLocaleLowerCase() === validityCheckedBy.trim().toLocaleLowerCase();
     if (sameChecker) missingValidity.push('verification by a person other than the data entrant');
-    const plausible = reported !== undefined
-      && reported >= 0
+    const plausible = reported >= 0
       && !(record.unit === '%' && reported > 100)
       && !(getNumber(record, ['enrolment', 'enrollment', 'populationLimit']) !== undefined
         && /girl|child|participant/i.test(String(record.unit || ''))
@@ -565,6 +575,7 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
   const reliabilityByIndicator = new Map<string, Set<string>>();
   for (const entry of indicators) {
     const record = entry.value as QualityValue;
+    if (getNumber(record, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']) === undefined) continue;
     const indicatorId = String(getField(record, ['indicatorId', 'id', 'name']) ?? '');
     const method = String(getField(record, ['method', 'measurementMethod', 'dataCollectionMethod']) ?? '');
     if (!indicatorId || !method) continue;
@@ -578,6 +589,11 @@ export function runQualityRules(input: QualityRulesInput | unknown): QualityIssu
 
   const dataQualityNodes = nodes.filter((node) => /validity|reliability|timeliness|precision|integrity/i.test(node.path));
   for (const node of dataQualityNodes) {
+    const dimensionName = node.path.match(/validity|reliability|timeliness|precision|integrity/i)?.[0]?.toLowerCase();
+    const numericalClaimInRecord = [...activities, ...results, ...indicators].some((entry) =>
+      (node.path.startsWith(`${entry.path}.`) || node.path.startsWith(`${entry.path}[`))
+      && getNumber(entry.value as QualityValue, ['actual', 'actualValue', 'achieved', 'result', 'resultValue']) !== undefined);
+    if (!numericalClaimInRecord && (dimensionName === 'validity' || dimensionName === 'reliability')) continue;
     const raw = typeof node.value === 'string' || typeof node.value === 'boolean' ? String(node.value).toLowerCase() : '';
     if (/^(?:false|invalid|unreliable|untimely|imprecise|incomplete|failed|poor|low|needs? (?:review|improvement))$/.test(raw)) {
       const dimension = node.path.match(/validity|reliability|timeliness|precision|integrity/i)?.[0] ?? 'data quality';

@@ -1,5 +1,5 @@
 import type { AppDatabase } from '../types';
-import { PROGRAMMES, type ProgrammeId } from '../data/programmes';
+import { LEGACY_PROGRAMMES, PROGRAMMES, type ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from './programmeSummary';
 import { generateReportNarrative } from './reportNarrative';
 
@@ -57,7 +57,8 @@ export function assembleSponsorReport(db: AppDatabase, options: SponsorReportOpt
   const periodLabel = options.fromDate || options.toDate
     ? `${options.fromDate || 'Beginning'} to ${options.toDate || 'Present'}`
     : 'All available dates';
-  const selectedProgrammes = PROGRAMMES.filter((item) => options.programmeId === 'ALL' || item.id === options.programmeId);
+  const selectedProgrammes = [...PROGRAMMES, ...LEGACY_PROGRAMMES]
+    .filter((item) => options.programmeId === 'ALL' || item.id === options.programmeId);
   const inPeriodBudget = (db.budgets || []).filter((item) =>
     recordDateIsInRange(budgetRecordDate(item.period, item.financialYear, item.month), options.fromDate, options.toDate)
   );

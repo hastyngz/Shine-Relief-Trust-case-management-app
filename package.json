@@ -9,6 +9,7 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:quality": "tsx scripts/quality-rules.test.ts && tsx scripts/programme-separation.test.ts && tsx scripts/phase3b-financial.test.ts",
     "test:rules": "firebase emulators:exec --only firestore \"tsx scripts/firestore-rules.test.ts\"",
     "test:phase5-rules": "firebase emulators:exec --project demo-shine-phase5-rules --only firestore \"tsx scripts/phase5-rules.test.ts\"",
     "test:phase5": "tsx scripts/phase5-intelligence.test.ts && tsx scripts/phase5-case-intelligence.test.ts",

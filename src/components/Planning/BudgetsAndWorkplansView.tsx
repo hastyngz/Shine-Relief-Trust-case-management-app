@@ -52,7 +52,7 @@ import {
 import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
 import { expandWorkplanOccurrences, findOverloadedStaff, MAX_WORKPLANS_PER_STAFF_PER_WEEK } from '../../services/workplanRecurrence';
 import { calculateBudgetForecast } from '../../services/intelligenceService';
-import { PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
+import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
@@ -274,7 +274,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     ? uniqueCategories.map((key) => budgetSummary(key, budgets.filter((line) => line.category === key)))
     : budgetSummaryGroup === 'period'
     ? uniquePeriods.map((key) => budgetSummary(key, budgets.filter((line) => line.period === key)))
-    : PROGRAMMES.map((item) => budgetSummary(
+    : [...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => budgetSummary(
       item.name,
       budgets.filter((line) => line.programmeId === item.id)
     )).filter((row) => row.budgeted || row.actual);
@@ -1591,7 +1591,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 </select>
               </div>
 
-              {['fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(budgetProgrammeId) && (
+              {['fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(budgetProgrammeId) && (
                 <fieldset className="rounded-lg border border-stone-200 p-3">
                   <legend className="px-1 text-xs font-semibold text-stone-700">Seasonal forecast months</legend>
                   <p className="mb-2 text-[11px] text-stone-500">Select the months when this line is expected. You can change these selections whenever needed.</p>

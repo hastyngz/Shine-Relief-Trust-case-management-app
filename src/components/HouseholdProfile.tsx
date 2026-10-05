@@ -46,6 +46,14 @@ interface HouseholdProfileProps {
   onDeleteHousehold?: (houseId: string) => void;
   onDeleteRentPayment?: (paymentId: string) => void;
   onDeleteExpense?: (expenseId: string) => void;
+  onMarkExpensePaid?: (
+    expenseId: string,
+    payment: Pick<HouseholdExpense, 'datePaid' | 'paymentMethod' | 'paymentReference'>,
+  ) => void;
+  onUpdateExpense?: (
+    expenseId: string,
+    changes: Partial<Omit<HouseholdExpense, 'id' | 'householdId' | 'createdAt'>>,
+  ) => void;
   onDeleteActivity?: (activityId: string) => void;
   onAddRentPayment: (household: Household) => void;
   onAddExpense: (household: Household) => void;
@@ -67,6 +75,8 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   onDeleteHousehold,
   onDeleteRentPayment,
   onDeleteExpense,
+  onMarkExpensePaid,
+  onUpdateExpense,
   onDeleteActivity,
   onAddRentPayment,
   onAddExpense,
@@ -76,6 +86,25 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const { isViewOnly } = useAuth();
   const [activeTab, setActiveTab] = useState<HouseTab>('overview');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('All');
+  const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('All');
+  const [payingExpenseId, setPayingExpenseId] = useState<string | null>(null);
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [editingExpense, setEditingExpense] = useState<{
+    id: string;
+    quantity: string;
+    unitCost: string;
+    totalCost: string;
+    amountDue: string;
+    supplier: string;
+    supplierContactPerson: string;
+    supplierPhone: string;
+    supplierEmail: string;
+    supplierAddress: string;
+    invoiceReference: string;
+  } | null>(null);
+  const [expenseEditError, setExpenseEditError] = useState('');
   const [householdAttachments, setHouseholdAttachments] = useState<PhotoAttachment[]>([]);
   const [isHousePhotoModalOpen, setIsHousePhotoModalOpen] = useState(false);
 
@@ -101,12 +130,45 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   // Expenses analytics
   const totalExpenses = expenses.reduce((acc, curr) => acc + curr.totalCost, 0);
   const filteredExpenses = expenses.filter((e) => {
-    if (expenseCategoryFilter === 'All') return true;
-    return e.category === expenseCategoryFilter;
+    const categoryMatches = expenseCategoryFilter === 'All' || e.category === expenseCategoryFilter;
+    const paymentMatches = expensePaymentFilter === 'All'
+      || (e.paymentStatus || 'Paid') === expensePaymentFilter;
+    return categoryMatches && paymentMatches;
   });
 
   // Outstanding actions in this house
   const outstandingActivities = activities.filter((a) => a.furtherActionRequired);
+
+  const saveExpenseEdit = (expense: HouseholdExpense) => {
+    if (!editingExpense || !onUpdateExpense) return;
+    const totalCost = Number(editingExpense.totalCost);
+    const unitCost = Number(editingExpense.unitCost);
+    const amountDue = Number(editingExpense.amountDue);
+    if (!Number.isFinite(totalCost) || totalCost <= 0 || !Number.isFinite(unitCost) || unitCost < 0) {
+      setExpenseEditError('Enter a positive total and a valid unit cost.');
+      return;
+    }
+    if (expense.paymentStatus === 'Payment Outstanding'
+      && editingExpense.amountDue.trim()
+      && (!Number.isFinite(amountDue) || amountDue <= 0)) {
+      setExpenseEditError('Enter a positive amount due.');
+      return;
+    }
+    onUpdateExpense(expense.id, {
+      quantity: editingExpense.quantity.trim(),
+      unitCost,
+      totalCost,
+      ...(expense.paymentStatus === 'Payment Outstanding' ? { amountDue: amountDue || totalCost } : {}),
+      supplier: editingExpense.supplier.trim(),
+      supplierContactPerson: editingExpense.supplierContactPerson.trim(),
+      supplierPhone: editingExpense.supplierPhone.trim(),
+      supplierEmail: editingExpense.supplierEmail.trim(),
+      supplierAddress: editingExpense.supplierAddress.trim(),
+      invoiceReference: editingExpense.invoiceReference.trim(),
+    });
+    setEditingExpense(null);
+    setExpenseEditError('');
+  };
 
   return (
     <div id="household-profile-view" className="space-y-6 pb-12">
@@ -606,6 +668,16 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                   <option value="Clothing/social support">Clothing/social support</option>
                   <option value="Other">Other</option>
                 </select>
+                <select
+                  value={expensePaymentFilter}
+                  onChange={(e) => setExpensePaymentFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs border border-stone-300 rounded-lg bg-white"
+                  aria-label="Filter expenses by payment status"
+                >
+                  <option value="All">All payment statuses</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Payment Outstanding">Payment Outstanding</option>
+                </select>
 
                 <button
                   onClick={() => onAddExpense(household)}
@@ -635,11 +707,14 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                       <th className="px-3 py-2.5">Unit Cost</th>
                       <th className="px-3 py-2.5">Total Cost</th>
                       <th className="px-3 py-2.5">Supplier / Notes</th>
+                      <th className="px-3 py-2.5">Payment</th>
+                      <th className="px-3 py-2.5">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-200">
                     {filteredExpenses.map((exp) => (
-                      <tr key={exp.id} className="hover:bg-stone-50/80">
+                      <React.Fragment key={exp.id}>
+                      <tr className="hover:bg-stone-50/80">
                         <td className="px-3 py-2.5 font-medium text-stone-900 whitespace-nowrap">
                           {formatDate(exp.date)}
                         </td>
@@ -652,7 +727,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           {exp.itemDescription}
                         </td>
                         <td className="px-3 py-2.5 text-stone-600">
-                          {exp.quantity}
+                          {[exp.quantity, exp.unit].filter(Boolean).join(' ')}
                         </td>
                         <td className="px-3 py-2.5 text-stone-600">
                           {formatMWK(exp.unitCost)}
@@ -662,20 +737,129 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                         </td>
                         <td className="px-3 py-2.5 text-stone-600 max-w-xs truncate">
                           {exp.supplier && <strong className="mr-1 text-stone-700">{exp.supplier}</strong>}
+                          {exp.invoiceReference && <span className="mr-1">Invoice: {exp.invoiceReference}</span>}
                           {exp.notes}
                         </td>
-                        {onDeleteExpense && (
-                          <td className="px-2 py-2.5 text-right">
-                            <button
-                              onClick={() => onDeleteExpense(exp.id)}
-                              className="text-stone-400 hover:text-red-700 p-1 rounded hover:bg-red-50"
-                              title="Delete expense entry"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        )}
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {(exp.paymentStatus || 'Paid') === 'Payment Outstanding' ? (
+                            <div>
+                              <span className="font-bold text-amber-800">Outstanding · {formatMWK(exp.amountDue ?? exp.totalCost)}</span>
+                              {!isViewOnly && onMarkExpensePaid && (
+                                payingExpenseId === exp.id ? (
+                                  <div className="mt-2 min-w-48 space-y-2 rounded border border-stone-200 bg-white p-2">
+                                    <label className="block text-[10px] font-semibold text-stone-700">Date paid
+                                      <input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} className="mt-1 w-full rounded border border-stone-300 p-1.5 text-xs" required />
+                                    </label>
+                                    <label className="block text-[10px] font-semibold text-stone-700">Payment method (Optional)
+                                      <input value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="mt-1 w-full rounded border border-stone-300 p-1.5 text-xs" />
+                                    </label>
+                                    <label className="block text-[10px] font-semibold text-stone-700">Payment reference (Optional)
+                                      <input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} className="mt-1 w-full rounded border border-stone-300 p-1.5 text-xs" />
+                                    </label>
+                                    <div className="flex gap-2">
+                                      <button type="button" className="rounded bg-teal-800 px-2 py-1 text-[10px] font-bold text-white" onClick={() => {
+                                        onMarkExpensePaid(exp.id, {
+                                          datePaid: paymentDate,
+                                          paymentMethod: paymentMethod.trim() || undefined,
+                                          paymentReference: paymentReference.trim() || undefined,
+                                        });
+                                        setPayingExpenseId(null);
+                                      }}>Save payment</button>
+                                      <button type="button" className="rounded border px-2 py-1 text-[10px]" onClick={() => setPayingExpenseId(null)}>Cancel</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button type="button" className="ml-2 rounded border border-teal-700 px-2 py-1 text-[10px] font-bold text-teal-900" onClick={() => {
+                                    setPayingExpenseId(exp.id);
+                                    setPaymentDate(new Date().toISOString().slice(0, 10));
+                                    setPaymentMethod(exp.paymentMethod || '');
+                                    setPaymentReference(exp.paymentReference || '');
+                                  }}>Mark as paid</button>
+                                )
+                              )}
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-emerald-800">Paid{exp.datePaid ? ` · ${formatDate(exp.datePaid)}` : ''}</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {!isViewOnly && onUpdateExpense && (
+                              <button type="button" className="rounded border border-stone-300 px-2 py-1 text-[10px] font-semibold text-stone-700" onClick={() => {
+                                setExpenseEditError('');
+                                setEditingExpense({
+                                  id: exp.id,
+                                  quantity: exp.quantity,
+                                  unitCost: String(exp.unitCost),
+                                  totalCost: String(exp.totalCost),
+                                  amountDue: String(exp.amountDue ?? exp.totalCost),
+                                  supplier: exp.supplier || '',
+                                  supplierContactPerson: exp.supplierContactPerson || '',
+                                  supplierPhone: exp.supplierPhone || '',
+                                  supplierEmail: exp.supplierEmail || '',
+                                  supplierAddress: exp.supplierAddress || '',
+                                  invoiceReference: exp.invoiceReference || '',
+                                });
+                              }}>Edit</button>
+                            )}
+                            {!isViewOnly && onDeleteExpense && (
+                              <button
+                                onClick={() => onDeleteExpense(exp.id)}
+                                className="text-stone-400 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                title="Delete expense entry"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
+                      {editingExpense?.id === exp.id && (
+                        <tr>
+                          <td colSpan={9} className="bg-stone-50 p-3">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                              <label className="text-[10px] font-semibold text-stone-700">Quantity
+                                <input value={editingExpense.quantity} onChange={(event) => setEditingExpense({ ...editingExpense, quantity: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Unit cost (MWK)
+                                <input type="number" min="0" step="1" value={editingExpense.unitCost} onChange={(event) => setEditingExpense({ ...editingExpense, unitCost: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Total cost (MWK)
+                                <input type="number" min="1" step="1" value={editingExpense.totalCost} onChange={(event) => setEditingExpense({ ...editingExpense, totalCost: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              {exp.paymentStatus === 'Payment Outstanding' && (
+                                <label className="text-[10px] font-semibold text-stone-700">Amount due (MWK)
+                                  <input type="number" min="1" step="1" value={editingExpense.amountDue} onChange={(event) => setEditingExpense({ ...editingExpense, amountDue: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                                </label>
+                              )}
+                              <label className="text-[10px] font-semibold text-stone-700">Supplier
+                                <input value={editingExpense.supplier} onChange={(event) => setEditingExpense({ ...editingExpense, supplier: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Contact person
+                                <input value={editingExpense.supplierContactPerson} onChange={(event) => setEditingExpense({ ...editingExpense, supplierContactPerson: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Phone
+                                <input type="tel" value={editingExpense.supplierPhone} onChange={(event) => setEditingExpense({ ...editingExpense, supplierPhone: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Email
+                                <input type="email" value={editingExpense.supplierEmail} onChange={(event) => setEditingExpense({ ...editingExpense, supplierEmail: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Address / location
+                                <input value={editingExpense.supplierAddress} onChange={(event) => setEditingExpense({ ...editingExpense, supplierAddress: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                              <label className="text-[10px] font-semibold text-stone-700">Invoice reference
+                                <input value={editingExpense.invoiceReference} onChange={(event) => setEditingExpense({ ...editingExpense, invoiceReference: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
+                              </label>
+                            </div>
+                            {expenseEditError && <p className="mt-2 text-xs font-semibold text-rose-800" role="alert">{expenseEditError}</p>}
+                            <div className="mt-3 flex justify-end gap-2">
+                              <button type="button" className="rounded border border-stone-300 px-3 py-1.5 text-xs" onClick={() => setEditingExpense(null)}>Cancel</button>
+                              <button type="button" className="rounded bg-teal-800 px-3 py-1.5 text-xs font-bold text-white" onClick={() => saveExpenseEdit(exp)}>Save expense changes</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

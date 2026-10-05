@@ -36,6 +36,10 @@ const severityLabel: Record<QualityIssue['severity'], string> = {
 };
 const PAGE_SIZE = 25;
 
+export function toggleQualityGroup(current: string | null, groupKey: string): string | null {
+  return current === groupKey ? null : groupKey;
+}
+
 function issueKey(issue: QualityIssue): string {
   return issue.rule;
 }
@@ -475,7 +479,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
               <p className="mt-1 break-words text-[11px] text-stone-600">“{renderIssueQuote(group.issues[0])}”</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="rounded border border-stone-400 px-2 py-1 text-xs font-semibold" onClick={() => { setExpandedGroup(group.key); setPage(0); }}>
+              <button type="button" className="rounded border border-stone-400 px-2 py-1 text-xs font-semibold" aria-expanded={expandedGroup === group.key} onClick={() => { setExpandedGroup((current) => toggleQualityGroup(current, group.key)); setPage(0); }}>
                 Fix these one by one
               </button>
               {group.safeFixes.length > 0 && (
@@ -515,7 +519,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
         && (ruleFilter === 'all' || issue.rule === ruleFilter)).map(({ issue, resolution, by, at }) => (
         <article key={issue.id} className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs">
           <p className="font-semibold">{qualityMessage(issue).title} <span className="text-[10px] font-normal text-stone-400">Ref: {issue.rule}</span></p>
-          <p className="mt-1">Reviewed by {by}{at ? ` at ${new Date(at).toLocaleString()}` : ''}. {resolution.note}</p>
+          <p className="mt-1">{/^Automatic safe fix|Applied deterministic reversible safe fix/.test(resolution.note) ? 'Fixed automatically' : 'Fixed manually'} by {by}{at ? ` at ${new Date(at).toLocaleString()}` : ''}. {resolution.note}</p>
           {resolution.before !== undefined && <p className="mt-1">Before: {String(resolution.before)} · after: {String(resolution.after)}</p>}
           {onUndoFix && <button type="button" className="mt-2 underline" onClick={() => { onUndoFix(issue); setResolved((items) => items.filter((item) => item.issue.id !== issue.id)); }}>Undo</button>}
         </article>
@@ -550,7 +554,7 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                 setLastBatch(batch);
                 setResolved((current) => [
                   ...current.filter((item) => !batch.some((issue) => issue.id === item.issue.id)),
-                  ...batch.map((issue) => ({ issue, resolution: { status: 'resolved' as const, note: 'Applied deterministic reversible safe fix.' }, by: currentUserName, at: new Date().toISOString() })),
+                  ...batch.map((issue) => ({ issue, resolution: { status: 'resolved' as const, note: 'Automatic safe fix applied.' }, by: currentUserName, at: new Date().toISOString() })),
                 ]);
                 setConfirmBatch(false);
               }}>Apply listed safe fixes</button>

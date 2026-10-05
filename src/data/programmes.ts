@@ -6,6 +6,8 @@ export type ProgrammeId =
   | 'bursary'
   | 'child-house'
   | 'relief-family'
+  | 'fish-farming'
+  | 'chicken-farming'
   | 'fish-chicken'
   | 'rice-maize-mill'
   | 'tomato-farming';
@@ -73,11 +75,21 @@ export const PROGRAMMES: ProgrammeDefinition[] = [
     logTypes: ['Distribution', 'Family support', 'Expense', 'Note'],
   },
   {
-    id: 'fish-chicken',
-    name: 'Fish & Chicken Farming',
+    id: 'fish-farming',
+    name: 'Fish Farming',
     group: 'Income Projects',
-    tagline: 'Local farming that creates reliable income and opportunity.',
-    background: 'SHINE’s fish and chicken farming project develops practical agricultural activity as a source of sustainable income. Production, sales, inputs, and costs are tracked to understand output and financial performance.',
+    tagline: 'Fish farming that creates reliable income and opportunity.',
+    background: 'SHINE’s fish farming project develops practical agricultural activity as a source of sustainable income. Production, sales, inputs, and costs are tracked to understand output and financial performance.',
+    startYear: 2021,
+    startConfirmed: true,
+    logTypes: ['Production', 'Sale', 'Expense', 'Input', 'Activity', 'Note'],
+  },
+  {
+    id: 'chicken-farming',
+    name: 'Chicken Farming',
+    group: 'Income Projects',
+    tagline: 'Chicken farming that creates reliable income and opportunity.',
+    background: 'SHINE’s chicken farming project develops practical agricultural activity as a source of sustainable income. Production, sales, inputs, and costs are tracked to understand output and financial performance.',
     startYear: 2021,
     startConfirmed: true,
     logTypes: ['Production', 'Sale', 'Expense', 'Input', 'Activity', 'Note'],
@@ -104,6 +116,69 @@ export const PROGRAMMES: ProgrammeDefinition[] = [
   },
 ];
 
+export const LEGACY_PROGRAMMES: ProgrammeDefinition[] = [
+  {
+    id: 'fish-chicken',
+    name: 'Fish & Chicken Farming (historical records)',
+    group: 'Historical records',
+    tagline: 'Combined historical records are retained without assigning them to either programme.',
+    background: 'Older records combined fish and chicken farming. They remain available here and are not reassigned because their original programme cannot be determined safely.',
+    startYear: 2021,
+    startConfirmed: true,
+    logTypes: ['Production', 'Sale', 'Expense', 'Input', 'Activity', 'Note'],
+  },
+];
+
 export const PROGRAMME_BY_ID: Record<ProgrammeId, ProgrammeDefinition> = Object.fromEntries(
-  PROGRAMMES.map((programme) => [programme.id, programme])
+  [...PROGRAMMES, ...LEGACY_PROGRAMMES].map((programme) => [programme.id, programme])
 ) as Record<ProgrammeId, ProgrammeDefinition>;
+
+const PROGRAMME_NAME_ALIASES: Partial<Record<ProgrammeId, string[]>> = {
+  'early-years': ['early childhood', 'early years programme'],
+  'shine-village': ['shine village programme'],
+  'child-house': ["shine children's home", 'shine children’s home'],
+  'relief-family': ['relief and family preservation'],
+  'fish-farming': ['fish farm'],
+  'chicken-farming': ['chicken farm'],
+  'rice-maize-mill': ['maize and rice mill'],
+};
+
+export function programmeNameAliases(approvedNames: string[] = PROGRAMMES.map(({ name }) => name)): Array<{ alias: string; approvedName: string }> {
+  return PROGRAMMES
+    .filter((programme) => approvedNames.includes(programme.name))
+    .flatMap((programme) => (PROGRAMME_NAME_ALIASES[programme.id] || []).map((alias) => ({
+      alias,
+      approvedName: programme.name,
+    })));
+}
+
+export function findProgrammeNameAliases(
+  text: string,
+  approvedNames: string[] = PROGRAMMES.map(({ name }) => name),
+): Array<{ alias: string; approvedName: string }> {
+  return programmeNameAliases(approvedNames).filter(({ alias }) =>
+    new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
+}
+
+export function normalizeProgrammeNames(
+  text: string,
+  approvedNames: string[] = PROGRAMMES.map(({ name }) => name),
+): string {
+  let normalizedText = text;
+  const approvedByLowerName = new Map(PROGRAMMES
+    .filter((programme) => approvedNames.includes(programme.name))
+    .map((programme) => [programme.name.toLowerCase(), programme.name]));
+  for (const [lowerName, approvedName] of approvedByLowerName) {
+    normalizedText = normalizedText.replace(
+      new RegExp(`\\b${lowerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
+      approvedName,
+    );
+  }
+  for (const { alias, approvedName } of programmeNameAliases(approvedNames)) {
+    normalizedText = normalizedText.replace(
+      new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'),
+      approvedName,
+    );
+  }
+  return normalizedText;
+}

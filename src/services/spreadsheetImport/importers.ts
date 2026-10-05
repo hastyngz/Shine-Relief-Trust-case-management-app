@@ -73,7 +73,7 @@ export interface ImportedProjectionLine {
   kind: 'projection';
   sheet: string;
   row: number;
-  programmeId: 'fish-chicken' | 'rice-maize-mill' | 'tomato-farming';
+  programmeId: 'fish-farming' | 'chicken-farming' | 'fish-chicken' | 'rice-maize-mill' | 'tomato-farming';
   period: string;
   revenueMWK: number;
   costLines: Array<{ label: string; amountMWK?: number; status: 'priced' | 'unpriced' }>;
@@ -161,7 +161,9 @@ function programmeFrom(...values: unknown[]): { id?: ProgrammeId; label: string 
     return { label: '' };
   }
   if (/^village$/.test(haystack)) return { id: 'shine-village', label: 'Shine Village' };
-  if (/fish|chicken/.test(haystack)) return { id: 'fish-chicken', label: 'Fish & Chicken Farming' };
+  if (/fish/.test(haystack) && /chicken/.test(haystack)) return { id: 'fish-chicken', label: 'Fish & Chicken Farming (historical records)' };
+  if (/fish/.test(haystack)) return { id: 'fish-farming', label: 'Fish Farming' };
+  if (/chicken/.test(haystack)) return { id: 'chicken-farming', label: 'Chicken Farming' };
   if (/tomato/.test(haystack)) return { id: 'tomato-farming', label: 'Tomato Farming' };
   if (/maize|rice|mill/.test(haystack)) return { id: 'rice-maize-mill', label: 'Maize & Rice Mill' };
   if (/relief|family/.test(haystack)) return { id: 'relief-family', label: 'Relief & Family Preservation' };
@@ -450,8 +452,12 @@ function parseProjectionRows(sheetName: string, rows: unknown[][]): ImportedProj
     ? 'tomato-farming'
     : /maize|rice|mill/.test(content)
       ? 'rice-maize-mill'
-      : /fish|chicken/.test(content)
+      : /fish/.test(content) && /chicken/.test(content)
         ? 'fish-chicken'
+        : /fish/.test(content)
+          ? 'fish-farming'
+          : /chicken/.test(content)
+            ? 'chicken-farming'
         : undefined;
   if (!programmeId) return null;
   const headerIndex = headerRowIndex(rows, 'profit-loss');

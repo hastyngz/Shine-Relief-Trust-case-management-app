@@ -49,7 +49,7 @@ const CATALOGUE: Record<string, MessageTemplate> = {
   'NARRATIVE-PROGRAMME-01': {
     title: 'This programme name isn’t written the way SHINE writes it.',
     why: 'Using the approved name keeps reports consistent.',
-    examples: ['Early Years', 'Fish & Chicken Farming'],
+    examples: ['Early Years', 'Fish Farming'],
     buttonLabel: 'Use the approved name',
   },
   'DQ-RELIABILITY': {
@@ -355,7 +355,7 @@ function activityQuestion(quote: string): string {
   if (/vocational training/i.test(activity)) return `How many girls are in vocational training, and in which courses?`;
   if (/field visits?/i.test(activity)) return `How many field visits were made, and how many girls went?`;
   const countNoun = activity.match(/\b(speakers?|visits?|workshops?|sessions?|competitions?|camps?|retreats?|meetings?|lessons?)\b/i)?.[0];
-  if (/guest speakers?/i.test(activity)) return `How many guest speakers visited, and how many girls attended?`;
+  if (/guest speakers?/i.test(text)) return `How many guest speakers visited, and how many girls attended?`;
   if (countNoun) return `How many ${activity} took place, and how many ${who} took part?`;
   return `How many ${who} took part in ${activity}?`;
 }
@@ -370,7 +370,16 @@ function sectionQuestion(quote: string): string {
 }
 
 export function qualityMessage(issue: QualityIssue): QualityMessage {
-  const template = CATALOGUE[issue.rule] || friendlyFallback;
+  const baseTemplate = CATALOGUE[issue.rule] || friendlyFallback;
+  const programmeMatch = issue.rule === 'NARRATIVE-PROGRAMME-01'
+    ? issue.message.match(/Use the approved name [“"](.+?)[”"]/)
+    : undefined;
+  const template = programmeMatch
+    ? {
+      ...baseTemplate,
+      examples: [`Found: ${issue.context || 'programme name'}`, `Approved: ${programmeMatch[1]}`] as [string, string],
+    }
+    : baseTemplate;
   const validityValue = issue.rule === 'DQ-VALIDITY'
     ? issue.context?.match(/Measure:\s*([^·]+).*?Value:\s*([^·]+)/)
     : undefined;

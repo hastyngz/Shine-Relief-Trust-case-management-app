@@ -4,6 +4,7 @@ import { formatMWK, formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
 import { useVisualSettings } from '../contexts/VisualSettingsContext';
 import { canAccessManagementDashboard } from '../services/managementAnalytics';
+import { outstandingExpenseSummary } from '../services/financialCalculations';
 import { PROGRAMMES, ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from '../services/programmeSummary';
 import { PROGRAMME_ICONS } from './Programmes/programmeIcons';
@@ -149,6 +150,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Total expenditure
   const totalExpenditure = db.expenses.reduce((sum, exp) => sum + exp.totalCost, 0);
+  const outstandingExpenses = outstandingExpenseSummary(db.expenses);
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const taskItems = db.caseActions || [];
@@ -262,7 +264,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Primary KPI Grid: Girls & Houses Breakdown */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Total Girls Card */}
         <div
           onClick={() => onNavigateToGirlsList()}
@@ -351,6 +353,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span className="text-emerald-700 font-semibold">{db.expenses.length} Tracked</span>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const expense = db.expenses.find((item) => item.paymentStatus === 'Payment Outstanding'
+              && db.households.some((household) => household.id === item.householdId));
+            if (expense) onNavigateToHouse(expense.householdId);
+            else onNavigateToHousesList();
+          }}
+          className="shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-all group"
+        >
+          <span className="flex items-center justify-between">
+            <span className="dashboard-stat-label text-xs font-bold text-amber-900 uppercase tracking-wider">Payments Outstanding</span>
+            <span className="dashboard-stat-icon w-8 h-8 rounded-lg bg-white text-amber-800 flex items-center justify-center group-hover:bg-amber-800 group-hover:text-white transition-colors">
+              <Banknote className="w-4 h-4" />
+            </span>
+          </span>
+          <span className="block dashboard-stat-number text-lg sm:text-xl font-black text-amber-950 mt-2">{formatMWK(outstandingExpenses.amount)}</span>
+          <span className="mt-2 block border-t border-amber-200 pt-2 text-[11px] font-semibold text-amber-900">{outstandingExpenses.count} unpaid {outstandingExpenses.count === 1 ? 'expense' : 'expenses'} · Review expenses</span>
+        </button>
       </div>
 
       <section aria-label="Programmes" className="space-y-3">

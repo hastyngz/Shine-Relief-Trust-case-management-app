@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { qualityScores, runQualityRules } from '../src/services/qualityRules';
 import { qualityMessage, qualityMessageCatalogue } from '../src/services/qualityMessages';
+import { toggleQualityGroup } from '../src/components/QualityCheckPanel';
 
 const ruleCases: Array<[string, unknown]> = [
-  ['QUANT-01', { finalReport: true, narrativeSections: [{ text: 'Activity delivery was completed.' }] }],
+  ['QUANT-01', { finalReport: true, narrativeSections: [{ text: 'Several girls participated in group sessions.' }] }],
   ['QUANT-02', { narrativeSections: [{ text: 'The girls participated in various activities.' }] }],
-  ['QUANT-03', { finalReport: true, activities: [{ title: 'Group sessions' }] }],
+  ['QUANT-03', { finalReport: true, activities: [{ id: 'session-activity', description: 'Children attended group sessions.' }] }],
   ['QUANT-04', { results: [{ target: 100, actual: 40 }] }],
   ['QUANT-05', { narrativeSections: [{ text: '99 learners attended.' }], results: [{ target: 100, actual: 12 }] }],
   ['QUANT-06', { options: { now: '2026-10-04' }, results: [{ actual: 3, evidenceRequired: true, verificationStatus: 'unverified', evidenceDate: '2026-01-01' }] }],
@@ -13,8 +14,8 @@ const ruleCases: Array<[string, unknown]> = [
   ['IMPACT-02', { narrativeSections: [{ text: 'Attendance improved during the programme.' }] }],
   ['IMPACT-03', { narrativeSections: [{ text: 'Attendance improved to 60%.' }] }],
   ['BASELINE-01', { narrativeSections: [{ text: 'Since the start, attendance increased.' }], indicators: [{ name: 'Attendance', change: 'increased' }] }],
-  ['DQ-VALIDITY', { dataQuality: { validity: 'invalid' } }],
-  ['DQ-RELIABILITY', { indicators: [{ id: 'i1', method: 'survey' }, { id: 'i1', method: 'interview' }] }],
+  ['DQ-VALIDITY', { results: [{ id: 'validity-result', actual: 1, validity: 'invalid' }] }],
+  ['DQ-RELIABILITY', { indicators: [{ id: 'i1', actual: 1, method: 'survey' }, { id: 'i1', actual: 2, method: 'interview' }] }],
   ['DQ-TIMELINESS', { results: [{ actual: 2 }] }],
   ['DQ-PRECISION', { results: [{ actual: 12.5 }] }],
   ['DQ-INTEGRITY', { results: [{ actual: 2, createdBy: 'staff-1', verifiedBy: 'staff-1' }] }],
@@ -28,7 +29,7 @@ const ruleCases: Array<[string, unknown]> = [
   ['NARRATIVE-VOICE-01', { narrativeSections: [{ text: 'We delivered support and the team recorded outcomes.' }] }],
   ['NARRATIVE-TENSE-01', { narrativeSections: [{ text: 'The team was active and the programme is active.' }] }],
   ['NARRATIVE-TRUNCATED-01', { narrativeSections: [{ text: 'The group completed the activity and then' }] }],
-  ['NARRATIVE-PROGRAMME-01', { options: { programmeNames: ['Early Years Programme'] }, narrativeSections: [{ text: 'Early activities reached 10 learners.' }] }],
+  ['NARRATIVE-PROGRAMME-01', { options: { programmeNames: ['Early Years'] }, narrativeSections: [{ text: 'Early childhood activities reached 10 learners.' }] }],
   ['NARRATIVE-SECTION-01', { options: { requiredSections: ['Executive summary'] }, narrativeSections: [{ title: 'Results', text: 'Five learners attended.' }] }],
   ['NARRATIVE-ORDER-01', { options: { requiredSections: ['Summary', 'Results'] }, narrativeSections: [{ title: 'Results' }, { title: 'Summary' }] }],
   ['NARRATIVE-HEADING-01', { narrativeSections: [{ text: 'Content before heading.', headingAfterContent: true }] }],
@@ -66,6 +67,12 @@ for (const [rule, template] of Object.entries(qualityMessageCatalogue())) {
     if (typeof value === 'string') assert.ok(!bannedMessageWords.test(value), `${rule} contains technical wording: ${value}`);
     else for (const example of value) assert.ok(!bannedMessageWords.test(example), `${rule} contains technical wording: ${example}`);
   }
+  let openGroup = toggleQualityGroup(null, 'quant-02');
+  assert.equal(openGroup, 'quant-02', 'the first click opens the issue group');
+  openGroup = toggleQualityGroup(openGroup, 'quant-02');
+  assert.equal(openGroup, null, 'the second click closes the issue group');
+  openGroup = toggleQualityGroup(openGroup, 'quant-02');
+  assert.equal(openGroup, 'quant-02', 'the third click opens the issue group again');
 }
 for (const [rule] of ruleCases) {
   assert.ok(qualityMessageCatalogue()[rule], `missing plain-language message for ${rule}`);
@@ -86,6 +93,23 @@ const stableTargetIssue = runQualityRules({
   narrativeSections: [{ id: 'preview-stable-42', text: 'The girls participated in various activities.' }],
 }).find((issue) => issue.rule === 'QUANT-02');
 assert.equal(stableTargetIssue?.target?.id, 'preview-stable-42');
+const ordinaryCaseNotes = runQualityRules({
+  narrativeSections: [
+    { id: 'travel-note', text: 'Margaret travelled to a school.' },
+    { id: 'school-change-note', text: 'Margaret changed school from X to Y.' },
+    { id: 'person-detected-note', text: 'A person was identified during the visit.' },
+  ],
+  activities: [
+    { id: 'travel-activity', description: 'Margaret travelled to a school.' },
+    { id: 'school-change-activity', description: 'Margaret changed school from X to Y.' },
+  ],
+  results: [{ id: 'ordinary-event', title: 'A person was identified during the visit.' }],
+});
+assert.ok(!ordinaryCaseNotes.some((issue) => ['QUANT-01', 'QUANT-02', 'QUANT-03', 'DQ-VALIDITY', 'DQ-RELIABILITY'].includes(issue.rule)),
+  'ordinary case-management events and non-numerical records must not be flagged for missing counts or checks');
+assert.ok(runQualityRules({
+  narrativeSections: [{ id: 'genuine-count', text: 'Cooperative learning: The girls participated in cooperative learning in September.' }],
+}).some((issue) => issue.rule === 'QUANT-01'), 'genuine activities that need counts remain flagged');
 const rebuiltActivityText = 'In September 2026, 8 girls took part in 6 cooperative learning sessions at Zomba.';
 assert.ok(!runQualityRules({
   narrativeSections: [{ id: 'preview-stable-42', text: rebuiltActivityText }],
@@ -122,7 +146,7 @@ const sensitiveFixture = {
   options: { now: '2026-10-04T00:00:00.000Z', staleAfterDays: 45, maxReadingGrade: 8, ukSpelling: true },
   narrativeSections: [{
     id: 'section-1',
-    text: 'Several participants improved greatly after training. 60% improved. We reached 20 participants, although the recorded result is 12. The program was very successful.',
+    text: 'Several participants attended training sessions. 60% improved. We reached 20 participants, although the recorded result is 12. The program was very successful.',
   }],
   activities: [{ id: 'activity-1', title: 'Workshop sessions', target: 10, actual: 4 }],
   results: [{

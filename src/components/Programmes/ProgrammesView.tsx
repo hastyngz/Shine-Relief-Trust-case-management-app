@@ -1,7 +1,7 @@
 import React, { FormEvent, useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Sprout } from 'lucide-react';
 import { AppDatabase, ProgrammeLogRecord, ProgrammeLogType } from '../../types';
-import { PROGRAMMES, PROGRAMME_BY_ID, ProgrammeDefinition, ProgrammeId } from '../../data/programmes';
+import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeDefinition, ProgrammeId } from '../../data/programmes';
 import { addProgrammeLog } from '../../utils/storage';
 import { formatMWK } from '../../utils/export';
 import { incomeTotals, logsForProgramme, productionByUnit, startBadge, summariseProgramme } from '../../services/programmeSummary';
@@ -84,6 +84,24 @@ function ProgrammesHub({ db, onOpenProgramme }: Pick<ProgrammesViewProps, 'db' |
           </div>
         </section>
       ))}
+      {LEGACY_PROGRAMMES.length > 0 && (
+        <section aria-label="Historical programme records" className="space-y-3">
+          <h2 className="border-b border-stone-200 pb-2 text-sm font-bold text-stone-700">Historical records</h2>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {LEGACY_PROGRAMMES.map((programme) => (
+              <button
+                type="button"
+                key={programme.id}
+                onClick={() => onOpenProgramme(programme.id)}
+                className="rounded-xl border border-stone-200 bg-stone-50 p-5 text-left hover:border-teal-700"
+              >
+                <span className="block font-bold text-stone-950">{programme.name}</span>
+                <span className="mt-1 block text-xs text-stone-600">{programme.tagline}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -115,7 +133,7 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
   const Icon = PROGRAMME_ICONS[programme.id];
   const logs = logsForProgramme(db, programme.id);
   const summary = summariseProgramme(db, programme.id);
-  const isIncomeProgramme = programme.id === 'fish-chicken' || programme.id === 'rice-maize-mill' || programme.id === 'tomato-farming';
+  const isIncomeProgramme = ['fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(programme.id);
 
   return (
     <div className="space-y-7 pb-12">
@@ -156,6 +174,7 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
           logs={logs}
           auditActor={props.auditActor}
           isViewOnly={props.isViewOnly}
+          allowAdd={programme.id !== 'fish-chicken'}
           onRefresh={props.onRefresh}
         />
       )}
@@ -310,12 +329,14 @@ function RecordsSection({
   logs,
   auditActor,
   isViewOnly,
+  allowAdd,
   onRefresh,
 }: {
   programme: ProgrammeDefinition;
   logs: ProgrammeLogRecord[];
   auditActor: string;
   isViewOnly: boolean;
+  allowAdd: boolean;
   onRefresh: () => void;
 }) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -361,7 +382,8 @@ function RecordsSection({
 
   return (
     <Section title="Records">
-      {!isViewOnly && (
+      {!allowAdd && <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">These combined records are kept for reference. New entries should be recorded under Fish Farming or Chicken Farming.</p>}
+      {!isViewOnly && allowAdd && (
         <form onSubmit={submit} className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
           <h3 className="flex items-center gap-2 text-sm font-bold text-stone-900"><Plus className="h-4 w-4 text-teal-800" />Add record</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">

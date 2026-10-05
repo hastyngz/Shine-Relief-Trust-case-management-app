@@ -1,5 +1,6 @@
 import {
   BudgetItem,
+  HouseholdExpense,
   PayrollPaymentStatus,
   SalaryHistoryRecord,
   SalaryFrequency,
@@ -54,6 +55,14 @@ export interface BudgetLineTotals {
   monthly: Record<number, number>;
   programme: Record<string, number>;
   category: Record<string, number>;
+}
+
+export function outstandingExpenseSummary(expenses: HouseholdExpense[]): { count: number; amount: number } {
+  const outstanding = expenses.filter((expense) => expense.paymentStatus === 'Payment Outstanding');
+  return {
+    count: outstanding.length,
+    amount: outstanding.reduce((total, expense) => total + (expense.amountDue ?? expense.totalCost), 0),
+  };
 }
 
 function parseDate(value: string, name: string): Date {

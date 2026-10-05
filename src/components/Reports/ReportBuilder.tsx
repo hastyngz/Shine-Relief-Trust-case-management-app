@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { canAccessManagementDashboard } from '../../services/managementAnalytics';
 import { assembleSponsorReport, type SponsorReportAudience } from '../../services/sponsorReport';
 import { generateReportNarrative } from '../../services/reportNarrative';
-import { PROGRAMMES, type ProgrammeId } from '../../data/programmes';
+import { LEGACY_PROGRAMMES, PROGRAMMES, type ProgrammeId } from '../../data/programmes';
 import { generateWordReport, reviewReportQuality, type ReportConfig } from '../../services/reportGenerators';
 import { formatMWK } from '../../utils/export';
 import { qualityScores } from '../../services/qualityRules';
@@ -367,6 +367,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
             <select className="field mt-1 w-full" value={programmeId} onChange={(event) => setProgrammeId(event.target.value as 'ALL' | ProgrammeId)}>
               <option value="ALL">All programmes</option>
               {PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {LEGACY_PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
           <label className="text-xs font-semibold text-stone-600">Audience

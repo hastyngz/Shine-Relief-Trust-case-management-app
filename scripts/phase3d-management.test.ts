@@ -163,7 +163,7 @@ const categoryExpenseReport = buildManagementReportRows('expenditure-category', 
 } as any, {});
 assert.deepEqual(categoryExpenseReport.rows, [['Food', 2, 150], ['Repairs', 1, 25]]);
 const managementWorkbook = XLSX.read(generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
-assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data']);
+assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data', 'Quality Issues']);
 assert.equal(managementWorkbook.Sheets['Report Data']['J2']?.v, 20);
 assert.ok(managementWorkbook.Sheets['Report Data']['!autofilter']);
 
@@ -328,7 +328,7 @@ assert.deepEqual(Array.from(wordBytes.slice(0, 2)), [0x50, 0x4b]);
 assert.ok(wordWithAttachmentReferences.size > 0);
 assert.ok(excelReport.byteLength > 0 || excelReport.length > 0);
 const selectedWorkbook = XLSX.read(excelReport, { type: 'array' });
-assert.deepEqual(selectedWorkbook.SheetNames, ['Executive Summary']);
+assert.deepEqual(selectedWorkbook.SheetNames, ['Executive Summary', 'Quality Issues']);
 
 const budgetWorkbookBytes = generateExcelWorkbook(reportDb, {
   ...reportConfig,

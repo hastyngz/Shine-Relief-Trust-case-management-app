@@ -463,9 +463,14 @@ export interface HouseholdExpense {
   category: ExpenseCategory;
   itemDescription: string;
   quantity: string;
+  unit?: string;
   unitCost: number; // MWK
   totalCost: number; // MWK
   supplier?: string;
+  supplierContactPerson?: string;
+  supplierPhone?: string;
+  supplierEmail?: string;
+  supplierAddress?: string;
   notes?: string;
   createdAt: string;
   updatedAt?: string;
@@ -477,6 +482,21 @@ export interface HouseholdExpense {
   programme?: string;
   budgetCategory?: string;
   subcategory?: string;
+  invoiceReference?: string;
+  paymentStatus?: 'Paid' | 'Payment Outstanding';
+  amountDue?: number;
+  dueDate?: string;
+  datePaid?: string;
+  paymentMethod?: string;
+  paymentReference?: string;
+  auditTrail?: Array<{
+    action: 'created' | 'updated' | 'payment-status-changed';
+    by: string;
+    at: string;
+    previousStatus?: 'Paid' | 'Payment Outstanding';
+    newStatus?: 'Paid' | 'Payment Outstanding';
+    changes?: Array<{ field: string; before?: unknown; after?: unknown }>;
+  }>;
   girlId?: string;
   activityId?: string;
 }
@@ -767,7 +787,7 @@ export interface ProcurementList {
 
 export interface ProjectProjection {
   id: string;
-  programmeId: 'fish-chicken' | 'rice-maize-mill' | 'tomato-farming';
+  programmeId: 'fish-farming' | 'chicken-farming' | 'fish-chicken' | 'rice-maize-mill' | 'tomato-farming';
   period: string;
   revenueMWK: number;
   costLines: Array<{ label: string; amountMWK?: number; status: 'priced' | 'unpriced' }>;

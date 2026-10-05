@@ -29,6 +29,7 @@ import {
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
+import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
   persistGirlToFirestore,
   deleteGirlFromFirestore,
@@ -566,20 +567,40 @@ export function addExpense(
 ): HouseholdExpense {
   const db = getDatabase();
   const now = new Date().toISOString();
-  const newItem: HouseholdExpense = {
+  const actor = auditActor || item.createdBy || 'SHINE Staff';
+  const newItem = withExpenseCreationAudit({
     ...item,
     id: generateFollowUpId('EXP'),
     createdAt: now,
     updatedAt: now,
-    createdBy: auditActor || item.createdBy || 'SHINE Staff',
+    createdBy: actor,
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
-  };
+  }, actor, now);
   db.expenses.unshift(newItem);
   saveDatabase(db);
   persistExpenseToFirestore(newItem).catch((err) =>
     console.error('Failed to persist expense to Firestore:', err)
   );
   return newItem;
+}
+
+export function updateExpense(
+  id: string,
+  changes: Partial<Omit<HouseholdExpense, 'id' | 'householdId' | 'createdAt'>>,
+  auditActor?: string,
+): HouseholdExpense | undefined {
+  const db = getDatabase();
+  const existing = db.expenses.find((expense) => expense.id === id);
+  if (!existing) return undefined;
+  const now = new Date().toISOString();
+  const actor = auditActor || 'SHINE Staff';
+  const updatedItem = updateExpenseWithAudit(existing, changes, actor, now);
+  db.expenses = db.expenses.map((expense) => expense.id === id ? updatedItem : expense);
+  saveDatabase(db);
+  persistExpenseToFirestore(updatedItem).catch((err) =>
+    console.error('Failed to persist expense update to Firestore:', err)
+  );
+  return updatedItem;
 }
 
 export function addHouseholdActivity(

@@ -19,7 +19,7 @@ import { calculateBudgetForecast, calculateFeedingCostInsight } from '../service
 import { formatMWK } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
 import type { SalaryHistoryRecord, StaffUser } from '../types';
-import { PROGRAMMES, type ProgrammeId } from '../data/programmes';
+import { LEGACY_PROGRAMMES, PROGRAMMES, type ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from '../services/programmeSummary';
 import { buildNeedsAttention } from '../services/attentionService';
 
@@ -197,7 +197,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     () => buildNeedsAttention(permittedDb, today, canViewCaseReviews),
     [permittedDb, today, canViewCaseReviews]
   );
-  const programmePerformance = useMemo(() => PROGRAMMES
+  const programmePerformance = useMemo(() => [...PROGRAMMES, ...LEGACY_PROGRAMMES]
     .filter((item) => programmeId === 'ALL' || item.id === programmeId)
     .map((item) => {
       const summary = summariseProgramme(permittedDb, item.id);
@@ -217,7 +217,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
           const delta = log.entryType === 'Sale' ? amount : log.entryType === 'Expense' || log.entryType === 'Input' ? -amount : 0;
           incomeByYear.set(year, (incomeByYear.get(year) || 0) + delta);
         });
-      const yearlyIncome = ['fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(item.id)
+      const yearlyIncome = ['fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(item.id)
         ? Array.from({ length: Math.max(0, new Date().getFullYear() - (item.startYear || new Date().getFullYear()) + 1) }, (_, index) => {
             const year = (item.startYear || new Date().getFullYear()) + index;
             return { year, net: incomeByYear.get(year) || 0 };
@@ -336,7 +336,7 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
           </label>
           <label className="text-[11px] text-stone-600">Programme
             <select className="field mt-1 w-full" value={programmeId} onChange={(event) => setProgrammeId(event.target.value as 'ALL' | ProgrammeId)}>
-              <option value="ALL">All portfolio programmes</option>{PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              <option value="ALL">All portfolio programmes</option>{PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}{LEGACY_PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
           <label className="text-[11px] text-stone-600">Household

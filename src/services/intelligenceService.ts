@@ -1,5 +1,5 @@
 import { AppDatabase, BudgetItem, FeedingProgramLog, MarketPriceRecord, WhatIfScenario } from '../types';
-import { PROGRAMMES } from '../data/programmes';
+import { PROGRAMME_BY_ID } from '../data/programmes';
 
 export interface IntelligenceSearchResult {
   recordType: 'girl' | 'household' | 'meeting' | 'schedule' | 'workplan' | 'marketPrice' | 'feedingLog' | 'programmeLog';
@@ -93,7 +93,7 @@ export function searchOperationalRecords(db: AppDatabase, query: string, limit =
     }
   });
   (db.programmeLogs || []).forEach((log) => {
-    const programme = PROGRAMMES.find((item) => item.id === log.programmeId);
+    const programme = PROGRAMME_BY_ID[log.programmeId as keyof typeof PROGRAMME_BY_ID];
     const programmeName = programme?.name || log.programmeId;
     if (matches([log.id, programmeName, log.entryType, log.description, log.date, log.notes])) {
       results.push({

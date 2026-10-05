@@ -1,3 +1,5 @@
+import { normalizeProgrammeNames } from '../data/programmes';
+
 export interface SafeTextChange {
   field: 'summary' | 'originalSnippet';
   before: string;
@@ -28,17 +30,6 @@ const MONTH_HEADER_FIXES: Array<[RegExp, string]> = [
   [/^(\s*)SEPTMBER(\s*:?\s*)$/i, '$1September$2'],
   [/^(\s*)SEPT(\s*:?\s*)$/i, '$1September$2'],
   [/^(\s*)JULY(\s*:?\s*)$/i, '$1July$2'],
-];
-const PROGRAMME_ALIASES: Array<[string, string]> = [
-  ['early childhood', 'Early Years'],
-  ['early years programme', 'Early Years'],
-  ['shine village', 'Shine Village'],
-  ['shine children’s home', 'Child House'],
-  ["shine children's home", 'Child House'],
-  ['relief and family preservation', 'Relief & Family Preservation'],
-  ['fish and chicken farming', 'Fish & Chicken Farming'],
-  ['maize and rice mill', 'Maize & Rice Mill'],
-  ['tomato farming', 'Tomato Farming'],
 ];
 const SENTENCE_START_WORDS = new Set([
   'the', 'our', 'we', 'in', 'during', 'staff', 'girls', 'children', 'learners',
@@ -151,10 +142,7 @@ function correctText(value: string): { value: string; reason: string[] } {
   }
 
   const programmeNames = text;
-  for (const [alias, approvedName] of PROGRAMME_ALIASES) {
-    const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    text = text.replace(new RegExp(`\\b${escapedAlias}\\b`, 'gi'), approvedName);
-  }
+  text = normalizeProgrammeNames(text);
   if (programmeNames !== text) reasons.push('Used the approved programme name');
 
   const ukSpelling = text.replace(/\borganization\b/gi, (word) =>

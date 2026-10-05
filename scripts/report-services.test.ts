@@ -26,7 +26,9 @@ const baseOptions = {
 };
 const emptyReport = assembleSponsorReport(emptyDb, baseOptions);
 assert.equal(emptyReport.girlsSupported, 0);
-assert.equal(emptyReport.programmes.length, 8);
+assert.equal(emptyReport.programmes.length, 10);
+assert.ok(emptyReport.programmes.some((programme) => programme.name === 'Fish Farming'));
+assert.ok(emptyReport.programmes.some((programme) => programme.name === 'Chicken Farming'));
 assert.equal(emptyReport.budgeted, 0);
 
 const sourceDb: AppDatabase = {

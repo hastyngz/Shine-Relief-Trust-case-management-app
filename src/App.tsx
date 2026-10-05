@@ -28,6 +28,7 @@ import {
   addRentPayment,
   deleteRentPayment,
   addExpense,
+  updateExpense,
   deleteExpense,
   addHouseholdActivity,
   deleteHouseholdActivity,
@@ -70,7 +71,7 @@ import { DataImportWizard } from './components/Import/DataImportWizard';
 import { ContactsView } from './components/Contacts/ContactsView';
 import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
 import { ProgrammesView } from './components/Programmes/ProgrammesView';
-import { PROGRAMMES, ProgrammeId } from './data/programmes';
+import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from './data/programmes';
 import type { QualityIssue } from './services/qualityRules';
 import {
   triggerDataChangeNotification,
@@ -149,7 +150,7 @@ function parseHash(): {
 
   if (hash === 'programmes' || hash.startsWith('programmes/')) {
     const routeId = hash.slice('programmes/'.length);
-    const programmeId = routeId && PROGRAMMES.some((programme) => programme.id === routeId)
+    const programmeId = routeId && [...PROGRAMMES, ...LEGACY_PROGRAMMES].some((programme) => programme.id === routeId)
       ? routeId as ProgrammeId
       : null;
     return { view: 'programmes', activeTab: 'programmes', programmeId };
@@ -1008,6 +1009,43 @@ function AppContent() {
     showToast('Expense entry deleted.');
   };
 
+  const handleMarkExpensePaid = (
+    id: string,
+    payment: Pick<HouseholdExpense, 'datePaid' | 'paymentMethod' | 'paymentReference'>,
+  ) => {
+    if (isViewOnly) {
+      showToast('View-only accounts cannot change payment status.');
+      return;
+    }
+    const existing = db.expenses.find((expense) => expense.id === id);
+    if (!existing) {
+      showToast('This expense could not be found. Refresh and try again.');
+      return;
+    }
+    if ((existing.paymentStatus || 'Paid') === 'Paid') {
+      showToast('This expense is already marked as paid.');
+      return;
+    }
+    updateExpense(id, { ...payment, paymentStatus: 'Paid' }, auditActor);
+    showToast('Payment recorded. The original expense has been updated.');
+  };
+
+  const handleUpdateExpense = (
+    id: string,
+    changes: Partial<Omit<HouseholdExpense, 'id' | 'householdId' | 'createdAt'>>,
+  ) => {
+    if (isViewOnly) {
+      showToast('View-only accounts cannot edit expenses.');
+      return;
+    }
+    if (!updateExpense(id, changes, auditActor)) {
+      showToast('This expense could not be found. Refresh and try again.');
+      return;
+    }
+    reloadData();
+    showToast('Expense details updated and recorded in the audit history.');
+  };
+
   const handleDeleteActivity = (id: string) => {
     if (isViewOnly) {
       showToast('View-only accounts cannot delete activities.');
@@ -1441,6 +1479,8 @@ function AppContent() {
             onDeleteHousehold={handleDeleteHousehold}
             onDeleteRentPayment={handleDeleteRentPayment}
             onDeleteExpense={handleDeleteExpense}
+            onMarkExpensePaid={handleMarkExpensePaid}
+            onUpdateExpense={handleUpdateExpense}
             onDeleteActivity={handleDeleteActivity}
             onAddRentPayment={handleStartRentPayment}
             onAddExpense={handleStartExpense}

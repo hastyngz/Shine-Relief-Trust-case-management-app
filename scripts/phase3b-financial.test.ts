@@ -8,7 +8,9 @@ import {
   calculatePlannedAmount,
   filterPayrollRecords,
   FINANCIAL_MONTHS,
+  outstandingExpenseSummary,
 } from '../src/services/financialCalculations';
+import { updateExpenseWithAudit, withExpenseCreationAudit } from '../src/services/expenseAudit';
 
 const salary = (id: string, employeeId: string, effectiveDate: string, salaryAmount: number): SalaryHistoryRecord => ({
   id, employeeId, effectiveDate, salaryAmount, salaryFrequency: 'Monthly', reasonForChange: 'Fixture',
@@ -48,6 +50,51 @@ assert.equal(totals.category.Rent, 2000);
 assert.equal(totals.programme.Homes, 5000);
 assert.deepEqual(FINANCIAL_MONTHS.slice(0, 3), ['January', 'February', 'March']);
 assert.equal(calculateBudgetVariance(100, 0).status, 'Within budget');
+assert.deepEqual(outstandingExpenseSummary([
+  { id: 'legacy-paid', householdId: 'house-1', date: '2026-01-01', category: 'Food', itemDescription: 'Legacy', quantity: '1', unitCost: 500, totalCost: 500, createdAt: '2026-01-01' },
+  { id: 'due-1', householdId: 'house-1', date: '2026-01-02', category: 'Food', itemDescription: 'Flour', quantity: '2', unitCost: 800, totalCost: 1600, paymentStatus: 'Payment Outstanding', amountDue: 1000, createdAt: '2026-01-02' },
+  { id: 'paid-2', householdId: 'house-1', date: '2026-01-03', category: 'Food', itemDescription: 'Oil', quantity: '1', unitCost: 300, totalCost: 300, paymentStatus: 'Paid', createdAt: '2026-01-03' },
+]), { count: 1, amount: 1000 });
+const unpaidExpense = withExpenseCreationAudit({
+  id: 'one-expense',
+  householdId: 'house-1',
+  date: '2026-09-20',
+  category: 'Other',
+  itemDescription: 'School supplies',
+  quantity: '4',
+  unitCost: 1000,
+  totalCost: 4000,
+  supplier: 'Stationery supplier',
+  paymentStatus: 'Payment Outstanding',
+  amountDue: 4000,
+  createdAt: '2026-09-20T00:00:00.000Z',
+}, 'Staff One', '2026-09-20T00:00:00.000Z');
+const paidExpense = updateExpenseWithAudit(unpaidExpense, {
+  paymentStatus: 'Paid',
+  datePaid: '2026-10-01',
+  paymentMethod: 'Bank transfer',
+  paymentReference: 'TX-123',
+}, 'Manager One', '2026-10-01T10:00:00.000Z');
+assert.equal(paidExpense.id, unpaidExpense.id, 'payment updates the existing expense rather than creating a duplicate');
+assert.equal(paidExpense.date, unpaidExpense.date, 'payment retains the original expense date');
+assert.equal(paidExpense.supplier, unpaidExpense.supplier, 'payment retains supplier details');
+assert.equal(paidExpense.paymentStatus, 'Paid');
+assert.equal(paidExpense.auditTrail?.length, 2);
+assert.deepEqual(
+  ((paidExpense.auditTrail || [])[1]),
+  {
+    action: 'payment-status-changed',
+    by: 'Manager One',
+    at: '2026-10-01T10:00:00.000Z',
+    previousStatus: 'Payment Outstanding',
+    newStatus: 'Paid',
+    changes: [
+      { field: 'datePaid', after: '2026-10-01' },
+      { field: 'paymentMethod', after: 'Bank transfer' },
+      { field: 'paymentReference', after: 'TX-123' },
+    ],
+  },
+);
 assert.equal(calculateBudgetVariance(100, 100).status, 'Approaching budget');
 assert.equal(calculateBudgetVariance(100, 50).remaining, 50);
 assert.equal(calculateBudgetVariance(100, 120).variancePercent, 20);
