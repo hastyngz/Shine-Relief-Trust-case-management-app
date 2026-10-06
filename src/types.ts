@@ -223,6 +223,9 @@ export type CaseActionSourceType =
   | 'healthFollowUp'
   | 'familyFollowUp'
   | 'householdActivity'
+  | 'programme'
+  | 'programmeLog'
+  | 'importBatch'
   | 'rentPayment'
   | 'expense'
   | 'safeguarding'
@@ -400,6 +403,7 @@ export interface GirlLeaveRecord {
 }
 
 export type ProgrammeLogType = 'Production' | 'Sale' | 'Expense' | 'Input' | 'Distribution' | 'Family support' | 'Activity' | 'Note';
+export type ProgrammePaymentStatus = 'paid' | 'partial' | 'credit';
 
 export interface ProgrammeLogRecord {
   id: string;
@@ -410,6 +414,10 @@ export interface ProgrammeLogRecord {
   quantity?: number;
   unit?: string;
   amountMWK?: number;
+  cashAmountMWK?: number;
+  paymentStatus?: ProgrammePaymentStatus;
+  counterpartyContactId?: string;
+  counterpartyName?: string;
   beneficiaries?: number;
   notes?: string;
   createdAt: string;
@@ -554,6 +562,9 @@ export type AttachmentTargetType =
   | 'healthFollowUp'
   | 'familyFollowUp'
   | 'householdActivity'
+  | 'programme'
+  | 'programmeLog'
+  | 'importBatch'
   | 'rentPayment'
   | 'expense';
 
@@ -1106,6 +1117,7 @@ export type ContactCategory =
   | 'government'
   | 'donor'
   | 'supplier'
+  | 'customer'
   | 'volunteer'
   | 'guest speaker'
   | 'health facility'
@@ -1329,6 +1341,7 @@ export interface ImportPreviewItem {
   actionProposed?: string;
   proposedGrouping?: string;
   photoBase64?: string;
+  photoOriginalBase64?: string;
   photoContentType?: string;
   photoCaption?: string;
   contactMatchStatus?: 'linked' | 'possible' | 'new';
@@ -1493,6 +1506,9 @@ export interface StaffMessage {
     | 'healthFollowUp'
     | 'familyFollowUp'
     | 'activity'
+    | 'programme'
+    | 'programmeLog'
+    | 'importBatch'
     | 'rentPayment'
     | 'expense';
   relatedRecordId?: string;
@@ -1528,6 +1544,9 @@ export interface StaffNotification {
     | 'healthFollowUp'
     | 'familyFollowUp'
     | 'activity'
+    | 'programme'
+    | 'programmeLog'
+    | 'importBatch'
     | 'rentPayment'
     | 'expense'
     | 'conversation';

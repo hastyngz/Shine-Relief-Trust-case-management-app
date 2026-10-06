@@ -25,6 +25,7 @@ export interface ReportMetadata {
 export interface ExtractedImageItem {
   id: string;
   base64: string;
+  previewBase64: string;
   contentType: string;
   caption?: string;
   altText?: string;
@@ -207,7 +208,8 @@ async function extractDocumentFromZip(buffer: ArrayBuffer): Promise<{
     const mime = extension === 'png' ? 'image/png' : extension === 'gif' ? 'image/gif' : extension === 'webp' ? 'image/webp' : 'image/jpeg';
     extractedImages.push({
       id: `zip_img_${relationshipId}`,
-      base64: await createImagePreview(bytes, mime),
+      base64: `data:${mime};base64,${uint8ArrayToBase64(bytes)}`,
+      previewBase64: await createImagePreview(bytes, mime),
       contentType: mime,
       caption: caption || `Embedded image from ${targetPath}`,
       altText: caption || `Embedded image from ${targetPath}`,
@@ -1538,7 +1540,8 @@ export async function parseDocxProgressReport(
       title: `Pictorial Highlight ${i + 1}`,
       originalSnippet: img.caption || `Embedded photograph from section: ${img.sectionHeading || 'Report'}`,
       actionProposed: 'Import Photographic Highlight to Storage / Attachments',
-      photoBase64: img.base64,
+      photoBase64: img.previewBase64,
+      photoOriginalBase64: img.base64,
       photoContentType: img.contentType,
       photoCaption: img.caption,
       extractedData: {
@@ -1546,9 +1549,10 @@ export async function parseDocxProgressReport(
         fileSize: Math.round(img.base64.length * 0.75),
         contentType: img.contentType,
         caption: img.caption || `Photograph from ${metadata.reportTitle} (${metadata.reportingPeriod})`,
-        category: 'Group Activity',
-        targetType: 'householdActivity',
-        targetId: db.households[0]?.id || 'SH-01',
+        photoCategory: 'Group Activity',
+        photoConsentConfirmed: false,
+        targetType: 'importBatch',
+        targetId: '__IMPORT_BATCH__',
         date: new Date().toISOString().slice(0, 10),
       },
       isHistorical: false,

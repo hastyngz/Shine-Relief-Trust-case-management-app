@@ -64,6 +64,23 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
   }, [db.contacts]);
 
   const programmes = useMemo(() => Array.from(new Set(contacts.flatMap((contact) => contact.programmes || []))).sort(), [contacts]);
+  const contactOutstandingSummary = useMemo(() => {
+    const summary = new Map<string, { receivable: number; payable: number }>();
+    for (const log of db.programmeLogs || []) {
+      if (!log.counterpartyContactId) continue;
+      const due = Math.max(0, (log.amountMWK || 0) - (log.cashAmountMWK ?? log.amountMWK ?? 0));
+      if (due <= 0) continue;
+      const current = summary.get(log.counterpartyContactId) || { receivable: 0, payable: 0 };
+      if (log.entryType === 'Sale') {
+        current.receivable += due;
+      }
+      if (log.entryType === 'Expense' || log.entryType === 'Input') {
+        current.payable += due;
+      }
+      summary.set(log.counterpartyContactId, current);
+    }
+    return summary;
+  }, [db.programmeLogs]);
   const filtered = useMemo(() => contacts.filter((contact) => {
     if (contact.archived || contact.mergedInto) return false;
     if (typeFilter !== 'all' && contact.type !== typeFilter) return false;
@@ -201,6 +218,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
   if (selected && !editing) {
     const timeline = [...(selected.interactions || [])].sort((a, b) => b.date.localeCompare(a.date));
     const mergeChoices = contacts.filter((contact) => contact.id !== selected.id && !contact.archived && !contact.mergedInto);
+    const contactBalance = contactOutstandingSummary.get(selected.id) || { receivable: 0, payable: 0 };
     return (
       <div id="contacts-view" className="mx-auto w-full max-w-5xl min-w-0 space-y-4 pb-20 md:pb-4">
         <button type="button" onClick={() => setSelected(null)} className="inline-flex items-center gap-1 text-sm font-semibold text-teal-800"><ChevronLeft className="h-4 w-4" /> Contacts</button>
@@ -218,6 +236,24 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
             {(selected.phone || []).map((phone) => <a key={phone} href={`tel:${phone.replace(/[^+\d]/g, '')}`} className="flex min-w-0 items-center gap-2 break-all text-sm font-semibold text-teal-800"><Phone className="h-4 w-4 shrink-0" />{phone}</a>)}
             {(selected.email || []).map((email) => <a key={email} href={`mailto:${email}`} className="flex min-w-0 items-center gap-2 break-all text-sm font-semibold text-teal-800"><Mail className="h-4 w-4 shrink-0" />{email}</a>)}
           </div>
+          {(contactBalance.receivable > 0 || contactBalance.payable > 0) && (
+            <div className="mt-5 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:grid-cols-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900">Receivables</p>
+                <p className="mt-1 text-lg font-black text-amber-950">MWK {contactBalance.receivable.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900">Payables</p>
+                <p className="mt-1 text-lg font-black text-amber-950">MWK {contactBalance.payable.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-900">Net</p>
+                <p className={`mt-1 text-lg font-black ${contactBalance.receivable - contactBalance.payable >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
+                  MWK {(contactBalance.receivable - contactBalance.payable).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          )}
           {!!selected.programmes?.length && <p className="mt-4 break-words text-xs text-stone-600">Programmes: {selected.programmes.join(', ')}</p>}
           {selected.notes && <p className="mt-4 whitespace-pre-wrap break-words rounded-lg bg-stone-50 p-3 text-sm leading-relaxed text-stone-700">{selected.notes}</p>}
           <p className="mt-4 text-xs text-stone-500">First seen {shownDate(selected.firstSeen)} · Last seen {shownDate(selected.lastSeen)}</p>
@@ -314,6 +350,15 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
             {contact.affiliation && <p className="mt-3 flex min-w-0 items-start gap-2 break-words text-xs text-stone-600"><Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-700" />{contact.affiliation}</p>}
             {contact.phone?.[0] && <a href={`tel:${contact.phone[0].replace(/[^+\d]/g, '')}`} className="mt-2 flex min-w-0 items-center gap-2 break-all text-xs font-semibold text-teal-800"><Phone className="h-3.5 w-3.5 shrink-0" />{contact.phone[0]}</a>}
             {contact.email?.[0] && <a href={`mailto:${contact.email[0]}`} className="mt-2 flex min-w-0 items-center gap-2 break-all text-xs font-semibold text-teal-800"><Mail className="h-3.5 w-3.5 shrink-0" />{contact.email[0]}</a>}
+            {(() => {
+              const balance = contactOutstandingSummary.get(contact.id) || { receivable: 0, payable: 0 };
+              const totalOutstanding = balance.receivable + balance.payable;
+              return totalOutstanding > 0 ? (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900">
+                  Outstanding: MWK {totalOutstanding.toLocaleString()}
+                </p>
+              ) : null;
+            })()}
             <p className="mt-3 border-t border-stone-200/70 pt-2 text-[11px] text-stone-500">Last seen {shownDate(contact.lastSeen || contact.updatedAt)}</p>
           </article>
         );

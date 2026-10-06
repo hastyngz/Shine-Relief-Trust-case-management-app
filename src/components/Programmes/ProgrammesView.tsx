@@ -1,11 +1,14 @@
 import React, { FormEvent, useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Sprout } from 'lucide-react';
-import { AppDatabase, ProgrammeLogRecord, ProgrammeLogType } from '../../types';
+import { AppDatabase, ContactCategory, ContactRecord, ProgrammeLogRecord, ProgrammeLogType, ProgrammePaymentStatus } from '../../types';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeDefinition, ProgrammeId } from '../../data/programmes';
 import { addProgrammeLog } from '../../utils/storage';
 import { formatMWK } from '../../utils/export';
 import { incomeTotals, logsForProgramme, productionByUnit, startBadge, summariseProgramme } from '../../services/programmeSummary';
 import { PROGRAMME_ICONS } from './programmeIcons';
+import { RecordAttachmentBar } from '../Attachments/RecordAttachmentBar';
+import { useAuth } from '../../contexts/AuthContext';
+import { createContact } from '../../services/contactsService';
 
 interface ProgrammesViewProps {
   db: AppDatabase;
@@ -17,6 +20,8 @@ interface ProgrammesViewProps {
   onNavigateToHouses: () => void;
   onNavigateToOperations: () => void;
   onRefresh: () => void;
+  onProgrammeLogAdded: (record: ProgrammeLogRecord, programmeName: string) => void;
+  onCreateProgrammePlan: (type: 'budget' | 'workplan', programmeId: ProgrammeId) => void;
 }
 
 export const ProgrammesView: React.FC<ProgrammesViewProps> = (props) => {
@@ -161,6 +166,35 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
         )}
       </header>
 
+      <RecordAttachmentBar
+        targetType="programme"
+        targetId={programme.id}
+        targetTitle={programme.name}
+        defaultCategory="Group Activity"
+      />
+
+      {!props.isViewOnly && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => props.onCreateProgrammePlan('budget', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
+            <Plus className="h-4 w-4" />New budget line
+          </button>
+          <button type="button" onClick={() => props.onCreateProgrammePlan('workplan', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
+            <Plus className="h-4 w-4" />New workplan
+          </button>
+        </div>
+      )}
+
+      {!props.isViewOnly && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => props.onCreateProgrammePlan('budget', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
+            <Plus className="h-4 w-4" />New budget line
+          </button>
+          <button type="button" onClick={() => props.onCreateProgrammePlan('workplan', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
+            <Plus className="h-4 w-4" />New workplan
+          </button>
+        </div>
+      )}
+
       {programme.id === 'early-years' && <EarlyYearsDetail db={db} onNavigate={props.onNavigateToOperations} />}
       {programme.id === 'bursary' && <BursaryDetail db={db} onNavigate={props.onNavigateToGirls} logs={logs} />}
       {programme.id === 'child-house' && <ChildHouseDetail db={db} onNavigate={props.onNavigateToHouses} />}
@@ -172,10 +206,12 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
         <RecordsSection
           programme={programme}
           logs={logs}
+          contacts={db.contacts || []}
           auditActor={props.auditActor}
           isViewOnly={props.isViewOnly}
           allowAdd={programme.id !== 'fish-chicken'}
           onRefresh={props.onRefresh}
+          onProgrammeLogAdded={props.onProgrammeLogAdded}
         />
       )}
     </div>
@@ -296,10 +332,14 @@ function IncomeDetail({ logs }: { logs: ProgrammeLogRecord[] }) {
   const output = productionByUnit(logs);
   return (
     <Section title="Financial and production summary">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <Stat label="Sales" value={formatMWK(totals.sales)} />
         <Stat label="Costs" value={formatMWK(totals.costs)} />
         <Stat label="Net income" value={formatMWK(totals.net)} />
+        <Stat label="Cash received" value={formatMWK(totals.cashReceived)} />
+        <Stat label="Cash paid" value={formatMWK(totals.cashPaid)} />
+        <Stat label="Customer balances due" value={formatMWK(totals.receivables)} />
+        <Stat label="Supplier balances due" value={formatMWK(totals.payables)} />
       </div>
       <div className="rounded-lg border border-stone-200 bg-white p-4">
         <h3 className="text-xs font-bold uppercase text-stone-500">Output by unit</h3>
@@ -327,18 +367,23 @@ const CHIP_COLOURS: Record<ProgrammeLogType, string> = {
 function RecordsSection({
   programme,
   logs,
+  contacts,
   auditActor,
   isViewOnly,
   allowAdd,
   onRefresh,
+  onProgrammeLogAdded,
 }: {
   programme: ProgrammeDefinition;
   logs: ProgrammeLogRecord[];
+  contacts: ContactRecord[];
   auditActor: string;
   isViewOnly: boolean;
   allowAdd: boolean;
   onRefresh: () => void;
+  onProgrammeLogAdded: (record: ProgrammeLogRecord, programmeName: string) => void;
 }) {
+  const { currentUser, staffProfile } = useAuth();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [entryType, setEntryType] = useState<ProgrammeLogType>(programme.logTypes[0] || 'Note');
   const [description, setDescription] = useState('');
@@ -348,18 +393,64 @@ function RecordsSection({
   const [beneficiaries, setBeneficiaries] = useState('');
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState('');
+  const [counterpartyContactId, setCounterpartyContactId] = useState('');
+  const [newCounterpartyName, setNewCounterpartyName] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState<ProgrammePaymentStatus>('paid');
+  const [cashAmountMWK, setCashAmountMWK] = useState('');
   const showQuantity = ['Production', 'Sale', 'Input', 'Distribution'].includes(entryType);
   const showAmount = ['Sale', 'Expense', 'Input', 'Distribution'].includes(entryType);
   const showBeneficiaries = entryType === 'Distribution' || entryType === 'Family support';
+  const isIncomeTransaction = ['Sale', 'Expense', 'Input'].includes(entryType);
+  const counterpartyCategory: ContactCategory = entryType === 'Sale' ? 'customer' : 'supplier';
+  const availableCounterparties = contacts.filter((contact) => !contact.archived && !contact.mergedInto && contact.category === counterpartyCategory);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const optionalNumbers = [quantity, amountMWK, beneficiaries].filter((value) => value.trim() !== '');
     if (!date || !description.trim() || optionalNumbers.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
       setFormError('Enter a date and description, and use zero or a positive number for each numeric field.');
       return;
     }
-    addProgrammeLog({
+    if (isIncomeTransaction && (!amountMWK.trim() || Number(amountMWK) <= 0)) {
+      setFormError('Enter the full sale, expense, or input amount.');
+      return;
+    }
+    const transactionAmount = Number(amountMWK) || 0;
+    const cashAmount = paymentStatus === 'paid'
+      ? transactionAmount
+      : paymentStatus === 'credit'
+        ? 0
+        : Number(cashAmountMWK);
+    if (isIncomeTransaction && (cashAmount < 0 || cashAmount > transactionAmount ||
+      (paymentStatus === 'partial' && (!cashAmountMWK.trim() || cashAmount <= 0 || cashAmount >= transactionAmount)))) {
+      setFormError('Cash received or paid must be less than the full amount for a partial transaction.');
+      return;
+    }
+    let counterparty = availableCounterparties.find((contact) => contact.id === counterpartyContactId);
+    if (counterpartyContactId === '__new__') {
+      if (!newCounterpartyName.trim()) {
+        setFormError(`Enter the ${entryType === 'Sale' ? 'customer' : 'supplier'} name to add it to Contacts.`);
+        return;
+      }
+      if (!currentUser) {
+        setFormError('Sign in again before creating a contact.');
+        return;
+      }
+      try {
+        counterparty = await createContact({
+          type: 'organisation',
+          name: newCounterpartyName.trim(),
+          category: counterpartyCategory,
+          aliases: [newCounterpartyName.trim()],
+          notes: '',
+          programmes: [programme.name],
+        }, { uid: currentUser.uid, name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff' });
+      } catch {
+        setFormError('The new contact could not be saved. Check your staff access and try again.');
+        return;
+      }
+    }
+    const record = addProgrammeLog({
       programmeId: programme.id,
       date,
       entryType,
@@ -367,15 +458,22 @@ function RecordsSection({
       ...(showQuantity && quantity !== '' ? { quantity: Number(quantity) } : {}),
       ...(showQuantity && unit.trim() ? { unit: unit.trim() } : {}),
       ...(showAmount && amountMWK !== '' ? { amountMWK: Number(amountMWK) } : {}),
+      ...(isIncomeTransaction ? { paymentStatus, cashAmountMWK: cashAmount } : {}),
+      ...(counterparty ? { counterpartyContactId: counterparty.id, counterpartyName: counterparty.name } : {}),
       ...(showBeneficiaries && beneficiaries !== '' ? { beneficiaries: Number(beneficiaries) } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     }, auditActor);
+    onProgrammeLogAdded(record, programme.name);
     setDescription('');
     setQuantity('');
     setUnit('');
     setAmountMWK('');
     setBeneficiaries('');
     setNotes('');
+    setCounterpartyContactId('');
+    setNewCounterpartyName('');
+    setPaymentStatus('paid');
+    setCashAmountMWK('');
     setFormError('');
     onRefresh();
   };
@@ -391,7 +489,13 @@ function RecordsSection({
               <input required type="date" value={date} onChange={(event) => setDate(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>
             <label className="space-y-1 text-xs font-semibold text-stone-700">Type
-              <select value={entryType} onChange={(event) => setEntryType(event.currentTarget.value as ProgrammeLogType)} className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+              <select value={entryType} onChange={(event) => {
+                setEntryType(event.currentTarget.value as ProgrammeLogType);
+                setCounterpartyContactId('');
+                setNewCounterpartyName('');
+                setPaymentStatus('paid');
+                setCashAmountMWK('');
+              }} className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
                 {programme.logTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </label>
@@ -404,9 +508,34 @@ function RecordsSection({
             {showQuantity && <label className="space-y-1 text-xs font-semibold text-stone-700">Unit
               <input value={unit} onChange={(event) => setUnit(event.currentTarget.value)} placeholder="kg, trays, bags..." className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>}
-            {showAmount && <label className="space-y-1 text-xs font-semibold text-stone-700">Amount (MWK)
-              <input type="number" min="0" step="any" value={amountMWK} onChange={(event) => setAmountMWK(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            {showAmount && <label className="space-y-1 text-xs font-semibold text-stone-700">{entryType === 'Sale' ? 'Sale amount (MWK)' : entryType === 'Expense' ? 'Expense amount (MWK)' : 'Amount (MWK)'}
+              <input required={isIncomeTransaction} type="number" min="0" step="any" value={amountMWK} onChange={(event) => setAmountMWK(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>}
+            {isIncomeTransaction && <>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">
+                {entryType === 'Sale' ? 'Customer' : 'Supplier'}
+                <select value={counterpartyContactId} onChange={(event) => setCounterpartyContactId(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+                  <option value="">No contact selected</option>
+                  {availableCounterparties.map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
+                  <option value="__new__">Add new {entryType === 'Sale' ? 'customer' : 'supplier'} to Contacts…</option>
+                </select>
+              </label>
+              {counterpartyContactId === '__new__' && <label className="space-y-1 text-xs font-semibold text-stone-700">
+                New {entryType === 'Sale' ? 'customer' : 'supplier'} name
+                <input required value={newCounterpartyName} onChange={(event) => setNewCounterpartyName(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>}
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Payment status
+                <select value={paymentStatus} onChange={(event) => setPaymentStatus(event.currentTarget.value as ProgrammePaymentStatus)} className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+                  <option value="paid">Paid in full</option>
+                  <option value="partial">Partially paid</option>
+                  <option value="credit">On credit</option>
+                </select>
+              </label>
+              {paymentStatus === 'partial' && <label className="space-y-1 text-xs font-semibold text-stone-700">Cash {entryType === 'Sale' ? 'received' : 'paid'} now (MWK)
+                <input required type="number" min="0" step="any" value={cashAmountMWK} onChange={(event) => setCashAmountMWK(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>}
+              {paymentStatus === 'credit' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 sm:col-span-2 lg:col-span-4">No cash {entryType === 'Sale' ? 'received' : 'paid'} yet. The full amount will be recorded as outstanding.</p>}
+            </>}
             {showBeneficiaries && <label className="space-y-1 text-xs font-semibold text-stone-700">Households reached
               <input type="number" min="0" step="1" value={beneficiaries} onChange={(event) => setBeneficiaries(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>}
@@ -432,9 +561,17 @@ function RecordsSection({
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
               {log.quantity !== undefined && <span>{log.quantity}{log.unit ? ` ${log.unit}` : ''}</span>}
               {log.amountMWK !== undefined && <span>{formatMWK(log.amountMWK)}</span>}
+              {log.counterpartyName && <span>{log.entryType === 'Sale' ? 'Customer' : 'Supplier'}: {log.counterpartyName}</span>}
+              {log.paymentStatus && <span>{log.paymentStatus === 'credit' ? 'On credit' : log.paymentStatus === 'partial' ? `Partially paid · cash ${formatMWK(log.cashAmountMWK || 0)}` : 'Paid in full'}</span>}
               {log.beneficiaries !== undefined && <span>{log.beneficiaries} households reached</span>}
               {log.notes && <span>{log.notes}</span>}
             </div>
+            <RecordAttachmentBar
+              targetType="programmeLog"
+              targetId={log.id}
+              targetTitle={`${programme.name} - ${log.description}`}
+              defaultCategory={log.entryType === 'Expense' || log.entryType === 'Sale' ? 'Receipt' : 'Group Activity'}
+            />
           </article>
         ))}
       </div>

@@ -8,13 +8,14 @@ import {
   HouseholdActivity,
   WorkplanItem,
   EarlyYearsRecord,
-  PhotoAttachment,
   ImportAuditRecord,
   ImportPreviewItem,
   Person,
   PersonType,
   PersonSourceDocument,
   ContactRecord,
+  AttachmentTargetType,
+  AttachmentCategory,
   BudgetItem,
   ProcurementList,
   ProjectProjection,
@@ -55,6 +56,8 @@ import {
 import { getDueDateRange } from './ingestionRules';
 import { analyzeSpreadsheetWorkbook, SpreadsheetAnalysis } from './spreadsheetImport/detector';
 import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spreadsheetImport/importers';
+import { uploadPhotoAttachment } from './attachmentService';
+import { PROGRAMMES } from '../data/programmes';
 
 function employeeImportWriteError(collectionName: string, recordId: string, error: unknown): Error {
   const details = error instanceof Error ? error.message : String(error);
@@ -611,6 +614,29 @@ export async function commitImportBatch(
   if (importingEmployee && auditRecord.importedByUid !== authenticatedUid) {
     throw new Error('Employee payroll import actor does not match the signed-in Firebase user. Reopen Import and try again.');
   }
+  const selectedPhotos = approvedItems.filter((item) => item.selected && item.classification === 'PHOTO_HIGHLIGHT');
+  const allowedPhotoTargets: AttachmentTargetType[] = ['programme', 'programmeLog', 'householdActivity', 'expense', 'rentPayment', 'importBatch'];
+  const photoTargetExists = (targetType: AttachmentTargetType, targetId: string) => {
+    if (targetType === 'programme') return PROGRAMMES.some((programme) => programme.id === targetId);
+    if (targetType === 'programmeLog') return (db.programmeLogs || []).some((record) => record.id === targetId);
+    if (targetType === 'householdActivity') return (db.householdActivities || []).some((record) => record.id === targetId);
+    if (targetType === 'expense') return (db.expenses || []).some((record) => record.id === targetId);
+    if (targetType === 'rentPayment') return (db.rentPayments || []).some((record) => record.id === targetId);
+    if (targetType === 'importBatch') return targetId === '__IMPORT_BATCH__';
+    return false;
+  };
+  const invalidPhoto = selectedPhotos.find((item) => {
+    const targetType = item.extractedData.targetType as AttachmentTargetType;
+    const targetId = String(item.extractedData.targetId || '');
+    return !allowedPhotoTargets.includes(targetType) || !photoTargetExists(targetType, targetId) ||
+      !(item.photoOriginalBase64 || item.photoBase64);
+  });
+  if (invalidPhoto) {
+    throw new Error(`Confirm photo consent and choose an existing programme, activity, expense, or rent record for ${invalidPhoto.title || 'each imported photo'}.`);
+  }
+  if (selectedPhotos.length > 0 && (!auth.currentUser || auditRecord.importedByUid !== auth.currentUser.uid)) {
+    throw new Error('Photo imports require the signed-in staff account that started this import. Reopen Import and try again.');
+  }
   const employeeActorUid = authenticatedUid || auditRecord.importedByUid;
   const updatedDb: AppDatabase = {
     ...db,
@@ -1111,28 +1137,30 @@ export async function commitImportBatch(
     // 5. Photographic Highlights / Embedded Photos
     else if (item.classification === 'PHOTO_HIGHLIGHT' || item.targetEntity === 'attachment') {
       if (item.photoBase64) {
-        const newAttachment: PhotoAttachment = {
-          id: generateFollowUpId('ATT'),
-          targetType: item.extractedData.targetType || 'householdActivity',
-          targetId: item.extractedData.targetId || updatedDb.households[0]?.id || 'SH-01',
-          fileName: item.extractedData.fileName || 'highlight_photo.jpg',
-          fileSize: item.extractedData.fileSize || 50000,
-          contentType: item.photoContentType || 'image/jpeg',
-          storagePath: `imports/${auditRecord.fileName}/${generateFollowUpId('ATT')}.jpg`,
-          downloadUrl: item.photoBase64, // Preserves base64 directly
+        const targetType = item.extractedData.targetType as AttachmentTargetType;
+        const targetId = targetType === 'importBatch' ? auditId : String(item.extractedData.targetId);
+        const response = await fetch(item.photoOriginalBase64 || item.photoBase64);
+        const imageBlob = await response.blob();
+        const uploadedAttachment = await uploadPhotoAttachment({
+          file: new File([imageBlob], String(item.extractedData.fileName || 'highlight_photo.jpg'), {
+            type: imageBlob.type || item.photoContentType || 'image/jpeg',
+          }),
+          targetType,
+          targetId,
           caption: item.photoCaption || item.extractedData.caption || item.summary,
-          category: (item.extractedData.category as any) || 'Group Activity',
-          date: item.recordDate || new Date().toISOString().slice(0, 10),
-          uploadedBy: {
-            uid: auditRecord.importedByUid,
-            name: auditRecord.importedByName,
-            email: 'staff@shinerelieftrust.org',
-            role: 'Staff',
+          category: (item.extractedData.photoCategory || 'Group Activity') as AttachmentCategory,
+          date: item.recordDate || item.extractedData.date || new Date().toISOString().slice(0, 10),
+          consent: item.extractedData.photoConsentConfirmed === true,
+          allowUnconfirmedConsent: true,
+          user: {
+            uid: auth.currentUser!.uid,
+            fullName: auditRecord.importedByName,
+            email: auth.currentUser!.email || 'staff@shinerelieftrust.org',
           },
-          createdAt: new Date().toISOString(),
-        };
+        });
         if (!updatedDb.attachments) updatedDb.attachments = [];
-        updatedDb.attachments.unshift(newAttachment);
+        updatedDb.attachments.unshift(uploadedAttachment);
+        linkedRecordId = uploadedAttachment.id;
       }
     }
     // 6. People Directory Record / Stakeholder Contact

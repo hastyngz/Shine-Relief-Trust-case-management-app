@@ -280,6 +280,11 @@ function AppContent() {
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<ProgrammeId | null>(
     initialRoute.programmeId || null
   );
+  const [programmePlanningRequest, setProgrammePlanningRequest] = useState<{
+    requestId: number;
+    type: 'budget' | 'workplan';
+    programmeId: ProgrammeId;
+  } | null>(null);
   const [qualityRecordFocus, setQualityRecordFocus] = useState(initialRoute.qualityTarget || null);
   const [editingGirl, setEditingGirl] = useState<Girl | null>(null);
   const [editingHouse, setEditingHouse] = useState<Household | null>(null);
@@ -688,17 +693,14 @@ function AppContent() {
     onFirstSuccess?: (url: string) => void
   ) => {
     if (!photos || photos.length === 0 || !currentUser) return;
-    const photosToUpload = photos.filter((photo) =>
-      !photo.file.type.startsWith('image/') || photo.consent === true);
-    const skippedCount = photos.length - photosToUpload.length;
-    if (!photosToUpload.length) {
-      showToast(`Skipped ${skippedCount} photo(s) without consent confirmation.`);
-      return;
-    }
-    showToast(`${skippedCount ? `Skipped ${skippedCount} without consent. ` : ''}Uploading ${photosToUpload.length} attachment(s)...`);
+    const photosToUpload = photos;
+    const unconfirmedCount = photos.filter((photo) => photo.file.type.startsWith('image/') && photo.consent !== true).length;
+    showToast(`Uploading ${photosToUpload.length} attachment(s)...${unconfirmedCount ? ` ${unconfirmedCount} will be flagged for consent follow-up.` : ''}`);
 
     (async () => {
-      let firstUploadedUrl: string | null = null;
+      let failedCount = 0;
+      let uploadedCount = 0;
+      let firstUploaded = false;
       for (let i = 0; i < photosToUpload.length; i++) {
         const p = photosToUpload[i];
         try {
@@ -710,6 +712,7 @@ function AppContent() {
             category: p.category || 'Supporting Document',
             date: p.date,
             consent: p.file.type.startsWith('image/') ? p.consent : undefined,
+            allowUnconfirmedConsent: true,
             user: {
               uid: currentUser.uid,
               fullName: staffProfile?.fullName || currentUser.displayName || auditActor,
@@ -717,17 +720,31 @@ function AppContent() {
               role: role || undefined,
             },
           });
-          if (i === 0 && res.downloadUrl) {
-            firstUploadedUrl = res.downloadUrl;
+          uploadedCount += 1;
+          if (!firstUploaded && res.downloadUrl) {
+            firstUploaded = true;
             if (onFirstSuccess) {
               onFirstSuccess(res.downloadUrl);
             }
           }
         } catch (err) {
+          failedCount += 1;
           console.error(`Error uploading photo ${p.file.name}:`, err);
         }
       }
-      showToast(`Finished uploading ${photos.length} attachment(s).`);
+      if (uploadedCount > 0) {
+        const relatedRecordType = targetType === 'householdActivity' ? 'activity' : targetType;
+        notifyDataChange({
+          type: 'attachment_added',
+          entityId: targetId,
+          entityTitle: `${targetType} ${targetId}`,
+          detail: `${uploadedCount} photo or receipt attachment(s)`,
+          relatedRecordType,
+        });
+      }
+      showToast(failedCount
+        ? `Uploaded ${photosToUpload.length - failedCount} attachment(s); ${failedCount} failed. Check the connection and retry.`
+        : `Finished uploading ${photosToUpload.length} attachment(s).`);
     })();
   };
 
@@ -1305,6 +1322,15 @@ function AppContent() {
             onNavigateToHouses={() => navigateTo('houses', 'houses')}
             onNavigateToOperations={() => navigateTo('operations', 'operations')}
             onRefresh={reloadData}
+            onProgrammeLogAdded={(record, programmeName) => notifyDataChange({
+              type: 'programme_record_added',
+              entityId: record.id,
+              entityTitle: `${programmeName}: ${record.description}`,
+            })}
+            onCreateProgrammePlan={(type, programmeId) => {
+              setProgrammePlanningRequest({ requestId: Date.now(), type, programmeId });
+              navigateTo('planning', 'planning');
+            }}
           />
         )}
 
@@ -1321,7 +1347,7 @@ function AppContent() {
           />
         )}
 
-        {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} />}
+        {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} onNavigateToProgramme={openProgramme} />}
 
         {/* VIEW 5: REPORTS */}
         {view === 'reports' && (
@@ -1378,6 +1404,14 @@ function AppContent() {
                 const act = db.householdActivities.find((a) => a.id === id);
                 const hId = rent?.householdId || exp?.householdId || act?.householdId;
                 if (hId) handleOpenHouseProfile(hId);
+              } else if (type === 'programmeLog') {
+                const record = (db.programmeLogs || []).find((item) => item.id === id);
+                if (record) openProgramme(record.programmeId as ProgrammeId);
+              } else if (type === 'programme') {
+                openProgramme(id as ProgrammeId);
+              } else if (type === 'importBatch') {
+                navigateTo('reports', 'reports');
+                window.location.hash = `#/reports?importAudit=${encodeURIComponent(id)}`;
               }
             }}
           />
@@ -1385,7 +1419,13 @@ function AppContent() {
 
         {/* VIEW: PLANNING (BUDGETS, WORKPLANS & FIELD SCHEDULES) */}
         {view === 'planning' && (
-          <BudgetsAndWorkplansView db={db} onRefresh={reloadData} qualityRecordFocus={qualityRecordFocus} />
+          <BudgetsAndWorkplansView
+            db={db}
+            onRefresh={reloadData}
+            qualityRecordFocus={qualityRecordFocus}
+            initialProgrammeCreate={programmePlanningRequest}
+            onProgrammeCreateHandled={() => setProgrammePlanningRequest(null)}
+          />
         )}
 
         {view === 'management' && (canAccessManagementDashboard(isAdmin, role) ? (
@@ -1410,7 +1450,8 @@ function AppContent() {
             initialFile={pendingImportFile}
             onInitialFileConsumed={() => setPendingImportFile(null)}
             onOpenFilePicker={openImportFilePicker}
-            onImportComplete={() => {
+            onImportComplete={(audit) => {
+              notifyDataChange({ type: 'import_completed', entityId: audit.id, entityTitle: audit.fileName });
               reloadData();
               showToast('Data ingestion completed and saved to Firestore!');
             }}
@@ -1632,6 +1673,7 @@ function AppContent() {
         isOpen={isQuickAddOpen}
         onClose={() => setIsQuickAddOpen(false)}
         onSelectAction={handleQuickAction}
+        onOpenProgramme={openProgramme}
       />
     </div>
   );

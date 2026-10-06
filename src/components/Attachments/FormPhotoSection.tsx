@@ -156,6 +156,16 @@ export const FormPhotoSection: React.FC<FormPhotoSectionProps> = ({
                     placeholder="Optional caption..."
                     className="w-full px-2 py-0.5 text-[11px] border border-stone-200 rounded bg-stone-50 focus:bg-white focus:outline-none"
                   />
+                  {categoryOptions && categoryOptions.length > 1 && (
+                    <select
+                      value={item.category || defaultCategory}
+                      onChange={(event) => updatePhoto(idx, { category: event.target.value as AttachmentCategory })}
+                      aria-label={`Category for ${item.file.name}`}
+                      className="w-full px-2 py-1 text-[11px] border border-stone-200 rounded bg-white"
+                    >
+                      {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+                    </select>
+                  )}
                   {item.file.type.startsWith('image/') && (
                     <label className="flex items-start gap-1.5 text-[10px] text-amber-900">
                       <input
@@ -164,7 +174,7 @@ export const FormPhotoSection: React.FC<FormPhotoSectionProps> = ({
                         onChange={(event) => updatePhoto(idx, { consent: event.target.checked })}
                         className="mt-0.5 accent-teal-800"
                       />
-                      <span>Everyone shown has agreed to this photo being stored.</span>
+                      <span>Consent confirmed for everyone shown. Unconfirmed photos are still saved and flagged for follow-up.</span>
                     </label>
                   )}
                   <div className="text-[10px] text-stone-400">

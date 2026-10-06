@@ -19,14 +19,20 @@ export function incomeTotals(logs: ProgrammeLogRecord[]): {
   sales: number;
   costs: number;
   net: number;
+  cashReceived: number;
+  cashPaid: number;
+  receivables: number;
+  payables: number;
 } {
-  const sales = logs
-    .filter((log) => log.entryType === 'Sale')
-    .reduce((total, log) => total + (log.amountMWK || 0), 0);
-  const costs = logs
-    .filter((log) => log.entryType === 'Expense' || log.entryType === 'Input')
-    .reduce((total, log) => total + (log.amountMWK || 0), 0);
-  return { sales, costs, net: sales - costs };
+  const sales = logs.filter((log) => log.entryType === 'Sale');
+  const costs = logs.filter((log) => log.entryType === 'Expense' || log.entryType === 'Input');
+  const totalSales = sales.reduce((total, log) => total + (log.amountMWK || 0), 0);
+  const totalCosts = costs.reduce((total, log) => total + (log.amountMWK || 0), 0);
+  const cashReceived = sales.reduce((total, log) => total + (log.cashAmountMWK ?? log.amountMWK ?? 0), 0);
+  const cashPaid = costs.reduce((total, log) => total + (log.cashAmountMWK ?? log.amountMWK ?? 0), 0);
+  const receivables = sales.reduce((total, log) => total + Math.max(0, (log.amountMWK || 0) - (log.cashAmountMWK ?? log.amountMWK ?? 0)), 0);
+  const payables = costs.reduce((total, log) => total + Math.max(0, (log.amountMWK || 0) - (log.cashAmountMWK ?? log.amountMWK ?? 0)), 0);
+  return { sales: totalSales, costs: totalCosts, net: totalSales - totalCosts, cashReceived, cashPaid, receivables, payables };
 }
 
 export function productionByUnit(logs: ProgrammeLogRecord[]): Array<{ unit: string; quantity: number }> {

@@ -152,6 +152,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalExpenditure = db.expenses.reduce((sum, exp) => sum + exp.totalCost, 0);
   const outstandingExpenses = outstandingExpenseSummary(db.expenses);
 
+  const programmeOutstandingSales = (db.programmeLogs || []).filter(
+    (log) => log.entryType === 'Sale' && (log.paymentStatus === 'partial' || log.paymentStatus === 'credit')
+  );
+  const programmeOutstandingCosts = (db.programmeLogs || []).filter(
+    (log) => (log.entryType === 'Expense' || log.entryType === 'Input') && (log.paymentStatus === 'partial' || log.paymentStatus === 'credit')
+  );
+  const programmeOutstandingTotal = programmeOutstandingSales.reduce(
+    (sum, log) => sum + Math.max(0, (log.amountMWK || 0) - (log.cashAmountMWK ?? log.amountMWK ?? 0)),
+    0
+  ) + programmeOutstandingCosts.reduce(
+    (sum, log) => sum + Math.max(0, (log.amountMWK || 0) - (log.cashAmountMWK ?? log.amountMWK ?? 0)),
+    0
+  );
+  const programmeOutstandingCount = programmeOutstandingSales.length + programmeOutstandingCosts.length;
+  const firstOutstandingProgrammeId = [
+    ...programmeOutstandingSales.map((log) => log.programmeId),
+    ...programmeOutstandingCosts.map((log) => log.programmeId),
+  ].find(Boolean) as ProgrammeId | undefined;
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const taskItems = db.caseActions || [];
   const teamTaskAccess = isAdmin || role === 'Manager';
@@ -359,19 +378,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
           onClick={() => {
             const expense = db.expenses.find((item) => item.paymentStatus === 'Payment Outstanding'
               && db.households.some((household) => household.id === item.householdId));
-            if (expense) onNavigateToHouse(expense.householdId);
-            else onNavigateToHousesList();
+            if (expense) {
+              onNavigateToHouse(expense.householdId);
+              return;
+            }
+            if (firstOutstandingProgrammeId) {
+              onNavigateToProgramme(firstOutstandingProgrammeId);
+              return;
+            }
+            onNavigateToHousesList();
           }}
           className="shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-all group"
         >
           <span className="flex items-center justify-between">
-            <span className="dashboard-stat-label text-xs font-bold text-amber-900 uppercase tracking-wider">Payments Outstanding</span>
+            <span className="dashboard-stat-label text-xs font-bold text-amber-900 uppercase tracking-wider">Payments &amp; Sales Outstanding</span>
             <span className="dashboard-stat-icon w-8 h-8 rounded-lg bg-white text-amber-800 flex items-center justify-center group-hover:bg-amber-800 group-hover:text-white transition-colors">
               <Banknote className="w-4 h-4" />
             </span>
           </span>
-          <span className="block dashboard-stat-number text-lg sm:text-xl font-black text-amber-950 mt-2">{formatMWK(outstandingExpenses.amount)}</span>
-          <span className="mt-2 block border-t border-amber-200 pt-2 text-[11px] font-semibold text-amber-900">{outstandingExpenses.count} unpaid {outstandingExpenses.count === 1 ? 'expense' : 'expenses'} · Review expenses</span>
+          <span className="block dashboard-stat-number text-lg sm:text-xl font-black text-amber-950 mt-2">{formatMWK(outstandingExpenses.amount + programmeOutstandingTotal)}</span>
+          <span className="mt-2 block border-t border-amber-200 pt-2 text-[11px] font-semibold text-amber-900">
+            {outstandingExpenses.count} unpaid {outstandingExpenses.count === 1 ? 'expense' : 'expenses'} · {programmeOutstandingSales.length} sales outstanding · {programmeOutstandingCount} programme items due
+          </span>
         </button>
       </div>
 

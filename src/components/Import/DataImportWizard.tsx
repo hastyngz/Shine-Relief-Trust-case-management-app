@@ -25,6 +25,7 @@ import {
 } from '../../services/spreadsheetImport/importers';
 import { spreadsheetEmployeeLineToPreview } from '../../services/spreadsheetImport/employeePreview';
 import { PROGRAMMES } from '../../data/programmes';
+import { RecordAttachmentBar } from '../Attachments/RecordAttachmentBar';
 import { useAuth } from '../../contexts/AuthContext';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
@@ -68,7 +69,7 @@ import {
 
 interface DataImportWizardProps {
   db: AppDatabase;
-  onImportComplete: () => void;
+  onImportComplete: (audit: ImportAuditRecord) => void;
   onCancel?: () => void;
   initialFile: File | null;
   onInitialFileConsumed: () => void;
@@ -509,11 +510,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         setSpreadsheetAnalysis(analysis.spreadsheetAnalysis || null);
         setDocumentStructure([]);
         setSpreadsheetKindOverride(null);
-        if (
-          analysis.spreadsheetImportPreview &&
-          analysis.spreadsheetAnalysis &&
-          analysis.spreadsheetAnalysis.detectedKind !== 'unknown'
-        ) {
+        if (analysis.spreadsheetImportPreview && analysis.spreadsheetAnalysis) {
           if (analysis.spreadsheetAnalysis.sheets.every((sheet) => sheet.rowsRead === 0)) {
             throw new Error('Spreadsheet contains zero readable data rows or table sheets.');
           }
@@ -606,9 +603,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   };
 
   const handleToggleItem = (tempId: string) => {
-    setPreviewItems((prev) =>
-      prev.map((item) => (item.tempId === tempId ? { ...item, selected: !item.selected } : item))
-    );
+    setPreviewItems((prev) => prev.map((item) =>
+      item.tempId === tempId ? { ...item, selected: !item.selected } : item
+    ));
   };
 
   // Reclassify single item
@@ -920,7 +917,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
       setCompletedAudit(result.createdAudit);
       setStep('completed');
-      onImportComplete();
+      onImportComplete(result.createdAudit);
     } catch (err: any) {
       console.error('Import execution error:', err);
       alert(`Import error: ${err.message || 'Failed to complete import batch'}`);
@@ -941,7 +938,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setParseError('Payroll spreadsheet imports are restricted to Administrators and Managers.');
       return;
     }
-    const parsed = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff);
+    const parsed = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff, db.employees || [], selectedFile.name);
     setSpreadsheetPreview(parsed);
     setPreviewItems(parsed.lines.map((line) =>
       spreadsheetLineToPreview(line, db.workplans || [])
@@ -1134,6 +1131,35 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     },
   }), [previewItems, reportMetadata, documentStructure, qualityDataSource, qualityCollectionMethod, qualityCollectionMethodOther]);
   const importQualityScores = useMemo(() => qualityScores(importQualityIssues), [importQualityIssues]);
+
+  const photoImportTargets = [
+    { targetType: 'importBatch' as const, targetId: '__IMPORT_BATCH__', label: 'Keep unlinked with this import' },
+    ...PROGRAMMES.map((programme) => ({
+      targetType: 'programme' as const,
+      targetId: programme.id,
+      label: `Programme · ${programme.name}`,
+    })),
+    ...(db.programmeLogs || []).map((record) => ({
+      targetType: 'programmeLog' as const,
+      targetId: record.id,
+      label: `${PROGRAMMES.find((programme) => programme.id === record.programmeId)?.name || record.programmeId} · ${record.description}`,
+    })),
+    ...(db.householdActivities || []).map((record) => ({
+      targetType: 'householdActivity' as const,
+      targetId: record.id,
+      label: `Activity · ${record.activityName}`,
+    })),
+    ...(db.expenses || []).map((record) => ({
+      targetType: 'expense' as const,
+      targetId: record.id,
+      label: `Expense · ${record.itemDescription || record.id}`,
+    })),
+    ...(db.rentPayments || []).map((record) => ({
+      targetType: 'rentPayment' as const,
+      targetId: record.id,
+      label: `Rent · ${record.householdId} · ${record.id}`,
+    })),
+  ];
 
   // Tab Filtering
   const filteredItems = previewItems.filter((item) => {
@@ -1847,7 +1873,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 <div>
                   <h3 className="text-sm font-bold text-sky-950">Spreadsheet structure</h3>
                   <p className="mt-1 text-xs text-sky-900">
-                    Detected from worksheet headers and layout. Formula cells retain both the formula and cached value.
+                    {spreadsheetAnalysis.detectedKind === 'unknown'
+                      ? 'The data type is unclear. Choose the type that best describes this workbook to re-interpret its rows. Nothing is selected for import yet.'
+                      : 'Detected from worksheet headers and layout. Formula cells retain both the formula and cached value.'}
                   </p>
                 </div>
                 <label className="text-xs font-semibold text-sky-950">
@@ -2493,9 +2521,62 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                                 <p className="text-xs text-stone-600">
                                   Embedded photographic highlight extracted directly from report document.
                                 </p>
-                                <p className="text-[11px] text-indigo-800 font-semibold">
-                                  Target: Linked to Household Activity / Communal Programme Record
-                                </p>
+                                <label className="block text-[11px] font-semibold text-stone-700">
+                                  Save photo with
+                                  <select
+                                    value={`${item.extractedData.targetType || 'importBatch'}:${item.extractedData.targetId || '__IMPORT_BATCH__'}`}
+                                    onChange={(event) => {
+                                      const target = photoImportTargets.find((candidate) => `${candidate.targetType}:${candidate.targetId}` === event.target.value)
+                                        || photoImportTargets[0];
+                                      setPreviewItems((current) => current.map((entry) => entry.tempId === item.tempId ? {
+                                        ...entry,
+                                        extractedData: {
+                                          ...entry.extractedData,
+                                          targetType: target.targetType,
+                                          targetId: target.targetId,
+                                          photoCategory: target.targetType === 'expense' || target.targetType === 'rentPayment' ? 'Receipt' : entry.extractedData.photoCategory || 'Group Activity',
+                                        },
+                                      } : entry));
+                                    }}
+                                    className="field mt-1 w-full"
+                                  >
+                                    {photoImportTargets.map((target) => (
+                                      <option key={`${target.targetType}:${target.targetId}`} value={`${target.targetType}:${target.targetId}`}>
+                                        {target.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="block text-[11px] font-semibold text-stone-700">
+                                  Photo category
+                                  <select
+                                    value={item.extractedData.photoCategory || 'Group Activity'}
+                                    onChange={(event) => setPreviewItems((current) => current.map((entry) => entry.tempId === item.tempId ? {
+                                      ...entry,
+                                      extractedData: { ...entry.extractedData, photoCategory: event.target.value },
+                                    } : entry))}
+                                    className="field mt-1 w-full"
+                                  >
+                                    <option value="Group Activity">Activity photo</option>
+                                    <option value="Receipt">Receipt</option>
+                                    <option value="Supporting Document">Supporting document</option>
+                                  </select>
+                                </label>
+                                <label className="flex items-start gap-1.5 text-[11px] font-semibold text-amber-900">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.extractedData.photoConsentConfirmed === true}
+                                    onChange={(event) => setPreviewItems((current) => current.map((entry) => entry.tempId === item.tempId ? {
+                                      ...entry,
+                                      extractedData: { ...entry.extractedData, photoConsentConfirmed: event.target.checked },
+                                    } : entry))}
+                                    className="mt-0.5"
+                                  />
+                                  <span>Consent confirmed for everyone shown.</span>
+                                </label>
+                                {item.extractedData.photoConsentConfirmed !== true && (
+                                  <p className="text-[11px] text-amber-800">Consent is not confirmed; this photo will be retained and marked for follow-up.</p>
+                                )}
                               </div>
                             </div>
                           )}
@@ -2873,6 +2954,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
               <strong className="text-stone-600 font-mono text-[11px]">{completedAudit.id}</strong>
             </div>
           </div>
+
+          <RecordAttachmentBar
+            targetType="importBatch"
+            targetId={completedAudit.id}
+            targetTitle={completedAudit.fileName}
+            defaultCategory="Group Activity"
+          />
 
           <div className="flex justify-center gap-3 pt-2">
             <button
