@@ -143,6 +143,16 @@ assert.ok(!runQualityRules({
   }],
 }).some((issue) => issue.rule === 'IDENTITY-FUZZY-01'));
 
+const reportGirlIdentityIssue = runQualityRules({
+  identityReviews: [{
+    id: 'report-girl-aisha',
+    name: 'Aisha',
+    candidates: [{ id: 'girl-aida', name: 'Aida' }],
+  }],
+}).find((issue) => issue.rule === 'IDENTITY-FUZZY-01');
+assert.equal(reportGirlIdentityIssue?.target?.id, 'report-girl-aisha');
+assert.deepEqual(reportGirlIdentityIssue?.candidateB, { id: 'girl-aida', name: 'Aida' });
+
 const repeatedQuantIssues = runQualityRules({
   narrativeSections: [{ id: 'same-text-block', text: 'Several girls participated in various activities.' }],
   activities: [{ id: 'same-text-block', description: 'Several girls participated in various activities.' }],

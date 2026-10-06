@@ -1101,23 +1101,21 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       name: item.extractedData.indicator || item.title,
       programmeId: item.extractedData.programmeId,
     })),
-    identityNames: previewItems.filter((item) => item.selected).flatMap((item) => [
-      item.matchedName,
-      item.extractedData.employeeName,
-      item.extractedData.personName,
-      item.extractedData.beneficiaryName,
-      ...(item.candidateGirls || []).map((girl) => girl.fullName),
-    ]).filter((name): name is string => typeof name === 'string' && !!name.trim()),
-    identityReviews: previewItems.filter((item) => item.selected).flatMap((item) => {
+    identityReviews: previewItems.flatMap((item) => {
       if (item.identityResolution) return [];
-      const name = item.matchedName
+      const name = item.extractedData.fullName
+        || item.extractedData.girlName
         || item.extractedData.employeeName
         || item.extractedData.personName
-        || item.extractedData.beneficiaryName;
+        || item.extractedData.beneficiaryName
+        || item.matchedName
+        || item.title?.replace(/^Detected Person:\s*/, '').replace(/\s+\([^)]*\)$/, '');
       if (typeof name !== 'string' || !name.trim()) return [];
+      const isImportedGirl = item.targetEntity === 'girl'
+        || (item.targetEntity === 'person' && item.detectedRole === 'SHINE Girl');
       const candidateLists = [
-        ...(item.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
-        ...(item.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
+        ...(isImportedGirl ? (item.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })) : []),
+        ...(!isImportedGirl ? (item.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })) : []),
         ...(Array.isArray(item.extractedData.matchCandidates) ? item.extractedData.matchCandidates : [])
           .filter((candidate: unknown): candidate is { id: string; name: string } =>
             typeof candidate === 'object' && candidate !== null
@@ -1200,9 +1198,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       const samePerson = value.decision === 'same-person';
       const differentPeople = value.decision === 'different-people';
       if (!target || (!samePerson && !differentPeople) || (samePerson && typeof value.candidateId !== 'string')) return false;
+      const isImportedGirl = target.targetEntity === 'girl'
+        || (target.targetEntity === 'person' && target.detectedRole === 'SHINE Girl');
       const candidateList = [
-        ...(target.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
-        ...(target.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })),
+        ...(isImportedGirl ? (target.candidateGirls || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })) : []),
+        ...(!isImportedGirl ? (target.candidatePeople || []).map((candidate) => ({ id: candidate.id, name: candidate.fullName })) : []),
         ...(Array.isArray(target.extractedData.matchCandidates) ? target.extractedData.matchCandidates : [])
           .filter((candidate: unknown): candidate is { id: string; name: string } =>
             typeof candidate === 'object' && candidate !== null
@@ -1211,11 +1211,14 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       ];
       const candidate = samePerson ? candidateList.find((person) => person.id === value.candidateId) : undefined;
       if (samePerson && !candidate) return false;
+      if (samePerson && isImportedGirl && !db.girls.some((girl) => girl.id === candidate?.id)) return false;
+      if (samePerson && target.targetEntity === 'person' && !isImportedGirl
+        && !(db.people || []).some((person) => person.id === candidate?.id)) return false;
       const identityDecision = samePerson ? 'existing-person' : 'new-person';
       const stillFires = runQualityRules({
         identityReviews: [{
           id: target.tempId,
-          name: target.matchedName || target.extractedData.employeeName || target.extractedData.personName || target.extractedData.beneficiaryName,
+          name: target.extractedData.fullName || target.extractedData.girlName || target.extractedData.employeeName || target.extractedData.personName || target.extractedData.beneficiaryName || target.matchedName,
           candidates: candidateList,
           decision: identityDecision,
         }],
@@ -1228,8 +1231,22 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         identityResolution: identityDecision,
         ...(target.targetEntity === 'person' ? {
           resultType: samePerson ? 'EXISTING_PERSON_MATCHED' : 'NEW_PERSON',
-          matchedPersonAction: samePerson ? 'ADD_TO_EXISTING_PERSON' : 'REGISTER_PERSON',
+          matchedPersonAction: samePerson
+            ? isImportedGirl ? 'ADD_HISTORICAL_RECORD' : 'ADD_TO_EXISTING_PERSON'
+            : isImportedGirl ? 'REGISTER_AS_NEW_GIRL' : 'REGISTER_PERSON',
         } : {}),
+        ...(target.targetEntity === 'girl' && target.resultType === 'HISTORICAL_RECORD' ? (samePerson ? {
+          extractedData: { ...target.extractedData, girlId: candidate?.id },
+        } : {
+          targetEntity: 'person',
+          resultType: 'NEW_PERSON',
+          detectedRole: 'SHINE Girl',
+          matchedPersonAction: 'REGISTER_AS_NEW_GIRL',
+          extractedData: {
+            ...target.extractedData,
+            fullName: target.extractedData.girlName || target.title?.replace(/^Historical Academic\/Transition Record:\s*/, ''),
+          },
+        }) : {}),
         ...(target.targetEntity === 'payroll' && candidate ? {
           extractedData: { ...target.extractedData, employeeId: candidate.id, employeeName: candidate.name },
         } : {}),

@@ -1140,7 +1140,33 @@ export async function commitImportBatch(
       if (!updatedDb.people) updatedDb.people = [];
 
       // Check if user decided to register as a new SHINE girl instead
-      if (item.matchedPersonAction === 'REGISTER_AS_NEW_GIRL') {
+      if (item.matchedPersonAction === 'ADD_HISTORICAL_RECORD' && item.matchedId) {
+        const girl = updatedDb.girls.find((candidate) => candidate.id === item.matchedId);
+        if (!girl) throw new Error(`Cannot link imported report record to missing girl ${item.matchedId}.`);
+        const newHist: HistoricalCaseRecord = {
+          id: generateFollowUpId('HCR'),
+          girlId: girl.id,
+          recordType: 'school_class',
+          isDateUnknown: true,
+          title: `Historical Report Record: ${item.reportingPeriod || 'Historical'}`,
+          description: item.originalSnippet || item.summary,
+          historicalSchool: item.extractedData.workplaceOrAffiliation,
+          historicalClass: item.extractedData.historicalClass,
+          source: {
+            originalFileName: auditRecord.fileName,
+            fileType: auditRecord.fileType,
+            importedAt: new Date().toISOString(),
+            importedByUid: auditRecord.importedByUid,
+            importedByName: auditRecord.importedByName,
+            documentDate: item.reportingPeriod,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        if (!updatedDb.historicalRecords) updatedDb.historicalRecords = [];
+        updatedDb.historicalRecords.unshift(newHist);
+        await persistHistoricalCaseRecordToFirestore(newHist);
+        linkedRecordId = newHist.id;
+      } else if (item.matchedPersonAction === 'REGISTER_AS_NEW_GIRL') {
         const nextGirlNum = updatedDb.girls.length + 1;
         const newGirlId = `SG-${String(nextGirlNum).padStart(3, '0')}`;
         const newGirl: Girl = {
