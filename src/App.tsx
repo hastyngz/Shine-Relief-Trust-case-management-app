@@ -77,6 +77,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
+import { flushPendingOfflineSnapshots, queueOfflineSnapshotIfNeeded, isBrowserOnline } from './services/offlineSync';
 
 // Forms
 import { GirlForm } from './components/Forms/GirlForm';
@@ -363,6 +364,28 @@ function AppContent() {
       window.removeEventListener('storage', handleDbUpdated);
     };
   }, []);
+
+  useEffect(() => {
+    const handleOffline = () => queueOfflineSnapshotIfNeeded(db);
+    const handleConnectivityChange = () => {
+      if (isBrowserOnline()) {
+        void flushPendingOfflineSnapshots();
+      }
+    };
+
+    window.addEventListener('online', handleConnectivityChange);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleConnectivityChange);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [db]);
+
+  useEffect(() => {
+    if (!isBrowserOnline()) {
+      queueOfflineSnapshotIfNeeded(db);
+    }
+  }, [db]);
 
   // Listen for browser Back/Forward navigation via hashchange
   useEffect(() => {
