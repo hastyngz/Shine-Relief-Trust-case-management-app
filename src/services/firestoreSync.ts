@@ -85,17 +85,22 @@ function updateSyncStatus(newStatus: SyncStatus) {
 
 // Clean undefined fields so Firestore doesn't reject them
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
-  const result: Record<string, any> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) {
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        result[key] = sanitizeForFirestore(value);
-      } else {
-        result[key] = value;
-      }
+  const sanitizeValue = (value: any): any => {
+    if (Array.isArray(value)) {
+      return value.filter((entry) => entry !== undefined).map(sanitizeValue);
     }
-  }
-  return result;
+    if (value !== null && typeof value === 'object') {
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) return value;
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([, entry]) => entry !== undefined)
+          .map(([key, entry]) => [key, sanitizeValue(entry)]),
+      );
+    }
+    return value;
+  };
+  return sanitizeValue(obj);
 }
 
 // Firestore collection names
@@ -225,8 +230,8 @@ export async function persistEmployeeRecordToFirestore(record: EmployeeRecord): 
   );
 }
 
-export async function appendEmployeeAuditLog(event: Record<string, any>): Promise<void> {
-  const auditId = `employee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+export async function appendEmployeeAuditLog(event: Record<string, any>, eventId?: string): Promise<void> {
+  const auditId = eventId || `employee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   await setDoc(doc(firestore, COLLECTIONS.EMPLOYEE_AUDIT_LOGS, auditId), {
     ...sanitizeForFirestore(event),
     id: auditId,
@@ -589,6 +594,7 @@ export async function persistPayrollRecordToFirestore(item: PayrollRecord): Prom
   } catch (err) {
     console.error('Firestore persistPayrollRecord error:', err);
     updateSyncStatus('error');
+    throw err;
   }
 }
 
