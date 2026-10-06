@@ -24,6 +24,7 @@ import {
   SalaryHistoryRecord,
 } from '../types';
 import { generateFollowUpId, generatePersonId, saveDatabase } from '../utils/storage';
+import { auth } from '../firebase';
 import {
   persistGirlToFirestore,
   persistHouseholdToFirestore,
@@ -54,6 +55,19 @@ import {
 import { getDueDateRange } from './ingestionRules';
 import { analyzeSpreadsheetWorkbook, SpreadsheetAnalysis } from './spreadsheetImport/detector';
 import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spreadsheetImport/importers';
+
+function employeeImportWriteError(collectionName: string, recordId: string, error: unknown): Error {
+  const details = error instanceof Error ? error.message : String(error);
+  const isPermissionDenied = typeof error === 'object' && error !== null
+    && 'code' in error && (error as { code?: unknown }).code === 'permission-denied'
+    || /missing or insufficient permissions|permission-denied/i.test(details);
+  return new Error(
+    isPermissionDenied
+      ? `Permission denied writing ${collectionName}/${recordId}`
+      : `Failed writing ${collectionName}/${recordId}: ${details}`,
+    { cause: error },
+  );
+}
 
 export interface FileAnalysisResult {
   fileName: string;
@@ -589,6 +603,15 @@ export async function commitImportBatch(
   approvedContacts: ConfirmedContactCandidate[] = [],
   confirmedDueDatePeriods: Record<string, string> = {}
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
+  const authenticatedUid = auth.currentUser?.uid;
+  const importingEmployee = approvedItems.some((item) => item.selected && item.targetEntity === 'employee');
+  if (importingEmployee && !authenticatedUid) {
+    throw new Error('Employee payroll import requires an authenticated Firebase user.');
+  }
+  if (importingEmployee && auditRecord.importedByUid !== authenticatedUid) {
+    throw new Error('Employee payroll import actor does not match the signed-in Firebase user. Reopen Import and try again.');
+  }
+  const employeeActorUid = authenticatedUid || auditRecord.importedByUid;
   const updatedDb: AppDatabase = {
     ...db,
     girls: [...db.girls],
@@ -754,7 +777,7 @@ export async function commitImportBatch(
         source: {
           fileName: auditRecord.fileName,
           importedAt: now,
-          importedByUid: auditRecord.importedByUid,
+          importedByUid: employeeActorUid,
           importedByName: auditRecord.importedByName,
         },
         createdAt: existingEmployee?.createdAt || now,
@@ -793,10 +816,14 @@ export async function commitImportBatch(
             notes: 'Historical salary amount from payroll spreadsheet; amount is not treated as proof of payment.',
             auditMetadata: {
               createdAt: now,
-              createdByUid: auditRecord.importedByUid,
+              createdByUid: employeeActorUid,
             },
           };
-          await persistEmployeeSalaryHistoryToFirestore(salaryRecord);
+          try {
+            await persistEmployeeSalaryHistoryToFirestore(salaryRecord);
+          } catch (error) {
+            throw employeeImportWriteError('employeeSalaryHistory', salaryRecord.id, error);
+          }
           currentSalaryHistoryRecordId = salaryId;
           importedSalaryIds.add(salaryId);
         }
@@ -824,14 +851,18 @@ export async function commitImportBatch(
             paymentStatus: 'Pending',
             notes: `Imported from ${auditRecord.fileName}; confirmation required. No payment date or paid status was supplied.`,
             createdBy: auditRecord.importedByName,
-            createdByUid: auditRecord.importedByUid,
+            createdByUid: employeeActorUid,
             createdAt: now,
             updatedBy: auditRecord.importedByName,
-            updatedByUid: auditRecord.importedByUid,
+            updatedByUid: employeeActorUid,
             updatedAt: now,
           };
           updatedDb.payrollRecords!.unshift(payment);
-          await persistPayrollRecordToFirestore(payment);
+          try {
+            await persistPayrollRecordToFirestore(payment);
+          } catch (error) {
+            throw employeeImportWriteError('payrollRecords', payment.id, error);
+          }
           importedPayrollRecords += 1;
         }
       }
@@ -865,28 +896,41 @@ export async function commitImportBatch(
           paymentStatus: 'Pending',
           notes: `Imported ${special.type} amount from ${auditRecord.fileName}; requires staff review and is not treated as a confirmed payment.`,
           createdBy: auditRecord.importedByName,
-          createdByUid: auditRecord.importedByUid,
+          createdByUid: employeeActorUid,
           createdAt: nowForSpecial,
           updatedBy: auditRecord.importedByName,
-          updatedByUid: auditRecord.importedByUid,
+          updatedByUid: employeeActorUid,
           updatedAt: nowForSpecial,
         };
         updatedDb.payrollRecords!.unshift(specialRecord);
-        await persistPayrollRecordToFirestore(specialRecord);
+        try {
+          await persistPayrollRecordToFirestore(specialRecord);
+        } catch (error) {
+          throw employeeImportWriteError('payrollRecords', specialRecord.id, error);
+        }
         importedPayrollRecords += 1;
       }
       employee.salaryHistoryRecordIds = Array.from(importedSalaryIds);
-      await persistEmployeeRecordToFirestore(employee);
-      await appendEmployeeAuditLog({
+      try {
+        await persistEmployeeRecordToFirestore(employee);
+      } catch (error) {
+        throw employeeImportWriteError('employees', employee.id, error);
+      }
+      const employeeImportEventId = `employee_import_${auditId}_${employeeId}`.replace(/[^A-Za-z0-9_-]/g, '_');
+      try {
+        await appendEmployeeAuditLog({
         employeeId,
         action: existingEmployee ? 'employee_import_updated' : 'employee_import_created',
-        actorUid: auditRecord.importedByUid,
+        actorUid: employeeActorUid,
         actorName: auditRecord.importedByName,
         sourceFile: auditRecord.fileName,
         payrollRecordsImported: history.filter((entry) => !db.payrollRecords?.some((record) =>
           record.employeeId === employeeId && record.payPeriod === entry.payPeriod)).length,
         timestamp: now,
-      });
+        }, employeeImportEventId);
+      } catch (error) {
+        throw employeeImportWriteError('employeeAuditLogs', employeeImportEventId, error);
+      }
       linkedRecordId = employeeId;
     }
     // 4. Payroll payment record

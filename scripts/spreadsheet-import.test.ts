@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook, detectSpreadsheetKind } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview, isValidPayrollEmployeeName } from '../src/services/spreadsheetImport/importers';
+import { spreadsheetEmployeeLineToPreview } from '../src/services/spreadsheetImport/employeePreview';
 import { matchNameCandidates } from '../src/services/spreadsheetImport/nameMatcher';
 import { extractEarlyYearsMetrics } from '../src/services/docxParserService';
 
@@ -228,6 +229,32 @@ for (const fileName of [
     assert.ok(gratuityRecipient, 'gratuity section rows remain linked to their named employees');
     assert.ok(gratuityRecipient?.otherPayrollAmounts.some((item) => item.payPeriod), 'monthly gratuity periods remain distinguishable');
   }
+}
+
+const onlySeptemberWorkbook = XLSX.read(
+  fs.readFileSync('scripts/fixtures/only sep employees salary 2026.xlsx'),
+  { cellFormula: true },
+);
+const onlySeptemberAnalysis = analyzeSpreadsheetWorkbook(onlySeptemberWorkbook);
+const onlySeptemberPreview = createSpreadsheetImportPreview(
+  onlySeptemberWorkbook,
+  onlySeptemberAnalysis,
+  onlySeptemberAnalysis.detectedKind,
+  [],
+  [],
+  'only sep employees salary 2026.xlsx',
+);
+const employeePreviewCards = onlySeptemberPreview.lines
+  .filter((line) => line.kind === 'employee')
+  .map(spreadsheetEmployeeLineToPreview);
+assert.equal(employeePreviewCards.length, 23);
+for (const card of employeePreviewCards) {
+  const name = String(card.extractedData.employeeName || '').trim();
+  assert.ok(name, 'every employee preview card has an employee name');
+  assert.equal(card.title, name, 'card title displays the parsed employee name');
+  assert.ok(card.summary.startsWith(`${name} ·`), 'card summary starts with the employee name');
+  assert.doesNotMatch(name, /^(?:FARM|MILL|HOUSE MUMS?|DRIVER|WATCHMEN|ADMISTRATION)$/i);
+  assert.doesNotMatch(name, /^PAYMENTS!\s*row\s*\d+$/i);
 }
 
 const aliasMatch = matchNameCandidates('Magret Synthetic', [{ id: 'staff-1', name: 'Margaret Synthetic' }]);

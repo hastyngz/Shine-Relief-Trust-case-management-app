@@ -23,6 +23,7 @@ import {
   ImportedSpreadsheetLine,
   SpreadsheetImportPreview,
 } from '../../services/spreadsheetImport/importers';
+import { spreadsheetEmployeeLineToPreview } from '../../services/spreadsheetImport/employeePreview';
 import { PROGRAMMES } from '../../data/programmes';
 import { useAuth } from '../../contexts/AuthContext';
 import { QualityCheckPanel } from '../QualityCheckPanel';
@@ -221,30 +222,7 @@ function spreadsheetLineToPreview(
     };
   }
   if (line.kind === 'employee') {
-    return {
-      tempId: id,
-      resultType: line.status === 'matched' ? 'CONFLICT' : 'NEW_RECORD',
-      targetEntity: 'employee',
-      classification: 'STAFF_PAYROLL_RECORD',
-      classificationLabel: 'Staff Payroll / Salary Record',
-      isDateUnknown: true,
-      title: line.employeeName,
-      summary: `${line.department || 'Department not supplied'} · ${line.salaryHistory.length} monthly salary entries · latest MWK ${line.currentSalary.toLocaleString()}`,
-      originalSnippet: `${line.sheet}!row ${line.row}`,
-      matchedId: line.matchedEmployeeId,
-      matchedName: line.matchCandidates.find((candidate) => candidate.id === line.matchedEmployeeId)?.name,
-      extractedData: { ...line, spreadsheetKind: 'payroll-grid' },
-      isHistorical: !line.latestSourcePeriod,
-      selected: line.status !== 'ambiguous',
-      warningOrConflict: line.employmentStatus === 'Completed'
-        ? `No salary was recorded in the latest workbook payment month (${line.latestWorkbookPaymentPeriod || 'not recorded'}). Last recorded salary: ${line.latestSourcePeriod || 'not recorded'}. Import as a former employee with historical payroll only.`
-        : line.status === 'matched'
-          ? 'Exact existing staff/employee match found. Confirm the update to preserve this employee’s salary history.'
-          : line.status === 'ambiguous'
-            ? 'Possible name match found. Review the candidates before adding or updating any employee.'
-            : undefined,
-      missingFields: [],
-    };
+    return spreadsheetEmployeeLineToPreview(line);
   }
   if (line.kind === 'payroll') {
     return {
@@ -339,7 +317,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   onInitialFileConsumed,
   onOpenFilePicker,
 }) => {
-  const { staffProfile, canEdit, isAdmin, role, allStaff } = useAuth();
+  const { currentUser, staffProfile, canEdit, isAdmin, role, allStaff } = useAuth();
 
   const activeStaff: StaffUser = staffProfile || {
     id: 'staff-user',
@@ -879,7 +857,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         ? 'xls'
         : 'xlsx',
       importedAt: new Date().toISOString(),
-      importedByUid: activeStaff.uid,
+      importedByUid: currentUser?.uid || activeStaff.uid,
       importedByName: activeStaff.fullName,
       reportingPeriod: reportMetadata?.reportingPeriod,
       contactsDetectedCount: contactReview.length,
@@ -1174,11 +1152,23 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     // Search filter
     if (searchTerm.trim().length > 0) {
       const q = searchTerm.toLowerCase();
-      const matchText = (item.summary + ' ' + (item.matchedName || '') + ' ' + (item.originalSnippet || '')).toLowerCase();
+      const matchText = [
+        item.summary,
+        item.matchedName || '',
+        item.originalSnippet || '',
+        item.title || '',
+        String(item.extractedData.employeeName || ''),
+      ].join(' ').toLowerCase();
       return matchText.includes(q);
     }
     return true;
-  });
+  }).sort((a, b) => activeTab === 'EMPLOYEES'
+    ? String(a.title || a.extractedData.employeeName || '').localeCompare(
+      String(b.title || b.extractedData.employeeName || ''),
+      undefined,
+      { sensitivity: 'base' },
+    )
+    : 0);
 
   const openImportQualityIssue = (issue: QualityIssue) => {
     if (issue.target?.kind !== 'preview-item' && issue.target?.kind !== 'narrative-section'
@@ -2341,6 +2331,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                         : 'border-stone-200 bg-white opacity-70'
                     }`}
                   >
+                    {(item.targetEntity === 'employee' || item.targetEntity === 'payroll') && (
+                      <div className="mb-3 pl-7">
+                        <h3 className="break-words text-base font-bold text-stone-950">
+                          {String(item.title || item.extractedData.employeeName || 'Unnamed employee')}
+                        </h3>
+                        <p className="mt-0.5 text-xs font-medium text-stone-600">
+                          {String(item.extractedData.department || item.extractedData.group || 'Department not supplied')}
+                        </p>
+                      </div>
+                    )}
                     {item.extractedData.autoLinkedIndicatorId && (
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
                         <span>Exact match linked to indicator {String(item.extractedData.autoLinkedIndicatorId)}.</span>
