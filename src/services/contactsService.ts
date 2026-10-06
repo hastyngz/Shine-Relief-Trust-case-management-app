@@ -23,6 +23,7 @@ export const CONTACT_CATEGORIES: ContactCategory[] = [
   'government',
   'donor',
   'supplier',
+  'customer',
   'volunteer',
   'guest speaker',
   'health facility',

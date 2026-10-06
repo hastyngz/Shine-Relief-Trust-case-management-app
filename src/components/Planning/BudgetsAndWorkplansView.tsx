@@ -61,12 +61,16 @@ interface BudgetsAndWorkplansViewProps {
   db: AppDatabase;
   onRefresh: () => void;
   qualityRecordFocus?: QualityRecordFocus | null;
+  initialProgrammeCreate?: { requestId: number; type: 'budget' | 'workplan'; programmeId: ProgrammeId } | null;
+  onProgrammeCreateHandled?: () => void;
 }
 
 export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = ({
   db,
   onRefresh,
   qualityRecordFocus,
+  initialProgrammeCreate,
+  onProgrammeCreateHandled,
 }) => {
   const { staffProfile, canEdit, isAdmin } = useAuth();
   const actorName = staffProfile?.fullName || 'SHINE Staff';
@@ -79,9 +83,26 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [budgetSummaryGroup, setBudgetSummaryGroup] = useState<'category' | 'period' | 'programme'>('category');
   const [workplanStatusFilter, setWorkplanStatusFilter] = useState<string>('ALL');
   const [budgetProgrammeId, setBudgetProgrammeId] = useState<ProgrammeId | ''>('');
+  const [workplanProgrammeId, setWorkplanProgrammeId] = useState<ProgrammeId | ''>('');
   const [seasonalMonthsDraft, setSeasonalMonthsDraft] = useState<number[]>([]);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, { supplier: string; amount: string }>>({});
   const focusedQualityKey = useRef('');
+
+  useEffect(() => {
+    if (!initialProgrammeCreate) return;
+    setBudgetProgrammeId(initialProgrammeCreate.programmeId);
+    setWorkplanProgrammeId(initialProgrammeCreate.programmeId);
+    setEditingBudget(null);
+    setEditingWorkplan(null);
+    if (initialProgrammeCreate.type === 'budget') {
+      setActiveSubTab('budgets');
+      setShowBudgetModal(true);
+    } else {
+      setActiveSubTab('workplans');
+      setShowWorkplanModal(true);
+    }
+    onProgrammeCreateHandled?.();
+  }, [initialProgrammeCreate?.requestId]);
 
   // Modal States
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
@@ -1092,6 +1113,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
               <button
                 onClick={() => {
                   setEditingWorkplan(null);
+                  setWorkplanProgrammeId('');
                   setShowWorkplanModal(true);
                 }}
                 className="px-3 py-2 bg-teal-800 text-white rounded-lg text-xs font-bold hover:bg-teal-900 transition-all flex items-center gap-1 shadow-xs"
@@ -1170,6 +1192,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           <button
                             onClick={() => {
                               setEditingWorkplan(w);
+                              setWorkplanProgrammeId(w.programmeId || '');
                               setShowWorkplanModal(true);
                             }}
                             className="text-teal-800 hover:underline font-semibold"
@@ -1472,7 +1495,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Programme</label>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Budget area</label>
                   <input
                     name="programme"
                     defaultValue={editingAnnualBudget?.programme || 'General programme'}
@@ -1579,7 +1602,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Programme attribution</label>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">SHINE programme</label>
                 <select
                   name="programmeId"
                   value={budgetProgrammeId}
@@ -1587,7 +1610,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                   className="w-full text-xs border border-stone-300 rounded-lg p-2"
                 >
                   <option value="">Unassigned</option>
-                  {PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  {[...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </div>
 
@@ -1754,11 +1777,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                 <label className="block text-xs font-semibold text-stone-700 mb-1">Programme</label>
                 <select
                   name="programmeId"
-                  defaultValue={editingWorkplan?.programmeId || ''}
+                  value={workplanProgrammeId}
+                  onChange={(event) => setWorkplanProgrammeId(event.target.value as ProgrammeId | '')}
                   className="w-full text-xs border border-stone-300 rounded-lg p-2"
                 >
                   <option value="">Unassigned</option>
-                  {PROGRAMMES.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  {[...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </div>
 

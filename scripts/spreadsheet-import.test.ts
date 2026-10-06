@@ -26,6 +26,10 @@ const detectorFixtures: Array<{ kind: string; rows: Array<Array<string | number>
     rows: [['Staff Name', 'Salary', 'January', 'SEPTMBER', 'JULY ', 'LOAN', 'Arrears'], ['Synthetic Staff', 1000, 1000, 1000, 1000, 50, 40]],
   },
   {
+    kind: 'payroll-grid',
+    rows: [['GRATUITY'], ['Department', 'Name', 'Total Gratuity', 'Salary', 'Rate %', 'Total months'], ['Security', 'Synthetic Worker', 576000, 120000, 0.05, 96]],
+  },
+  {
     kind: 'profit-loss',
     rows: [['Revenue', 'Cost', 'Net Profit'], ['Sales', 1000, 500]],
   },
@@ -120,6 +124,60 @@ assert.equal(payrollEmployees.length, 1);
 assert.equal(payrollEmployees[0].salaryHistory.length, 3);
 assert.ok(payrollEmployees[0].otherPayrollAmounts.some((line) => line.type === 'loan'));
 assert.ok(payrollEmployees[0].otherPayrollAmounts.some((line) => line.type === 'arrears'));
+
+const gratuityWorkbook = workbook([
+  ['GRATUITY'],
+  ['Department', 'Name', 'Total Gratuity', 'Salary', 'Rate %', 'Total months'],
+  ['Security', 'Synthetic Worker', 576000, 120000, 0.05, 96],
+  ['Security', 'Another Worker', 288000, 80000, 0.05, 48],
+]);
+const gratuityAnalysis = analyzeSpreadsheetWorkbook(gratuityWorkbook);
+assert.equal(gratuityAnalysis.detectedKind, 'payroll-grid');
+const gratuityPreview = createSpreadsheetImportPreview(
+  gratuityWorkbook,
+  gratuityAnalysis,
+  gratuityAnalysis.detectedKind,
+  [{ id: 'staff-1', uid: 'staff-1', email: 'worker@example.org', fullName: 'Synthetic Worker', role: 'Staff', status: 'Active', createdAt: '', updatedAt: '' }],
+  [],
+  'Gratuity all workers.xlsx',
+);
+const gratuityEmployees = gratuityPreview.lines.filter((line) => line.kind === 'employee');
+assert.equal(gratuityEmployees.length, 2);
+assert.equal(gratuityEmployees[0].matchedEmployeeId, 'staff-1');
+assert.equal(gratuityEmployees[0].salaryHistory.length, 0);
+assert.equal(gratuityEmployees[0].otherPayrollAmounts[0].type, 'gratuity');
+assert.equal(gratuityEmployees[0].otherPayrollAmounts[0].amount, 576000);
+assert.match(spreadsheetEmployeeLineToPreview(gratuityEmployees[0]).summary, /gratuity MWK 576,000/);
+
+const uploadedGratuityWorkbook = XLSX.read(
+  fs.readFileSync('public/sample_reports/Gratuity all workers.xlsx'),
+  { cellFormula: true },
+);
+const uploadedGratuityAnalysis = analyzeSpreadsheetWorkbook(uploadedGratuityWorkbook);
+assert.equal(uploadedGratuityAnalysis.detectedKind, 'payroll-grid');
+const uploadedGratuityPreview = createSpreadsheetImportPreview(
+  uploadedGratuityWorkbook,
+  uploadedGratuityAnalysis,
+  uploadedGratuityAnalysis.detectedKind,
+  [],
+  [],
+  'Gratuity all workers.xlsx',
+);
+const uploadedGratuityEmployees = uploadedGratuityPreview.lines.filter((line) => line.kind === 'employee');
+assert.equal(uploadedGratuityEmployees.length, 24);
+assert.equal(uploadedGratuityEmployees.flatMap((line) => line.otherPayrollAmounts)
+  .filter((amount) => amount.type === 'gratuity')
+  .reduce((total, amount) => total + amount.amount, 0), 9224750);
+assert.ok(uploadedGratuityEmployees.every((line) => line.salaryHistory.length === 0));
+
+const unknownWorkbook = workbook([['Column A', 'Column B'], ['value 1', 'value 2']]);
+const unknownPreview = createSpreadsheetImportPreview(
+  unknownWorkbook,
+  analyzeSpreadsheetWorkbook(unknownWorkbook),
+  'unknown',
+);
+assert.ok(unknownPreview.lines.length > 0, 'unknown data stays in the review preview for user classification');
+assert.ok(unknownPreview.lines.every((line) => line.kind === 'unmapped'));
 
 assert.equal(isValidPayrollEmployeeName('PAYMENTS'), false);
 assert.equal(isValidPayrollEmployeeName('TOTAL SALARY'), false);

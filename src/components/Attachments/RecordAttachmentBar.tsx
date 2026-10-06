@@ -129,6 +129,9 @@ export const RecordAttachmentBar: React.FC<RecordAttachmentBarProps> = ({
               <div className="font-bold text-stone-900">
                 {activePreview.caption || activePreview.fileName}
               </div>
+                {activePreview.consent === false && (
+                  <p className="font-semibold text-amber-900">Consent was not confirmed when this image was imported. Review before sharing or reuse.</p>
+                )}
               <div className="text-[11px] text-stone-500">
                 Date: {activePreview.date} • Uploaded by {activePreview.uploadedBy?.name || 'Staff'}
               </div>

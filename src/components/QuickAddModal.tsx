@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AppDatabase, Girl, Household } from '../types';
+import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from '../data/programmes';
 import {
   X,
   UserPlus,
@@ -10,6 +11,7 @@ import {
   Banknote,
   ShoppingBag,
   Sparkles,
+  Sprout,
   ChevronRight,
 } from 'lucide-react';
 
@@ -21,7 +23,8 @@ export type ActionType =
   | 'add-family'
   | 'add-rent'
   | 'add-expense'
-  | 'add-activity';
+  | 'add-activity'
+  | 'add-programme-record';
 
 interface QuickAddModalProps {
   db: AppDatabase;
@@ -32,6 +35,7 @@ interface QuickAddModalProps {
     girl?: Girl,
     house?: Household
   ) => void;
+  onOpenProgramme: (id: ProgrammeId | null) => void;
 }
 
 export const QuickAddModal: React.FC<QuickAddModalProps> = ({
@@ -39,14 +43,21 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   isOpen,
   onClose,
   onSelectAction,
+  onOpenProgramme,
 }) => {
   const [selectedAction, setSelectedAction] = useState<ActionType | null>(null);
   const [targetGirlId, setTargetGirlId] = useState<string>('');
   const [targetHouseId, setTargetHouseId] = useState<string>('');
+  const [targetProgrammeId, setTargetProgrammeId] = useState<ProgrammeId | ''>('');
 
   if (!isOpen) return null;
 
   const handleActionClick = (action: ActionType) => {
+    if (action === 'add-programme-record') {
+      setSelectedAction(action);
+      setTargetProgrammeId(PROGRAMMES[0]?.id || '');
+      return;
+    }
     if (action === 'register-girl' || action === 'register-house') {
       onSelectAction(action);
       onClose();
@@ -62,6 +73,16 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
   const handleConfirmTarget = () => {
     if (!selectedAction) return;
+
+    if (selectedAction === 'add-programme-record') {
+      const programme = [...PROGRAMMES, ...LEGACY_PROGRAMMES].find((item) => item.id === targetProgrammeId);
+      if (programme) {
+        onOpenProgramme(programme.id);
+        onClose();
+        setSelectedAction(null);
+      }
+      return;
+    }
 
     if (
       selectedAction === 'add-edu' ||
@@ -247,6 +268,26 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400" />
               </button>
+
+              <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider px-1 pt-2">
+                Programme Records
+              </div>
+
+              <button
+                onClick={() => handleActionClick('add-programme-record')}
+                className="w-full p-3 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                    <Sprout className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xs text-stone-900">Add a Programme Record</div>
+                    <div className="text-[11px] text-stone-500">Choose a programme, then add its activity, costs, or outputs</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-stone-400" />
+              </button>
             </div>
           ) : (
             /* Target Selector Screen */
@@ -259,7 +300,9 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                   ← Back to Options
                 </button>
                 <h3 className="font-bold text-sm text-stone-900">
-                  {selectedAction === 'add-edu' ||
+                  {selectedAction === 'add-programme-record'
+                    ? 'Select Programme'
+                    : selectedAction === 'add-edu' ||
                   selectedAction === 'add-health' ||
                   selectedAction === 'add-family'
                     ? 'Select Girl for Follow-Up'
@@ -267,7 +310,19 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 </h3>
               </div>
 
-              {selectedAction === 'add-edu' ||
+              {selectedAction === 'add-programme-record' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Choose Programme:</label>
+                  <select
+                    value={targetProgrammeId}
+                    onChange={(event) => setTargetProgrammeId(event.target.value as ProgrammeId | '')}
+                    className="w-full p-2.5 text-sm border border-stone-300 rounded-lg bg-white"
+                  >
+                    {PROGRAMMES.map((programme) => <option key={programme.id} value={programme.id}>{programme.name}</option>)}
+                    {LEGACY_PROGRAMMES.map((programme) => <option key={programme.id} value={programme.id}>{programme.name}</option>)}
+                  </select>
+                </div>
+              ) : selectedAction === 'add-edu' ||
               selectedAction === 'add-health' ||
               selectedAction === 'add-family' ? (
                 db.girls.length === 0 ? (
@@ -345,6 +400,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                 selectedAction === 'add-health' ||
                 selectedAction === 'add-family') &&
                 db.girls.length > 0) ||
+              (selectedAction === 'add-programme-record' && Boolean(targetProgrammeId)) ||
               ((selectedAction === 'add-activity' ||
                 selectedAction === 'add-rent' ||
                 selectedAction === 'add-expense') &&
@@ -360,7 +416,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                     onClick={handleConfirmTarget}
                     className="flex-1 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg"
                   >
-                    Continue to Form
+                    {selectedAction === 'add-programme-record' ? 'Open Programme' : 'Continue to Form'}
                   </button>
                 </div>
               ) : null}

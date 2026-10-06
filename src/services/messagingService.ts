@@ -188,7 +188,7 @@ export async function getUserNotificationPreferences(
   try {
     const snap = await getDoc(doc(firestore, COLLECTIONS.PREFERENCES, userId));
     if (snap.exists()) {
-      return { userId, ...(snap.data() as any) };
+      return { userId, ...DEFAULT_NOTIFICATION_PREFERENCES, ...(snap.data() as any) };
     }
   } catch (err) {
     console.warn('Could not read user notification preferences:', err);
@@ -707,6 +707,9 @@ export type DataChangeType =
   | 'rent_added'
   | 'expense_added'
   | 'activity_added'
+  | 'attachment_added'
+  | 'programme_record_added'
+  | 'import_completed'
   | 'record_updated';
 
 export async function triggerDataChangeNotification(params: {
@@ -717,6 +720,7 @@ export async function triggerDataChangeNotification(params: {
   detail?: string;
   girlId?: string;
   houseId?: string;
+  relatedRecordType?: StaffNotification['relatedRecordType'];
   allStaff: StaffUser[];
   currentDb: AppDatabase;
 }): Promise<void> {
@@ -794,6 +798,29 @@ export async function triggerDataChangeNotification(params: {
       relatedRecordType = 'activity';
       break;
 
+    case 'attachment_added':
+      title = 'Photo or Receipt Added';
+      message = `${actor.name} added ${detail || 'a photo or receipt'} to ${entityTitle}.`;
+      priority = 'normal';
+      relatedRecordType = params.relatedRecordType || 'activity';
+      break;
+
+    case 'programme_record_added':
+      title = 'Programme Record Added';
+      message = `${actor.name} added a programme record: ${entityTitle}.`;
+      priority = 'normal';
+      targetRoles = ['Administrator', 'Manager'];
+      relatedRecordType = 'programmeLog';
+      break;
+
+    case 'import_completed':
+      title = 'Data Import Completed';
+      message = `${actor.name} completed a data import from ${entityTitle}.`;
+      priority = 'important';
+      targetRoles = ['Administrator', 'Manager'];
+      relatedRecordType = 'importBatch';
+      break;
+
     case 'record_updated':
       title = 'Record Updated';
       message = `${actor.name} updated ${detail || 'record'} for ${entityTitle}.`;
@@ -804,12 +831,20 @@ export async function triggerDataChangeNotification(params: {
   }
 
   // Filter recipient staff: active, in target roles, NOT the actor themselves
-  const recipients = allStaff.filter(
+  const roleRecipients = allStaff.filter(
     (staff) =>
       staff.status === 'Active' &&
+      Boolean(staff.uid) &&
       staff.uid !== actor.uid &&
       targetRoles.includes(staff.role)
   );
+  const preferencesByRecipient = await Promise.all(roleRecipients.map(async (staff) => ({
+    staff,
+    preferences: await getUserNotificationPreferences(staff.uid),
+  })));
+  const recipients = preferencesByRecipient
+    .filter(({ preferences }) => preferences.dataChangeNotifications !== false)
+    .map(({ staff }) => staff);
 
   if (recipients.length === 0) return;
 

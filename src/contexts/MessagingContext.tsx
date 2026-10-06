@@ -89,6 +89,7 @@ interface MessagingContextType {
     detail?: string;
     girlId?: string;
     houseId?: string;
+    relatedRecordType?: StaffNotification['relatedRecordType'];
     currentDb: AppDatabase;
   }) => Promise<void>;
   notifyAssignment: (params: {
@@ -383,6 +384,7 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       detail?: string;
       girlId?: string;
       houseId?: string;
+      relatedRecordType?: StaffNotification['relatedRecordType'];
       currentDb: AppDatabase;
     }) => {
       if (!currentActor.uid) return;

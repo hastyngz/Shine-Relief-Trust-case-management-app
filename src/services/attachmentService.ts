@@ -55,9 +55,9 @@ export async function getArchivedReport(storagePath: string): Promise<Blob> {
 export async function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
   const targetTypes: AttachmentTargetType[] = [
     'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
-    'householdActivity', 'rentPayment', 'expense',
-    ...(canViewHealthRecords ? ['healthFollowUp' as const] : []),
+    'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
   ];
+  if (canViewHealthRecords) targetTypes.push('healthFollowUp');
   const snapshots = await Promise.all(targetTypes.map((targetType) => {
     const constraints = [
       where('targetType', '==', targetType),
@@ -107,6 +107,7 @@ export interface UploadAttachmentParams {
   category: AttachmentCategory;
   date?: string; // YYYY-MM-DD
   consent?: boolean;
+  allowUnconfirmedConsent?: boolean;
   user: {
     uid: string;
     fullName?: string;
@@ -124,7 +125,7 @@ export async function uploadPhotoAttachment(
   params: UploadAttachmentParams
 ): Promise<PhotoAttachment> {
   const { file, targetType, targetId, caption, category, date, consent, user } = params;
-  if (file.type.startsWith('image/') && consent !== true) {
+  if (file.type.startsWith('image/') && consent !== true && !params.allowUnconfirmedConsent) {
     throw new Error('Photo consent must be confirmed before uploading an image.');
   }
 
@@ -169,10 +170,12 @@ export async function uploadPhotoAttachment(
     storagePath,
     downloadUrl,
     caption: caption?.trim() || undefined,
-    ...(file.type.startsWith('image/') && consent === true ? {
-      consent: true,
-      consentCheckedAt: new Date().toISOString(),
-      consentCheckedBy: user.fullName || user.email,
+    ...(file.type.startsWith('image/') ? {
+      consent: consent === true,
+      ...(consent === true ? {
+        consentCheckedAt: new Date().toISOString(),
+        consentCheckedBy: user.fullName || user.email,
+      } : {}),
     } : {}),
     category,
     date: date || new Date().toISOString().slice(0, 10),

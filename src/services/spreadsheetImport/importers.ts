@@ -541,7 +541,79 @@ function parsePayrollRows(
   sourceName: string,
 ): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
   const headerIndex = rows.slice(0, 10).findIndex((row) => row.some((value) => monthColumn(value)));
-  if (headerIndex < 0) return { lines: [], imported: 0, skipped: rows.length };
+  if (headerIndex < 0) {
+    const gratuityHeaderIndex = rows.slice(0, 15).findIndex((row) =>
+      columnIndex(row, [/name/, /employee/, /staff/, /worker/]) >= 0 &&
+      row.some((value) => /gratuity/.test(normalized(value)) && !/(?:salary|rate|percent|month)/.test(normalized(value)))
+    );
+    if (gratuityHeaderIndex < 0) return { lines: [], imported: 0, skipped: rows.length };
+
+    const headers = rows[gratuityHeaderIndex];
+    const nameIndex = columnIndex(headers, [/employee/, /staff/, /worker/, /name/]);
+    const amountIndex = headers.findIndex((value) =>
+      /gratuity/.test(normalized(value)) && !/(?:salary|rate|percent|month)/.test(normalized(value))
+    );
+    const departmentIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
+    const year = inferYear(sourceName || sheetName, rows);
+    const staffNames = [
+      ...staff.map((person) => ({ id: person.id, name: person.fullName })),
+      ...employees.map((person) => ({ id: person.id, name: person.fullName })),
+    ].filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
+    const output: ImportedEmployeeLine[] = [];
+    const employeesByName = new Map<string, ImportedEmployeeLine>();
+    let currentDepartment = '';
+    let skipped = 0;
+
+    rows.slice(gratuityHeaderIndex + 1).forEach((row, offset) => {
+      const rowDepartment = departmentIndex >= 0 ? text(row[departmentIndex]) : '';
+      if (rowDepartment) currentDepartment = rowDepartment;
+      const employeeName = text(row[nameIndex]).split(/\r?\n|;| \| /)[0]?.trim() || '';
+      const amount = number(row[amountIndex]);
+      if (!employeeName || amount === undefined || amount <= 0) return;
+      if (!isValidPayrollEmployeeName(employeeName) || /^(?:total|grand total|subtotal|summary)$/i.test(employeeName)) {
+        skipped += 1;
+        return;
+      }
+
+      const sourceRow = gratuityHeaderIndex + offset + 2;
+      const sourceReference = `${sourceName || sheetName}/${sheetName}/${sourceRow}/gratuity`;
+      const gratuityAmount = { type: 'gratuity' as const, amount, sourceReference };
+      const employeeKey = normalized(employeeName);
+      const existingLine = employeesByName.get(employeeKey);
+      if (existingLine) {
+        existingLine.otherPayrollAmounts.push(gratuityAmount);
+        return;
+      }
+
+      const nameMatches = matchNameCandidates(employeeName, staffNames);
+      const exact = nameMatches.exact;
+      const candidates = exact.length === 1 ? exact : nameMatches.possible.slice(0, 5);
+      const status: ImportedEmployeeLine['status'] = exact.length === 1
+        ? 'matched'
+        : exact.length > 1 || candidates.length > 1
+          ? 'ambiguous'
+          : 'unmatched';
+      const line: ImportedEmployeeLine = {
+        kind: 'employee',
+        sheet: sheetName,
+        row: sourceRow,
+        employeeName,
+        department: currentDepartment,
+        sourceYear: year,
+        currentSalary: 0,
+        salaryHistory: [],
+        otherPayrollAmounts: [gratuityAmount],
+        employmentStatus: 'Active',
+        matchCandidates: candidates,
+        matchedEmployeeId: exact.length === 1 ? exact[0].id : undefined,
+        status,
+      };
+      employeesByName.set(employeeKey, line);
+      output.push(line);
+    });
+
+    return { lines: output, imported: output.length, skipped };
+  }
   const headers = rows[headerIndex];
   const labelledNameIndex = columnIndex(headers, [/employee/, /staff/, /name/, /personnel/]);
   const monthColumns = findMonthColumns(headers);

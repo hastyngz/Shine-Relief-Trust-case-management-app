@@ -343,8 +343,9 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
           pendingPhotos={pendingPhotos}
           onChange={setPendingPhotos}
           defaultCategory="Group Activity"
-          title="Activity Photos & Documentation (Optional)"
-          description="Take camera photo or choose file: group activity photos, study sessions, repair progress, chores, or meeting notes."
+          categoryOptions={['Group Activity', 'Receipt', 'Supporting Document', 'Other']}
+          title="Activity Photos or Receipts (Optional)"
+          description="Add activity photos or receipts. Confirm consent for everyone shown before saving."
         />
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-200">

@@ -17,7 +17,9 @@ import {
   PhotoAttachment,
 } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useMessaging } from '../../contexts/MessagingContext';
 import { uploadPhotoAttachment } from '../../services/attachmentService';
+import { getDatabase } from '../../utils/storage';
 import { formatBytes } from '../../utils/imageOptimizer';
 
 interface PhotoUploadModalProps {
@@ -75,6 +77,24 @@ const CATEGORY_OPTIONS: { [key in AttachmentTargetType]?: AttachmentCategory[] }
     'Supporting Document',
     'Other',
   ],
+  programmeLog: [
+    'Group Activity',
+    'Receipt',
+    'Supporting Document',
+    'Other',
+  ],
+  programme: [
+    'Group Activity',
+    'Receipt',
+    'Supporting Document',
+    'Other',
+  ],
+  importBatch: [
+    'Group Activity',
+    'Receipt',
+    'Supporting Document',
+    'Other',
+  ],
   rentPayment: [
     'Receipt',
     'Supporting Document',
@@ -112,6 +132,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
   onUploaded,
 }) => {
   const { currentUser, staffProfile, role } = useAuth();
+  const { notifyDataChange } = useMessaging();
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [caption, setCaption] = useState('');
@@ -156,11 +177,6 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
       return;
     }
 
-    if (files.some((file) => file.type.startsWith('image/')) && !consentConfirmed) {
-      setError('Please confirm that everyone shown has given permission for these photos to be stored.');
-      return;
-    }
-
     if (!currentUser) {
       setError('You must be signed in to upload photos.');
       return;
@@ -170,6 +186,8 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
     setError(null);
 
     try {
+      const failedFiles: Array<{ file: File; previewUrl: string }> = [];
+      const uploadedAttachments: PhotoAttachment[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setProgressText(
@@ -178,34 +196,59 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
             : 'Compressing and uploading photo to Firebase Storage...'
         );
 
-        const attachment = await uploadPhotoAttachment({
-          file,
-          targetType,
-          targetId,
-          caption: caption.trim() || undefined,
-          category,
-          date,
-          consent: file.type.startsWith('image/') ? consentConfirmed : undefined,
-          user: {
-            uid: currentUser.uid,
-            fullName: staffProfile?.fullName || currentUser.displayName || undefined,
-            email: currentUser.email || '',
-            role: role || undefined,
-          },
-        });
+        try {
+          const attachment = await uploadPhotoAttachment({
+            file,
+            targetType,
+            targetId,
+            caption: caption.trim() || undefined,
+            category,
+            date,
+            consent: file.type.startsWith('image/') ? consentConfirmed : undefined,
+            allowUnconfirmedConsent: true,
+            user: {
+              uid: currentUser.uid,
+              fullName: staffProfile?.fullName || currentUser.displayName || undefined,
+              email: currentUser.email || '',
+              role: role || undefined,
+            },
+          });
+          uploadedAttachments.push(attachment);
 
-        if (onUploaded) {
-          onUploaded(attachment);
+          if (onUploaded) {
+            onUploaded(attachment);
+          }
+        } catch (uploadError) {
+          console.error(`Upload photo error for ${file.name}:`, uploadError);
+          failedFiles.push({ file, previewUrl: previewUrls[i] });
         }
       }
 
-      // Cleanup previews
-      previewUrls.forEach((url) => URL.revokeObjectURL(url));
-      setFiles([]);
-      setPreviewUrls([]);
-      setCaption('');
-      setConsentConfirmed(false);
-      onClose();
+      if (uploadedAttachments.length > 0) {
+        const relatedRecordType = targetType === 'householdActivity' ? 'activity' : targetType;
+        void notifyDataChange({
+          type: 'attachment_added',
+          entityId: targetId,
+          entityTitle: targetTitle || targetId,
+          detail: `${uploadedAttachments.length} ${category === 'Receipt' ? 'receipt' : 'photo'} attachment(s)`,
+          relatedRecordType,
+          currentDb: getDatabase(),
+        }).catch((notificationError) => console.warn('Could not notify staff about uploaded attachments:', notificationError));
+      }
+
+      const failedUrls = new Set(failedFiles.map((item) => item.previewUrl));
+      previewUrls.filter((url) => !failedUrls.has(url)).forEach((url) => URL.revokeObjectURL(url));
+      if (failedFiles.length > 0) {
+        setFiles(failedFiles.map((item) => item.file));
+        setPreviewUrls(failedFiles.map((item) => item.previewUrl));
+        setError(`${failedFiles.length} photo(s) could not upload. They remain selected so you can retry.`);
+      } else {
+        setFiles([]);
+        setPreviewUrls([]);
+        setCaption('');
+        setConsentConfirmed(false);
+        onClose();
+      }
     } catch (err: any) {
       console.error('Upload photo error:', err);
       setError(err.message || 'Failed to upload photo. Please check your connection.');
@@ -404,10 +447,9 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 checked={consentConfirmed}
                 onChange={(event) => setConsentConfirmed(event.target.checked)}
                 disabled={uploading}
-                required
                 className="mt-0.5 accent-teal-800"
               />
-              <span>I confirm everyone shown has given permission for these photos to be stored. The confirmation and date will be recorded.</span>
+              <span>Consent confirmed for everyone shown. If unchecked, the photo will still upload and be flagged for follow-up.</span>
             </label>
           )}
 
