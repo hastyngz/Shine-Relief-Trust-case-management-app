@@ -33,7 +33,7 @@ const MONTH_NAMES =
 function normalize(value: unknown): string {
   return String(value ?? '')
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\\u0300-\\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
