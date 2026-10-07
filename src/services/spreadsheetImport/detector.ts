@@ -33,7 +33,7 @@ const MONTH_NAMES =
 function normalize(value: unknown): string {
   return String(value ?? '')
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\u0300-\\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
@@ -87,6 +87,16 @@ function detectRows(rows: string[][], sheetName = ''): SpreadsheetKind {
   }
 
   if (hasGratuityTable) return 'payroll-grid';
+
+  // Flat employee roster / reconciliation table: a name column next to an amount column,
+  // with payroll wording somewhere on the sheet and no quantity column (so not an item list).
+  const hasRosterTable = rows.slice(0, 25).some((row) =>
+    row.some((cell) => /\b(employee|staff|worker|name)\b/.test(cell)) &&
+    row.some((cell) => /\b(salary|wage|amount|mwk|pay)\b/.test(cell) && !/\b(status|action)\b/.test(cell))
+  );
+  if (hasRosterTable && !hasQuantity && (payrollSheetName || /\b(employee|staff|payroll|salary|wage)\b/.test(documentLabel))) {
+    return 'payroll-grid';
+  }
 
   if (
     hasMonths &&
