@@ -41,7 +41,7 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
   {
     name: 'getGirlProfile',
-    description: 'Retrieve case profile for an individual girl by her unique girl ID or case ID (e.g. "SG-001").',
+    description: 'Retrieve case profile for an individual girl by her unique girl ID or case ID (e.g. "SG-001"). If a name matches more than one girl, the result lists the candidates instead of guessing.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -136,7 +136,7 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
         },
         status: {
           type: Type.STRING,
-          description: 'Optional payment status: "Paid", "Partial", "Overdue"',
+          description: 'Optional payment status: "Paid", "Partially paid", or "Not paid"',
         },
       },
     },
@@ -168,7 +168,7 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
   {
     name: 'getGroupActivities',
-    description: 'Retrieve group activities, workshops, and household gatherings conducted.',
+    description: 'Retrieve group activities, workshops, and household gatherings conducted. Can be filtered by household, month, and year.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -178,7 +178,7 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
         },
         month: {
           type: Type.STRING,
-          description: 'Optional month filter',
+          description: 'Optional month name (e.g. "October"), month number (1-12), or YYYY-MM string',
         },
         year: {
           type: Type.NUMBER,
@@ -280,6 +280,92 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
 ];
 
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/**
+ * True when an ISO date (YYYY-MM-DD) falls in the requested month and/or year.
+ * month accepts a name ("October"), a number (1-12) or "YYYY-MM". Empty filters match everything.
+ */
+function matchesPeriod(date: string | undefined, monthInput: unknown, yearInput: unknown): boolean {
+  const monthText = String(monthInput || '').toLowerCase().trim();
+  const yearText = yearInput ? String(yearInput) : '';
+  if (!monthText && !yearText) return true;
+  if (!date) return false;
+  if (yearText && !date.startsWith(yearText)) return false;
+  if (!monthText) return true;
+
+  const yearMonth = monthText.match(/^(\d{4})-(\d{1,2})$/);
+  if (yearMonth) return date.startsWith(`${yearMonth[1]}-${yearMonth[2].padStart(2, '0')}`);
+
+  let index = MONTH_NAMES.findIndex((name) => name.startsWith(monthText));
+  if (index === -1 && /^\d{1,2}$/.test(monthText)) index = Number(monthText) - 1;
+  if (index < 0 || index > 11) return false;
+  return date.slice(5, 7) === String(index + 1).padStart(2, '0');
+}
+
+/** Maps loose wording ("partial", "overdue", "unpaid") onto the stored rent statuses, lower-cased. */
+function normalizeRentStatus(input: unknown): string {
+  const value = String(input || '').toLowerCase().trim();
+  if (!value) return '';
+  if (value.startsWith('part')) return 'partially paid';
+  if (['overdue', 'unpaid', 'not paid', 'arrears', 'outstanding'].includes(value)) return 'not paid';
+  return value;
+}
+
+/**
+ * Resolve a girl by case ID, exact name, or a name fragment. A fragment that matches more than
+ * one girl is reported back as ambiguous instead of silently picking the first match.
+ */
+function resolveGirl(db: AppDatabase, input: unknown): { girl?: Girl; error?: Record<string, unknown> } {
+  const target = String(input || '').toLowerCase().trim();
+  if (!target) return { error: { error: 'No girl ID or name was provided.' } };
+
+  const byId = db.girls.find((g) => g.id.toLowerCase() === target);
+  if (byId) return { girl: byId };
+
+  const exactName = db.girls.filter((g) => g.fullName.toLowerCase() === target);
+  if (exactName.length === 1) return { girl: exactName[0] };
+
+  const candidates = exactName.length > 1
+    ? exactName
+    : db.girls.filter((g) => g.fullName.toLowerCase().includes(target));
+  if (candidates.length === 1) return { girl: candidates[0] };
+  if (candidates.length === 0) return { error: { error: `No girl found matching "${input}".` } };
+  return {
+    error: {
+      error: `More than one girl matches "${input}". Ask the staff member which one they mean, or use the case ID.`,
+      matches: candidates.slice(0, 10).map((g) => ({ id: g.id, fullName: g.fullName })),
+    },
+  };
+}
+
+/** Same rules as resolveGirl, for households. */
+function resolveHousehold(db: AppDatabase, input: unknown): { house?: Household; error?: Record<string, unknown> } {
+  const target = String(input || '').toLowerCase().trim();
+  if (!target) return { error: { error: 'No household ID or name was provided.' } };
+
+  const byId = db.households.find((h) => h.id.toLowerCase() === target);
+  if (byId) return { house: byId };
+
+  const exactName = db.households.filter((h) => h.name.toLowerCase() === target);
+  if (exactName.length === 1) return { house: exactName[0] };
+
+  const candidates = exactName.length > 1
+    ? exactName
+    : db.households.filter((h) => h.name.toLowerCase().includes(target));
+  if (candidates.length === 1) return { house: candidates[0] };
+  if (candidates.length === 0) return { error: { error: `Household "${input}" not found.` } };
+  return {
+    error: {
+      error: `More than one household matches "${input}". Ask the staff member which one they mean, or use the household ID.`,
+      matches: candidates.slice(0, 10).map((h) => ({ id: h.id, name: h.name })),
+    },
+  };
+}
+
 /**
  * Controlled Executor for AI Tools
  */
@@ -334,14 +420,8 @@ export async function executeAITool(
     }
 
     case 'getGirlProfile': {
-      const targetId = (args.girlId || '').toLowerCase().trim();
-      const girl = db.girls.find(
-        (g) => g.id.toLowerCase() === targetId || g.fullName.toLowerCase().includes(targetId)
-      );
-
-      if (!girl) {
-        return { error: `No girl found with ID or name matching "${args.girlId}".` };
-      }
+      const { girl, error } = resolveGirl(db, args.girlId);
+      if (!girl) return error;
 
       accessedRecordIds.add(girl.id);
 
@@ -372,14 +452,8 @@ export async function executeAITool(
     }
 
     case 'getGirlFollowUps': {
-      const targetId = (args.girlId || '').toLowerCase().trim();
-      const girl = db.girls.find(
-        (g) => g.id.toLowerCase() === targetId || g.fullName.toLowerCase().includes(targetId)
-      );
-
-      if (!girl) {
-        return { error: `No girl found matching "${args.girlId}".` };
-      }
+      const { girl, error } = resolveGirl(db, args.girlId);
+      if (!girl) return error;
 
       accessedRecordIds.add(girl.id);
       const type = (args.followUpType || 'all').toLowerCase();
@@ -488,14 +562,8 @@ export async function executeAITool(
     }
 
     case 'getHouseholdProfile': {
-      const targetId = (args.householdId || '').toLowerCase().trim();
-      const house = db.households.find(
-        (h) => h.id.toLowerCase() === targetId || h.name.toLowerCase().includes(targetId)
-      );
-
-      if (!house) {
-        return { error: `Household "${args.householdId}" not found.` };
-      }
+      const { house, error } = resolveHousehold(db, args.householdId);
+      if (!house) return error;
 
       accessedRecordIds.add(house.id);
       const residents = db.girls
@@ -520,14 +588,8 @@ export async function executeAITool(
     }
 
     case 'getHouseholdFollowUps': {
-      const targetId = (args.householdId || '').toLowerCase().trim();
-      const house = db.households.find(
-        (h) => h.id.toLowerCase() === targetId || h.name.toLowerCase().includes(targetId)
-      );
-
-      if (!house) {
-        return { error: `Household "${args.householdId}" not found.` };
-      }
+      const { house, error } = resolveHousehold(db, args.householdId);
+      if (!house) return error;
 
       accessedRecordIds.add(house.id);
       const activities = db.householdActivities
@@ -560,14 +622,14 @@ export async function executeAITool(
       const hId = (args.householdId || '').toLowerCase().trim();
       const month = (args.month || '').toLowerCase().trim();
       const year = args.year ? Number(args.year) : undefined;
-      const status = args.status;
+      const status = normalizeRentStatus(args.status);
 
       const records = db.rentPayments
         .filter((r) => {
           if (hId && r.householdId.toLowerCase() !== hId) return false;
           if (month && !r.monthCovered.toLowerCase().includes(month)) return false;
           if (year && !r.monthCovered.includes(String(year)) && !r.datePaid.startsWith(String(year))) return false;
-          if (status && r.paymentStatus !== status) return false;
+          if (status && String(r.paymentStatus).toLowerCase() !== status) return false;
           return true;
         })
         .map((r) => {
@@ -651,7 +713,7 @@ export async function executeAITool(
       const activities = db.householdActivities
         .filter((a) => {
           if (hId && a.householdId.toLowerCase() !== hId) return false;
-          if (args.year && !a.date.startsWith(String(args.year))) return false;
+          if (!matchesPeriod(a.date, args.month, args.year)) return false;
           return true;
         })
         .map((a) => {
@@ -887,9 +949,8 @@ export async function executeAITool(
     }
 
     case 'getGirlEducationHistory': {
-      const targetGirlId = String(args.girlId || '').toLowerCase();
-      const girl = db.girls.find((record) => record.id.toLowerCase() === targetGirlId || record.fullName.toLowerCase() === targetGirlId);
-      if (!girl) return { error: `No girl found matching "${args.girlId}".` };
+      const { girl, error } = resolveGirl(db, args.girlId);
+      if (!girl) return error;
       accessedRecordIds.add(girl.id);
       const history = (db.educationHistory || []).filter((record) => record.girlId === girl.id).map((record) => {
         accessedRecordIds.add(record.id);
@@ -938,10 +999,7 @@ export async function executeAITool(
       const year = Number(args.year);
 
       // Map month name to 2-digit representation
-      const monthNames = [
-        'january', 'february', 'march', 'april', 'may', 'june',
-        'july', 'august', 'september', 'october', 'november', 'december'
-      ];
+      const monthNames = MONTH_NAMES;
       let monthIndex = monthNames.findIndex((m) => m.startsWith(monthInput));
       if (monthIndex === -1 && !isNaN(Number(monthInput))) {
         monthIndex = Number(monthInput) - 1;

@@ -239,18 +239,26 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     setErrorMessage(null);
     setInputQuery('');
 
-    // If query is "Summarize this girl's case history" but no girl is selected, prompt user
-    if (query.toLowerCase().includes("this girl") && !selectedGirlId && db.girls.length > 0) {
-      // Pick first girl or prompt selection
-      setSelectedGirlId(db.girls[0].id);
-    }
-
     const userMessage: ChatMessage = {
       id: 'msg_' + Date.now(),
       role: 'user',
       content: query,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
+
+    // "This girl" needs a selected girl. Never guess one: ask the staff member to choose.
+    if (query.toLowerCase().includes('this girl') && !selectedGirlId) {
+      const promptMsg: ChatMessage = {
+        id: 'asst_' + Date.now(),
+        role: 'assistant',
+        content:
+          'Please choose a girl in the "Query Focus" selector above, then ask again. I will not guess which girl you mean.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages([...messages, userMessage, promptMsg]);
+      if (voiceConversationRef.current) speakResponse(promptMsg.content);
+      return;
+    }
 
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
@@ -773,14 +781,11 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                       key={idx}
                       type="button"
                       onClick={() => {
-                        let finalQuery = q.text;
-                        if (q.needsGirl && activeGirl) {
-                          finalQuery = `Summarize case history for ${activeGirl.fullName} (${activeGirl.id}).`;
-                        } else if (q.needsGirl && db.girls.length > 0) {
-                          const firstGirl = db.girls[0];
-                          setSelectedGirlId(firstGirl.id);
-                          finalQuery = `Summarize case history for ${firstGirl.fullName} (${firstGirl.id}).`;
-                        }
+                        // With no girl selected, "this girl" is sent as-is and handleSubmit
+                        // asks the staff member to choose one rather than guessing.
+                        const finalQuery = q.needsGirl && activeGirl
+                          ? `Summarize case history for ${activeGirl.fullName} (${activeGirl.id}).`
+                          : q.text;
                         handleSubmit(finalQuery);
                       }}
                       className="text-left text-xs bg-stone-50 hover:bg-teal-50 hover:border-teal-300 border border-stone-200 rounded-xl p-3 flex items-start gap-2.5 transition-all text-stone-800 hover:text-teal-950 group"
