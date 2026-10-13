@@ -103,6 +103,7 @@ CRITICAL OPERATIONAL RULES:
 1. STRICT READ-ONLY FACTUALITY: Only report information retrieved via your tools. Never invent missing details, dates, statistics, girls, households, or expenditures.
 2. MISSING INFORMATION: If information is unavailable or not found, explicitly state:
    "I could not find that information in the SHINE records."
+   If a tool reports that more than one girl or household matches a name, do not pick one. List the candidates (name and ID) and ask the staff member which one they mean.
 3. CONFLICT IDENTIFICATION: If records appear contradictory or incomplete, explicitly highlight the discrepancy for the staff member to review in the original documentation.
 4. CLEAR CATEGORICAL SEPARATION: In every response, organize your findings and clearly distinguish between:
    - 📋 **Information from SHINE Records**: Verifiable data extracted directly from stored files, citing girl name, Case ID (e.g. SG-001), household name, or recorded visit dates.
@@ -287,7 +288,17 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
       workingModel = nextGen.workingModel;
     }
 
-    const replyText = currentResponse.text || 'I have analyzed the available records.';
+    // If the model still wanted more look-ups after the turn limit, say so instead of
+    // presenting a partial or empty answer as complete.
+    const hitToolLimit = !!(currentResponse.functionCalls && currentResponse.functionCalls.length > 0);
+    let replyText = (currentResponse.text || '').trim();
+    if (!replyText) {
+      replyText = hitToolLimit
+        ? 'I reached the limit of record look-ups for a single question before I could finish. Please narrow the question (for example to one girl, one household, or one month) and ask again.'
+        : 'I could not produce an answer from the SHINE records for that question. Please rephrase it or add more detail.';
+    } else if (hitToolLimit) {
+      replyText += '\n\n⚠️ Note: this answer may be incomplete because I reached the limit of record look-ups for one question. Try a narrower question to confirm.';
+    }
 
     return {
       success: true,
