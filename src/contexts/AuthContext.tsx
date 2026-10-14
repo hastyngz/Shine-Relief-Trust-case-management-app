@@ -115,12 +115,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (profile) {
-        // Update last login
+        // Update lastLoginAt at most once per calendar day. Every write to
+        // staffUsers can fan out to the roster onSnapshot listener for every
+        // active session, so writing on every login creates avoidable reads.
         if (profile.status === 'Active') {
-          profile.lastLoginAt = new Date().toISOString();
-          persistStaffUserToFirestore(profile).catch((e) =>
-            console.warn('Non-fatal: could not update lastLoginAt', e)
-          );
+          const now = new Date().toISOString();
+          if (profile.lastLoginAt?.slice(0, 10) !== now.slice(0, 10)) {
+            profile.lastLoginAt = now;
+            persistStaffUserToFirestore(profile).catch((e) =>
+              console.warn('Non-fatal: could not update lastLoginAt', e)
+            );
+          }
         }
         setStaffProfile(profile);
       } else {
