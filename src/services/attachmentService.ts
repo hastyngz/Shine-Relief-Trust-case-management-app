@@ -305,77 +305,35 @@ export function subscribeAttachmentsForTarget(
 // reduces the number of simultaneous listeners on profiles with many linked
 // follow-up records. This does not promise fewer billed document reads: every
 // matching attachment is still returned, and each batch remains real-time.
-const ATTACHMENT_TARGET_QUERY_BATCH_SIZE = 30;
 
-function subscribeAttachmentsForTargets(
-  targetIds: string[],
-  onUpdate: (attachments: PhotoAttachment[]) => void,
-  label: string,
-): () => void {
-  const uniqueTargetIds = Array.from(new Set(
-    targetIds.filter((targetId) => typeof targetId === 'string' && targetId.trim().length > 0),
-  ));
-  if (uniqueTargetIds.length === 0) {
-    onUpdate([]);
-    return () => {};
-  }
-
-  const current = new Map<string, PhotoAttachment[]>(
-    uniqueTargetIds.map((targetId) => [targetId, []]),
-  );
-  const emit = () => {
-    const related = Array.from(current.values()).flat();
-    related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    onUpdate(related);
-  };
-  const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
-  const unsubscribers: Array<() => void> = [];
-
-  for (let start = 0; start < uniqueTargetIds.length; start += ATTACHMENT_TARGET_QUERY_BATCH_SIZE) {
-    const batchIds = uniqueTargetIds.slice(start, start + ATTACHMENT_TARGET_QUERY_BATCH_SIZE);
-    let latestSnapshotVersion = 0;
-    const unsubscribe = onSnapshot(
-      query(colRef, where('targetId', 'in', batchIds)),
-      async (snapshot) => {
-        const snapshotVersion = ++latestSnapshotVersion;
-        const attachments = await Promise.all(
-          snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)),
-        );
-        // URL lookups are asynchronous. Ignore an older snapshot if a newer one
-        // arrived while its download URLs were being prepared.
-        if (snapshotVersion !== latestSnapshotVersion) return;
-
-        const grouped = new Map<string, PhotoAttachment[]>(
-          batchIds.map((targetId) => [targetId, []]),
-        );
-        attachments.forEach((attachment) => {
-          grouped.get(attachment.targetId)?.push(attachment);
-        });
-        grouped.forEach((items, targetId) => current.set(targetId, items));
-        emit();
-      },
-      (err) => {
-        console.warn(`${label} attachment subscription notice:`, err.message);
-        batchIds.forEach((targetId) => current.set(targetId, []));
-        emit();
-      },
-    );
-    unsubscribers.push(unsubscribe);
-  }
-
-  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-}
-
-/**
- * Subscribes in real-time to all attachments linked to a specific girl (profile, edu, health, family).
- */
 export function subscribeAllGirlAttachments(
   girlId: string,
   followUpIds: string[],
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
   try {
-    return subscribeAttachmentsForTargets([girlId, ...followUpIds], onUpdate, 'Girl');
+    const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
+    const current = new Map<string, PhotoAttachment[]>();
+    const emit = () => {
+      const related = Array.from(current.values()).flat();
+      related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onUpdate(related);
+    };
+    const unsubscribers = Array.from(new Set([girlId, ...followUpIds])).map((targetId) =>
+      onSnapshot(
+        query(colRef, where('targetId', '==', targetId)),
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
+          emit();
+        },
+        (err) => {
+          console.warn('Girl attachment subscription notice:', err.message);
+          current.set(targetId, []);
+          emit();
+        }
+      )
+    );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   } catch (err) {
     console.warn('Error in subscribeAllGirlAttachments:', err);
     return () => {};
@@ -391,16 +349,33 @@ export function subscribeAllHouseholdAttachments(
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
   try {
-    return subscribeAttachmentsForTargets([householdId, ...linkedRecordIds], onUpdate, 'Household');
+    const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
+    const current = new Map<string, PhotoAttachment[]>();
+    const emit = () => {
+      const related = Array.from(current.values()).flat();
+      related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onUpdate(related);
+    };
+    const unsubscribers = Array.from(new Set([householdId, ...linkedRecordIds])).map((targetId) =>
+      onSnapshot(
+        query(colRef, where('targetId', '==', targetId)),
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
+          emit();
+        },
+        (err) => {
+          console.warn('Household attachment subscription notice:', err.message);
+          current.set(targetId, []);
+          emit();
+        }
+      )
+    );
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   } catch (err) {
     console.warn('Error in subscribeAllHouseholdAttachments:', err);
     return () => {};
   }
 }
-
-/**
- * Subscribes in real-time to all attachments linked to a household (profile, rent, expense, activities).
- */
 
 
 /**
