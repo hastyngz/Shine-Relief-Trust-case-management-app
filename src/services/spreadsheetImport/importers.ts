@@ -251,9 +251,13 @@ function worksheetRows(sheet: XLSX.WorkSheet): unknown[][] {
   });
 }
 
-function inferYear(sheetName: string, rows: unknown[][]): number {
+function inferYear(sheetName: string, rows: unknown[][], fallbackLabel = ''): number {
+  // Prefer the sheet and its own header/data year over the filename. A file may
+  // be named for the current payroll year while containing historical rows.
   const content = `${sheetName} ${rows.slice(0, 8).flat().map(text).join(' ')}`;
-  return Number(content.match(/\b20\d{2}\b/)?.[0] || new Date().getFullYear());
+  const explicitYear = content.match(/\b20\d{2}\b/)?.[0];
+  const fallbackYear = fallbackLabel.match(/\b20\d{2}\b/)?.[0];
+  return Number(explicitYear || fallbackYear || new Date().getFullYear());
 }
 
 function headerRowIndex(rows: unknown[][], kind: SpreadsheetKind): number {
@@ -568,7 +572,7 @@ function parsePayrollRows(
       /gratuity/.test(normalized(value)) && !/(?:salary|rate|percent|month)/.test(normalized(value))
     );
     const departmentIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
-    const year = inferYear(sourceName || sheetName, rows);
+    const year = inferYear(sheetName, rows, sourceName);
     const staffNames = [
       ...staff.map((person) => ({ id: person.id, name: person.fullName })),
       ...employees.map((person) => ({ id: person.id, name: person.fullName })),
@@ -668,7 +672,7 @@ function parsePayrollRows(
     if (/^ministry$/.test(category)) return { department: 'Ministry' };
     return { department: group };
   };
-  const year = inferYear(sourceName || sheetName, rows);
+  const year = inferYear(sheetName, rows, sourceName);
   const isGratuitySection = (group: string) => /^grad?uity$/i.test(normalized(group));
   const sourceRows = rows.slice(headerIndex + 1);
   const isGroupHeading = (value: string, row: unknown[]) => {
