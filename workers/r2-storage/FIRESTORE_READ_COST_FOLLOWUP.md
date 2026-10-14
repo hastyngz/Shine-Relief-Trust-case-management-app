@@ -36,3 +36,12 @@ A source review of `src/components/PayrollDashboard.tsx`, `src/services/importSe
 - Therefore the new UID-filtered listener is aligned with the current security rule, but staff may see no payroll documents when older/imported payroll records use a separate employee ID. The client query must not be broadened to load other employees' payroll.
 
 **Do not loosen the Firestore rule to solve this.** Before rollout, inspect representative payroll documents and confirm whether `employeeId` equals the employee's Firebase UID. If IDs differ, design a controlled migration to a stable UID field (or a separate, securely authorized mapping) and test it with staff, manager, and administrator accounts. Existing records must remain private during the migration. Automated build/test success does not establish that live payroll data uses the expected identifier.
+
+
+## Payroll summary identity issue found during continued trace
+
+The risk is not limited to the Firestore listener. In `src/services/payrollService.ts`, the monthly summary first indexes imported `EmployeeRecord` entries by `employee.id`, then adds active `StaffUser` entries only when their `person.id` is not already present. The code matches by ID, not by a stable shared identity such as a verified UID/email mapping. Since imported employee records and Firebase staff profiles can have different IDs, the same human may appear twice in the monthly payroll summary. Salary history and payment matching are also keyed by that employee ID, so an arbitrary name-based merge would be unsafe.
+
+This is confirmed as a code-path risk, not confirmed as a live-data defect. The live Firebase records and import workbook need to be checked before choosing a repair. A safe follow-up should establish an explicit employee-to-auth-UID link (or another stable immutable payroll identity), then use it consistently for payroll records, salary history, imported employee records, and the staff-only Firestore query. Preserve historical records and keep managers/admins as the only roles that can read the full payroll collection. Add tests for different IDs belonging to one linked employee, unlinked imported employees, and staff-only visibility before rollout.
+
+No code-level identity migration has been made because the current repository connection cannot inspect the live Firestore documents, and guessing the mapping could expose payroll or merge two different people.
