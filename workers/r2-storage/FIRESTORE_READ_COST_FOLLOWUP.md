@@ -54,3 +54,11 @@ For staff self-service payroll to work with the current Firestore rule and query
 
 With matching IDs, the monthly payroll summary's current ID-based de-duplication can represent the same person once across the employee and staff lists. Unlinked imported employees should remain separate until their identity is explicitly confirmed. This convention is a data-entry/record-management agreement; it does not prove that existing live records already comply. The repository connection cannot inspect production Firestore data, so verify current records and role-based behavior before rollout.
 
+## Reduced repeated login writes and roster-listener fan-out
+
+The staff profile loader previously wrote `lastLoginAt` to the `staffUsers` document on every successful login. Active staff sessions subscribe to the full `staffUsers` roster, so frequent updates to that collection can trigger additional snapshot delivery/read activity for other connected sessions.
+
+The loader now updates `lastLoginAt` only when the stored timestamp is not from the current UTC calendar date. This retains a daily last-login marker while avoiding repeated writes from multiple logins on the same day. The write remains non-blocking and does not change staff roles, access rules, or roster subscription behavior.
+
+Expected effect: fewer redundant `staffUsers` writes and potentially fewer listener-triggered reads when the same staff member logs in repeatedly during a day. Actual savings depend on session count and Firestore billing/usage measurements; no numerical reduction is claimed. Verify last-login display expectations and run the automated workflow before deploying.
+
