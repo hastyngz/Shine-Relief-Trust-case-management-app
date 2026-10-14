@@ -43,3 +43,36 @@ Cloudflare KV is also eventually consistent. Replacing live subscriptions with p
 ## Current status
 
 The KV binding exists, but no application data read is routed through KV. The strongest finding so far is that the app's central live-sync design—not a missing KV binding—is the main obstacle to reducing reads through edge caching. The next safe engineering change should first establish a measured baseline and review which listeners are necessary for each role and screen, rather than inserting a disconnected cache.
+
+
+## Follow-up: application startup and listener scope
+
+The caller trace in `src/App.tsx` confirms `initFirestoreListeners()` is started whenever a signed-in user is present and is not suspended. It is not tied to the selected route or currently open module. The central listener set therefore starts when the user opens the app, even if they only intend to use one module.
+
+The listener options already narrow three areas:
+- Case actions are limited to the current staff member when they cannot view team tasks.
+- Historical records are filtered by record type for users who cannot view health records.
+- Health follow-ups, case reviews, and restricted import source data can be skipped according to supplied permission flags.
+
+However, most of the remaining collections still use collection-wide snapshots. The app also subscribes to the staff roster separately in `src/contexts/AuthContext.tsx`; that list feeds current staff profile refresh and staff-facing reminder/notification workflows. It must not be removed as a simple cost-saving measure without tracing those dependencies.
+
+### Safe optimization opportunity: listener scope review
+
+A future optimization can split data into:
+1. **Core startup data** that the dashboard and global features truly require.
+2. **Module-specific data** that can load when the user opens Girls, Contacts, Planning, Payroll, Import, Case Management, or another module.
+3. **Restricted data** that should only be subscribed to when the authenticated role has permission and a feature needs it.
+
+This is an architectural change, not a one-line cache addition. Before moving a collection to on-demand loading, test deep links, global search, dashboards, background reminders, report generation, imports, offline behavior, and edits from another staff member. Keep existing listeners in place until the replacement path is proven.
+
+### Recommended immediate measurement
+
+Use Firebase/Google Cloud usage reporting to record a consistent baseline for the same time window and similar activity. At minimum, compare:
+- Firestore document reads and billed reads;
+- app initial-load behavior;
+- one typical staff session and one administrator session;
+- collection-level usage where the console/metrics expose it.
+
+Then make one small, reversible listener-scope change on `Replit`, run TypeScript/build and relevant tests, and repeat the measurement. Do not use raw snapshot callback counts as a substitute for billed document-read metrics.
+
+No listener code has been changed in this commit. This is the verified dependency map to guide the first behavior-changing optimization without breaking SHINE's live sync.
