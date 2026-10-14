@@ -93,6 +93,7 @@ import { HouseholdActivityForm } from './components/Forms/HouseholdActivityForm'
 
 // Modals
 import { SearchModal } from './components/SearchModal';
+import { ErrorBoundary } from './components/Error/ErrorBoundary';
 import { DataModal } from './components/DataModal';
 import { QuickAddModal, ActionType } from './components/QuickAddModal';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -1309,6 +1310,8 @@ function AppContent() {
 
       {/* Primary Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Keyed by view so a crash in one view clears when the user navigates. */}
+        <ErrorBoundary key={view} label={view}>
         {/* VIEW 1: DASHBOARD */}
         {view === 'dashboard' && (
           <Dashboard
@@ -1706,6 +1709,7 @@ function AppContent() {
             />
           </div>
         )}
+        </ErrorBoundary>
       </main>
 
       {/* Global Modals */}

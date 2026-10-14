@@ -63,6 +63,9 @@ jobs:
       - name: Test local storage failure handling
         run: npm run test:storage
 
+      - name: Test error boundary
+        run: npm run test:error-boundary
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 
