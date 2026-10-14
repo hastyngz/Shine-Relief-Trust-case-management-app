@@ -16,7 +16,8 @@ The permission regression test now covers default-deny and manager/admin opt-in 
 - Avoids starting a collection-wide listener that ordinary staff and view-only users are not authorized to read.
 - Reduces unnecessary permission-denied listener attempts for those roles.
 - Does not change Firestore rules or grant any additional access.
-- Does not yet optimize `payrollRecords`; staff may be permitted to read their own payroll documents, so that collection needs a separate UID-filtered query path before it can be safely optimized.
+- For non-management roles, the `payrollRecords` listener now queries only documents with `employeeId == currentUser.uid`, matching the staff-specific read condition in `firestore.rules`. If no UID is supplied, the listener is skipped. Administrators and Managers retain the full payroll listener.
+- This relies on the current data contract that a staff member's own payroll records use their authenticated UID as `employeeId`. Records keyed only to a separate employee-record ID are not visible to staff under the existing rules and are not made visible by this change.
 - No billed-read savings have been measured. Confirm behavior with live role-by-role logins and compare Firebase/Google Cloud usage before claiming cost reduction.
 
 ## Verification
