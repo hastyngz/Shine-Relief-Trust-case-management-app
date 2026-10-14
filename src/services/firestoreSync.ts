@@ -199,6 +199,7 @@ const salaryHistoryByEmployeeInFlight = new Map<string, Promise<SalaryHistoryRec
 const salaryHistoryForStaffInFlight = new Map<string, Promise<SalaryHistoryRecord[]>>();
 
 export function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHistoryRecord[]> {
+  if (!employeeId.trim()) return Promise.resolve([]);
   const existing = salaryHistoryByEmployeeInFlight.get(employeeId);
   if (existing) return existing;
 
@@ -225,7 +226,7 @@ export function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHist
 }
 
 export function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
-  const uniqueIds = Array.from(new Set(employeeIds)).sort();
+  const uniqueIds = Array.from(new Set(employeeIds.filter((employeeId) => employeeId.trim()))).sort();
   if (uniqueIds.length === 0) return Promise.resolve([]);
 
   // Sorting gives callers with the same employee set the same in-flight key,
