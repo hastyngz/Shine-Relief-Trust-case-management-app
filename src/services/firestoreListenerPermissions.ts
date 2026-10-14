@@ -10,6 +10,7 @@ export function shouldSubscribeToCollection(
     canReadManagementPlanning?: boolean;
     canReadHealthRecords?: boolean;
     canReadCaseReviews?: boolean;
+    canViewTeamTasks?: boolean;
   } = {},
 ): boolean {
   if (colName === 'restrictedImportSources' && options.canReadImportSourceData !== true) {
@@ -24,6 +25,12 @@ export function shouldSubscribeToCollection(
       colName === 'employees') &&
     options.canReadManagementPlanning !== true
   ) {
+    return false;
+  }
+  // Staff case-action queries must be scoped to their UID. If the caller
+  // has neither management access nor a UID, skip the listener instead of
+  // attempting a collection-wide query that cannot satisfy the rules.
+  if (colName === 'caseActions' && options.canViewTeamTasks !== true && !options.uid) {
     return false;
   }
   // Payroll is manager/admin-wide, but an active staff member may read only
