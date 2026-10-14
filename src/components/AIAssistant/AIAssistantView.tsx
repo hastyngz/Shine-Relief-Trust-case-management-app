@@ -24,6 +24,11 @@ import {
   Mic,
   MicOff,
   Languages,
+  SlidersHorizontal,
+  Maximize2,
+  ArrowLeft,
+  Info,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE_URL } from '../../services/apiBase';
@@ -172,6 +177,15 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [recognitionCycle, setRecognitionCycle] = useState(0);
 
+  // Phone layout: compact composer, Tools sheet, Query Focus sheet and optional focus mode.
+  const [isWide, setIsWide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
+  );
+  const [showToolsSheet, setShowToolsSheet] = useState(false);
+  const [showFocusSheet, setShowFocusSheet] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [verifyNoteId, setVerifyNoteId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -201,8 +215,31 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     if (initialHouseId) setSelectedHouseId(initialHouseId);
   }, [initialGirlId, initialHouseId]);
 
+  // Track whether the screen is wide (tablet/desktop keep the original layout).
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setIsWide(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  // Focus mode covers the app header and bottom menu; it only applies to the phone layout.
+  const inFocusMode = focusMode && !isWide;
+  useEffect(() => {
+    if (!inFocusMode) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [inFocusMode]);
+
   const activeGirl = db.girls.find((g) => g.id === selectedGirlId);
   const activeHouse = db.households.find((h) => h.id === selectedHouseId);
+  const focusLabel = `${activeGirl ? activeGirl.fullName : 'All girls'} · ${
+    activeHouse ? activeHouse.name : 'All households'
+  }`;
 
   const handleClearChat = () => {
     if (confirm('Clear the current conversation? Stored records in the database will not be affected.')) {
@@ -347,6 +384,14 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
   submitVoiceQueryRef.current = (query) => { void handleSubmit(query); };
 
+  const askSuggested = (q: (typeof SUGGESTED_QUESTIONS)[number]) => {
+    // With no girl selected, "this girl" is sent as-is and handleSubmit
+    // asks the staff member to choose one rather than guessing.
+    const finalQuery =
+      q.needsGirl && activeGirl ? `Summarize case history for ${activeGirl.fullName} (${activeGirl.id}).` : q.text;
+    handleSubmit(finalQuery);
+  };
+
   useEffect(() => {
     if (!voiceConversation || loading || isSpeaking) {
       recognitionRef.current?.stop();
@@ -417,7 +462,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     };
   }, [voiceConversation, voiceLanguage, loading, isSpeaking, recognitionCycle]);
 
-  const renderComposer = () => (
+  const renderFullComposer = () => (
     <div className="w-full space-y-3 text-left">
       <form
         onSubmit={(event) => {
@@ -509,6 +554,251 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       </p>
     </div>
   );
+
+  // Phone composer: one-line input, mic toggle, and a Tools button that holds the other voice controls.
+  const renderCompactComposer = () => (
+    <div className="w-full space-y-2 text-left">
+      <div className="flex items-center gap-2 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setShowToolsSheet(true)}
+          aria-label="Open tools: voice, language, stop speaking, record or upload"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-teal-800 bg-teal-50 px-3 text-xs font-bold text-teal-900"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          <span>Tools</span>
+          {(voiceConversation || isSpeaking) && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />}
+        </button>
+        {messages.length > 0 && (
+          <>
+            <span className="shrink-0 text-xs font-semibold text-stone-400">Quick:</span>
+            {SUGGESTED_QUESTIONS.slice(0, 5).map((q, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => askSuggested(q)}
+                disabled={loading}
+                className="h-9 shrink-0 whitespace-nowrap rounded-full border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900 disabled:opacity-50"
+              >
+                {q.text}
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleSubmit();
+        }}
+        className="flex w-full items-end gap-2"
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={voiceConversation}
+          aria-label={`Voice conversation ${voiceConversation ? 'On' : 'Off'}`}
+          onClick={() => {
+            setVoiceError(null);
+            setVoiceConversation((enabled) => !enabled);
+          }}
+          className={`relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
+            voiceConversation ? 'bg-teal-900 text-white' : 'border border-stone-300 bg-white text-stone-700'
+          }`}
+        >
+          {voiceConversation ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+          {voiceListening && <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
+        </button>
+        <textarea
+          ref={textareaRef}
+          value={inputQuery}
+          onChange={(event) => setInputQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              handleSubmit();
+            }
+          }}
+          aria-label="Ask SHINE AI"
+          placeholder="Ask about SHINE girls, follow-ups, expenses…"
+          rows={1}
+          disabled={loading}
+          className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-stone-300 bg-stone-50 px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 transition-colors [field-sizing:content] focus:border-teal-800 focus:bg-white focus:outline-none disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          aria-label="Ask AI"
+          disabled={!inputQuery.trim() || loading}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-900 text-white shadow-xs transition-all hover:bg-teal-950 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loading ? <RefreshCw className="h-5 w-5 animate-spin text-amber-400" /> : <Send className="h-5 w-5 text-amber-400" />}
+        </button>
+      </form>
+
+      {voiceError && <p className="text-xs text-rose-700" role="status">{voiceError}</p>}
+      <p className="text-center text-[11px] font-medium text-stone-500">
+        AI summaries may contain errors. Verify against SHINE records.
+      </p>
+    </div>
+  );
+
+  const renderToolsSheet = () =>
+    showToolsSheet && !isWide ? (
+      <div className="fixed inset-0 z-[1100] flex items-end" role="dialog" aria-modal="true" aria-label="Chat tools">
+        <button
+          type="button"
+          aria-label="Close tools"
+          onClick={() => setShowToolsSheet(false)}
+          className="absolute inset-0 bg-black/45"
+        />
+        <div
+          className="relative max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pt-2 shadow-2xl"
+          style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-300" />
+          <div className="flex h-11 items-center justify-between">
+            <h2 className="text-base font-bold text-stone-900">Chat tools</h2>
+            <button
+              type="button"
+              aria-label="Close tools"
+              onClick={() => setShowToolsSheet(false)}
+              className="flex h-11 w-11 items-center justify-center text-stone-500"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="flex h-14 items-center gap-3 border-t border-stone-100">
+            {voiceConversation ? <Mic className="h-5 w-5 text-stone-600" /> : <MicOff className="h-5 w-5 text-stone-600" />}
+            <span className="flex-1 text-sm font-bold text-stone-900">Voice conversation</span>
+            <span className="text-xs text-stone-500">{voiceConversation ? 'On' : 'Off'}</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={voiceConversation}
+              aria-label="Voice conversation"
+              onClick={() => {
+                setVoiceError(null);
+                setVoiceConversation((enabled) => !enabled);
+              }}
+              className={`flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                voiceConversation ? 'justify-end bg-teal-900' : 'justify-start bg-stone-300'
+              }`}
+            >
+              <span className="h-6 w-6 rounded-full bg-white shadow" />
+            </button>
+          </div>
+
+          <div className="flex h-14 items-center gap-3 border-t border-stone-100">
+            <Languages className="h-5 w-5 text-stone-600" />
+            <span className="flex-1 text-sm font-bold text-stone-900">Language</span>
+            <select
+              aria-label="Voice conversation language"
+              value={voiceLanguage}
+              onChange={(event) => setVoiceLanguage(event.target.value)}
+              className="h-10 rounded-full border border-stone-300 bg-white px-3 text-sm text-stone-800"
+            >
+              <option value="en-GB">English (UK)</option>
+              <option value="en-US">English (US)</option>
+              <option value="ny-MW">Chichewa</option>
+            </select>
+          </div>
+
+          <div className="border-t border-stone-100 py-2.5">
+            <button
+              type="button"
+              onClick={stopSpeaking}
+              disabled={!isSpeaking}
+              className="flex h-11 w-full items-center gap-2.5 rounded-xl border border-stone-300 bg-white px-3.5 text-sm font-bold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <StopCircle className="h-5 w-5" />
+              <span>Stop speaking</span>
+            </button>
+          </div>
+
+          {voiceError && <p className="pb-2 text-xs text-rose-700" role="status">{voiceError}</p>}
+          <details className="rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-3">
+            <summary className="cursor-pointer text-sm font-bold text-stone-700">Record or upload a voice question</summary>
+            <div className="pt-3">
+              <AudioDataInput label="Voice question" onTranscriptionChange={setInputQuery} disabled={loading} />
+            </div>
+          </details>
+        </div>
+      </div>
+    ) : null;
+
+  const renderFocusSheet = () =>
+    showFocusSheet && !isWide ? (
+      <div className="fixed inset-0 z-[1100] flex items-end" role="dialog" aria-modal="true" aria-label="Query Focus">
+        <button
+          type="button"
+          aria-label="Close Query Focus"
+          onClick={() => setShowFocusSheet(false)}
+          className="absolute inset-0 bg-black/45"
+        />
+        <div
+          className="relative max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl bg-white px-4 pt-2 shadow-2xl"
+          style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-300" />
+          <div className="flex h-11 items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-teal-700" />
+            <h2 className="flex-1 text-base font-bold text-stone-900">Query Focus</h2>
+            <button
+              type="button"
+              aria-label="Close Query Focus"
+              onClick={() => setShowFocusSheet(false)}
+              className="flex h-11 w-11 items-center justify-center text-stone-500"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <label className="mt-2 block text-xs font-bold text-stone-500">
+            SHINE Girls
+            <select
+              value={selectedGirlId}
+              onChange={(e) => setSelectedGirlId(e.target.value)}
+              className="mt-1.5 h-12 w-full rounded-xl border border-stone-300 bg-stone-50 px-3 text-[15px] font-normal text-stone-900"
+            >
+              <option value="">All SHINE Girls</option>
+              {db.girls.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.fullName} ({g.id}) - {g.school}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="mt-4 block text-xs font-bold text-stone-500">
+            Households
+            <select
+              value={selectedHouseId}
+              onChange={(e) => setSelectedHouseId(e.target.value)}
+              className="mt-1.5 h-12 w-full rounded-xl border border-stone-300 bg-stone-50 px-3 text-[15px] font-normal text-stone-900"
+            >
+              <option value="">All Households</option>
+              {db.households.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name} ({h.id})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setShowFocusSheet(false)}
+            className="mt-5 h-12 w-full rounded-xl bg-teal-900 text-[15px] font-bold text-white"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    ) : null;
+
+  const renderComposer = () => (isWide ? renderFullComposer() : renderCompactComposer());
 
   // Extract girl IDs (e.g., SG-001) or household IDs (e.g., HH-01) from content to create quick navigation links
   const renderFormattedContent = (content: string) => {
@@ -650,8 +940,33 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   };
 
   return (
-    <div id="shine-ai-assistant-container" className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-120px)] bg-stone-100">
-      {/* Top Header */}
+    <div
+      id="shine-ai-assistant-container"
+      className={`flex flex-col bg-stone-100 ${
+        inFocusMode ? 'fixed inset-0 z-[1000] h-[100dvh]' : 'h-[calc(100vh-140px)] md:h-[calc(100vh-120px)]'
+      }`}
+    >
+      {/* Focus mode bar: stands in for the app header and bottom menu while focus mode is on */}
+      {inFocusMode && (
+        <div
+          className="flex min-h-12 shrink-0 items-center gap-1 bg-teal-900 pl-1 pr-3 text-white"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          <button
+            type="button"
+            onClick={() => setFocusMode(false)}
+            aria-label="Back: show header and menu"
+            className="flex h-11 w-11 items-center justify-center"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <span className="flex-1 text-base font-bold">SHINE AI</span>
+          <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-bold">Focus mode</span>
+        </div>
+      )}
+
+      {/* Top Header (tablet/desktop; phones use the compact row at the top of the chat) */}
+      {isWide && (
       <div className="bg-white border-b border-stone-200 px-4 py-3 shrink-0 shadow-xs">
         <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -760,11 +1075,51 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Main Chat Stream */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 max-w-5xl w-full mx-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-3 sm:space-y-4 max-w-5xl w-full mx-auto">
+        {/* Phone row: Query Focus chip, clear chat and focus mode. Scrolls away with the messages. */}
+        {!isWide && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFocusSheet(true)}
+              aria-label={`Query Focus: ${focusLabel}. Tap to change.`}
+              className="inline-flex h-10 min-w-0 max-w-[62%] items-center gap-2 rounded-full border border-stone-300 bg-white pl-3 pr-2.5 text-xs font-medium text-stone-800"
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0 text-teal-700" />
+              <span className="truncate">{focusLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-stone-500" />
+            </button>
+            <div className="flex-1" />
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearChat}
+                aria-label="Clear current conversation"
+                title="Clear current conversation"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-600 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            {!inFocusMode && (
+              <button
+                type="button"
+                onClick={() => setFocusMode(true)}
+                aria-label="Focus mode: hide header and menu"
+                title="Focus mode"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-600"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {messages.length === 0 ? (
-          <div className="shine-card bg-white border border-stone-200 p-6 max-w-5xl mx-auto my-4 text-center">
+          <div className="shine-card bg-white border border-stone-200 p-4 sm:p-6 max-w-5xl mx-auto my-2 sm:my-4 text-center">
             <div className="w-14 h-14 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-center text-teal-800 mx-auto mb-4">
               <Sparkles className="w-7 h-7 text-amber-600" />
             </div>
@@ -820,16 +1175,16 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
             return (
               <div
                 key={msg.id}
-                className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-2 sm:gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
               >
                 {!isUser && (
-                  <div className="w-8 h-8 rounded-lg bg-teal-900 text-amber-400 flex items-center justify-center shrink-0 mt-1 shadow-xs">
+                  <div className="w-8 h-8 rounded-lg bg-teal-900 text-amber-400 hidden sm:flex items-center justify-center shrink-0 mt-1 shadow-xs">
                     <Bot className="w-5 h-5" />
                   </div>
                 )}
 
                 <div
-                  className={`shine-card max-w-3xl px-4 py-3 ${
+                  className={`shine-card min-w-0 max-w-3xl px-3 py-3 sm:px-4 ${
                     isUser
                       ? 'bg-teal-900 text-white rounded-tr-xs'
                       : msg.isUnavailable
@@ -866,7 +1221,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                     <div>
                       {renderFormattedContent(msg.content)}
 
-                      {msg.modelsUsed && msg.modelsUsed.length > 0 && (
+                      {!inFocusMode && msg.modelsUsed && msg.modelsUsed.length > 0 && (
                         <p className="mt-2 text-[10px] text-stone-400">
                           Model: {msg.modelsUsed.join(', ')}
                         </p>
@@ -890,6 +1245,22 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                       ) : null}
 
                       {/* Message Actions */}
+                      {inFocusMode ? (
+                        <div>
+                          <div className="mt-2 flex h-10 items-center gap-0.5 border-t border-stone-100 text-stone-400">
+                            <span className="min-w-0 flex-1 truncate text-[11px]">
+                              {msg.modelsUsed && msg.modelsUsed.length > 0 ? msg.modelsUsed.join(', ') : 'SHINE AI'}
+                            </span>
+                            <button type="button" onClick={() => setVerifyNoteId((current) => (current === msg.id ? null : msg.id))} aria-label="Verify important figures against original documents" aria-expanded={verifyNoteId === msg.id} title="Verify important figures against original documents." className="flex h-9 w-9 items-center justify-center rounded hover:bg-stone-50 hover:text-stone-700"><Info className="h-4 w-4" /></button>
+                            <button type="button" onClick={() => handleCopy(msg.id, msg.content)} aria-label="Copy response" className="flex h-9 w-9 items-center justify-center rounded hover:bg-stone-50 hover:text-stone-700">{copiedId === msg.id ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}</button>
+                            <button type="button" onClick={() => speakResponse(msg.content)} aria-label="Read response aloud" className="flex h-9 w-9 items-center justify-center rounded hover:bg-stone-50 hover:text-stone-700"><Volume2 className="h-4 w-4" /></button>
+                            <button type="button" onClick={stopSpeaking} aria-label="Stop speaking" className="flex h-9 w-9 items-center justify-center rounded hover:bg-stone-50 hover:text-stone-700"><StopCircle className="h-4 w-4" /></button>
+                          </div>
+                          {verifyNoteId === msg.id && (
+                            <p className="pb-1 text-[10px] italic text-stone-500">Verify important figures against original documents.</p>
+                          )}
+                        </div>
+                      ) : (
                       <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between text-xs text-stone-400">
                         <span className="text-[10px] italic">
                           Verify important figures against original documents.
@@ -916,12 +1287,13 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                           <button type="button" onClick={stopSpeaking} title="Stop speaking" className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] hover:bg-stone-50 hover:text-stone-700"><StopCircle className="h-3.5 w-3.5" /><span className="hidden sm:inline">Stop</span></button>
                         </div>
                       </div>
+                      )}
                     </div>
                   )}
                 </div>
 
                 {isUser && (
-                  <div className="w-8 h-8 rounded-lg bg-stone-300 text-stone-700 flex items-center justify-center shrink-0 mt-1 font-bold text-xs">
+                  <div className="w-8 h-8 rounded-lg bg-stone-300 text-stone-700 hidden sm:flex items-center justify-center shrink-0 mt-1 font-bold text-xs">
                     {(staffProfile?.fullName || 'U').charAt(0).toUpperCase()}
                   </div>
                 )}
@@ -951,7 +1323,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
       </div>
 
       {/* Suggested Chips Bar (When messages exist, staff can still quickly click suggestions) */}
-      {messages.length > 0 && (
+      {messages.length > 0 && isWide && (
         <div className="bg-white border-t border-stone-200 px-4 py-2 shrink-0 overflow-x-auto">
           <div className="max-w-5xl mx-auto flex items-center gap-2 text-xs">
             <span className="text-stone-400 font-semibold shrink-0">Quick questions:</span>
@@ -978,12 +1350,18 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
       {/* Keep the chat composer directly beneath quick questions. */}
       {messages.length > 0 && (
-        <div className="shrink-0 border-t border-stone-200 bg-white p-4">
+        <div
+          className="shrink-0 border-t border-stone-200 bg-white p-3 sm:p-4"
+          style={!isWide ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' } : undefined}
+        >
           <div className="mx-auto max-w-5xl">
             {renderComposer()}
           </div>
         </div>
       )}
+
+      {renderToolsSheet()}
+      {renderFocusSheet()}
     </div>
   );
 };
