@@ -76,3 +76,13 @@ No roster-listener code change was made in this pass because changing this lifec
 `getReportAttachmentMetadata(true)` previously issued one Firestore query per report-eligible attachment target type (including health follow-ups), even though this permission path can query the bounded target-type list with a single Firestore `in` query. It now uses one query for that authorised path. Users without health-record permission retain separate per-type queries with a server-side category exclusion, because Firestore does not allow combining `in` and `not-in` in the same query.
 
 This reduces query fan-out and request overhead for report generation by users who can view health records. It does **not** necessarily reduce billed document reads when the same documents are returned; no monetary saving is claimed. The target-type allowlist continues to exclude safeguarding-case attachments. Check the CI result and validate report generation with authorised and unauthorised roles before deployment.
+
+## Salary-history read deduplication — 14 October 2026
+
+The management dashboard and management reports both load salary-history records for the current staff IDs. Their effects previously depended on the whole `staff` array reference, so a roster refresh that recreated the array could repeat the same salary-history query even when the staff identities were unchanged.
+
+Both screens now derive a stable, sorted key from staff IDs and refetch only when that ID set or the user's management access changes. This does not cache salary data across sessions, change Firestore permissions, or suppress a change to the actual staff-ID set.
+
+The payroll dashboard already uses an ID-based dependency for its salary-history fetch. This change aligns the other two screens with that pattern.
+
+**Expected effect:** fewer duplicate salary-history queries when roster objects refresh without changing staff membership. Actual savings depend on whether such refreshes occur in normal use; no billed-read savings have been measured. The standard CI workflow should be checked after these changes. The full Firestore emulator rules suite remains separate from that workflow.
