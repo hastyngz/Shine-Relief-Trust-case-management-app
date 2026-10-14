@@ -1359,8 +1359,16 @@ export function initFirestoreListeners(
   const initialLoadedCollections = new Set<string>();
   const TOTAL_COLLECTIONS = 38;
 
+  // Coalesce bursts of independent collection snapshots into one app-state
+  // update. This does not change Firestore reads or realtime subscription
+  // semantics; it prevents a burst of callbacks from repeatedly rebuilding
+  // and persisting the same aggregate database state.
+  let notifyTimer: ReturnType<typeof setTimeout> | null = null;
   const notifyChange = () => {
-    onDatabaseSynced({
+    if (notifyTimer !== null) clearTimeout(notifyTimer);
+    notifyTimer = setTimeout(() => {
+      notifyTimer = null;
+      onDatabaseSynced({
       girls: [...liveState.girls],
       households: [...liveState.households],
       educationalFollowUps: [...liveState.educationalFollowUps],
@@ -1402,7 +1410,8 @@ export function initFirestoreListeners(
       caseGoals: [...(liveState.caseGoals || [])],
       procurementLists: [...(liveState.procurementLists || [])],
       projectProjections: [...(liveState.projectProjections || [])],
-    });
+      });
+    }, 50);
   };
 
   const handleCollection = <T>(
@@ -1487,5 +1496,9 @@ export function initFirestoreListeners(
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());
     activeUnsubscribers = [];
+    if (notifyTimer !== null) {
+      clearTimeout(notifyTimer);
+      notifyTimer = null;
+    }
   };
 }
