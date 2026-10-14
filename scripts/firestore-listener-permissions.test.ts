@@ -9,6 +9,13 @@ assert.equal(shouldSubscribeToCollection('whatIfScenarios', { canReadManagementP
 assert.equal(shouldSubscribeToCollection('projectProjections', { canReadManagementPlanning: true }), true);
 assert.equal(shouldSubscribeToCollection('employees', { canReadManagementPlanning: true }), true);
 
+// Non-management staff must have a UID for payroll, and their listener is
+// constrained by the same employeeId == authenticated UID rule as Firestore.
+assert.equal(shouldSubscribeToCollection('payrollRecords'), false);
+assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: false }), false);
+assert.equal(shouldSubscribeToCollection('payrollRecords', { uid: 'staff-uid', canReadManagementPlanning: false }), true);
+assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: true }), true);
+
 // Restricted import source data is opt-in; sensitive follow-up/review listeners
 // are skipped only when the caller explicitly says the role cannot read them.
 assert.equal(shouldSubscribeToCollection('restrictedImportSources'), false);
