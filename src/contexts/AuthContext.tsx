@@ -215,7 +215,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         unsubOwnProfile();
       };
     }
-  }, [currentUser, staffProfile]);
+  }, [currentUser, staffProfile?.uid, staffProfile?.id, staffProfile?.status, staffProfile?.createdBy]);
 
   const refreshStaffProfile = async () => {
     if (auth.currentUser) {
