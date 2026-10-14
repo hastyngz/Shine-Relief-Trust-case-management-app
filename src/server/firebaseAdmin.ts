@@ -200,3 +200,15 @@ export async function notifyCaseAction(
   });
   return true;
 }
+
+/**
+ * Resolve the caller's Firebase uid for rate limiting. Returns undefined when
+ * the request is not authenticated so the limiter can fall back to the IP.
+ */
+export async function resolveAuthenticatedUid(authorization?: string): Promise<string | undefined> {
+  try {
+    return (await authenticateAIRequest(authorization)).uid;
+  } catch {
+    return undefined;
+  }
+}

@@ -4,8 +4,9 @@ import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
-import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
+import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, resolveAuthenticatedUid, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
+import { createRateLimiter, getRateLimitConfig } from './src/server/rateLimit';
 
 function canAccessSafeguardingRecord(staff: any, record: any): boolean {
   return staff.role === 'Administrator' || staff.safeguardingPermissions.canView ||
@@ -82,12 +83,21 @@ async function startServer() {
   // JSON payload parser for requests
   app.use(express.json({ limit: '25mb' }));
 
-  // Health check endpoint
+  // Per-user rate limits. Requests are keyed by the authenticated Firebase uid
+  // (falling back to IP for unauthenticated callers) so one signed-in user, or
+  // a runaway client loop, cannot hammer the AI, storage or safeguarding APIs.
+  const rateLimits = getRateLimitConfig();
+  const resolveUid = (req: express.Request) => resolveAuthenticatedUid(req.headers.authorization);
+  const aiLimiter = createRateLimiter(rateLimits.ai, { resolveUid });
+  const storageLimiter = createRateLimiter(rateLimits.storage, { resolveUid });
+  const safeguardingLimiter = createRateLimiter(rateLimits.safeguarding, { resolveUid });
+
+  // Health check endpoint (deliberately unlimited).
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
-  app.put('/api/storage/object', express.raw({ type: () => true, limit: '50mb' }), async (req, res) => {
+  app.put('/api/storage/object', storageLimiter, express.raw({ type: () => true, limit: '50mb' }), async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       if (staff.role === 'View Only') throw new StorageAccessError('Your role cannot upload files.', 403);
@@ -124,7 +134,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/storage/download-url', async (req, res) => {
+  app.get('/api/storage/download-url', storageLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const storagePath = getSafeStoragePath(req.query.path);
@@ -139,7 +149,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/storage/object', async (req, res) => {
+  app.get('/api/storage/object', storageLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const storagePath = getSafeStoragePath(req.query.path);
@@ -154,7 +164,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/storage/object', async (req, res) => {
+  app.delete('/api/storage/object', storageLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const storagePath = getSafeStoragePath(req.query.path);
@@ -168,7 +178,7 @@ async function startServer() {
   });
 
   // Secure SHINE AI Assistant endpoint
-  app.post('/api/ai/chat', async (req, res) => {
+  app.post('/api/ai/chat', aiLimiter, async (req, res) => {
     try {
       const staffUser = await authenticateAIRequest(req.headers.authorization);
       const aiSettings = await getAISettings();
@@ -231,7 +241,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/ai/transcribe', async (req, res) => {
+  app.post('/api/ai/transcribe', aiLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
@@ -257,7 +267,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/ai/analyze-document', async (req, res) => {
+  app.post('/api/ai/analyze-document', aiLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
@@ -273,7 +283,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/safeguarding/cases', async (req, res) => {
+  app.get('/api/safeguarding/cases', safeguardingLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const casesCollection = adminFirestore.collection('safeguardingCases');
@@ -299,7 +309,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/safeguarding/count', async (req, res) => {
+  app.get('/api/safeguarding/count', safeguardingLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       if (staff.role !== 'Administrator' && !staff.safeguardingPermissions.canView) {
@@ -314,7 +324,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/safeguarding/cases/:caseId', async (req, res) => {
+  app.get('/api/safeguarding/cases/:caseId', safeguardingLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const snapshot = await adminFirestore.collection('safeguardingCases').doc(req.params.caseId).get();
@@ -330,7 +340,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/safeguarding/cases', async (req, res) => {
+  app.post('/api/safeguarding/cases', safeguardingLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       if (staff.role === 'View Only' || (staff.role !== 'Administrator' && !staff.safeguardingPermissions.canCreate)) {
@@ -421,7 +431,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/safeguarding/cases/:caseId/files', async (req, res) => {
+  app.get('/api/safeguarding/cases/:caseId/files', safeguardingLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const caseSnapshot = await adminFirestore.collection('safeguardingCases').doc(req.params.caseId).get();
@@ -440,7 +450,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/safeguarding/cases/:caseId/files/:fileId', express.raw({ type: () => true, limit: '15mb' }), async (req, res) => {
+  app.put('/api/safeguarding/cases/:caseId/files/:fileId', safeguardingLimiter, express.raw({ type: () => true, limit: '15mb' }), async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const caseRef = adminFirestore.collection('safeguardingCases').doc(req.params.caseId);
@@ -480,7 +490,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/safeguarding/cases/:caseId/files/:fileId', async (req, res) => {
+  app.get('/api/safeguarding/cases/:caseId/files/:fileId', safeguardingLimiter, async (req, res) => {
     try {
       const staff = await authenticateAIRequest(req.headers.authorization);
       const caseRef = adminFirestore.collection('safeguardingCases').doc(req.params.caseId);

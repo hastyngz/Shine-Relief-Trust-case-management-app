@@ -72,6 +72,9 @@ jobs:
       - name: Test offline app shell
         run: npm run test:app-shell
 
+      - name: Test rate limiting
+        run: npm run test:rate-limit
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 

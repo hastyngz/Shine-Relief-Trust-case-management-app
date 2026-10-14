@@ -336,6 +336,24 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
 
       const data = await response.json();
 
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const rateLimitMessage =
+          data.reply ||
+          data.error ||
+          `SHINE AI Assistant is receiving too many requests. Please wait${retryAfter ? ` ${retryAfter} seconds` : ' a moment'} and try again.`;
+        const assistantMsg: ChatMessage = {
+          id: 'asst_' + Date.now(),
+          role: 'assistant',
+          content: rateLimitMessage,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isUnavailable: true,
+        };
+        setMessages([...newMessages, assistantMsg]);
+        if (voiceConversationRef.current) speakResponse(assistantMsg.content);
+        return;
+      }
+
       if (!response.ok || data.isUnavailable) {
         const assistantMsg: ChatMessage = {
           id: 'asst_' + Date.now(),
