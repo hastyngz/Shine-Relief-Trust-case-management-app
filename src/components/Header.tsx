@@ -23,12 +23,13 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { SyncStatus } from '../services/firestoreSync';
-import { getPendingOfflineSnapshotCount } from '../services/offlineSync';
+import { getPendingOfflineSnapshotCount, refreshPendingOfflineSnapshotCount, getSyncConflictCount } from '../services/offlineSync';
 import { useAuth } from '../contexts/AuthContext';
 import { themes, useVisualSettings } from '../contexts/VisualSettingsContext';
 import { StaffRole } from '../types';
 import { NotificationBellDropdown } from './Notifications/NotificationBellDropdown';
 import { ShineLogo } from './ShineLogo';
+import { SyncConflictsPanel } from './Sync/SyncConflictsPanel';
 
 interface HeaderProps {
   onNavigateDashboard: () => void;
@@ -40,6 +41,7 @@ interface HeaderProps {
   onOpenRecord?: (type: string, id: string) => void;
   onOpenNotificationSettings?: () => void;
   syncStatus?: SyncStatus;
+  storageWarning?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -52,6 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRecord,
   onOpenNotificationSettings,
   syncStatus = 'synced',
+  storageWarning = false,
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
   const {
@@ -71,6 +74,8 @@ export const Header: React.FC<HeaderProps> = ({
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingOfflineSnapshotCount);
+  const [conflictCount, setConflictCount] = useState(0);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const mobileActionsRef = useRef<HTMLDivElement>(null);
   const visualSettingsRef = useRef<HTMLDivElement>(null);
@@ -95,15 +100,20 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const updateOnlineStatus = () => {
       setIsOffline(!navigator.onLine);
-      setPendingSyncCount(getPendingOfflineSnapshotCount());
+      void refreshPendingOfflineSnapshotCount().then(setPendingSyncCount);
+      void getSyncConflictCount().then(setConflictCount);
     };
+    void refreshPendingOfflineSnapshotCount().then(setPendingSyncCount);
+    void getSyncConflictCount().then(setConflictCount);
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
     window.addEventListener('shine_offline_queue_updated', updateOnlineStatus);
+    window.addEventListener('shine_sync_conflicts_updated', updateOnlineStatus);
     return () => {
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
       window.removeEventListener('shine_offline_queue_updated', updateOnlineStatus);
+      window.removeEventListener('shine_sync_conflicts_updated', updateOnlineStatus);
     };
   }, []);
 
@@ -159,10 +169,33 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Quick Action Controls, Cloud Status & User Session */}
           <div className="flex items-center gap-2 sm:gap-3">
             {isOffline && (
-              <div className="offline-indicator inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold" role="status" aria-live="polite" title="This device is offline; local changes will sync when a connection returns.">
+              <button
+                type="button"
+                onClick={() => setSyncPanelOpen(true)}
+                className="offline-indicator inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
+                role="status"
+                aria-live="polite"
+                title="This device is offline; local changes will sync when a connection returns. Tap to view sync conflicts."
+              >
                 <CloudOff className="h-3.5 w-3.5" />
                 <span>Offline{pendingSyncCount ? ` · ${pendingSyncCount} queued` : ' · drafts stay here'}</span>
-              </div>
+              </button>
+            )}
+            {(conflictCount > 0 || (!isOffline && pendingSyncCount > 0)) && (
+              <button
+                type="button"
+                onClick={() => setSyncPanelOpen(true)}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-amber-500/60 bg-amber-950/70 px-2.5 py-1 text-[11px] font-bold text-amber-200"
+                title="View sync conflicts and queued changes"
+                aria-label={`Sync status: ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}, ${pendingSyncCount} queued change${pendingSyncCount === 1 ? '' : 's'}`}
+              >
+                <CloudOff className="h-3.5 w-3.5" />
+                <span>
+                  {conflictCount > 0
+                    ? `${conflictCount} conflict${conflictCount === 1 ? '' : 's'}`
+                    : `${pendingSyncCount} queued`}
+                </span>
+              </button>
             )}
             {/* Firestore Cloud Status Indicator */}
             <div
@@ -537,6 +570,11 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+      <SyncConflictsPanel
+        isOpen={syncPanelOpen}
+        onClose={() => setSyncPanelOpen(false)}
+        storageWarning={storageWarning}
+      />
     </header>
   );
 };

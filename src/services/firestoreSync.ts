@@ -6,6 +6,7 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
+  runTransaction,
   getDocs,
   query,
   where,
@@ -61,6 +62,9 @@ import {
   RestrictedImportSourceData,
   ContactRecord,
   EmployeeRecord,
+  OfflineChangeEntry,
+  SyncConflict,
+  SyncConflictResolution,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -1226,6 +1230,103 @@ export async function syncEntireDatabaseToFirestore(
     throw err;
   }
 }
+
+export type SyncChangeResult = {
+  applied: number;
+  conflicts: Array<{
+    collection: string;
+    recordId: string;
+    data: Record<string, any> | null;
+    updatedAt: string | null;
+    updatedBy: string | null;
+  }>;
+};
+
+/**
+ * Applies queued per-record changes to Firestore in a transaction each.
+ * A change is only written when the server copy is not newer than the version
+ * this device based its edit on (baseUpdatedAt). Otherwise it is returned as a
+ * conflict so the caller can store it for manual resolution instead of
+ * silently overwriting a newer edit.
+ */
+export async function syncChangeEntriesToFirestore(
+  entries: OfflineChangeEntry[],
+  actor?: { uid: string; name: string },
+): Promise<SyncChangeResult> {
+  const result: SyncChangeResult = { applied: 0, conflicts: [] };
+  if (!entries.length) return result;
+  updateSyncStatus('saving');
+
+  for (const entry of entries) {
+    const ref = doc(firestore, entry.collection, entry.recordId);
+    try {
+      const conflict = await runTransaction(firestore, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        const serverData = snapshot.exists() ? (snapshot.data() as Record<string, any>) : null;
+        const serverUpdatedAt = typeof serverData?.updatedAt === 'string' ? serverData.updatedAt : null;
+        const localUpdatedAt = typeof entry.data?.updatedAt === 'string' ? entry.data.updatedAt : null;
+
+        // Already applied by this device (its own online write): not a conflict.
+        if (serverUpdatedAt && localUpdatedAt && serverUpdatedAt === localUpdatedAt) return null;
+
+        // The server changed the record after this device last saw it.
+        if (serverUpdatedAt && entry.baseUpdatedAt && serverUpdatedAt > entry.baseUpdatedAt) {
+          return {
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: serverData,
+            updatedAt: serverUpdatedAt,
+            updatedBy: typeof serverData?.updatedBy === 'string' ? serverData.updatedBy : null,
+          };
+        }
+
+        if (entry.operation === 'delete') {
+          if (snapshot.exists()) transaction.delete(ref);
+        } else {
+          transaction.set(ref, sanitizeForFirestore(entry.data || {}), { merge: true });
+        }
+        return null;
+      });
+
+      if (conflict) result.conflicts.push(conflict);
+      else result.applied += 1;
+    } catch (err) {
+      // Network or permission failure: keep the entry queued for a later flush.
+      console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);
+      updateSyncStatus('error');
+      throw err;
+    }
+  }
+
+  if (!result.conflicts.length) updateSyncStatus('synced');
+  return result;
+}
+
+/** Writes an audit entry for a detected or resolved sync conflict. */
+export async function appendSyncConflictAudit(event: {
+  action: 'conflict_detected' | 'conflict_resolved';
+  resolution?: SyncConflictResolution;
+  collection: string;
+  recordId: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  localUpdatedAt?: string | null;
+  serverUpdatedAt?: string | null;
+  serverUpdatedBy?: string | null;
+}): Promise<void> {
+  const auditId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await setDoc(doc(firestore, COLLECTIONS.CASE_ACTION_AUDIT_LOGS, auditId), {
+      ...sanitizeForFirestore(event),
+      id: auditId,
+    });
+  } catch (err) {
+    console.warn('Could not write sync conflict audit entry:', err);
+  }
+}
+
+export type { SyncConflict };
 
 // Clear operational records without deleting staff access or message history.
 export async function clearAllFirestoreCollections(): Promise<void> {

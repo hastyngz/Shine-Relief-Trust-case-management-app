@@ -77,7 +77,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { flushPendingOfflineSnapshots, queueOfflineSnapshotIfNeeded, isBrowserOnline } from './services/offlineSync';
+import { flushPendingOfflineSnapshots, recordOfflineChanges, setLastSyncedSnapshot, isBrowserOnline } from './services/offlineSync';
 
 // Forms
 import { GirlForm } from './components/Forms/GirlForm';
@@ -320,6 +320,7 @@ function AppContent() {
 
     const unsub = initFirestoreListeners((cloudDb) => {
       saveDatabase(cloudDb, false);
+      setLastSyncedSnapshot(cloudDb);
       setDb(cloudDb);
     }, {
       uid: currentUser.uid,
@@ -367,7 +368,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const handleOffline = () => queueOfflineSnapshotIfNeeded(db);
+    const handleOffline = () => { void recordOfflineChanges(db); };
     const handleConnectivityChange = () => {
       if (isBrowserOnline()) {
         void flushPendingOfflineSnapshots();
@@ -382,10 +383,10 @@ function AppContent() {
     };
   }, [db]);
 
+  // Record the diff against the last synced copy after every local edit so an
+  // offline edit is never lost, whether or not the browser reports offline.
   useEffect(() => {
-    if (!isBrowserOnline()) {
-      queueOfflineSnapshotIfNeeded(db);
-    }
+    void recordOfflineChanges(db);
   }, [db]);
 
   // Listen for browser Back/Forward navigation via hashchange

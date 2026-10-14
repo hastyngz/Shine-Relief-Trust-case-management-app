@@ -1,28 +1,259 @@
 import assert from 'node:assert/strict';
-import { clearPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readPendingOfflineSnapshots, writePendingOfflineSnapshot } from '../src/services/offlineSync';
-import { AppDatabase } from '../src/types';
+import { register } from 'node:module';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
+// ---------------------------------------------------------------------------
+// Firestore is replaced with an in-memory fake so the transactional flush can
+// be exercised without a real Firebase project. The fake records every write
+// and models updatedAt-based conflict detection exactly like production code.
+// ---------------------------------------------------------------------------
+const firestoreFakeSource = `
+const serverRecords = new Map();
+export const __server = {
+  seed(collection, id, data) { serverRecords.set(collection + '/' + id, { ...data }); },
+  get(collection, id) { return serverRecords.get(collection + '/' + id); },
+  all() { return [...serverRecords.entries()]; },
+  reset() { serverRecords.clear(); },
+};
+export function doc(_db, collection, id) {
+  if (arguments.length === 2) return { collection: _db.__name, id: collection };
+  return { collection, id };
+}
+export function collection(_db, name) { return { __name: name }; }
+export async function getDocs() { return { docs: [], empty: true }; }
+export async function getDoc(ref) {
+  const value = serverRecords.get(ref.collection + '/' + ref.id);
+  return { exists: () => value !== undefined, data: () => (value ? { ...value } : undefined) };
+}
+export async function setDoc(ref, data) { serverRecords.set(ref.collection + '/' + ref.id, { ...data }); }
+export async function deleteDoc(ref) { serverRecords.delete(ref.collection + '/' + ref.id); }
+export function writeBatch() {
+  return { set: (ref, data) => setDoc(ref, data), delete: (ref) => deleteDoc(ref), commit: async () => {} };
+}
+export async function runTransaction(_db, updater) {
+  const transaction = {
+    get: (ref) => getDoc(ref),
+    set: (ref, data) => setDoc(ref, data),
+    delete: (ref) => deleteDoc(ref),
+  };
+  return updater(transaction);
+}
+export function onSnapshot() { return () => {}; }
+export function query(...args) { return args; }
+export function where(...args) { return args; }
+export function orderBy(...args) { return args; }
+export function limit(...args) { return args; }
+export function getFirestore() { return {}; }
+export function initializeFirestore() { return {}; }
+`;
+
+const tmpRoot = os.tmpdir();
+const fakeFirestorePath = path.join(tmpRoot, 'shine-offline-test-firestore-fake.mjs');
+writeFileSync(fakeFirestorePath, firestoreFakeSource);
+const fakeFirebasePath = path.join(tmpRoot, 'shine-offline-test-firebase-fake.mjs');
+writeFileSync(fakeFirebasePath, [
+  'export const app = {};',
+  'export const firestore = {};',
+  'export const auth = {};',
+  'export function initializeApp() { return app; }',
+  'export function getApps() { return []; }',
+  'export function getApp() { return app; }',
+  'export function getFirestore() { return firestore; }',
+  'export function getAuth() { return auth; }',
+  'export default firestore;',
+  '',
+].join('\n'));
+const fakeFirebaseAuthPath = path.join(tmpRoot, 'shine-offline-test-firebase-auth-fake.mjs');
+writeFileSync(fakeFirebaseAuthPath, [
+  'export const auth = {};',
+  'export function getAuth() { return auth; }',
+  'export function onAuthStateChanged() { return () => {}; }',
+  'export default auth;',
+  '',
+].join('\n'));
+
+const loaderSource = `
+export async function resolve(specifier, context, next) {
+  if (specifier === 'firebase/firestore') {
+    return { url: ${JSON.stringify('file://' + fakeFirestorePath)}, shortCircuit: true };
+  }
+  if (specifier === 'firebase/app') {
+    return { url: ${JSON.stringify('file://' + fakeFirebasePath)}, shortCircuit: true };
+  }
+  if (specifier === 'firebase/auth') {
+    return { url: ${JSON.stringify('file://' + fakeFirebaseAuthPath)}, shortCircuit: true };
+  }
+  return next(specifier, context);
+}
+`;
+const loaderPath = path.join(tmpRoot, 'shine-offline-test-loader.mjs');
+writeFileSync(loaderPath, loaderSource);
+register(new URL(`file://${loaderPath}`).href, import.meta.url);
+
+// Browser globals used by the queue persistence and the IndexedDB fallback.
 const values = new Map<string, string>();
-const fakeWindow = {
+const listeners = new Map<string, Set<() => void>>();
+const fakeWindow: any = {
   localStorage: {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); },
     removeItem: (key: string) => { values.delete(key); },
   },
-  dispatchEvent: () => true,
+  dispatchEvent: (event: any) => {
+    listeners.get(event?.type)?.forEach((listener) => listener());
+    return true;
+  },
+  addEventListener: (type: string, listener: () => void) => {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type)!.add(listener);
+  },
+  removeEventListener: (type: string, listener: () => void) => {
+    listeners.get(type)?.delete(listener);
+  },
 };
-
+class FakeEvent { constructor(public type: string) {} }
 Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWindow });
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: fakeWindow.localStorage });
+Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, storage: undefined } });
+Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 
-const first = { girls: [], households: [], marker: 'first' } as unknown as AppDatabase;
-const latest = { girls: [], households: [], marker: 'latest' } as unknown as AppDatabase;
-writePendingOfflineSnapshot(first);
-writePendingOfflineSnapshot(latest);
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue } = await import('../src/services/offlineSync');
+const { __server } = await import('firebase/firestore') as unknown as { __server: any };
+const server: any = __server;
+const { syncChangeEntriesToFirestore } = await import('../src/services/firestoreSync');
 
+const T1 = '2026-01-01T10:00:00.000Z';
+const T2 = '2026-01-01T11:00:00.000Z';
+const T3 = '2026-01-01T12:00:00.000Z';
+
+function girl(id: string, updatedAt: string, name = 'Girl ' + id) {
+  return { id, fullName: name, updatedAt, createdAt: T1 } as any;
+}
+function db(partial: Record<string, any> = {}): any {
+  return { girls: [], households: [], educationalFollowUps: [], healthFollowUps: [], familyFollowUps: [], rentPayments: [], expenses: [], householdActivities: [], ...partial };
+}
+
+// --- 1. Diffing only queues changed records ---------------------------------
+const baseline = db({ girls: [girl('SG-001', T1), girl('SG-002', T1)] });
+const edited = db({ girls: [girl('SG-001', T1, 'Renamed girl'), girl('SG-002', T1)] });
+const entries = computeChangeEntries(edited, baseline);
+assert.equal(entries.length, 1, 'only the edited record should be queued');
+assert.equal(entries[0].recordId, 'SG-001');
+assert.equal(entries[0].operation, 'set');
+assert.equal(entries[0].baseUpdatedAt, T1, 'baseUpdatedAt records the version this device last saw');
+
+// Untouched records are never queued, so they cannot overwrite newer edits.
+const untouched = computeChangeEntries(baseline, baseline);
+assert.equal(untouched.length, 0);
+
+// --- 2. Two devices editing the same record ---------------------------------
+server.reset();
+server.seed('girls', 'SG-001', girl('SG-001', T3, 'Edited on phone B'));
+// This phone edited SG-001 offline while it had seen version T1.
+const localEdit = computeChangeEntries(db({ girls: [girl('SG-001', T2, 'Edited on phone A')] }), db({ girls: [girl('SG-001', T1)] }));
+assert.equal(localEdit.length, 1);
+const flushResult = await syncChangeEntriesToFirestore(localEdit);
+assert.equal(flushResult.applied, 0, 'a newer server edit must not be overwritten');
+assert.equal(flushResult.conflicts.length, 1);
+assert.equal(server.get('girls', 'SG-001').fullName, 'Edited on phone B', 'the newer server value is preserved');
+
+// --- 3. An untouched record is not overwritten by a stale snapshot ----------
+server.reset();
+server.seed('girls', 'SG-002', girl('SG-002', T3, 'Edited elsewhere'));
+const staleSnapshot = db({ girls: [girl('SG-001', T2), girl('SG-002', T1)] });
+const changedOnly = computeChangeEntries(staleSnapshot, db({ girls: [girl('SG-001', T1), girl('SG-002', T1)] }));
+assert.equal(changedOnly.length, 1, 'the untouched SG-002 must not be queued');
+assert.equal(changedOnly[0].recordId, 'SG-001');
+await syncChangeEntriesToFirestore(changedOnly);
+assert.equal(server.get('girls', 'SG-002').fullName, 'Edited elsewhere', 'the untouched record keeps the newer server value');
+
+// --- 4. Deletes are queued and applied --------------------------------------
+server.reset();
+server.seed('households', 'SH-01', { id: 'SH-01', name: 'House', updatedAt: T1 });
+const deleteEntries = computeChangeEntries(db({ households: [] }), db({ households: [{ id: 'SH-01', name: 'House', updatedAt: T1 }] }));
+assert.equal(deleteEntries.length, 1);
+assert.equal(deleteEntries[0].operation, 'delete');
+assert.equal(deleteEntries[0].baseUpdatedAt, T1);
+await syncChangeEntriesToFirestore(deleteEntries);
+assert.equal(server.get('households', 'SH-01'), undefined, 'the queued delete removes the server record');
+
+// A delete is not applied when the server record changed since we saw it.
+server.reset();
+server.seed('households', 'SH-01', { id: 'SH-01', name: 'House', updatedAt: T3 });
+const staleDelete = computeChangeEntries(db({ households: [] }), db({ households: [{ id: 'SH-01', name: 'House', updatedAt: T1 }] }));
+const deleteConflict = await syncChangeEntriesToFirestore(staleDelete);
+assert.equal(deleteConflict.applied, 0);
+assert.equal(deleteConflict.conflicts.length, 1);
+assert.ok(server.get('households', 'SH-01'), 'a newer server record is not deleted');
+
+// --- 4b. This device's own online write is not treated as a conflict -------
+server.reset();
+server.seed('girls', 'SG-050', girl('SG-050', T2, 'My own online edit'));
+const ownWrite = computeChangeEntries(db({ girls: [girl('SG-050', T2, 'My own online edit')] }), db({ girls: [girl('SG-050', T1)] }));
+assert.equal(ownWrite.length, 1);
+const ownResult = await syncChangeEntriesToFirestore(ownWrite);
+assert.equal(ownResult.conflicts.length, 0, 'the device must not conflict with its own write');
+assert.equal(ownResult.applied, 1);
+
+// --- 5. Legacy snapshot migration -------------------------------------------
+values.clear();
+values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-009', T1)] })]));
+const migrated = await migrateLegacySnapshots();
+assert.equal(migrated, true, 'the legacy snapshot queue is migrated');
+assert.equal(values.has('shine_relief_trust_pending_sync_v1'), false, 'the legacy key is cleared after migration');
+const queue = await loadQueue();
+assert.equal(queue.length, 1, 'the migrated record becomes a per-record change');
+assert.equal(queue[0].recordId, 'SG-009');
 assert.equal(getPendingOfflineSnapshotCount(), 1);
-assert.equal((readPendingOfflineSnapshots()[0] as any).marker, 'latest');
 
-clearPendingOfflineSnapshots();
+// --- 6. End-to-end offline edit + flush through the queue -------------------
+values.clear();
+server.reset();
+const confirmed = db({ girls: [girl('SG-100', T1), girl('SG-101', T1)] });
+setLastSyncedSnapshot(confirmed);
+await recordOfflineChanges(db({ girls: [girl('SG-100', T2, 'Offline edit'), girl('SG-101', T1)] }));
+assert.equal(getPendingOfflineSnapshotCount(), 1, 'only the offline-edited record is queued');
+const flushed = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(flushed.flushed, true);
+assert.equal(flushed.applied, 1);
+assert.equal(server.get('girls', 'SG-100').fullName, 'Offline edit');
+assert.equal(getPendingOfflineSnapshotCount(), 0, 'applied entries leave the queue');
+
+// --- 7. Conflicts surface in the conflict list and can be resolved ----------
+values.clear();
+server.reset();
+setLastSyncedSnapshot(db({ girls: [girl('SG-200', T1)] }));
+await recordOfflineChanges(db({ girls: [girl('SG-200', T2, 'Mine')] }));
+server.seed('girls', 'SG-200', girl('SG-200', T3, 'Theirs'));
+const conflictFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(conflictFlush.conflicts.length, 1);
+const conflicts = await readSyncConflicts();
+assert.equal(conflicts.length, 1);
+assert.equal(conflicts[0].recordId, 'SG-200');
+assert.equal(conflicts[0].serverData?.fullName, 'Theirs');
+assert.equal(conflicts[0].serverUpdatedBy, null);
+assert.equal(getPendingOfflineSnapshotCount(), 1, 'the conflicted change stays queued until resolved');
+
+// Keep theirs: the local edit is dropped.
+await resolveSyncConflict(conflicts[0].id, 'keep-theirs', { uid: 'uid-a', name: 'Staff A' });
+assert.equal((await readSyncConflicts()).length, 0);
 assert.equal(getPendingOfflineSnapshotCount(), 0);
+assert.equal(server.get('girls', 'SG-200').fullName, 'Theirs');
 
-console.log('Offline queue tests passed.');
+// Keep mine: the local edit is re-based and applied.
+values.clear();
+server.reset();
+setLastSyncedSnapshot(db({ girls: [girl('SG-300', T1)] }));
+await recordOfflineChanges(db({ girls: [girl('SG-300', T2, 'Mine again')] }));
+server.seed('girls', 'SG-300', girl('SG-300', T3, 'Theirs again'));
+await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+const mineConflicts = await readSyncConflicts();
+assert.equal(mineConflicts.length, 1);
+await resolveSyncConflict(mineConflicts[0].id, 'keep-mine', { uid: 'uid-a', name: 'Staff A' });
+await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(server.get('girls', 'SG-300').fullName, 'Mine again', 'keep-mine applies the local edit');
+assert.equal((await readSyncConflicts()).length, 0);
+
+console.log('Offline per-record queue and conflict tests passed.');

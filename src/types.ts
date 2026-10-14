@@ -1429,6 +1429,52 @@ export interface AppDatabase {
   projectProjections?: ProjectProjection[];
 }
 
+export type OfflineChangeOperation = 'set' | 'delete';
+
+/**
+ * A single queued local change produced by diffing the current database
+ * against the last copy confirmed by Firestore. baseUpdatedAt is the value of
+ * the record's updatedAt when this device last saw it, which lets the sync
+ * flush detect that another device edited the same record while we were offline.
+ */
+export interface OfflineChangeEntry {
+  collection: string;
+  recordId: string;
+  operation: OfflineChangeOperation;
+  data: Record<string, any> | null;
+  baseUpdatedAt: string | null;
+  queuedAt: string;
+}
+
+export type SyncConflictResolution = 'keep-mine' | 'keep-theirs';
+
+export interface SyncConflict {
+  id: string;
+  collection: string;
+  recordId: string;
+  localData: Record<string, any> | null;
+  localOperation: OfflineChangeOperation;
+  baseUpdatedAt: string | null;
+  serverData: Record<string, any> | null;
+  serverUpdatedAt: string | null;
+  serverUpdatedBy: string | null;
+  detectedAt: string;
+  detectedBy: string | null;
+}
+
+export interface SyncConflictAuditEvent {
+  action: 'conflict_detected' | 'conflict_resolved';
+  resolution?: SyncConflictResolution;
+  collection: string;
+  recordId: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  localUpdatedAt?: string | null;
+  serverUpdatedAt?: string | null;
+  serverUpdatedBy?: string | null;
+}
+
 export interface ReportHistoryRecord {
   id: string;
   reportType: string;
