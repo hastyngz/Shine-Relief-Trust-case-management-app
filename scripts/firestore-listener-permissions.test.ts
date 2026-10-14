@@ -4,8 +4,10 @@ import { shouldSubscribeToCollection } from '../src/services/firestoreListenerPe
 // Management-only listeners must remain off unless App.tsx explicitly grants access.
 assert.equal(shouldSubscribeToCollection('whatIfScenarios'), false);
 assert.equal(shouldSubscribeToCollection('projectProjections', {}), false);
+assert.equal(shouldSubscribeToCollection('employees', {}), false);
 assert.equal(shouldSubscribeToCollection('whatIfScenarios', { canReadManagementPlanning: true }), true);
 assert.equal(shouldSubscribeToCollection('projectProjections', { canReadManagementPlanning: true }), true);
+assert.equal(shouldSubscribeToCollection('employees', { canReadManagementPlanning: true }), true);
 
 // Restricted import source data is opt-in; sensitive follow-up/review listeners
 // are skipped only when the caller explicitly says the role cannot read them.
