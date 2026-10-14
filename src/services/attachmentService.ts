@@ -56,7 +56,28 @@ export async function getArchivedReport(storagePath: string): Promise<Blob> {
   return getStoredFile(storagePath);
 }
 
-export async function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+// Share only concurrent report-metadata requests. This is deliberately not
+// a persistent cache: attachment permissions and records must be rechecked on
+// later opens, and health-authorized and non-authorized results stay separate.
+const reportAttachmentRequests = new Map<boolean, Promise<PhotoAttachment[]>>();
+
+export function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  const existing = reportAttachmentRequests.get(canViewHealthRecords);
+  if (existing) return existing;
+
+  const request = fetchReportAttachmentMetadata(canViewHealthRecords);
+  reportAttachmentRequests.set(canViewHealthRecords, request);
+  void request.finally(() => {
+    if (reportAttachmentRequests.get(canViewHealthRecords) === request) {
+      reportAttachmentRequests.delete(canViewHealthRecords);
+    }
+  }).catch(() => {
+    // The caller handles the original failure; don't create an unhandled cleanup rejection.
+  });
+  return request;
+}
+
+async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
   const targetTypes: AttachmentTargetType[] = [
     'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
     'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
