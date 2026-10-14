@@ -46,7 +46,10 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
 
   useEffect(() => {
     let cancelled = false;
-    if (employeeIds.length === 0) {
+    // Salary history is manager/admin-only in firestore.rules. Staff can view
+    // their own payroll records, but must not issue a collection query for the
+    // restricted salary-history records.
+    if (!canProcessPayroll || employeeIds.length === 0) {
       setSalaryHistory([]);
       setSalaryHistoryError('');
       return;
@@ -63,7 +66,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
         setSalaryHistoryError('Salary history could not be refreshed. Current payroll will use stored employee salaries where available.');
       });
     return () => { cancelled = true; };
-  }, [employeeIds.join('|')]);
+  }, [canProcessPayroll, employeeIds.join('|')]);
 
   const monthlySummary = useMemo(() => buildMonthlyPayrollSummary(
     selectedPeriod, db.employees || [], allStaff, salaryHistory, records,
