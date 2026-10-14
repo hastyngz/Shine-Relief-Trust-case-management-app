@@ -1240,6 +1240,7 @@ export function initFirestoreListeners(
     canReadHealthRecords?: boolean;
     canReadCaseReviews?: boolean;
     canReadImportSourceData?: boolean;
+    canReadManagementPlanning?: boolean;
   } = {}
 ): () => void {
   // Teardown previous listeners if any
@@ -1344,6 +1345,13 @@ export function initFirestoreListeners(
     stateField: keyof AppDatabase
   ) => {
     if (colName === COLLECTIONS.RESTRICTED_IMPORT_SOURCES && options.canReadImportSourceData !== true) {
+      initialLoadedCollections.add(colName);
+      return;
+    }
+    // These collections are manager/admin-only in firestore.rules. Avoid creating
+    // listeners for roles that cannot read them.
+    if ((colName === COLLECTIONS.WHAT_IF_SCENARIOS || colName === COLLECTIONS.PROJECT_PROJECTIONS)
+      && options.canReadManagementPlanning !== true) {
       initialLoadedCollections.add(colName);
       return;
     }
