@@ -4,7 +4,7 @@
 The target is to cover the app's full Firestore data-access surface, not only one reference collection. This includes reads across all collections and queries used by the app, plus a coordinated write/invalidation path so updates made by one staff member do not leave other staff seeing stale data.
 
 ## Current status
-The Worker currently authenticates Firebase users and serves private R2 storage and AI routes. The app's Firestore listeners and many reads/writes are implemented separately in the frontend, so adding a KV binding to this Worker alone will not reduce those Firestore reads. The KV binding is configured in `workers/r2-storage/wrangler.toml`, but cache code and app integration have not yet been implemented.
+The Worker currently authenticates Firebase users and serves private R2 storage and AI routes. The app's Firestore listeners and many reads/writes are implemented separately in the frontend, so adding a KV binding to this Worker alone will not reduce those Firestore reads. The KV binding is configured in `workers/r2-storage/wrangler.toml`, but cache code and app integration have not yet been implemented. A repeatable static inventory script now exists at `scripts/audit-firestore-access.mjs`; run it with `npm run audit:firestore-access` from the project root before deciding which paths can safely be routed through a cache.
 
 ## Security and consistency requirements
 - Authenticate every request and check current staff status, role, and relevant permissions before returning cached data. A cache hit must never grant access.
