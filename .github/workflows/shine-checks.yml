@@ -1,0 +1,49 @@
+name: SHINE app checks
+
+on:
+  push:
+    branches:
+      - Replit
+  pull_request:
+    branches:
+      - Replit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shine-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check TypeScript
+        run: npm run lint
+
+      - name: Test Firestore listener permissions
+        run: npm run test:firestore-listener-permissions
+
+      - name: Test existing quality rules
+        run: npm run test:quality
+
+      - name: Audit Firestore access patterns
+        run: npm run audit:firestore-access
+
+      - name: Build application
+        run: npm run build
