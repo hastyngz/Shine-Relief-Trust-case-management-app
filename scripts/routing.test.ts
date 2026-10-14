@@ -65,7 +65,7 @@ assert.equal(buildHash('girls'), '#/girls');
 assert.equal(buildHash('girl-profile', 'g1'), '#/girl/g1');
 assert.equal(buildHash('girl-profile', null), '#/girls');
 assert.equal(buildHash('house-profile', undefined, 'h1'), '#/house/h1');
-assert.equal(buildHash('programmes', undefined, undefined, 'education'), '#/programmes/education');
+assert.equal(buildHash('programmes', undefined, undefined, 'education' as any), '#/programmes/education');
 assert.equal(buildHash('form-girl'), '#/register-girl');
 assert.equal(buildHash('ai-assistant'), '#/ai-assistant');
 
