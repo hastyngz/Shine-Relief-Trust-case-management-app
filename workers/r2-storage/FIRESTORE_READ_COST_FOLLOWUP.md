@@ -94,3 +94,11 @@ The startup listener permission helper now skips `caseActions` when the caller h
 The current `App.tsx` caller already supplies the authenticated UID and the management-role flag, so this is a defensive guard for missing/incomplete options rather than a change to normal signed-in behaviour. The listener-permission unit test now covers both scoped staff access and manager-wide access.
 
 This prevents a future caller from accidentally attempting an unscoped collection listener that would fail the intended Firestore rule query constraints. It does not reduce reads for the current valid signed-in path by itself, and no billing savings are claimed.
+
+## Payroll salary-history permission-aligned fetch — 14 October 2026
+
+The payroll dashboard previously attempted to read salary-history documents for the roster regardless of the signed-in role. The Firestore rule for `employeeSalaryHistory` permits reads only to Managers and Administrators, so staff sessions could issue a guaranteed-denied query and show a misleading salary-history refresh warning.
+
+The dashboard now fetches salary history only when `canProcessPayroll` is true (Manager/Administrator). Other roles clear the management-only salary-history state and do not issue that query. This does not change access rules or payroll-record visibility; staff payroll access remains governed by the existing UID-scoped `payrollRecords` rule.
+
+Expected effect: avoids a known unauthorized query attempt on staff payroll-dashboard visits. It is not a reduction in successful billed document reads because the restricted query should already be denied. Verify the payroll screen with staff, manager, and administrator accounts before deployment.
