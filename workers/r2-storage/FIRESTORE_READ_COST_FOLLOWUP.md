@@ -25,3 +25,14 @@ The permission regression test now covers default-deny and manager/admin opt-in 
 The existing GitHub Actions workflow on `Replit` runs TypeScript checks, listener-permission tests, quality tests, the Firestore access audit, and a production build. Check the latest workflow run before merging or deploying.
 
 `main` remains unchanged.
+
+
+## Additional payroll identity check — important before rollout
+
+A source review of `src/components/PayrollDashboard.tsx`, `src/services/importService.ts`, and `firestore.rules` shows a potential data-model mismatch that must be checked against real records:
+
+- The staff payroll read rule permits a non-management user to read a payroll document only when `resource.data.employeeId == request.auth.uid`.
+- The payroll UI can save the selected employee ID from a payroll form, and the import pipeline can use a matched employee-record ID. Those IDs are not guaranteed to be Firebase authentication UIDs.
+- Therefore the new UID-filtered listener is aligned with the current security rule, but staff may see no payroll documents when older/imported payroll records use a separate employee ID. The client query must not be broadened to load other employees' payroll.
+
+**Do not loosen the Firestore rule to solve this.** Before rollout, inspect representative payroll documents and confirm whether `employeeId` equals the employee's Firebase UID. If IDs differ, design a controlled migration to a stable UID field (or a separate, securely authorized mapping) and test it with staff, manager, and administrator accounts. Existing records must remain private during the migration. Automated build/test success does not establish that live payroll data uses the expected identifier.
