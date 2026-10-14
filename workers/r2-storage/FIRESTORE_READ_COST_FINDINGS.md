@@ -85,3 +85,14 @@ The code search found `whatIfScenarios` consumed in `Phase5OperationsView.tsx`, 
 Important permission finding: `firestore.rules` restricts reads of `whatIfScenarios` and `projectProjections` to managers/admins, while the central listener initializer calls `handleCollection` for both without an explicit role gate in the initializer itself. Firestore rules remain the actual security boundary, but the app should avoid deliberately subscribing users who cannot read those collections. Verify the runtime role options and denied-listener behavior before changing this. Do not cache either collection in KV.
 
 Next safe step: trace role flags passed from `App.tsx` into `initFirestoreListeners`, confirm which roles currently attempt these reads, and add a focused permission-aware listener test before any listener is made on-demand. No runtime code was changed during this review.
+
+
+### Implemented: avoid denied management-only subscriptions
+
+Two small changes are now committed on `Replit`:
+- `src/services/firestoreSync.ts` adds an explicit `canReadManagementPlanning` option and skips the `whatIfScenarios` and `projectProjections` listeners unless it is explicitly `true`. Skipped collections are marked as handled for initial-sync accounting so the existing startup completion logic can still finish.
+- `src/App.tsx` sets that option only for administrators and managers, matching the read permissions in `firestore.rules`.
+
+Commits: `2bdc5fb512b39cf45f963df1632c959a4098606b` and `f4626eb11d08b8544f9beb7f6bca144fd0c7172a`.
+
+This is a permission-alignment and unnecessary-listener fix, not a verified billed-read reduction. The two collections were already protected by Firestore rules; the change avoids starting listeners for roles that are not allowed to read them. A build and runtime role test have not been run from this GitHub-only workflow, so verify staff, manager, and admin sign-in plus initial sync status before deployment.
