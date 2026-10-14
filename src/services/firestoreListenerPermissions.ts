@@ -5,6 +5,7 @@
 export function shouldSubscribeToCollection(
   colName: string,
   options: {
+    uid?: string;
     canReadImportSourceData?: boolean;
     canReadManagementPlanning?: boolean;
     canReadHealthRecords?: boolean;
@@ -23,6 +24,12 @@ export function shouldSubscribeToCollection(
       colName === 'employees') &&
     options.canReadManagementPlanning !== true
   ) {
+    return false;
+  }
+  // Payroll is manager/admin-wide, but an active staff member may read only
+  // documents whose employeeId matches their authenticated UID. Without a UID,
+  // do not start any payroll listener.
+  if (colName === 'payrollRecords' && options.canReadManagementPlanning !== true && !options.uid) {
     return false;
   }
   if (colName === 'healthFollowUps' && options.canReadHealthRecords === false) {
