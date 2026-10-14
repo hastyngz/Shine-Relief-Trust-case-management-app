@@ -62,13 +62,20 @@ export async function getReportAttachmentMetadata(canViewHealthRecords: boolean)
     'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
   ];
   if (canViewHealthRecords) targetTypes.push('healthFollowUp');
-  const snapshots = await Promise.all(targetTypes.map((targetType) => {
-    const constraints = [
-      where('targetType', '==', targetType),
-      ...(!canViewHealthRecords ? [where('category', 'not-in', ['Medical Document', 'Prescription'])] : []),
-    ];
-    return getDocs(query(collection(firestore, ATTACHMENTS_COLLECTION), ...constraints));
-  }));
+  // When the user can view health records, a single bounded `in` query can
+  // retrieve all report-eligible target types. Without health permission, keep
+  // the per-type queries because Firestore cannot combine `in` and `not-in`
+  // in the same query; those queries exclude medical attachments at the server.
+  const snapshots = canViewHealthRecords
+    ? [await getDocs(query(
+        collection(firestore, ATTACHMENTS_COLLECTION),
+        where('targetType', 'in', targetTypes),
+      ))]
+    : await Promise.all(targetTypes.map((targetType) => getDocs(query(
+        collection(firestore, ATTACHMENTS_COLLECTION),
+        where('targetType', '==', targetType),
+        where('category', 'not-in', ['Medical Document', 'Prescription']),
+      ))));
 
   const attachments = snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
     .filter((attachment) => canViewHealthRecords || (
