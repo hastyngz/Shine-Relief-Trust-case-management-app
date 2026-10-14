@@ -43,3 +43,15 @@ The React app reads Firestore directly through Firebase client SDK calls, includ
 ## Current status
 
 The KV binding is configured and a static access inventory script is available as `npm run audit:firestore-access`. No application reads are routed through KV yet, and no cost reduction or production deployment is claimed.
+
+
+## Call-site trace (2026-10-14)
+
+The first candidate trace rules out a quick cache in front of the existing app:
+
+- `marketPrices` is subscribed through the shared `handleCollection` / `onSnapshot` pipeline in `src/services/firestoreSync.ts`. Its create/update and delete functions write directly to Firestore in `persistMarketPriceToFirestore` and `deleteMarketPriceFromFirestore`. A KV response added only to the Worker would not replace that subscription or save its ongoing reads.
+- `forecastSettings` is also subscribed through the same `onSnapshot` pipeline. Its write function `persistForecastSettingsToFirestore` writes directly to Firestore, and manager/admin permissions differ from the read permissions. A cache hit must not bypass the current role check, and changing this path safely would require a coordinated read/write design.
+- The existing Worker authenticates Firebase tokens and checks the current staff profile, but it has no general Firestore collection-data route. Its current Firestore REST helper is used for attachment metadata and authorization, not a safe general-purpose collection API.
+- `staffAnnouncements` has an active-staff read rule and admin-only create rule (with limited read-marker updates), but it is not wired into the central collection subscription list shown in `firestoreSync.ts`. It needs its own caller/read-path investigation before it can be considered.
+
+**Decision:** Do not add a proxy for `marketPrices` or `forecastSettings` yet. Doing so would add complexity without removing the current live Firestore listeners, and could cause stale or permission-inappropriate data. The next implementation step is to identify a real one-shot, non-sensitive read path with low freshness requirements and route that exact call through the Worker, with authenticated access and write invalidation. Until then, this remains an audit/configuration change, not an active read cache.
