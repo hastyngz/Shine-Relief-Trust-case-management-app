@@ -162,3 +162,17 @@ The authentication context previously started a collection-wide `staffUsers` lis
 The listener lifecycle now waits for a resolved, active registered profile before opening the full roster subscription. A known registered but suspended user listens only to their own staff document, allowing a live status change to reactivate the roster flow without exposing the full staff directory. Unknown/unregistered accounts do not start either a full roster listener or a persistent profile listener. The full-roster effect depends only on identity and access-state fields, not the entire profile object, so ordinary profile field updates do not repeatedly tear down and recreate the collection listener.
 
 This preserves the existing Firestore rules and does not grant new access. It is expected to avoid collection-wide listener attempts for accounts that cannot read the roster, but actual billing impact has not been measured. The standard CI workflow checks TypeScript, existing listener-permission tests, quality rules, the static access audit, and the production build; it does not simulate the full authentication lifecycle. Before rollout, manually test first login, an unregistered account, suspended-to-active reactivation, active staff, and manager/admin role changes. No production Firebase records are accessible through this repository connection.
+
+## Snapshot burst coalescing and report metadata request sharing — 14 October 2026
+
+### Aggregate app-state updates
+
+The central Firestore listener now debounces rapid collection-snapshot callbacks into a single aggregate app-state update after a short 50 ms quiet period. This is intended to reduce repeated React state updates and local database persistence when multiple collection listeners return or change close together. Pending notification timers are cleared when the listener is torn down.
+
+This does **not** reduce Firestore document reads and does not replace, delay, or remove the underlying real-time listeners. It only coalesces the app's downstream aggregate-state processing. Confirm initial sync completion, edits from a second session, offline/reconnect behaviour, and immediate UI refresh after saves during manual testing.
+
+### Comprehensive report attachment metadata
+
+The report attachment metadata service now shares an in-flight request when the same permission class opens the report flow more than once concurrently. Health-authorized and non-health-authorized requests are keyed separately, and each entry is removed when the request succeeds or fails. Later opens fetch fresh metadata; this is not a persistent cache and does not weaken the existing health-record filtering.
+
+This can avoid duplicate Firestore queries if multiple consumers request the same report metadata at the same time. It does not reduce reads for a single request, and no billing savings have been measured.
