@@ -1,13 +1,78 @@
+import 'dotenv/config';
 import express from 'express';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
-import { AIRequestAuthError, adminFirestore, adminStorageBucket, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
+import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
+import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
 
 function canAccessSafeguardingRecord(staff: any, record: any): boolean {
   return staff.role === 'Administrator' || staff.safeguardingPermissions.canView ||
     (record.authorizedStaffUids || []).includes(staff.uid);
+}
+
+class StorageAccessError extends Error {
+  constructor(message: string, public statusCode: number) {
+    super(message);
+  }
+}
+
+function getSafeStoragePath(value: unknown): string {
+  if (typeof value !== 'string' || !value || value.startsWith('/') || value.includes('\\') ||
+    value.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new StorageAccessError('A valid storage path is required.', 400);
+  }
+  return value;
+}
+
+async function authorizeR2Read(staff: any, storagePath: string): Promise<void> {
+  const reportMatch = storagePath.match(/^reports\/([^/]+)\/([^/]+)\/[^/]+$/);
+  if (reportMatch) {
+    if (staff.uid !== reportMatch[1] && !['Administrator', 'Manager'].includes(staff.role)) {
+      throw new StorageAccessError('You are not authorized to access this report.', 403);
+    }
+    return;
+  }
+
+  const attachmentSnapshot = await adminFirestore.collection('attachments')
+    .where('storagePath', '==', storagePath).limit(1).get();
+  const attachment = attachmentSnapshot.docs[0]?.data();
+  if (!attachment) throw new StorageAccessError('Attachment metadata was not found.', 404);
+  if ((attachment.targetType === 'healthFollowUp' || ['Medical Document', 'Prescription'].includes(attachment.category)) &&
+    !staff.canViewHealthRecords) {
+    throw new StorageAccessError('You are not authorized to access this health attachment.', 403);
+  }
+  if (attachment.targetType === 'safeguardingCase') {
+    const caseSnapshot = await adminFirestore.collection('safeguardingCases').doc(attachment.targetId).get();
+    if (!caseSnapshot.exists || !canAccessSafeguardingRecord(staff, caseSnapshot.data())) {
+      throw new StorageAccessError('You are not authorized to access this safeguarding attachment.', 403);
+    }
+  }
+}
+
+async function authorizeR2Delete(staff: any, storagePath: string): Promise<void> {
+  const attachmentSnapshot = await adminFirestore.collection('attachments')
+    .where('storagePath', '==', storagePath).limit(1).get();
+  const attachment = attachmentSnapshot.docs[0]?.data();
+  if (!attachment) throw new StorageAccessError('Attachment metadata was not found.', 404);
+  const restrictedHealth = attachment.targetType === 'healthFollowUp' ||
+    ['Medical Document', 'Prescription'].includes(attachment.category);
+  if (restrictedHealth && !staff.canEditHealthRecords) {
+    throw new StorageAccessError('You are not authorized to delete this health attachment.', 403);
+  }
+  if (attachment.targetType === 'safeguardingCase') {
+    const caseSnapshot = await adminFirestore.collection('safeguardingCases').doc(attachment.targetId).get();
+    const record: any = caseSnapshot.data();
+    if (!caseSnapshot.exists || !canAccessSafeguardingRecord(staff, record) || (staff.role !== 'Administrator' &&
+      !staff.safeguardingPermissions.canEdit && record.responsibleStaffId !== staff.uid)) {
+      throw new StorageAccessError('You are not authorized to delete this safeguarding attachment.', 403);
+    }
+    return;
+  }
+  if (staff.role !== 'Administrator' && staff.role !== 'Manager' && attachment.uploadedBy?.uid !== staff.uid) {
+    throw new StorageAccessError('You are not authorized to delete this attachment.', 403);
+  }
 }
 
 async function startServer() {
@@ -20,6 +85,86 @@ async function startServer() {
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
+  });
+
+  app.put('/api/storage/object', express.raw({ type: () => true, limit: '50mb' }), async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      if (staff.role === 'View Only') throw new StorageAccessError('Your role cannot upload files.', 403);
+      const storagePath = getSafeStoragePath(req.headers['x-storage-path']);
+      const contentType = String(req.headers['content-type'] || 'application/octet-stream');
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0 || req.body.length > 50 * 1024 * 1024) {
+        throw new StorageAccessError('Choose a file smaller than 50 MB.', 400);
+      }
+
+      const reportMatch = storagePath.match(/^reports\/([^/]+)\/([^/]+)\/[^/]+$/);
+      if (reportMatch) {
+        if (reportMatch[1] !== staff.uid) throw new StorageAccessError('Reports can only be uploaded to your own archive.', 403);
+      } else {
+        const attachmentMatch = storagePath.match(/^attachments\/([^/]+)\/([^/]+)\/[^/]+$/);
+        const validTargets = [
+          'girl', 'household', 'educationalFollowUp', 'healthFollowUp', 'familyFollowUp',
+          'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
+        ];
+        if (!attachmentMatch || !validTargets.includes(attachmentMatch[1]) || attachmentMatch[1] !== req.headers['x-storage-target-type'] ||
+          attachmentMatch[2] !== req.headers['x-storage-target-id']) {
+          throw new StorageAccessError('The attachment path is invalid.', 400);
+        }
+        const category = String(req.headers['x-storage-category'] || '');
+        if ((attachmentMatch[1] === 'healthFollowUp' || ['Medical Document', 'Prescription'].includes(category)) &&
+          !staff.canEditHealthRecords) {
+          throw new StorageAccessError('You are not authorized to upload health attachments.', 403);
+        }
+      }
+      await putR2Object(storagePath, req.body, contentType);
+      res.status(204).end();
+    } catch (err: any) {
+      const status = err instanceof AIRequestAuthError ? err.statusCode : err instanceof StorageAccessError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not upload file to R2.' });
+    }
+  });
+
+  app.get('/api/storage/download-url', async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      const storagePath = getSafeStoragePath(req.query.path);
+      await authorizeR2Read(staff, storagePath);
+      const fileName = typeof req.query.download === 'string' && req.query.download === '1' && typeof req.query.name === 'string'
+        ? req.query.name
+        : undefined;
+      res.json({ url: await getR2DownloadUrl(storagePath, fileName) });
+    } catch (err: any) {
+      const status = err instanceof AIRequestAuthError ? err.statusCode : err instanceof StorageAccessError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not create a secure file link.' });
+    }
+  });
+
+  app.get('/api/storage/object', async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      const storagePath = getSafeStoragePath(req.query.path);
+      await authorizeR2Read(staff, storagePath);
+      const object = await getR2Object(storagePath);
+      res.setHeader('Content-Type', object.contentType);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.send(Buffer.from(object.body));
+    } catch (err: any) {
+      const status = err instanceof AIRequestAuthError ? err.statusCode : err instanceof StorageAccessError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not download file from R2.' });
+    }
+  });
+
+  app.delete('/api/storage/object', async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      const storagePath = getSafeStoragePath(req.query.path);
+      await authorizeR2Delete(staff, storagePath);
+      await deleteR2Object(storagePath);
+      res.status(204).end();
+    } catch (err: any) {
+      const status = err instanceof AIRequestAuthError ? err.statusCode : err instanceof StorageAccessError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not delete file from R2.' });
+    }
   });
 
   // Secure SHINE AI Assistant endpoint
@@ -36,6 +181,7 @@ async function startServer() {
         });
       }
 
+      let databasePromise: ReturnType<typeof loadAIRecords> | undefined;
       const chatPayload: AIChatRequest = {
         message: req.body.message.trim(),
         history: Array.isArray(req.body.history)
@@ -47,7 +193,7 @@ async function startServer() {
           girlId: typeof req.body.context?.girlId === 'string' ? req.body.context.girlId.slice(0, 128) : undefined,
           householdId: typeof req.body.context?.householdId === 'string' ? req.body.context.householdId.slice(0, 128) : undefined,
         },
-        db: await loadAIRecords(
+        loadDatabase: () => databasePromise ??= loadAIRecords(
           staffUser.canViewHealthRecords,
           staffUser.uid,
           staffUser.role === 'Administrator' || staffUser.role === 'Manager',
@@ -314,10 +460,7 @@ async function startServer() {
       }
       const fileName = decodeURIComponent(String(req.headers['x-file-name'] || 'document')).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
       const filePath = `safeguarding/${caseSnapshot.id}/${req.params.fileId}_${fileName}`;
-      await adminStorageBucket.file(filePath).save(req.body, {
-        resumable: false,
-        metadata: { contentType, cacheControl: 'private, no-store' },
-      });
+      await putR2Object(filePath, req.body, contentType);
       const metadata = {
         id: req.params.fileId,
         fileName,
@@ -350,12 +493,12 @@ async function startServer() {
       const fileSnapshot = await caseRef.collection('files').doc(req.params.fileId).get();
       if (!fileSnapshot.exists) return res.status(404).json({ error: 'Safeguarding document not found.' });
       const fileData = fileSnapshot.data()!;
-      const [contents] = await adminStorageBucket.file(fileData.storagePath).download();
+      const { body: contents } = await getR2Object(fileData.storagePath);
       await writeSafeguardingAudit({ userId: staff.uid, userName: staff.fullName, action: 'download', recordId: caseSnapshot.id });
       res.setHeader('Content-Type', fileData.contentType || 'application/octet-stream');
       res.setHeader('Content-Disposition', `attachment; filename="${String(fileData.fileName).replace(/"/g, '')}"`);
       res.setHeader('Cache-Control', 'private, no-store');
-      res.send(contents);
+      res.send(Buffer.from(contents));
     } catch (err: any) {
       const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
       res.status(status).json({ error: err.message || 'Could not download safeguarding document.' });

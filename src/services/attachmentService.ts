@@ -1,11 +1,4 @@
 import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  getBlob,
-  deleteObject,
-} from 'firebase/storage';
-import {
   collection,
   doc,
   setDoc,
@@ -16,7 +9,7 @@ import {
   onSnapshot,
   updateDoc,
 } from 'firebase/firestore';
-import { storage, firestore } from '../firebase';
+import { firestore } from '../firebase';
 import {
   PhotoAttachment,
   AttachmentTargetType,
@@ -25,8 +18,18 @@ import {
 } from '../types';
 import { compressImage } from '../utils/imageOptimizer';
 import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
+import { deleteStoredFile, getStoredFile, getStoredFileDownloadUrl, uploadStoredFile } from './r2StorageClient';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
+
+async function withDownloadUrl(attachment: PhotoAttachment): Promise<PhotoAttachment> {
+  try {
+    return { ...attachment, downloadUrl: await getStoredFileDownloadUrl(attachment.storagePath) };
+  } catch (error) {
+    console.warn('Could not create secure attachment URL:', error);
+    return { ...attachment, downloadUrl: '' };
+  }
+}
 
 export async function archiveGeneratedReport(
   blob: Blob,
@@ -37,19 +40,20 @@ export async function archiveGeneratedReport(
 ): Promise<string> {
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `reports/${ownerUid}/${reportId}/${safeFileName}`;
-  await uploadBytes(ref(storage, storagePath), blob, {
-    contentType: fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
+  await uploadStoredFile(storagePath, blob, fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : fileType === 'xlsx'
         ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv',
-    customMetadata: { ownerUid, reportId, fileType },
+        : 'text/csv', {
+    'Owner-Uid': ownerUid,
+    'Report-Id': reportId,
+    'File-Type': fileType,
   });
   return storagePath;
 }
 
 export async function getArchivedReport(storagePath: string): Promise<Blob> {
-  return getBlob(ref(storage, storagePath), 50 * 1024 * 1024);
+  return getStoredFile(storagePath);
 }
 
 export async function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
@@ -66,13 +70,14 @@ export async function getReportAttachmentMetadata(canViewHealthRecords: boolean)
     return getDocs(query(collection(firestore, ATTACHMENTS_COLLECTION), ...constraints));
   }));
 
-  return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
+  const attachments = snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
     .filter((attachment) => canViewHealthRecords || (
       attachment.targetType !== 'healthFollowUp' &&
       attachment.category !== 'Medical Document' &&
       attachment.category !== 'Prescription'
     ))
     .sort((a, b) => b.date.localeCompare(a.date));
+  return Promise.all(attachments.map(withDownloadUrl));
 }
 
 export async function getAuthorizedReportImage(
@@ -90,13 +95,13 @@ export async function getAuthorizedReportImage(
     throw new Error('Your account cannot include this health attachment in a report.');
   }
 
-  const image = await getBlob(ref(storage, attachment.storagePath), 15 * 1024 * 1024);
+  const image = await getStoredFile(attachment.storagePath);
   return new Uint8Array(await image.arrayBuffer());
 }
 
 export async function getAllAttachmentMetadata(): Promise<PhotoAttachment[]> {
   const snapshot = await getDocs(collection(firestore, ATTACHMENTS_COLLECTION));
-  return snapshot.docs.map((document) => document.data() as PhotoAttachment);
+  return Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
 }
 
 export interface UploadAttachmentParams {
@@ -118,7 +123,7 @@ export interface UploadAttachmentParams {
 }
 
 /**
- * Uploads an image or document to Firebase Storage, compresses it on mobile,
+ * Uploads an image or document to private Cloudflare R2 storage, compresses it on mobile,
  * and saves metadata securely in Firestore.
  */
 export async function uploadPhotoAttachment(
@@ -141,23 +146,12 @@ export async function uploadPhotoAttachment(
   const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `attachments/${targetType}/${targetId}/${attachmentId}_${cleanName}`;
 
-  // 3. Upload to Firebase Storage
-  const storageRef = ref(storage, storagePath);
-  const metadata = {
-    contentType: optimizedFile.type || 'image/jpeg',
-    customMetadata: {
-      targetType,
-      targetId,
-      uploadedByUid: user.uid,
-      uploadedByEmail: user.email,
-      category,
-    },
-  };
-
-  await uploadBytes(storageRef, optimizedFile, metadata);
-
-  // 4. Retrieve secure download URL
-  const downloadUrl = await getDownloadURL(storageRef);
+  // 3. Upload to private R2 storage. The server validates the target and user role.
+  await uploadStoredFile(storagePath, optimizedFile, optimizedFile.type || 'image/jpeg', {
+    'Target-Type': targetType,
+    'Target-Id': targetId,
+    Category: category,
+  });
 
   // 5. Construct PhotoAttachment record
   const attachment: PhotoAttachment = {
@@ -168,7 +162,7 @@ export async function uploadPhotoAttachment(
     fileSize: optimizedFile.size,
     contentType: optimizedFile.type || 'image/jpeg',
     storagePath,
-    downloadUrl,
+    downloadUrl: '',
     caption: caption?.trim() || undefined,
     ...(file.type.startsWith('image/') ? {
       consent: consent === true,
@@ -187,10 +181,12 @@ export async function uploadPhotoAttachment(
     },
     createdAt: new Date().toISOString(),
   };
+  const downloadUrl = attachment.downloadUrl;
 
   // 6. Save metadata record to Firestore
   const firestoreDocRef = doc(firestore, ATTACHMENTS_COLLECTION, attachmentId);
   await setDoc(firestoreDocRef, sanitizeForFirestore(attachment));
+  attachment.downloadUrl = await getStoredFileDownloadUrl(storagePath);
 
   // 7. If this is a primary profile photo, update the parent entity's photoUrl
   if (category === 'Profile Photo') {
@@ -217,15 +213,14 @@ export async function uploadPhotoAttachment(
 }
 
 /**
- * Deletes an attachment from both Firebase Storage and Firestore.
+ * Deletes an attachment from both R2 and Firestore.
  */
 export async function deletePhotoAttachment(
   attachment: PhotoAttachment
 ): Promise<void> {
-  // 1. Delete file from Firebase Storage
+  // 1. Delete file from R2
   try {
-    const storageRef = ref(storage, attachment.storagePath);
-    await deleteObject(storageRef);
+    await deleteStoredFile(attachment.storagePath);
   } catch (err: any) {
     // If already missing from storage, proceed to delete Firestore metadata
     console.warn('Storage delete notice (file may not exist):', err.message || err);
@@ -258,8 +253,8 @@ export function subscribeAttachmentsForTarget(
 
     return onSnapshot(
       q,
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => d.data() as PhotoAttachment);
+      async (snapshot) => {
+        const list = await Promise.all(snapshot.docs.map((d) => withDownloadUrl(d.data() as PhotoAttachment)));
         // Sort descending by date / createdAt
         list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         onUpdate(list);
@@ -294,8 +289,8 @@ export function subscribeAllGirlAttachments(
     const unsubscribers = Array.from(new Set([girlId, ...followUpIds])).map((targetId) =>
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
-        (snapshot) => {
-          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
           emit();
         },
         (err) => {
@@ -331,8 +326,8 @@ export function subscribeAllHouseholdAttachments(
     const unsubscribers = Array.from(new Set([householdId, ...linkedRecordIds])).map((targetId) =>
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
-        (snapshot) => {
-          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
           emit();
         },
         (err) => {

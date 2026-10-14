@@ -131,6 +131,20 @@ async function run() {
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));
+    const caseGoal = {
+      id: 'goal-worker', girlId: 'girl-1', title: 'Improve attendance', baseline: '70%',
+      targetOutcome: '90% attendance', measureOfSuccess: 'Monthly attendance report', status: 'In progress',
+      progressNotes: [], createdByUid: 'worker', createdBy: 'worker', createdAt: '2026-09-26T00:00:00.000Z',
+      updatedByUid: 'worker', updatedBy: 'worker', updatedAt: '2026-09-26T00:00:00.000Z',
+    };
+    await assertSucceeds(setDoc(doc(worker, 'caseGoals/goal-worker'), caseGoal));
+    await assertSucceeds(getDoc(doc(viewer, 'caseGoals/goal-worker')));
+    await assertFails(setDoc(doc(viewer, 'caseGoals/goal-viewer'), { ...caseGoal, id: 'goal-viewer', createdByUid: 'viewer' }));
+    await assertFails(updateDoc(doc(worker, 'caseGoals/goal-worker'), { status: 'Achieved', updatedByUid: 'worker' }));
+    await assertSucceeds(updateDoc(doc(worker, 'caseGoals/goal-worker'), { status: 'Achieved', outcome: 'Attendance rose to 92%', updatedByUid: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'caseGoals/goal-worker'), { girlId: 'girl-2', updatedByUid: 'worker' }));
+    await assertFails(deleteDoc(doc(worker, 'caseGoals/goal-worker')));
+    await assertSucceeds(deleteDoc(doc(manager, 'caseGoals/goal-worker')));
     await assertFails(getDoc(doc(viewer, 'healthFollowUps/health-1')));
     await assertSucceeds(getDoc(doc(manager, 'healthFollowUps/health-1')));
     await assertFails(getDoc(doc(viewer, 'attachments/medical-photo')));

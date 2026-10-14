@@ -291,6 +291,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /caseGoals/{goalId} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.status in ['Not started', 'In progress', 'Achieved', 'Not achieved', 'On hold'] &&
+        request.resource.data.title is string && request.resource.data.title.size() > 0 &&
+        request.resource.data.targetOutcome is string &&
+        request.resource.data.measureOfSuccess is string &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true);
+      allow update: if isManagerOrStaff() &&
+        request.resource.data.girlId == resource.data.girlId &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'baseline', 'targetOutcome', 'measureOfSuccess', 'targetDate', 'status',
+          'progressNotes', 'outcome', 'outcomeRecordedAt', 'updatedByUid', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isManagerOrAdmin();
+    }
+
     // Salary and gratuity inputs are restricted to Administrators and Managers.
     // Salary history is append-only so historical remuneration cannot be silently overwritten.
     match /employeeSalaryHistory/{recordId} {

@@ -43,7 +43,7 @@ export const DataModal: React.FC<DataModalProps> = ({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      setMessage({ text: 'Database records and attachment metadata exported. Media files remain in Firebase Storage.', type: 'success' });
+      setMessage({ text: 'Database records and attachment metadata exported. Media files remain in Cloudflare R2.', type: 'success' });
     } catch (err) {
       setMessage({ text: 'Could not export database backup: ' + String(err), type: 'error' });
     }

@@ -23,6 +23,7 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { SyncStatus } from '../services/firestoreSync';
+import { getPendingOfflineSnapshotCount } from '../services/offlineSync';
 import { useAuth } from '../contexts/AuthContext';
 import { themes, useVisualSettings } from '../contexts/VisualSettingsContext';
 import { StaffRole } from '../types';
@@ -69,6 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingOfflineSnapshotCount);
   const menuRef = useRef<HTMLDivElement>(null);
   const mobileActionsRef = useRef<HTMLDivElement>(null);
   const visualSettingsRef = useRef<HTMLDivElement>(null);
@@ -91,12 +93,17 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   useEffect(() => {
-    const updateOnlineStatus = () => setIsOffline(!navigator.onLine);
+    const updateOnlineStatus = () => {
+      setIsOffline(!navigator.onLine);
+      setPendingSyncCount(getPendingOfflineSnapshotCount());
+    };
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    window.addEventListener('shine_offline_queue_updated', updateOnlineStatus);
     return () => {
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
+      window.removeEventListener('shine_offline_queue_updated', updateOnlineStatus);
     };
   }, []);
 
@@ -154,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({
             {isOffline && (
               <div className="offline-indicator inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold" role="status" aria-live="polite" title="This device is offline; local changes will sync when a connection returns.">
                 <CloudOff className="h-3.5 w-3.5" />
-                <span>Offline</span>
+                <span>Offline{pendingSyncCount ? ` · ${pendingSyncCount} queued` : ' · drafts stay here'}</span>
               </div>
             )}
             {/* Firestore Cloud Status Indicator */}

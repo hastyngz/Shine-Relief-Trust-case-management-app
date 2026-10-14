@@ -1501,6 +1501,8 @@ function AppContent() {
             attendanceRecords={(db.attendanceRecords || []).filter((item) => item.girlId === currentGirl.id)}
             girlLeaves={(db.girlLeaves || []).filter((item) => item.girlId === currentGirl.id)}
             caseReviews={(db.caseReviews || []).filter((item) => item.girlId === currentGirl.id)}
+            caseGoals={(db.caseGoals || []).filter((item) => item.girlId === currentGirl.id)}
+            householdActivities={(db.householdActivities || []).filter((item) => item.householdId === currentGirl.householdId)}
             onBack={() => navigateTo('girls', 'girls')}
             onNavigateToHouse={handleOpenHouseProfile}
             onEditGirl={handleStartEditGirl}

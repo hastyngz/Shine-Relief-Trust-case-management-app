@@ -145,6 +145,7 @@ export function getDatabase(): AppDatabase {
       girlLeaves: parsed.girlLeaves || [],
       programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
       caseReviews: parsed.caseReviews || [],
+      caseGoals: parsed.caseGoals || [],
       procurementLists: parsed.procurementLists || [],
       projectProjections: parsed.projectProjections || [],
     };

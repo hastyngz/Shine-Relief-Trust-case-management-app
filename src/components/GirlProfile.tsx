@@ -14,9 +14,13 @@ import {
   AttendanceRecord,
   GirlLeaveRecord,
   CaseReview,
+  CaseGoal,
+  HouseholdActivity,
 } from '../types';
 import { formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { getDatabase, saveDatabase } from '../utils/storage';
+import { persistPhase2Record } from '../services/firestoreSync';
 import {
   ArrowLeft,
   GraduationCap,
@@ -42,6 +46,7 @@ import { PhotoGallery } from './Attachments/PhotoGallery';
 import { PhotoUploadModal } from './Attachments/PhotoUploadModal';
 import { RecordAttachmentBar } from './Attachments/RecordAttachmentBar';
 import { subscribeAllGirlAttachments } from '../services/attachmentService';
+import { CaseGoalsPanel } from './CaseGoalsPanel';
 
 interface GirlProfileProps {
   girl: Girl;
@@ -57,6 +62,8 @@ interface GirlProfileProps {
   attendanceRecords?: AttendanceRecord[];
   girlLeaves?: GirlLeaveRecord[];
   caseReviews?: CaseReview[];
+  caseGoals?: CaseGoal[];
+  householdActivities?: HouseholdActivity[];
   onBack: () => void;
   onNavigateToHouse: (houseId: string) => void;
   onEditGirl: (girl: Girl) => void;
@@ -68,7 +75,7 @@ interface GirlProfileProps {
   onAskAI?: (girlId: string) => void;
 }
 
-type TimelineFilter = 'all' | 'educational' | 'health' | 'family' | 'historical' | 'action' | 'education-history' | 'support' | 'examination' | 'attendance' | 'leave' | 'review';
+type TimelineFilter = 'all' | 'educational' | 'health' | 'family' | 'historical' | 'action' | 'education-history' | 'support' | 'examination' | 'attendance' | 'leave' | 'review' | 'goal' | 'household-activity';
 
 interface UnifiedTimelineItem {
   id: string;
@@ -101,6 +108,8 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   attendanceRecords = [],
   girlLeaves = [],
   caseReviews = [],
+  caseGoals = [],
+  householdActivities = [],
   onBack,
   onNavigateToHouse,
   onEditGirl,
@@ -115,6 +124,9 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   const [filter, setFilter] = useState<TimelineFilter>('all');
   const [attachments, setAttachments] = useState<PhotoAttachment[]>([]);
   const [isProfilePhotoModalOpen, setIsProfilePhotoModalOpen] = useState(false);
+  const profilePhotoUrl = attachments.find((attachment) =>
+    attachment.targetType === 'girl' && attachment.targetId === girl.id && attachment.category === 'Profile Photo'
+  )?.downloadUrl || girl.photoUrl;
 
   // Subscribe to all attachments linked to this girl or her follow-ups
   useEffect(() => {
@@ -202,6 +214,45 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
       nextFollowUpDate: action.dueDate,
       recordedBy: action.createdBy,
     })),
+    ...caseGoals.flatMap((goal) => [
+      {
+        id: goal.id,
+        type: 'goal' as const,
+        date: goal.createdAt,
+        title: goal.title,
+        subtitle: `Case goal · ${goal.status}${goal.targetDate ? ` · Target ${goal.targetDate}` : ''}`,
+        description: `Baseline: ${goal.baseline || 'Not recorded'}\nTarget: ${goal.targetOutcome}\nMeasure: ${goal.measureOfSuccess}`,
+        progressOrOutcome: goal.outcome,
+        furtherActionRequired: !['Achieved', 'Not achieved'].includes(goal.status),
+        nextFollowUpDate: goal.targetDate,
+        recordedBy: goal.createdBy,
+      },
+      ...goal.progressNotes.map((note) => ({
+        id: note.id,
+        type: 'goal' as const,
+        date: note.date,
+        title: `Goal progress · ${goal.title}`,
+        subtitle: `Progress update · ${goal.status}`,
+        description: note.note,
+        progressOrOutcome: goal.outcome,
+        furtherActionRequired: !['Achieved', 'Not achieved'].includes(goal.status),
+        nextFollowUpDate: goal.targetDate,
+        recordedBy: note.recordedBy,
+      })),
+    ]).flat(),
+    ...householdActivities.map((activity) => ({
+      id: activity.id,
+      type: 'household-activity' as const,
+      date: activity.date,
+      title: activity.activityName,
+      subtitle: `Household activity · ${activity.activityCategory || activity.activityType}`,
+      description: activity.description,
+      supportProvided: activity.supportProvided,
+      progressOrOutcome: activity.outcome,
+      furtherActionRequired: activity.furtherActionRequired,
+      nextFollowUpDate: activity.nextFollowUpDate,
+      recordedBy: activity.recordedBy,
+    })),
     ...educationHistory.map((record) => ({
       id: record.id,
       type: 'education-history' as const,
@@ -281,6 +332,13 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   });
 
   const outstandingItems = timeline.filter((item) => item.furtherActionRequired);
+
+  const saveCaseGoal = async (goal: CaseGoal) => {
+    const current = getDatabase();
+    saveDatabase({ ...current, caseGoals: [...(current.caseGoals || []).filter((item) => item.id !== goal.id), goal] });
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    await persistPhase2Record('caseGoals', goal);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -386,9 +444,9 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-4">
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-teal-950 flex items-center justify-center font-black text-xl sm:text-2xl shadow-md shrink-0 overflow-hidden group border-2 border-white/20">
-                {girl.photoUrl ? (
+                {profilePhotoUrl ? (
                   <img
-                    src={girl.photoUrl}
+                    src={profilePhotoUrl}
                     alt={girl.fullName}
                     className="w-full h-full object-cover"
                   />
@@ -517,7 +575,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
             <span>
               Recorded: {girl.createdAt ? formatDate(girl.createdAt) : 'Initial registration'}
               {girl.createdBy ? ` by ${girl.createdBy}` : ''}
-            <select value={filter} onChange={(event) => setFilter(event.target.value as TimelineFilter)} aria-label="Filter case timeline" className="max-w-36 bg-white border border-stone-200 rounded-md px-2 py-1.5 text-[11px] text-stone-700">
+            <select value={filter} onChange={(event) => setFilter(event.target.value as TimelineFilter)} aria-label="Filter case timeline" className="max-w-44 bg-white border border-stone-200 rounded-md px-2 py-1.5 text-[11px] text-stone-700">
               <option value="all">All case events</option>
               <option value="action">Case actions</option>
               <option value="education-history">Education history</option>
@@ -526,6 +584,8 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
               <option value="attendance">Attendance</option>
               <option value="leave">Leave</option>
               <option value="review">Case reviews</option>
+              <option value="goal">Goals & outcomes</option>
+              <option value="household-activity">Household activities</option>
             </select>
             </span>
             {girl.updatedAt && (
@@ -571,6 +631,8 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
           </div>
         </div>
       )}
+
+      <CaseGoalsPanel girlId={girl.id} goals={caseGoals} canEdit={!isViewOnly} onSave={saveCaseGoal} />
 
       {/* Historical Follow-Ups Section */}
       <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-5 space-y-5">
@@ -661,7 +723,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
               const isHist = item.type === 'historical';
               const isEducationRecord = ['education-history', 'support', 'examination'].includes(item.type);
               const isOther = !isEdu && !isHlt && !isFam && !isHist && !isEducationRecord;
-              const typeLabel = isHist ? 'Historical Record' : isEdu ? 'Educational Follow-Up' : isHlt ? 'Health / Medical Record' : isFam ? 'Family / Guardian Contact' : item.type === 'action' ? 'Case Action' : item.type === 'education-history' ? 'Education History' : item.type === 'support' ? 'Academic Support' : item.type === 'examination' ? 'Examination' : item.type === 'attendance' ? 'Attendance' : item.type === 'leave' ? 'Leave' : 'Case Review';
+              const typeLabel = isHist ? 'Historical Record' : isEdu ? 'Educational Follow-Up' : isHlt ? 'Health / Medical Record' : isFam ? 'Family / Guardian Contact' : item.type === 'action' ? 'Case Action' : item.type === 'education-history' ? 'Education History' : item.type === 'support' ? 'Academic Support' : item.type === 'examination' ? 'Examination' : item.type === 'attendance' ? 'Attendance' : item.type === 'leave' ? 'Leave' : item.type === 'goal' ? 'Case Goal' : item.type === 'household-activity' ? 'Household Activity' : 'Case Review';
 
               return (
                 <div
@@ -840,7 +902,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
         targetId={girl.id}
         targetTitle={girl.fullName}
         title={`Photos & Attached Records for ${girl.fullName}`}
-        subtitle="Passport photos, school report cards, medical discharge notes, and guardian visits stored in Firebase Storage"
+        subtitle="Passport photos, school report cards, medical discharge notes, and guardian visits stored in Cloudflare R2"
         defaultCategory="School Document"
       />
 

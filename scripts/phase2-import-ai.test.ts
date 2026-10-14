@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { analyzeImportRows } from '../src/services/importService';
+import { processAIChat } from '../src/server/aiService';
 import { executeAITool } from '../src/server/aiTools';
 import { AppDatabase, StaffUser } from '../src/types';
+import { getAICollectionsForTool } from '../workers/r2-storage/aiBackend';
 
 const staff: StaffUser = {
   id: 'staff-1',
@@ -67,6 +69,49 @@ async function run() {
   assert.equal(educationResult.girl.id, 'SG-001');
   assert.equal('safeguardingCases' in educationResult, false);
   assert.equal('safeguardingCases' in db, false);
+
+  const restrictedStaff = { role: 'Staff', canViewHealthRecords: false, canViewCaseReviews: false };
+  assert.deepEqual(getAICollectionsForTool('getGirlProfile', {}, restrictedStaff), ['girls', 'households', 'caseGoals']);
+  assert.deepEqual(getAICollectionsForTool('getGirlFollowUps', { followUpType: 'health' }, restrictedStaff), ['girls']);
+  assert.equal(getAICollectionsForTool('getDashboardStatistics', {}, restrictedStaff).includes('healthFollowUps'), false);
+  assert.equal(getAICollectionsForTool('getDashboardStatistics', {}, restrictedStaff).includes('caseReviews'), false);
+  assert.deepEqual(getAICollectionsForTool('getCaseActions', {}, restrictedStaff), ['caseActions']);
+
+  const originalFetch = globalThis.fetch;
+  const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  let completion = 0;
+  globalThis.fetch = async () => {
+    const body = completion++ === 0
+      ? {
+          model: 'provider/tool-model',
+          choices: [{ message: { tool_calls: [{ id: 'call-1', function: { name: 'searchGirls', arguments: JSON.stringify({ query: 'Test' }) } }] } }],
+        }
+      : { model: 'provider/final-model', choices: [{ message: { content: 'Test response.' } }] };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const response = await processAIChat({
+      message: 'Find Test Girl',
+      staffUser: staff,
+      loadDatabase: async (toolName) => {
+        assert.equal(toolName, 'searchGirls');
+        return db;
+      },
+    });
+    assert.deepEqual(response.modelsUsed, ['provider/tool-model', 'provider/final-model']);
+    assert.deepEqual(response.sourceRefs, [{
+      id: 'SG-001',
+      collection: 'girls',
+      date: '2024-01-01',
+      girlId: 'SG-001',
+      householdId: 'SH-01',
+    }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
+  }
 
   console.log('Import and AI scope tests passed.');
 }

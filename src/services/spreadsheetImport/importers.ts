@@ -221,10 +221,24 @@ function categoryFrom(value: string): BudgetCategory {
 }
 
 function monthColumn(header: unknown): number | undefined {
-  const value = normalized(header).replace(/\s+20\d{2}$/, '');
-  if (!/^[a-z]+$/.test(value)) return undefined;
-  if (/^septmb?er$/.test(value)) return 9;
-  return MONTHS.find(({ label }) => label.test(value))?.month;
+  const tokens = normalized(header).split(' ').filter(Boolean);
+  const monthTokens = tokens.map((token) => ({
+    token,
+    month: /^sept(?:ember|mber|mb?er)?$/.test(token)
+      ? 9
+      : MONTHS.find(({ label }) => label.test(token))?.month,
+  })).filter((entry): entry is { token: string; month: number } => entry.month !== undefined);
+  if (monthTokens.length !== 1) return undefined;
+
+  const monthDescriptors = new Set([
+    'salary', 'salaries', 'wage', 'wages', 'pay', 'payroll', 'payment', 'payments',
+    'amount', 'amounts', 'gross', 'net', 'monthly', 'total', 'remuneration', 'earning', 'earnings',
+    'mwk', 'kwacha', 'currency',
+  ]);
+  const hasUnexpectedToken = tokens.some((token) =>
+    token !== monthTokens[0].token && !/^20\d{2}$/.test(token) && !monthDescriptors.has(token)
+  );
+  return hasUnexpectedToken ? undefined : monthTokens[0].month;
 }
 
 function nonEmptyRow(row: unknown[]): boolean {
@@ -694,7 +708,9 @@ function parsePayrollRows(
     })).filter((entry): entry is { month: number; amount: number } => entry.amount !== undefined && entry.amount > 0);
     const specialAmounts = specialColumns.map(({ index, type }) => ({ type, amount: number(row[index]) }))
       .filter((entry): entry is { type: 'loan' | 'arrears'; amount: number } => entry.amount !== undefined && entry.amount !== 0);
-    if (isGroupHeading(groupLabel, row)) {
+    if (labelledGroupColumn !== undefined && groupLabel) {
+      department = groupLabel;
+    } else if (isGroupHeading(groupLabel, row)) {
       department = groupLabel;
       if (!rowName) {
         if (monthlyAmounts.length || specialAmounts.length) skipped += 1;

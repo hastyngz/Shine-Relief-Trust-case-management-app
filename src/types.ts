@@ -446,6 +446,28 @@ export interface CaseReview {
   updatedAt: string;
 }
 
+export type CaseGoalStatus = 'Not started' | 'In progress' | 'Achieved' | 'Not achieved' | 'On hold';
+
+export interface CaseGoal {
+  id: string;
+  girlId: string;
+  title: string;
+  baseline: string;
+  targetOutcome: string;
+  measureOfSuccess: string;
+  targetDate?: string;
+  status: CaseGoalStatus;
+  progressNotes: Array<{ id: string; date: string; note: string; recordedBy: string }>;
+  outcome?: string;
+  outcomeRecordedAt?: string;
+  createdByUid: string;
+  createdBy: string;
+  createdAt: string;
+  updatedByUid: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
 export interface FamilyFollowUp {
   id: string;
   girlId: string;
@@ -589,8 +611,8 @@ export interface PhotoAttachment {
   fileName: string;
   fileSize: number; // in bytes
   contentType: string; // e.g. 'image/jpeg'
-  storagePath: string; // path in Firebase Storage
-  downloadUrl: string; // secure download URL
+  storagePath: string; // object key in Cloudflare R2
+  downloadUrl: string; // short-lived signed download URL
   caption?: string;
   consent?: boolean;
   consentCheckedAt?: string;
@@ -1402,6 +1424,7 @@ export interface AppDatabase {
   girlLeaves?: GirlLeaveRecord[];
   programmeLogs?: ProgrammeLogRecord[];
   caseReviews?: CaseReview[];
+  caseGoals?: CaseGoal[];
   procurementLists?: ProcurementList[];
   projectProjections?: ProjectProjection[];
 }

@@ -902,7 +902,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-stone-900">Authorized report photos</h4>
-                  <p className="text-[11px] text-stone-500">Only selected JPEG and PNG images with recorded consent are loaded through Firebase Storage access rules. Add a descriptive caption for accessible alt text.</p>
+                  <p className="text-[11px] text-stone-500">Only selected JPEG and PNG images with recorded consent are loaded through authenticated private storage. Add a descriptive caption for accessible alt text.</p>
                 </div>
                 <label className="text-[11px] font-semibold text-stone-600">Maximum photos
                   <input type="number" min={0} max={50} value={maxPhotos} onChange={(event) => setMaxPhotos(Math.max(0, Math.min(50, Number(event.target.value) || 0)))} className="field mt-1 block w-24" />

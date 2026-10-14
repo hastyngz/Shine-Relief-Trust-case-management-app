@@ -26,6 +26,7 @@ import {
   Languages,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE_URL } from '../../services/apiBase';
 import { AppDatabase, Girl, Household } from '../../types';
 import { AudioDataInput } from '../Intelligence/AudioDataInput';
 import { cleanTextForSpeech } from '../../utils/speech';
@@ -37,6 +38,8 @@ export interface ChatMessage {
   timestamp: string;
   toolsUsed?: string[];
   accessedRecordIds?: string[];
+  sourceRefs?: Array<{ id: string; collection: string; date?: string; girlId?: string; householdId?: string }>;
+  modelsUsed?: string[];
   isUnavailable?: boolean;
 }
 
@@ -280,8 +283,8 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         content: m.content,
       }));
 
-      // Call server-side controlled Gemini endpoint
-      const response = await fetch('/api/ai/chat', {
+      // Call the authenticated server-side AI endpoint
+      const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -318,6 +321,8 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         toolsUsed: data.toolsUsed,
         accessedRecordIds: data.accessedRecordIds,
+        sourceRefs: data.sourceRefs,
+        modelsUsed: data.modelsUsed,
       };
 
       setMessages([...newMessages, assistantMsg]);
@@ -861,22 +866,26 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                     <div>
                       {renderFormattedContent(msg.content)}
 
+                      {msg.modelsUsed && msg.modelsUsed.length > 0 && (
+                        <p className="mt-2 text-[10px] text-stone-400">
+                          Model: {msg.modelsUsed.join(', ')}
+                        </p>
+                      )}
+
                       {/* Tool references and accessed records */}
                       {(msg.toolsUsed && msg.toolsUsed.length > 0) ||
+                      (msg.sourceRefs && msg.sourceRefs.length > 0) ||
                       (msg.accessedRecordIds && msg.accessedRecordIds.length > 0) ? (
                         <div className="mt-3 pt-2 border-t border-stone-100 flex flex-wrap items-center gap-1.5 text-[10px] text-stone-500">
-                          <span className="font-semibold text-stone-600">Verified from records:</span>
-                          {msg.accessedRecordIds?.slice(0, 6).map((recId) => (
-                            <span
-                              key={recId}
-                              className="bg-stone-100 border border-stone-200 text-stone-700 px-1.5 py-0.5 rounded font-mono font-medium"
-                            >
-                              {recId}
-                            </span>
-                          ))}
-                          {msg.accessedRecordIds && msg.accessedRecordIds.length > 6 && (
-                            <span className="text-stone-400">+{msg.accessedRecordIds.length - 6} more</span>
-                          )}
+                          <span className="w-full font-semibold text-stone-600">Sources checked:</span>
+                          {msg.sourceRefs?.slice(0, 8).map((source) => {
+                            const label = `${source.collection} · ${source.id}${source.date ? ` · ${source.date}` : ''}`;
+                            if (source.girlId && onNavigateToGirl) return <button key={`${source.collection}-${source.id}`} type="button" onClick={() => onNavigateToGirl(source.girlId!)} title="Open related girl profile" className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-teal-900 underline">{label}</button>;
+                            if (source.householdId && onNavigateToHouse) return <button key={`${source.collection}-${source.id}`} type="button" onClick={() => onNavigateToHouse(source.householdId!)} title="Open related household" className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-teal-900 underline">{label}</button>;
+                            return <span key={`${source.collection}-${source.id}`} className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono font-medium text-stone-700">{label}</span>;
+                          })}
+                          {msg.sourceRefs && msg.sourceRefs.length > 8 && <span className="text-stone-400">+{msg.sourceRefs.length - 8} more sources</span>}
+                          {!msg.sourceRefs?.length && msg.accessedRecordIds?.slice(0, 8).map((recId) => <span key={recId} className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono font-medium text-stone-700">{recId}</span>)}
                         </div>
                       ) : null}
 

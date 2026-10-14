@@ -14,8 +14,8 @@ import {
   Unsubscribe,
   Query,
 } from 'firebase/firestore';
-import { deleteObject, ref } from 'firebase/storage';
-import { firestore, storage } from '../firebase';
+import { firestore } from '../firebase';
+import { deleteStoredFile } from './r2StorageClient';
 import {
   AppDatabase,
   Girl,
@@ -45,6 +45,7 @@ import {
   GirlLeaveRecord,
   ProgrammeLogRecord,
   CaseReview,
+  CaseGoal,
   ReportHistoryRecord,
   ReportExportRecord,
   MeetingRecord,
@@ -148,6 +149,7 @@ export const COLLECTIONS = {
   GIRL_LEAVES: 'girlLeaves',
   PROGRAMME_LOGS: 'programmeLogs',
   CASE_REVIEWS: 'caseReviews',
+  CASE_GOALS: 'caseGoals',
   SAFEGUARDING_CASES: 'safeguardingCases',
   SAFEGUARDING_AUDIT_LOGS: 'safeguardingAuditLogs',
   EMPLOYEE_SALARY_HISTORY: 'employeeSalaryHistory',
@@ -1072,6 +1074,7 @@ export async function syncEntireDatabaseToFirestore(
       ['girlLeaves', COLLECTIONS.GIRL_LEAVES],
       ['programmeLogs', COLLECTIONS.PROGRAMME_LOGS],
       ['caseReviews', COLLECTIONS.CASE_REVIEWS],
+      ['caseGoals', COLLECTIONS.CASE_GOALS],
       ['procurementLists', COLLECTIONS.PROCUREMENT_LISTS],
       ['projectProjections', COLLECTIONS.PROJECT_PROJECTIONS],
     ];
@@ -1135,7 +1138,7 @@ export async function syncEntireDatabaseToFirestore(
             const storagePath = record.data().storagePath;
             if (typeof storagePath === 'string' && storagePath) {
               try {
-                await deleteObject(ref(storage, storagePath));
+                await deleteStoredFile(storagePath);
               } catch (err: any) {
                 if (err?.code !== 'storage/object-not-found') throw err;
               }
@@ -1168,7 +1171,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       const storagePath = attachmentDoc.data().storagePath;
       if (typeof storagePath === 'string' && storagePath) {
         try {
-          await deleteObject(ref(storage, storagePath));
+          await deleteStoredFile(storagePath);
         } catch (err: any) {
           if (err?.code !== 'storage/object-not-found') throw err;
         }
@@ -1203,6 +1206,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       COLLECTIONS.GIRL_LEAVES,
       COLLECTIONS.PROGRAMME_LOGS,
       COLLECTIONS.CASE_REVIEWS,
+      COLLECTIONS.CASE_GOALS,
     ];
 
     for (const colName of collectionNames) {
@@ -1281,12 +1285,13 @@ export function initFirestoreListeners(
     girlLeaves: [],
     programmeLogs: [],
     caseReviews: [],
+    caseGoals: [],
     procurementLists: [],
     projectProjections: [],
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 37;
+  const TOTAL_COLLECTIONS = 38;
 
   const notifyChange = () => {
     onDatabaseSynced({
@@ -1328,6 +1333,7 @@ export function initFirestoreListeners(
       girlLeaves: [...(liveState.girlLeaves || [])],
       programmeLogs: [...(liveState.programmeLogs || [])],
       caseReviews: [...(liveState.caseReviews || [])],
+      caseGoals: [...(liveState.caseGoals || [])],
       procurementLists: [...(liveState.procurementLists || [])],
       projectProjections: [...(liveState.projectProjections || [])],
     });
@@ -1414,6 +1420,7 @@ export function initFirestoreListeners(
   handleCollection<GirlLeaveRecord>(COLLECTIONS.GIRL_LEAVES, 'girlLeaves');
   handleCollection<ProgrammeLogRecord>(COLLECTIONS.PROGRAMME_LOGS, 'programmeLogs');
   handleCollection<CaseReview>(COLLECTIONS.CASE_REVIEWS, 'caseReviews');
+  handleCollection<CaseGoal>(COLLECTIONS.CASE_GOALS, 'caseGoals');
   handleCollection<ProcurementList>(COLLECTIONS.PROCUREMENT_LISTS, 'procurementLists');
   handleCollection<ProjectProjection>(COLLECTIONS.PROJECT_PROJECTIONS, 'projectProjections');
 

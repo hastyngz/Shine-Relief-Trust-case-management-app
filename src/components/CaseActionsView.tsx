@@ -17,13 +17,17 @@ type ActionFilter = 'All' | 'Mine' | 'Open' | 'Due Today' | 'Due This Week' | 'O
 const priorities: CaseActionPriority[] = ['Low', 'Medium', 'High', 'Urgent'];
 const statuses: CaseActionStatus[] = ['Open', 'In Progress', 'Completed', 'Overdue', 'Cancelled'];
 
+function getActionDraftKey(uid: string): string {
+  return `shine_case_action_draft_v1_${uid}`;
+}
+
 function effectiveStatus(action: CaseAction, today: string): CaseActionStatus {
   if (action.status === 'Completed' || action.status === 'Cancelled') return action.status;
   return action.dueDate < today ? 'Overdue' : action.status;
 }
 
 export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh, onOpenGirl, onOpenHousehold }) => {
-  const { currentUser, staffProfile, allStaff, role, isAdmin } = useAuth();
+  const { currentUser, staffProfile, allStaff, role, isAdmin, canViewHealthRecords } = useAuth();
   const [filter, setFilter] = useState<ActionFilter>('Mine');
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -37,6 +41,47 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   const [dueDate, setDueDate] = useState('');
   const [statusFilter, setStatusFilter] = useState<ActionFilter>('Mine');
   const [error, setError] = useState('');
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftOwnerUid, setDraftOwnerUid] = useState('');
+  const draftKey = currentUser ? getActionDraftKey(currentUser.uid) : '';
+
+  useEffect(() => {
+    setDraftReady(false);
+    setDraftOwnerUid('');
+    if (!currentUser || typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(getActionDraftKey(currentUser.uid));
+      if (raw) {
+        const draft = JSON.parse(raw);
+        setTitle(typeof draft.title === 'string' ? draft.title : '');
+        setDescription(typeof draft.description === 'string' ? draft.description : '');
+        setGirlId(typeof draft.girlId === 'string' ? draft.girlId : '');
+        setHouseholdId(typeof draft.householdId === 'string' ? draft.householdId : '');
+        setPersonId(typeof draft.personId === 'string' ? draft.personId : '');
+        setAssignedStaffId(typeof draft.assignedStaffId === 'string' ? draft.assignedStaffId : currentUser.uid);
+        setSource(typeof draft.source === 'string' ? draft.source : 'manual');
+        setPriority(priorities.includes(draft.priority) ? draft.priority : 'Medium');
+        setDueDate(typeof draft.dueDate === 'string' ? draft.dueDate : '');
+        setShowForm(true);
+      } else {
+        setAssignedStaffId(currentUser.uid);
+      }
+    } catch (draftError) {
+      console.warn('Could not restore case action draft:', draftError);
+    }
+    setDraftOwnerUid(currentUser.uid);
+    setDraftReady(true);
+  }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (!draftReady || !currentUser || draftOwnerUid !== currentUser.uid || !draftKey || typeof window === 'undefined') return;
+    const hasContent = Boolean(title || description || girlId || householdId || personId || dueDate);
+    if (!hasContent) {
+      window.localStorage.removeItem(draftKey);
+      return;
+    }
+    window.localStorage.setItem(draftKey, JSON.stringify({ title, description, girlId, householdId, personId, assignedStaffId, source, priority, dueDate }));
+  }, [draftReady, draftOwnerUid, currentUser?.uid, draftKey, title, description, girlId, householdId, personId, assignedStaffId, source, priority, dueDate]);
 
   const actor = {
     uid: currentUser?.uid || '',
@@ -55,15 +100,21 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   const overdue = activeActions.filter((action) => action.dueDate < today);
   const highPriority = activeActions.filter((action) => action.priority === 'High' || action.priority === 'Urgent');
   const completed = actions.filter((action) => action.status === 'Completed');
+  const followUpQueue = [
+    ...db.educationalFollowUps.map((item) => ({ id: item.id, girlId: item.girlId, type: 'Education', title: item.academicIssue || item.problemsExperienced || 'Educational follow-up', dueDate: item.nextFollowUpDate || '', needsAction: item.furtherActionRequired })),
+    ...(canViewHealthRecords ? db.healthFollowUps.map((item) => ({ id: item.id, girlId: item.girlId, type: 'Health', title: item.reasonForVisit || 'Health follow-up', dueDate: item.nextFollowUpDate || '', needsAction: item.furtherActionRequired })) : []),
+    ...db.familyFollowUps.map((item) => ({ id: item.id, girlId: item.girlId, type: 'Family', title: item.contactType || 'Family follow-up', dueDate: item.nextFollowUpDate || '', needsAction: item.furtherActionRequired })),
+  ].filter((item) => item.needsAction || (item.dueDate && item.dueDate <= weekLimit))
+    .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
 
   const sourceOptions = useMemo(() => [
     ...db.educationalFollowUps.map((record) => ({ id: record.id, type: 'educationalFollowUp' as const, title: `Education: ${record.academicIssue}` })),
-    ...db.healthFollowUps.map((record) => ({ id: record.id, type: 'healthFollowUp' as const, title: `Health: ${record.reasonForVisit}` })),
+    ...(canViewHealthRecords ? db.healthFollowUps.map((record) => ({ id: record.id, type: 'healthFollowUp' as const, title: `Health: ${record.reasonForVisit}` })) : []),
     ...db.familyFollowUps.map((record) => ({ id: record.id, type: 'familyFollowUp' as const, title: `Family: ${record.contactType}` })),
     ...(db.householdActivities || []).map((record) => ({ id: record.id, type: 'householdActivity' as const, title: `Activity: ${record.activityName}` })),
     ...db.rentPayments.map((record) => ({ id: record.id, type: 'rentPayment' as const, title: `Rent: ${record.monthCovered}` })),
     ...db.expenses.map((record) => ({ id: record.id, type: 'expense' as const, title: `Expense: ${record.itemDescription}` })),
-  ], [db]);
+  ], [db, canViewHealthRecords]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -185,8 +236,8 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     <section className="space-y-4" aria-label="Case actions">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black text-stone-900">Case Actions</h2>
-          <p className="text-xs text-stone-500">Assigned follow-up work across girls and households</p>
+          <h2 className="text-lg font-black text-stone-900">Staff work queue</h2>
+          <p className="text-xs text-stone-500">Assigned actions and follow-ups that need attention</p>
         </div>
         <button onClick={() => setShowForm((shown) => !shown)} className="inline-flex items-center gap-2 bg-teal-900 text-white px-3 py-2 rounded-lg text-xs font-bold">
           <Plus className="w-4 h-4" /> New action
@@ -204,6 +255,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
 
       {showForm && (
         <form onSubmit={submit} className="theme-card border border-stone-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <p className="md:col-span-2 text-[11px] text-stone-500">This draft is saved on this device and remains available if your connection drops.</p>
           <label className="text-xs font-semibold text-stone-700">Action title *
             <input value={title} onChange={(event) => setTitle(event.target.value)} required className="mt-1 w-full border border-stone-300 rounded-md px-2.5 py-2" />
           </label>
@@ -309,6 +361,33 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
         })}
         {visibleActions.length === 0 && <div className="py-10 text-center text-xs text-stone-500"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-stone-400" />No case actions match this filter.</div>}
       </div>
+
+      <section aria-label="Follow-ups needing attention" className="space-y-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-bold text-stone-900">Follow-ups needing attention</h3>
+          <span className="text-[11px] text-stone-500">Overdue, unscheduled, or due within 7 days</span>
+        </div>
+        {followUpQueue.length ? (
+          <div className="divide-y divide-stone-200 border-y border-stone-200">
+            {followUpQueue.slice(0, 15).map((item) => {
+              const girl = db.girls.find((record) => record.id === item.girlId);
+              const overdue = item.dueDate && item.dueDate < today;
+              return (
+                <article key={`${item.type}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-sm bg-stone-100 px-1.5 py-0.5 text-[10px] font-bold text-stone-700">{item.type}</span>
+                      <span className="text-xs font-semibold text-stone-900">{item.title}</span>
+                    </div>
+                    <button type="button" onClick={() => onOpenGirl?.(item.girlId)} className="mt-1 text-[11px] text-teal-800 underline">{girl?.fullName || item.girlId}</button>
+                  </div>
+                  <span className={`text-[11px] font-semibold ${overdue ? 'text-rose-700' : 'text-stone-500'}`}>{item.dueDate ? `${overdue ? 'Overdue' : 'Due'} ${item.dueDate}` : 'Date not set'}</span>
+                </article>
+              );
+            })}
+          </div>
+        ) : <p className="border-y border-stone-200 py-5 text-center text-xs text-stone-500">No follow-ups are due soon.</p>}
+      </section>
       <p className="inline-flex items-center gap-1 text-[10px] text-stone-500"><RefreshCw className="w-3 h-3" />Due and overdue states are calculated from the due date. Tasks are never completed automatically.</p>
     </section>
   );

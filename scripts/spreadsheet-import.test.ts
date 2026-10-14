@@ -315,6 +315,54 @@ for (const card of employeePreviewCards) {
   assert.doesNotMatch(name, /^PAYMENTS!\s*row\s*\d+$/i);
 }
 
+const missingPayrollWorkbook = workbook([
+  ['September 2026 Payroll - Missing Employees Report'],
+  ['Employees listed in the September spreadsheet but missing from payroll'],
+  ['Employee Name', 'September Salary (MWK)', 'Payroll App Status', 'Action Required'],
+  ['Synthetic Farm Worker', 100000, 'Missing from App', 'Add to payroll'],
+  ['Synthetic House Mum', 100000, 'Missing from App', 'Add to payroll'],
+  ['Synthetic Driver', 100000, 'Missing from App', 'Add to payroll'],
+  ['Synthetic Security Guard', 80000, 'Missing from App', 'Verify and add'],
+  ['Total September Salary Unaccounted', 380000, '', ''],
+], 'Sept Payroll Missing Employees');
+const missingPayrollAnalysis = analyzeSpreadsheetWorkbook(missingPayrollWorkbook);
+assert.equal(missingPayrollAnalysis.detectedKind, 'payroll-grid');
+const missingPayrollPreview = createSpreadsheetImportPreview(
+  missingPayrollWorkbook,
+  missingPayrollAnalysis,
+  missingPayrollAnalysis.detectedKind,
+  [],
+  [],
+  'september_2026_missing_payroll_report.xlsx',
+);
+const missingPayrollEmployees = missingPayrollPreview.lines.filter((line) => line.kind === 'employee');
+assert.deepEqual(missingPayrollEmployees.map((line) => [line.employeeName, line.currentSalary, line.latestSourcePeriod]), [
+  ['Synthetic Farm Worker', 100000, '2026-09'],
+  ['Synthetic House Mum', 100000, '2026-09'],
+  ['Synthetic Driver', 100000, '2026-09'],
+  ['Synthetic Security Guard', 80000, '2026-09'],
+]);
+
+const alternatePayrollLayout = workbook([
+  ['Staff payroll exceptions - September 2026'],
+  ['Department', 'Employee Full Name', 'Pay September 2026 (MWK)'],
+  ['Operations', 'Synthetic Layout Employee', 85000],
+], 'September Payroll Exceptions');
+const alternatePayrollAnalysis = analyzeSpreadsheetWorkbook(alternatePayrollLayout);
+const alternatePayrollPreview = createSpreadsheetImportPreview(
+  alternatePayrollLayout,
+  alternatePayrollAnalysis,
+  alternatePayrollAnalysis.detectedKind,
+  [],
+  [],
+  'alternate_september_payroll.xlsx',
+);
+const alternateEmployee = alternatePayrollPreview.lines.find((line) => line.kind === 'employee');
+assert.equal(alternateEmployee?.employeeName, 'Synthetic Layout Employee');
+assert.equal(alternateEmployee?.department, 'Operations');
+assert.equal(alternateEmployee?.currentSalary, 85000);
+assert.equal(alternateEmployee?.latestSourcePeriod, '2026-09');
+
 const aliasMatch = matchNameCandidates('Magret Synthetic', [{ id: 'staff-1', name: 'Margaret Synthetic' }]);
 assert.equal(aliasMatch.exact.length, 0);
 assert.equal(aliasMatch.possible.length, 1);

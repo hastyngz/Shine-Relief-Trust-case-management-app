@@ -21,12 +21,15 @@ export function readPendingOfflineSnapshots(): AppDatabase[] {
   }
 }
 
+export function getPendingOfflineSnapshotCount(): number {
+  return readPendingOfflineSnapshots().length;
+}
+
 export function writePendingOfflineSnapshot(snapshot: AppDatabase): void {
   if (typeof window === 'undefined') return;
   try {
-    const existing = readPendingOfflineSnapshots();
-    const next = [...existing, snapshot];
-    window.localStorage.setItem(OFFLINE_SNAPSHOT_KEY, JSON.stringify(next));
+    window.localStorage.setItem(OFFLINE_SNAPSHOT_KEY, JSON.stringify([snapshot]));
+    window.dispatchEvent(new Event('shine_offline_queue_updated'));
   } catch (error) {
     console.warn('Could not queue offline snapshot:', error);
   }
@@ -35,6 +38,7 @@ export function writePendingOfflineSnapshot(snapshot: AppDatabase): void {
 export function clearPendingOfflineSnapshots(): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(OFFLINE_SNAPSHOT_KEY);
+  window.dispatchEvent(new Event('shine_offline_queue_updated'));
 }
 
 export async function flushPendingOfflineSnapshots(): Promise<boolean> {
@@ -43,7 +47,7 @@ export async function flushPendingOfflineSnapshots(): Promise<boolean> {
   if (!queued.length) return false;
   try {
     const newest = queued[queued.length - 1];
-    await syncEntireDatabaseToFirestore(newest, true);
+    await syncEntireDatabaseToFirestore(newest, false);
     clearPendingOfflineSnapshots();
     return true;
   } catch (error) {
