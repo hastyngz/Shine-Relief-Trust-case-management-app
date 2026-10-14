@@ -1100,10 +1100,11 @@ export async function requestPushNotificationPermission(
         const { app } = await import('../firebase');
         const messaging = getMessaging(app);
 
-        // Register service worker if available
+        // Register service worker if available. It lives under /push/ so it
+        // has its own scope and never competes with the app-shell worker at /.
         let swReg: ServiceWorkerRegistration | undefined;
         if ('serviceWorker' in navigator) {
-          swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          swReg = await navigator.serviceWorker.register('/push/firebase-messaging-sw.js', { scope: '/push/' });
         }
 
         const token = await getToken(messaging, {

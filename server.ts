@@ -563,7 +563,15 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // The service worker and manifest must be revalidated so a new deploy is
+    // picked up; hashed assets keep the default caching.
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('sw.js') || filePath.endsWith('manifest.webmanifest')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    }));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

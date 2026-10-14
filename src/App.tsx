@@ -51,6 +51,8 @@ import { StaffLoginView } from './components/StaffLoginView';
 import { ShineLogo } from './components/ShineLogo';
 
 import { Header } from './components/Header';
+import { UpdateAvailableBanner } from './components/Update/UpdateAvailableBanner';
+import { markUnsavedChanges, clearUnsavedChanges } from './pwa/unsavedChanges';
 import { Navigation, NavTab } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
 import { canAccessManagementDashboard } from './services/managementAnalytics';
@@ -360,12 +362,20 @@ function AppContent() {
     };
   }, []);
 
+  // While a data-entry form is open the app is treated as holding unsaved
+  // work, so a pending app update never reloads over it.
+  const isFormView = view.startsWith('form-');
+  useEffect(() => {
+    if (isFormView) markUnsavedChanges();
+    else clearUnsavedChanges();
+    return () => clearUnsavedChanges();
+  }, [isFormView]);
+
   // Real-time bidirectional Firebase Firestore persistence synchronization
   useEffect(() => {
     if (!currentUser || isSuspended) {
       return;
     }
-
     const unsub = initFirestoreListeners((cloudDb) => {
       saveDatabase(cloudDb, false);
       setLastSyncedSnapshot(cloudDb);
@@ -1338,6 +1348,9 @@ function AppContent() {
           </span>
         </div>
       )}
+
+      {/* New version available */}
+      <UpdateAvailableBanner />
 
       {/* Primary Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -69,6 +69,9 @@ jobs:
       - name: Test code splitting
         run: npm run test:code-splitting
 
+      - name: Test offline app shell
+        run: npm run test:app-shell
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 
