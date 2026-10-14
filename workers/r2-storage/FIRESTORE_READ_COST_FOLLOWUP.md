@@ -146,3 +146,19 @@ The comprehensive report currently requests report-eligible attachment metadata 
 The JSON backup path intentionally includes all attachment metadata so the export can represent a complete database backup. Do not narrow that query for cost reasons. If backup size or latency becomes a problem, redesign it as a paginated/streamed export while preserving completeness and restore compatibility.
 
 No additional implementation change was made in this pass because the remaining candidates require a user-visible pagination/export design or production usage evidence. Prefer measuring query counts and document volume before making these changes.
+
+## Salary-history overlapping request reduction — 14 October 2026
+
+The salary-history service now coalesces identical reads while a request is still in flight. Calls for the same employee, or the same set of employee IDs regardless of input order, share the same pending promise instead of issuing duplicate Firestore queries at the same time. The temporary entry is removed when the request settles; this is not a time-based cache and does not keep salary data around after completion.
+
+The multi-employee lookup also skips empty IDs, returns immediately for an empty set, and runs its independent batches of up to 30 IDs concurrently. Concurrent batches can reduce waiting time but do not inherently reduce billed document reads; the in-flight coalescing is the part that can avoid duplicate reads when screens request the same set simultaneously.
+
+No salary data, role checks, or Firestore rules were changed. Verify manager/admin salary-history views and contract/gratuity calculations after deployment. No monetary saving has been measured.
+
+## Staff roster subscription lifecycle — 14 October 2026
+
+The authentication context previously started a collection-wide `staffUsers` listener as soon as Firebase Auth reported a user, before the staff profile had been resolved. That could cause unnecessary denied roster-listener attempts for unregistered accounts and suspended staff.
+
+The listener lifecycle now waits for a resolved, active registered profile before opening the full roster subscription. A known registered but suspended user listens only to their own staff document, allowing a live status change to reactivate the roster flow without exposing the full staff directory. Unknown/unregistered accounts do not start either a full roster listener or a persistent profile listener. The full-roster effect depends only on identity and access-state fields, not the entire profile object, so ordinary profile field updates do not repeatedly tear down and recreate the collection listener.
+
+This preserves the existing Firestore rules and does not grant new access. It is expected to avoid collection-wide listener attempts for accounts that cannot read the roster, but actual billing impact has not been measured. The standard CI workflow checks TypeScript, existing listener-permission tests, quality rules, the static access audit, and the production build; it does not simulate the full authentication lifecycle. Before rollout, manually test first login, an unregistered account, suspended-to-active reactivation, active staff, and manager/admin role changes. No production Firebase records are accessible through this repository connection.
