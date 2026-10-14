@@ -93,6 +93,32 @@ import {
 const STORAGE_KEY = 'shine_relief_trust_prod_v1';
 const LEGACY_STORAGE_KEY = 'shine_relief_trust_db_v1';
 
+/** Dispatched when a local save fails so the UI can show a persistent banner. */
+export const STORAGE_WARNING_EVENT = 'shine_storage_warning';
+export const STORAGE_RECOVERED_EVENT = 'shine_storage_recovered';
+
+export interface StorageSaveResult {
+  ok: boolean;
+  quotaExceeded: boolean;
+  error?: unknown;
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { name?: string; code?: number };
+  return (
+    candidate.name === 'QuotaExceededError' ||
+    candidate.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    candidate.code === 22 ||
+    candidate.code === 1014
+  );
+}
+
+function dispatchStorageEvent(name: string, detail?: unknown): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
 export function getDatabase(): AppDatabase {
   if (typeof window === 'undefined') return INITIAL_DATABASE;
   try {
@@ -155,15 +181,24 @@ export function getDatabase(): AppDatabase {
   }
 }
 
-export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): void {
-  if (typeof window === 'undefined') return;
+export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): StorageSaveResult {
+  if (typeof window === 'undefined') return { ok: true, quotaExceeded: false };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     if (dispatchEvent) {
       window.dispatchEvent(new Event('shine_db_updated'));
     }
+    // A previous failure may now be resolved (space freed or back online).
+    dispatchStorageEvent(STORAGE_RECOVERED_EVENT);
+    return { ok: true, quotaExceeded: false };
   } catch (error) {
+    const quotaExceeded = isQuotaExceededError(error);
     console.error('Error saving database to localStorage:', error);
+    if (dispatchEvent) {
+      // The in-memory database is left untouched; the offline queue keeps edits.
+      dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
+    }
+    return { ok: false, quotaExceeded, error };
   }
 }
 

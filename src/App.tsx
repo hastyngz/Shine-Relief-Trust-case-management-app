@@ -34,6 +34,8 @@ import {
   deleteHouseholdActivity,
   addEducationHistoryRecord,
   updateEducationHistoryRecord,
+  STORAGE_WARNING_EVENT,
+  STORAGE_RECOVERED_EVENT,
 } from './utils/storage';
 import {
   initFirestoreListeners,
@@ -93,7 +95,7 @@ import { HouseholdActivityForm } from './components/Forms/HouseholdActivityForm'
 import { SearchModal } from './components/SearchModal';
 import { DataModal } from './components/DataModal';
 import { QuickAddModal, ActionType } from './components/QuickAddModal';
-import { CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { uploadPhotoAttachment } from './services/attachmentService';
 import { PendingPhoto } from './components/Attachments/FormPhotoSection';
 import { AttachmentTargetType, StaffRole } from './types';
@@ -304,12 +306,26 @@ function AppContent() {
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState(false);
 
   // Firestore sync status
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus());
 
   useEffect(() => {
     return subscribeSyncStatus(setSyncStatus);
+  }, []);
+
+  // Surface local storage failures (for example a full quota) instead of
+  // silently losing offline edits.
+  useEffect(() => {
+    const handleWarning = () => setStorageWarning(true);
+    const handleRecovered = () => setStorageWarning(false);
+    window.addEventListener(STORAGE_WARNING_EVENT, handleWarning);
+    window.addEventListener(STORAGE_RECOVERED_EVENT, handleRecovered);
+    return () => {
+      window.removeEventListener(STORAGE_WARNING_EVENT, handleWarning);
+      window.removeEventListener(STORAGE_RECOVERED_EVENT, handleRecovered);
+    };
   }, []);
 
   // Real-time bidirectional Firebase Firestore persistence synchronization
@@ -1249,6 +1265,7 @@ function AppContent() {
         }}
         onOpenNotificationSettings={() => navigateTo('messages', 'messages')}
         syncStatus={syncStatus}
+        storageWarning={storageWarning}
       />
 
       {/* Main Navigation Bar */}
@@ -1274,6 +1291,19 @@ function AppContent() {
       {isViewOnly && (
         <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-center text-xs text-amber-900 font-semibold flex items-center justify-center gap-2">
           <span>You are logged in with <strong>View Only</strong> access. Record editing, deletions, and additions are disabled.</span>
+        </div>
+      )}
+
+      {/* Local Storage Warning Banner */}
+      {storageWarning && (
+        <div
+          className="bg-rose-100 border-b border-rose-300 px-4 py-2 text-center text-xs text-rose-900 font-semibold flex items-center justify-center gap-2"
+          role="alert"
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>
+            This phone is out of storage. Changes may not be saved offline. Connect to the internet to sync, then free space.
+          </span>
         </div>
       )}
 

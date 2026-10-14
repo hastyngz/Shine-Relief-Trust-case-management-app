@@ -57,6 +57,12 @@ jobs:
       - name: Test payroll and gratuity calculations
         run: npm run test:payroll
 
+      - name: Test offline sync queue
+        run: npm run test:offline
+
+      - name: Test local storage failure handling
+        run: npm run test:storage
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 
