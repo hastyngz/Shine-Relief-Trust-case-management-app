@@ -26,6 +26,7 @@
     "test:code-splitting": "tsx scripts/code-splitting.test.ts",
     "test:app-shell": "tsx scripts/app-shell-offline.test.ts",
     "test:rate-limit": "tsx scripts/rate-limit.test.ts",
+    "test:routing": "tsx scripts/routing.test.ts",
     "test:deployment-smoke": "tsx scripts/cloudflare-deployment-smoke.test.ts"
   },
   "dependencies": {

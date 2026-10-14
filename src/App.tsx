@@ -55,14 +55,8 @@ import { UpdateAvailableBanner } from './components/Update/UpdateAvailableBanner
 import { markUnsavedChanges, clearUnsavedChanges } from './pwa/unsavedChanges';
 import { Navigation, NavTab } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
-import { canAccessManagementDashboard } from './services/managementAnalytics';
 import { detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from './services/caseIntelligenceService';
-import { GirlsList } from './components/GirlsList';
-import { HouseholdsList } from './components/HouseholdsList';
-import { ActivitiesList } from './components/ActivitiesList';
-import { GirlProfile } from './components/GirlProfile';
-import { HouseholdProfile } from './components/HouseholdProfile';
-import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from './data/programmes';
+import { ProgrammeId } from './data/programmes';
 import type { QualityIssue } from './services/qualityRules';
 import {
   triggerDataChangeNotification,
@@ -70,54 +64,16 @@ import {
 } from './services/messagingService';
 import { flushPendingOfflineSnapshots, recordOfflineChanges, setLastSyncedSnapshot, isBrowserOnline } from './services/offlineSync';
 
-// Forms
-import { GirlForm } from './components/Forms/GirlForm';
-import { HouseholdForm } from './components/Forms/HouseholdForm';
-import { EducationalFollowUpForm } from './components/Forms/EducationalFollowUpForm';
-import { HealthFollowUpForm } from './components/Forms/HealthFollowUpForm';
-import { FamilyFollowUpForm } from './components/Forms/FamilyFollowUpForm';
-import { RentPaymentForm } from './components/Forms/RentPaymentForm';
-import { HouseholdExpenseForm } from './components/Forms/HouseholdExpenseForm';
-import { HouseholdActivityForm } from './components/Forms/HouseholdActivityForm';
-
-// Modals
-import { SearchModal } from './components/SearchModal';
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
-import { DataModal } from './components/DataModal';
-import { QuickAddModal, ActionType } from './components/QuickAddModal';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { uploadPhotoAttachment } from './services/attachmentService';
 import { PendingPhoto } from './components/Attachments/FormPhotoSection';
-import { AttachmentTargetType, StaffRole } from './types';
-
-type AppView =
-  | 'dashboard'
-  | 'girls'
-  | 'houses'
-  | 'activities'
-  | 'programmes'
-  | 'contacts'
-  | 'messages'
-  | 'planning'
-  | 'import'
-  | 'management'
-  | 'reports'
-  | 'report-builder'
-  | 'payroll'
-  | 'staff'
-  | 'ai-assistant'
-  | 'case-management'
-  | 'operations'
-  | 'girl-profile'
-  | 'house-profile'
-  | 'form-girl'
-  | 'form-house'
-  | 'form-edu'
-  | 'form-health'
-  | 'form-family'
-  | 'form-rent'
-  | 'form-expense'
-  | 'form-activity';
+import { AttachmentTargetType } from './types';
+import type { ActionType } from './components/QuickAddModal';
+import { AppView, parseHash, buildHash, qualityTargetHash } from './routing/appRoutes';
+import { AppViewSwitch } from './views/AppViewSwitch';
+import { useAppModals } from './hooks/useAppModals';
+import { AppModals } from './views/AppModals';
 
 // Heavy views are split out of the first download so the dashboard and
 // navigation load quickly on a weak connection. Each is fetched on first use.
@@ -161,65 +117,6 @@ function ViewSkeleton() {
       <div className="h-64 rounded-2xl bg-stone-200" />
     </div>
   );
-}
-
-// Helper to parse route from URL hash
-function parseHash(): {
-  view: AppView;
-  activeTab: NavTab;
-  girlId?: string;
-  houseId?: string;
-  programmeId?: ProgrammeId | null;
-  qualityTarget?: { kind: 'budget-item' | 'workplan-item'; id: string };
-} {
-  const [hash, query = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
-  if (!hash) return { view: 'dashboard', activeTab: 'dashboard' };
-  if (hash === 'planning') {
-    const params = new URLSearchParams(query);
-    const kind = params.get('qualityKind');
-    const id = params.get('qualityId');
-    const qualityTarget: { kind: 'budget-item' | 'workplan-item'; id: string } | undefined =
-      id && (kind === 'budget-item' || kind === 'workplan-item')
-        ? { kind, id }
-      : undefined;
-    return { view: 'planning', activeTab: 'planning', qualityTarget };
-  }
-
-  if (hash === 'programmes' || hash.startsWith('programmes/')) {
-    const routeId = hash.slice('programmes/'.length);
-    const programmeId = routeId && [...PROGRAMMES, ...LEGACY_PROGRAMMES].some((programme) => programme.id === routeId)
-      ? routeId as ProgrammeId
-      : null;
-    return { view: 'programmes', activeTab: 'programmes', programmeId };
-  }
-
-  if (hash.startsWith('girl/')) {
-    const girlId = hash.slice(5);
-    return { view: 'girl-profile', activeTab: 'girls', girlId };
-  }
-  if (hash.startsWith('house/')) {
-    const houseId = hash.slice(6);
-    return { view: 'house-profile', activeTab: 'houses', houseId };
-  }
-  if (hash === 'girls') return { view: 'girls', activeTab: 'girls' };
-  if (hash === 'houses') return { view: 'houses', activeTab: 'houses' };
-  if (hash === 'activities') return { view: 'activities', activeTab: 'activities' };
-  if (hash === 'contacts') return { view: 'contacts', activeTab: 'contacts' };
-  if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
-  if (hash === 'operations' || hash === 'intelligence' || hash === 'calendar') return { view: 'operations', activeTab: 'operations' };
-  if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
-  if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
-  if (hash === 'management' || hash === 'executive-overview') return { view: 'management', activeTab: 'management' };
-  if (hash === 'import' || hash === 'ingestion') return { view: 'import', activeTab: 'import' };
-  if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
-  if (hash === 'report-builder') return { view: 'report-builder', activeTab: 'reports' };
-  if (hash === 'payroll') return { view: 'payroll', activeTab: 'payroll' };
-  if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
-  if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
-  if (hash === 'register-girl') return { view: 'form-girl', activeTab: 'girls' };
-  if (hash === 'add-house') return { view: 'form-house', activeTab: 'houses' };
-
-  return { view: 'dashboard', activeTab: 'dashboard' };
 }
 
 function AppContent() {
@@ -334,9 +231,11 @@ function AppContent() {
   const [girlsStatusFilter, setGirlsStatusFilter] = useState<string | undefined>(undefined);
 
   // Modals state
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isDataModalOpen, setIsDataModalOpen] = useState(false);
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const {
+    isSearchOpen, setIsSearchOpen,
+    isDataModalOpen, setIsDataModalOpen,
+    isQuickAddOpen, setIsQuickAddOpen,
+  } = useAppModals();
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -477,71 +376,7 @@ function AppContent() {
     if (houseId !== undefined) setSelectedHouseId(houseId);
     if (newView !== 'programmes' || programmeId !== undefined) setSelectedProgrammeId(programmeId || null);
 
-    let targetHash = '';
-    switch (newView) {
-      case 'dashboard':
-        targetHash = '#/';
-        break;
-      case 'girls':
-        targetHash = '#/girls';
-        break;
-      case 'girl-profile':
-        targetHash = girlId ? `#/girl/${girlId}` : '#/girls';
-        break;
-      case 'houses':
-        targetHash = '#/houses';
-        break;
-      case 'house-profile':
-        targetHash = houseId ? `#/house/${houseId}` : '#/houses';
-        break;
-      case 'activities':
-        targetHash = '#/activities';
-        break;
-      case 'programmes':
-        targetHash = programmeId ? `#/programmes/${programmeId}` : '#/programmes';
-        break;
-      case 'contacts':
-        targetHash = '#/contacts';
-        break;
-      case 'case-management':
-        targetHash = '#/case-management';
-        break;
-      case 'messages':
-        targetHash = '#/messages';
-        break;
-      case 'planning':
-        targetHash = '#/planning';
-        break;
-      case 'management':
-        targetHash = '#/management';
-        break;
-      case 'import':
-        targetHash = '#/import';
-        break;
-      case 'reports':
-        targetHash = '#/reports';
-        break;
-      case 'report-builder':
-        targetHash = '#/report-builder';
-        break;
-      case 'payroll':
-        targetHash = '#/payroll';
-        break;
-      case 'staff':
-        targetHash = '#/staff';
-        break;
-      case 'ai-assistant':
-        targetHash = '#/ai-assistant';
-        break;
-      case 'form-girl':
-        targetHash = '#/register-girl';
-        break;
-      case 'form-house':
-        targetHash = '#/add-house';
-        break;
-      default:
-        targetHash = '';
-    }
+    let targetHash = buildHash(newView, girlId, houseId, programmeId);
     if (targetHash && window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -564,7 +399,7 @@ function AppContent() {
     const qualityTarget = { kind, id: target.id };
     setQualityRecordFocus(qualityTarget);
     navigateTo('planning', 'planning');
-    const targetHash = `#/planning?qualityKind=${kind}&qualityId=${encodeURIComponent(target.id)}`;
+    const targetHash = qualityTargetHash(kind, target.id);
     if (window.location.hash !== targetHash) window.location.hash = targetHash;
   };
 
@@ -1356,431 +1191,113 @@ function AppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Keyed by view so a crash in one view clears when the user navigates. */}
         <ErrorBoundary key={view} label={view}>
-        <Suspense fallback={<ViewSkeleton />}>
-        {/* VIEW 1: DASHBOARD */}
-        {view === 'dashboard' && (
-          <Dashboard
-            db={db}
-            onNavigateToGirl={handleOpenGirlProfile}
-            onNavigateToHouse={handleOpenHouseProfile}
-            onNavigateToGirlsList={(status?: string) => {
-              setGirlsStatusFilter(status);
-              navigateTo('girls', 'girls');
-            }}
-            onNavigateToHousesList={() => navigateTo('houses', 'houses')}
-            onNavigateToReports={() => navigateTo('reports', 'reports')}
-            onOpenSponsorReport={() => navigateTo('report-builder', 'reports')}
-            onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-            onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
-            onNavigateToProgramme={openProgramme}
-            safeguardingCount={safeguardingCount}
-          />
-        )}
-
-        {/* VIEW 2: GIRLS DIRECTORY */}
-        {view === 'girls' && (
-          <GirlsList
-            girls={db.girls}
-            households={db.households}
-            db={db}
-            initialStatusFilter={girlsStatusFilter}
-            onSelectGirl={handleOpenGirlProfile}
-            onRegisterGirl={handleStartRegisterGirl}
-          />
-        )}
-
-        {/* VIEW 3: HOUSEHOLDS DIRECTORY */}
-        {view === 'houses' && (
-          <HouseholdsList
-            households={db.households}
-            girls={db.girls}
-            db={db}
-            onSelectHouse={handleOpenHouseProfile}
-            onAddHouse={handleStartAddHouse}
-            onAddRent={handleStartRentPayment}
-            onAddExpense={handleStartExpense}
-            onAddActivity={handleStartActivity}
-          />
-        )}
-
-        {/* VIEW 4: GROUP ACTIVITIES */}
-        {view === 'activities' && (
-          <ActivitiesList
-            activities={db.householdActivities}
-            households={db.households}
-            girls={db.girls}
-            onSelectHouse={handleOpenHouseProfile}
-            onAddActivity={() => handleStartActivity()}
-          />
-        )}
-
-        {view === 'programmes' && (
-          <ProgrammesView
-            db={db}
-            selectedProgrammeId={selectedProgrammeId}
-            auditActor={auditActor}
-            isViewOnly={isViewOnly}
-            onOpenProgramme={openProgramme}
-            onNavigateToGirls={() => navigateTo('girls', 'girls')}
-            onNavigateToHouses={() => navigateTo('houses', 'houses')}
-            onNavigateToOperations={() => navigateTo('operations', 'operations')}
-            onRefresh={reloadData}
-            onProgrammeLogAdded={(record, programmeName) => notifyDataChange({
-              type: 'programme_record_added',
-              entityId: record.id,
-              entityTitle: `${programmeName}: ${record.description}`,
-            })}
-            onCreateProgrammePlan={(type, programmeId) => {
-              setProgrammePlanningRequest({ requestId: Date.now(), type, programmeId });
-              navigateTo('planning', 'planning');
-            }}
-          />
-        )}
-
-        {view === 'contacts' && (
-          <ContactsView db={db} />
-        )}
-
-        {view === 'case-management' && (
-          <CaseManagementView
-            db={db}
-            onRefresh={reloadData}
-            onOpenGirl={handleOpenGirlProfile}
-            onOpenHousehold={handleOpenHouseProfile}
-          />
-        )}
-
-        {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} onNavigateToProgramme={openProgramme} />}
-
-        {/* VIEW 5: REPORTS */}
-        {view === 'reports' && (
-          <Reports
-            db={db}
-            onSelectGirl={handleOpenGirlProfile}
-            onSelectHouse={handleOpenHouseProfile}
-            onOpenQualityRecord={openQualityRecord}
-          />
-        )}
-
-        {view === 'report-builder' && (
-          <ReportBuilder db={db} onClose={() => navigateTo('dashboard', 'dashboard')} onOpenQualityRecord={openQualityRecord} />
-        )}
-
-        {view === 'payroll' && (
-          <PayrollDashboard db={db} onRefresh={reloadData} />
-        )}
-
-        {/* VIEW: STAFF MANAGEMENT (ADMINISTRATORS ONLY) */}
-        {view === 'staff' && (
-          <StaffManagement />
-        )}
-
-        {/* VIEW: SHINE AI ASSISTANT */}
-        {view === 'ai-assistant' && (
-          <AIAssistantView
-            db={db}
-            initialGirlId={aiFocusGirlId}
-            initialHouseId={aiFocusHouseId}
-            onNavigateToGirl={handleOpenGirlProfile}
-            onNavigateToHouse={handleOpenHouseProfile}
-          />
-        )}
-
-        {/* VIEW: STAFF MESSAGING & NOTIFICATIONS HUB */}
-        {view === 'messages' && (
-          <MessagingView
-            appDb={db}
-            onOpenRecord={(type, id) => {
-              if (type === 'girl') {
-                handleOpenGirlProfile(id);
-              } else if (type === 'household') {
-                handleOpenHouseProfile(id);
-              } else if (type === 'educationalFollowUp' || type === 'healthFollowUp' || type === 'familyFollowUp') {
-                const edu = db.educationalFollowUps.find((e) => e.id === id);
-                const hlth = db.healthFollowUps.find((h) => h.id === id);
-                const fam = db.familyFollowUps.find((f) => f.id === id);
-                const gId = edu?.girlId || hlth?.girlId || fam?.girlId;
-                if (gId) handleOpenGirlProfile(gId);
-              } else if (type === 'rentPayment' || type === 'expense' || type === 'householdActivity') {
-                const rent = db.rentPayments.find((r) => r.id === id);
-                const exp = db.expenses.find((e) => e.id === id);
-                const act = db.householdActivities.find((a) => a.id === id);
-                const hId = rent?.householdId || exp?.householdId || act?.householdId;
-                if (hId) handleOpenHouseProfile(hId);
-              } else if (type === 'programmeLog') {
-                const record = (db.programmeLogs || []).find((item) => item.id === id);
-                if (record) openProgramme(record.programmeId as ProgrammeId);
-              } else if (type === 'programme') {
-                openProgramme(id as ProgrammeId);
-              } else if (type === 'importBatch') {
-                navigateTo('reports', 'reports');
-                window.location.hash = `#/reports?importAudit=${encodeURIComponent(id)}`;
-              }
-            }}
-          />
-        )}
-
-        {/* VIEW: PLANNING (BUDGETS, WORKPLANS & FIELD SCHEDULES) */}
-        {view === 'planning' && (
-          <BudgetsAndWorkplansView
-            db={db}
-            onRefresh={reloadData}
-            qualityRecordFocus={qualityRecordFocus}
-            initialProgrammeCreate={programmePlanningRequest}
-            onProgrammeCreateHandled={() => setProgrammePlanningRequest(null)}
-          />
-        )}
-
-        {view === 'management' && (canAccessManagementDashboard(isAdmin, role) ? (
-          <ManagementDashboard
-            db={db}
-            staff={allStaff}
-            onNavigateReports={() => navigateTo('reports', 'reports')}
-            onOpenReportBuilder={() => navigateTo('report-builder', 'reports')}
-          />
-        ) : (
-          <div className="rounded-xl border border-rose-200 bg-white p-8 text-center">
-            <h1 className="text-lg font-bold text-stone-900">Management access restricted</h1>
-            <p className="mt-2 text-sm text-stone-600">Only Administrators and Managers can view this dashboard.</p>
-          </div>
-        ))}
-
-        {/* VIEW: DOCUMENT INGESTION WIZARD */}
-        {view === 'import' && (
-          <DataImportWizard
-            key={importWizardKey}
-            db={db}
-            initialFile={pendingImportFile}
-            onInitialFileConsumed={() => setPendingImportFile(null)}
-            onOpenFilePicker={openImportFilePicker}
-            onImportComplete={(audit) => {
-              notifyDataChange({ type: 'import_completed', entityId: audit.id, entityTitle: audit.fileName });
-              reloadData();
-              showToast('Data ingestion completed and saved to Firestore!');
-            }}
-            onCancel={() => {
-              setPendingImportFile(null);
-              navigateTo(previousImportLocation.view, previousImportLocation.tab, previousImportLocation.girlId, previousImportLocation.houseId);
-            }}
-          />
-        )}
-
-        {/* VIEW 6: GIRL PROFILE */}
-        {view === 'girl-profile' && currentGirl && (
-          <GirlProfile
-            girl={currentGirl}
-            household={currentGirlHouse}
-            educationalFollowUps={currentGirlEdu}
-            healthFollowUps={currentGirlHealth}
-            familyFollowUps={currentGirlFamily}
-            historicalRecords={db.historicalRecords?.filter((h) => h.girlId === currentGirl.id) || []}
-            caseActions={(db.caseActions || []).filter((item) => item.girlId === currentGirl.id)}
-            educationHistory={(db.educationHistory || []).filter((item) => item.girlId === currentGirl.id)}
-            academicSupports={(db.academicSupports || []).filter((item) => item.girlId === currentGirl.id)}
-            examinationRecords={(db.examinationRecords || []).filter((item) => item.girlId === currentGirl.id)}
-            attendanceRecords={(db.attendanceRecords || []).filter((item) => item.girlId === currentGirl.id)}
-            girlLeaves={(db.girlLeaves || []).filter((item) => item.girlId === currentGirl.id)}
-            caseReviews={(db.caseReviews || []).filter((item) => item.girlId === currentGirl.id)}
-            caseGoals={(db.caseGoals || []).filter((item) => item.girlId === currentGirl.id)}
-            householdActivities={(db.householdActivities || []).filter((item) => item.householdId === currentGirl.householdId)}
-            onBack={() => navigateTo('girls', 'girls')}
-            onNavigateToHouse={handleOpenHouseProfile}
-            onEditGirl={handleStartEditGirl}
-            onDeleteGirl={handleDeleteGirl}
-            onDeleteFollowUp={handleDeleteFollowUp}
-            onAddEducationalFollowUp={handleStartEduFollowUp}
-            onAddHealthFollowUp={handleStartHealthFollowUp}
-            onAddFamilyFollowUp={handleStartFamilyFollowUp}
-            onAskAI={handleAskAIAboutGirl}
-          />
-        )}
-
-        {/* Fallback if girl not found */}
-        {view === 'girl-profile' && !currentGirl && (
-          <div className="bg-white p-8 rounded-xl border border-stone-200 text-center space-y-3">
-            <h2 className="text-lg font-bold text-stone-800">Girl Profile Not Found</h2>
-            <p className="text-xs text-stone-500">
-              The requested girl record does not exist or has been removed.
-            </p>
-            <button
-              onClick={() => navigateTo('girls', 'girls')}
-              className="px-4 py-2 bg-teal-800 text-white text-xs font-bold rounded-lg"
-            >
-              Return to Girls Directory
-            </button>
-          </div>
-        )}
-
-        {/* VIEW 7: HOUSEHOLD PROFILE */}
-        {view === 'house-profile' && currentHouse && (
-          <HouseholdProfile
-            household={currentHouse}
-            residentGirls={currentHouseResidents}
-            rentPayments={currentHouseRent}
-            expenses={currentHouseExpenses}
-            activities={currentHouseActivities}
-            onBack={() => navigateTo('houses', 'houses')}
-            onNavigateToGirl={handleOpenGirlProfile}
-            onEditHousehold={handleStartEditHouse}
-            onDeleteHousehold={handleDeleteHousehold}
-            onDeleteRentPayment={handleDeleteRentPayment}
-            onDeleteExpense={handleDeleteExpense}
-            onMarkExpensePaid={handleMarkExpensePaid}
-            onUpdateExpense={handleUpdateExpense}
-            onDeleteActivity={handleDeleteActivity}
-            onAddRentPayment={handleStartRentPayment}
-            onAddExpense={handleStartExpense}
-            onAddActivity={handleStartActivity}
-            onAskAI={handleAskAIAboutHouse}
-          />
-        )}
-
-        {/* Fallback if house not found */}
-        {view === 'house-profile' && !currentHouse && (
-          <div className="bg-white p-8 rounded-xl border border-stone-200 text-center space-y-3">
-            <h2 className="text-lg font-bold text-stone-800">Household Not Found</h2>
-            <p className="text-xs text-stone-500">
-              The requested household record does not exist or has been removed.
-            </p>
-            <button
-              onClick={() => navigateTo('houses', 'houses')}
-              className="px-4 py-2 bg-teal-800 text-white text-xs font-bold rounded-lg"
-            >
-              Return to Households Directory
-            </button>
-          </div>
-        )}
-
-        {/* FORM 1: GIRL REGISTRATION / EDIT */}
-        {view === 'form-girl' && (
-          <div className="max-w-3xl mx-auto">
-            <GirlForm
-              initialData={editingGirl || undefined}
-              existingGirls={db.girls}
-              households={db.households}
-              onSave={handleSaveGirl}
-              onCancel={() => {
-                if (editingGirl) {
-                  navigateTo('girl-profile', 'girls', editingGirl.id);
-                } else {
-                  navigateTo('girls', 'girls');
-                }
-              }}
+          <Suspense fallback={<ViewSkeleton />}>
+            <AppViewSwitch
+              view={view}
+              db={db}
+              role={role}
+              isAdmin={isAdmin}
+              isViewOnly={isViewOnly}
+              auditActor={auditActor}
+              allStaff={allStaff}
+              safeguardingCount={safeguardingCount}
+              girlsStatusFilter={girlsStatusFilter}
+              selectedProgrammeId={selectedProgrammeId}
+              qualityRecordFocus={qualityRecordFocus}
+              programmePlanningRequest={programmePlanningRequest}
+              importWizardKey={importWizardKey}
+              pendingImportFile={pendingImportFile}
+              previousImportLocation={previousImportLocation}
+              editingGirl={editingGirl}
+              editingHouse={editingHouse}
+              aiFocusGirlId={aiFocusGirlId}
+              aiFocusHouseId={aiFocusHouseId}
+              currentGirl={currentGirl}
+              currentGirlHouse={currentGirlHouse}
+              currentGirlEdu={currentGirlEdu}
+              currentGirlHealth={currentGirlHealth}
+              currentGirlFamily={currentGirlFamily}
+              currentHouse={currentHouse}
+              currentHouseResidents={currentHouseResidents}
+              currentHouseRent={currentHouseRent}
+              currentHouseExpenses={currentHouseExpenses}
+              currentHouseActivities={currentHouseActivities}
+              ManagementDashboard={ManagementDashboard}
+              Reports={Reports}
+              ReportBuilder={ReportBuilder}
+              AIAssistantView={AIAssistantView}
+              MessagingView={MessagingView}
+              BudgetsAndWorkplansView={BudgetsAndWorkplansView}
+              PayrollDashboard={PayrollDashboard}
+              CaseManagementView={CaseManagementView}
+              DataImportWizard={DataImportWizard}
+              ContactsView={ContactsView}
+              Phase5OperationsView={Phase5OperationsView}
+              ProgrammesView={ProgrammesView}
+              StaffManagement={StaffManagement}
+              Dashboard={Dashboard}
+              navigateTo={navigateTo}
+              openProgramme={openProgramme}
+              openQualityRecord={openQualityRecord}
+              setGirlsStatusFilter={setGirlsStatusFilter}
+              onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+              onInitialFileConsumed={() => setPendingImportFile(null)}
+              onProgrammeCreateHandled={() => setProgrammePlanningRequest(null)}
+              onCreateProgrammePlan={(type, programmeId) => setProgrammePlanningRequest({ requestId: Date.now(), type, programmeId })}
+              handleOpenGirlProfile={handleOpenGirlProfile}
+              handleOpenHouseProfile={handleOpenHouseProfile}
+              handleStartRegisterGirl={handleStartRegisterGirl}
+              handleStartAddHouse={handleStartAddHouse}
+              handleStartRentPayment={handleStartRentPayment}
+              handleStartExpense={handleStartExpense}
+              handleStartActivity={handleStartActivity}
+              handleStartEditGirl={handleStartEditGirl}
+              handleStartEditHouse={handleStartEditHouse}
+              handleStartEduFollowUp={handleStartEduFollowUp}
+              handleStartHealthFollowUp={handleStartHealthFollowUp}
+              handleStartFamilyFollowUp={handleStartFamilyFollowUp}
+              handleAskAIAboutGirl={handleAskAIAboutGirl}
+              handleAskAIAboutHouse={handleAskAIAboutHouse}
+              handleDeleteGirl={handleDeleteGirl}
+              handleDeleteHousehold={handleDeleteHousehold}
+              handleDeleteFollowUp={handleDeleteFollowUp}
+              handleDeleteRentPayment={handleDeleteRentPayment}
+              handleDeleteExpense={handleDeleteExpense}
+              handleMarkExpensePaid={handleMarkExpensePaid}
+              handleUpdateExpense={handleUpdateExpense}
+              handleDeleteActivity={handleDeleteActivity}
+              handleSaveGirl={handleSaveGirl}
+              handleSaveHouse={handleSaveHouse}
+              handleSaveEduFollowUp={handleSaveEduFollowUp}
+              handleSaveHealthFollowUp={handleSaveHealthFollowUp}
+              handleSaveFamilyFollowUp={handleSaveFamilyFollowUp}
+              handleSaveRentPayment={handleSaveRentPayment}
+              handleSaveExpense={handleSaveExpense}
+              handleSaveActivity={handleSaveActivity}
+              reloadData={reloadData}
+              notifyDataChange={notifyDataChange}
+              showToast={showToast}
+              openImportFilePicker={openImportFilePicker}
             />
-          </div>
-        )}
-
-        {/* FORM 2: HOUSEHOLD REGISTRATION / EDIT */}
-        {view === 'form-house' && (
-          <div className="max-w-2xl mx-auto">
-            <HouseholdForm
-              initialData={editingHouse || undefined}
-              existingHouses={db.households}
-              onSave={handleSaveHouse}
-              onCancel={() => {
-                if (editingHouse) {
-                  navigateTo('house-profile', 'houses', undefined, editingHouse.id);
-                } else {
-                  navigateTo('houses', 'houses');
-                }
-              }}
-            />
-          </div>
-        )}
-
-        {/* FORM 3: EDUCATIONAL FOLLOW-UP */}
-        {view === 'form-edu' && currentGirl && (
-          <div className="max-w-3xl mx-auto">
-            <EducationalFollowUpForm
-              girl={currentGirl}
-              onSave={handleSaveEduFollowUp}
-              onCancel={() => navigateTo('girl-profile', 'girls', currentGirl.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 4: HEALTH / MEDICAL FOLLOW-UP */}
-        {view === 'form-health' && currentGirl && (
-          <div className="max-w-3xl mx-auto">
-            <HealthFollowUpForm
-              girl={currentGirl}
-              onSave={handleSaveHealthFollowUp}
-              onCancel={() => navigateTo('girl-profile', 'girls', currentGirl.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 5: FAMILY FOLLOW-UP */}
-        {view === 'form-family' && currentGirl && (
-          <div className="max-w-3xl mx-auto">
-            <FamilyFollowUpForm
-              girl={currentGirl}
-              onSave={handleSaveFamilyFollowUp}
-              onCancel={() => navigateTo('girl-profile', 'girls', currentGirl.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 6: RENT PAYMENT */}
-        {view === 'form-rent' && currentHouse && (
-          <div className="max-w-2xl mx-auto">
-            <RentPaymentForm
-              household={currentHouse}
-              onSave={handleSaveRentPayment}
-              onCancel={() => navigateTo('house-profile', 'houses', undefined, currentHouse.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 7: HOUSEHOLD EXPENSE */}
-        {view === 'form-expense' && currentHouse && (
-          <div className="max-w-2xl mx-auto">
-            <HouseholdExpenseForm
-              household={currentHouse}
-              onSave={handleSaveExpense}
-              onCancel={() => navigateTo('house-profile', 'houses', undefined, currentHouse.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 8: HOUSEHOLD ACTIVITY */}
-        {view === 'form-activity' && currentHouse && (
-          <div className="max-w-3xl mx-auto">
-            <HouseholdActivityForm
-              household={currentHouse}
-              houseGirls={currentHouseResidents}
-              onSave={handleSaveActivity}
-              onCancel={() => navigateTo('house-profile', 'houses', undefined, currentHouse.id)}
-            />
-          </div>
-        )}
-        </Suspense>
+          </Suspense>
         </ErrorBoundary>
       </main>
 
       {/* Global Modals */}
-      <SearchModal
+      <AppModals
         db={db}
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onSelectGirl={handleOpenGirlProfile}
-        onSelectHouse={handleOpenHouseProfile}
-        onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
-      />
-
-      <DataModal
-        db={db}
-        isOpen={isDataModalOpen}
-        onClose={() => setIsDataModalOpen(false)}
-        onDataChanged={reloadData}
-      />
-
-      <QuickAddModal
-        db={db}
-        isOpen={isQuickAddOpen}
-        onClose={() => setIsQuickAddOpen(false)}
-        onSelectAction={handleQuickAction}
-        onOpenProgramme={openProgramme}
+        isSearchOpen={isSearchOpen}
+        isDataModalOpen={isDataModalOpen}
+        isQuickAddOpen={isQuickAddOpen}
+        setIsSearchOpen={setIsSearchOpen}
+        setIsDataModalOpen={setIsDataModalOpen}
+        setIsQuickAddOpen={setIsQuickAddOpen}
+        handleOpenGirlProfile={handleOpenGirlProfile}
+        handleOpenHouseProfile={handleOpenHouseProfile}
+        navigateTo={navigateTo}
+        reloadData={reloadData}
+        handleQuickAction={handleQuickAction}
+        openProgramme={openProgramme}
       />
     </div>
   );

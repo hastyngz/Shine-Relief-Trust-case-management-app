@@ -75,6 +75,9 @@ jobs:
       - name: Test rate limiting
         run: npm run test:rate-limit
 
+      - name: Test hash routing
+        run: npm run test:routing
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 
