@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import * as XLSX from 'xlsx';
+import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
+import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
 import { analyzeImportRows } from '../src/services/importService';
 import { processAIChat } from '../src/server/aiService';
 import { executeAITool } from '../src/server/aiTools';
@@ -47,7 +50,36 @@ const db: AppDatabase = {
   caseReviews: [],
 };
 
+function verifyPayrollYearInference() {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['SHINE Payroll Year 2025'],
+    ['Employee Name', 'January', 'February', 'September'],
+    ['Maria Chipelesa', 200000, 200000, 200000],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Payroll');
+
+  const analysis = analyzeSpreadsheetWorkbook(workbook);
+  assert.equal(analysis.detectedKind, 'payroll-grid');
+  const preview = createSpreadsheetImportPreview(
+    workbook,
+    analysis,
+    'payroll-grid',
+    [],
+    [],
+    'only sep employees salary 2026.xlsx',
+  );
+  const maria = preview.lines.find((line) => line.kind === 'employee' && line.employeeName === 'Maria Chipelesa');
+  assert.ok(maria && maria.kind === 'employee', 'the employee row should be recognised');
+  assert.deepEqual(
+    maria.salaryHistory.map((entry) => entry.payPeriod),
+    ['2025-01', '2025-02', '2025-09'],
+    'the explicit workbook year must take precedence over a different year in the filename',
+  );
+}
+
 async function run() {
+  verifyPayrollYearInference();
   const healthPreview = analyzeImportRows([
     {
       GirlID: 'SG-001',
