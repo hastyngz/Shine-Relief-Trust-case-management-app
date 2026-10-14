@@ -28,3 +28,15 @@ A KV namespace is bound in Wrangler as `KV` using namespace ID `91b798c7acfc4ad4
 4. Route or invalidate writes and preserve real-time updates.
 5. Add tests, run TypeScript and production builds, and compare Firestore read metrics.
 6. Deploy only after the tests and permission review pass.
+
+## One-shot read review (2026-10-14)
+
+A follow-up review of the explicit `getDoc` / `getDocs` helpers in `src/services/firestoreSync.ts` did not reveal a safe first KV target:
+
+- `getEmployeeSalaryHistory` and `getEmployeeSalaryHistoryForStaff` read restricted salary-history records. Do not cache these in the first implementation.
+- `getReportHistory` reads report metadata scoped by the caller or manager/admin role. It is not a good first target because report visibility is user/role-dependent and new report entries are written directly to Firestore.
+- `getStaffUserDoc` and `getStaffUserByEmail` are used for staff identity/access-related information and must remain source-validated.
+- The broad `getDocs` calls inside full-database restore/clear operations are administrative maintenance paths, not user-facing repeated reads to cache.
+- The shared operational collections, including market prices and forecast settings, use live `onSnapshot` listeners; a separate cached GET would not remove those reads.
+
+**Result:** No safe, worthwhile first cache target is approved from these reviewed call sites. Do not ship a decorative KV helper or claim savings. The next useful engineering step is a deliberate data-access abstraction that preserves Firestore listener semantics and authorization, then migrate one explicitly chosen collection end-to-end (reads, writes, invalidation and tests) rather than adding a disconnected cache route.
