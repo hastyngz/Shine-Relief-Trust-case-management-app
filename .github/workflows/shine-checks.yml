@@ -51,6 +51,9 @@ jobs:
       - name: Test existing quality rules
         run: npm run test:quality
 
+      - name: Test spreadsheet import and AI access boundaries
+        run: npm run test:phase2
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 
