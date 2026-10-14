@@ -76,3 +76,12 @@ Use Firebase/Google Cloud usage reporting to record a consistent baseline for th
 Then make one small, reversible listener-scope change on `Replit`, run TypeScript/build and relevant tests, and repeat the measurement. Do not use raw snapshot callback counts as a substitute for billed document-read metrics.
 
 No listener code has been changed in this commit. This is the verified dependency map to guide the first behavior-changing optimization without breaking SHINE's live sync.
+
+
+### Follow-up candidate review (14 October 2026)
+
+The code search found `whatIfScenarios` consumed in `Phase5OperationsView.tsx`, with creation through `addWhatIfScenario` in `src/utils/storage.ts` and persistence through `persistWhatIfScenarioToFirestore`. No direct reference was found in `src/services/importService.ts`. This makes it a plausible candidate for deeper review, but not yet safe to move on-demand: the component also computes scenario results from shared budgets and forecast settings, and broader backup/restore/export paths still need a complete check.
+
+Important permission finding: `firestore.rules` restricts reads of `whatIfScenarios` and `projectProjections` to managers/admins, while the central listener initializer calls `handleCollection` for both without an explicit role gate in the initializer itself. Firestore rules remain the actual security boundary, but the app should avoid deliberately subscribing users who cannot read those collections. Verify the runtime role options and denied-listener behavior before changing this. Do not cache either collection in KV.
+
+Next safe step: trace role flags passed from `App.tsx` into `initFirestoreListeners`, confirm which roles currently attempt these reads, and add a focused permission-aware listener test before any listener is made on-demand. No runtime code was changed during this review.
