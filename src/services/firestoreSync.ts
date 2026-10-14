@@ -192,30 +192,77 @@ export async function persistStaffUserToFirestore(staff: StaffUser): Promise<voi
   }
 }
 
-export async function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHistoryRecord[]> {
-  const salaryQuery = query(
-    collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
-    where('employeeId', '==', employeeId)
-  );
-  const snapshot = await getDocs(salaryQuery);
-  return snapshot.docs
-    .map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
-    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
-}
+// Coalesce overlapping reads only while they are in flight. Salary history is
+// sensitive and can change after an edit, so these maps are deliberately not a
+// persistent or time-based cache.
+const salaryHistoryByEmployeeInFlight = new Map<string, Promise<SalaryHistoryRecord[]>>();
+const salaryHistoryForStaffInFlight = new Map<string, Promise<SalaryHistoryRecord[]>>();
 
-export async function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
-  const uniqueIds = Array.from(new Set(employeeIds));
-  const records: SalaryHistoryRecord[] = [];
-  for (let index = 0; index < uniqueIds.length; index += 30) {
-    const batch = uniqueIds.slice(index, index + 30);
+export function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHistoryRecord[]> {
+  const existing = salaryHistoryByEmployeeInFlight.get(employeeId);
+  if (existing) return existing;
+
+  const request = (async () => {
     const salaryQuery = query(
       collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
-      where('employeeId', 'in', batch)
+      where('employeeId', '==', employeeId)
     );
     const snapshot = await getDocs(salaryQuery);
-    records.push(...snapshot.docs.map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord));
-  }
-  return records;
+    return snapshot.docs
+      .map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  })();
+
+  salaryHistoryByEmployeeInFlight.set(employeeId, request);
+  void request.finally(() => {
+    if (salaryHistoryByEmployeeInFlight.get(employeeId) === request) {
+      salaryHistoryByEmployeeInFlight.delete(employeeId);
+    }
+  }).catch(() => {
+    // The original caller handles the read error; avoid a second unhandled rejection.
+  });
+  return request;
+}
+
+export function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
+  const uniqueIds = Array.from(new Set(employeeIds)).sort();
+  if (uniqueIds.length === 0) return Promise.resolve([]);
+
+  // Sorting gives callers with the same employee set the same in-flight key,
+  // even if their roster arrays arrive in a different order.
+  const requestKey = uniqueIds.join('\u001f');
+  const existing = salaryHistoryForStaffInFlight.get(requestKey);
+  if (existing) return existing;
+
+  const request = (async () => {
+    const batches: string[][] = [];
+    for (let index = 0; index < uniqueIds.length; index += 30) {
+      batches.push(uniqueIds.slice(index, index + 30));
+    }
+
+    // Each bounded "in" query is independent, so fetch batches concurrently
+    // rather than waiting for one network round-trip before starting the next.
+    const snapshots = await Promise.all(batches.map((batch) => getDocs(query(
+      collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
+      where('employeeId', 'in', batch)
+    ))));
+    return snapshots.flatMap((snapshot) =>
+      snapshot.docs.map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
+    ).sort((a, b) => {
+      const byDate = a.effectiveDate.localeCompare(b.effectiveDate);
+      return byDate || a.employeeId.localeCompare(b.employeeId);
+    });
+  })();
+
+  salaryHistoryForStaffInFlight.set(requestKey, request);
+  void request.finally(() => {
+    if (salaryHistoryForStaffInFlight.get(requestKey) === request) {
+      salaryHistoryForStaffInFlight.delete(requestKey);
+    }
+  }).catch(() => {
+    // The original caller handles the read error; avoid a second unhandled rejection.
+  });
+  return request;
 }
 
 export async function persistEmployeeSalaryHistoryToFirestore(record: SalaryHistoryRecord): Promise<void> {
