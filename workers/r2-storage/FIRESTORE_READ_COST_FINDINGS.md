@@ -96,3 +96,13 @@ Two small changes are now committed on `Replit`:
 Commits: `2bdc5fb512b39cf45f963df1632c959a4098606b` and `f4626eb11d08b8544f9beb7f6bca144fd0c7172a`.
 
 This is a permission-alignment and unnecessary-listener fix, not a verified billed-read reduction. The two collections were already protected by Firestore rules; the change avoids starting listeners for roles that are not allowed to read them. A build and runtime role test have not been run from this GitHub-only workflow, so verify staff, manager, and admin sign-in plus initial sync status before deployment.
+
+
+### Regression coverage added (14 October 2026)
+
+The listener-option rules have been extracted into the pure helper `shouldSubscribeToCollection` in `src/services/firestoreSync.ts`. This lets a small test exercise the opt-in management-planning rule and the existing health/review/import-source gates without opening a live Firestore connection.
+
+New test: `scripts/firestore-listener-permissions.test.ts`  
+Command: `npm run test:firestore-listener-permissions`
+
+The test covers default-deny for manager/admin-only planning listeners, opt-in access, existing restricted collection gates, and unchanged default behavior for ordinary collections. It does not replace the separate runtime checks for actual Administrator, Manager, Staff, and View Only sessions, nor does it prove billed-read savings. The GitHub-connected workflow used for these commits cannot execute the npm command, so the test and production build are **added but not yet run**. Keep the changes on `Replit` until those checks pass.
