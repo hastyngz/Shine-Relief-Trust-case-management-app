@@ -1225,6 +1225,37 @@ export async function clearAllFirestoreCollections(): Promise<void> {
   }
 }
 
+/**
+ * Pure role-option gate for startup listeners. Keep this aligned with firestore.rules.
+ * A skipped collection is treated as handled by initFirestoreListeners so initial sync can finish.
+ */
+export function shouldSubscribeToCollection(
+  colName: string,
+  options: {
+    canReadImportSourceData?: boolean;
+    canReadManagementPlanning?: boolean;
+    canReadHealthRecords?: boolean;
+    canReadCaseReviews?: boolean;
+  } = {},
+): boolean {
+  if (colName === COLLECTIONS.RESTRICTED_IMPORT_SOURCES && options.canReadImportSourceData !== true) {
+    return false;
+  }
+  if (
+    (colName === COLLECTIONS.WHAT_IF_SCENARIOS || colName === COLLECTIONS.PROJECT_PROJECTIONS) &&
+    options.canReadManagementPlanning !== true
+  ) {
+    return false;
+  }
+  if (colName === COLLECTIONS.HEALTH_FOLLOW_UPS && options.canReadHealthRecords === false) {
+    return false;
+  }
+  if (colName === COLLECTIONS.CASE_REVIEWS && options.canReadCaseReviews === false) {
+    return false;
+  }
+  return true;
+}
+
 // Global active unsubscribers
 let activeUnsubscribers: Unsubscribe[] = [];
 
@@ -1344,22 +1375,7 @@ export function initFirestoreListeners(
     colName: string,
     stateField: keyof AppDatabase
   ) => {
-    if (colName === COLLECTIONS.RESTRICTED_IMPORT_SOURCES && options.canReadImportSourceData !== true) {
-      initialLoadedCollections.add(colName);
-      return;
-    }
-    // These collections are manager/admin-only in firestore.rules. Avoid creating
-    // listeners for roles that cannot read them.
-    if ((colName === COLLECTIONS.WHAT_IF_SCENARIOS || colName === COLLECTIONS.PROJECT_PROJECTIONS)
-      && options.canReadManagementPlanning !== true) {
-      initialLoadedCollections.add(colName);
-      return;
-    }
-    if (colName === COLLECTIONS.HEALTH_FOLLOW_UPS && options.canReadHealthRecords === false) {
-      initialLoadedCollections.add(colName);
-      return;
-    }
-    if (colName === COLLECTIONS.CASE_REVIEWS && options.canReadCaseReviews === false) {
+    if (!shouldSubscribeToCollection(colName, options)) {
       initialLoadedCollections.add(colName);
       return;
     }
