@@ -86,3 +86,11 @@ Both screens now derive a stable, sorted key from staff IDs and refetch only whe
 The payroll dashboard already uses an ID-based dependency for its salary-history fetch. This change aligns the other two screens with that pattern.
 
 **Expected effect:** fewer duplicate salary-history queries when roster objects refresh without changing staff membership. Actual savings depend on whether such refreshes occur in normal use; no billed-read savings have been measured. The standard CI workflow should be checked after these changes. The full Firestore emulator rules suite remains separate from that workflow.
+
+## Case-action listener scoping guard — 14 October 2026
+
+The startup listener permission helper now skips `caseActions` when the caller has neither management-wide task access nor an authenticated UID to scope the query. Non-management callers with a UID still use the existing `assignedStaffId == uid` query; managers/admins retain the team-wide query.
+
+The current `App.tsx` caller already supplies the authenticated UID and the management-role flag, so this is a defensive guard for missing/incomplete options rather than a change to normal signed-in behaviour. The listener-permission unit test now covers both scoped staff access and manager-wide access.
+
+This prevents a future caller from accidentally attempting an unscoped collection listener that would fail the intended Firestore rule query constraints. It does not reduce reads for the current valid signed-in path by itself, and no billing savings are claimed.
