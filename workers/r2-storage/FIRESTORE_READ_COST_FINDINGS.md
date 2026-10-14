@@ -123,3 +123,23 @@ Added `.github/workflows/shine-checks.yml`, triggered on pushes and pull request
 The first run exposed that the committed `package-lock.json` is out of sync with `package.json` (including Wrangler/Cloudflare dependency entries). The workflow currently uses `npm install` to reconcile dependencies in its temporary runner, which allowed all checks to pass. This does **not** repair the committed lockfile; a later maintenance change should regenerate and commit the lockfile from a trusted Node/npm environment so clean installs can use `npm ci` reproducibly.
 
 CI success verifies compile/build and the listed automated tests only. It does not replace a live role-by-role login check or prove reduced Firestore billing. No changes were made to `main`.
+
+
+### Follow-up: payroll and employee listener scope (14 October 2026)
+
+A further review of the actual Firestore rules and listener code identified two additional role-alignment changes:
+
+- The `employees` collection is manager/admin-only under `firestore.rules`; its startup listener is now skipped for other roles.
+- `payrollRecords` stays available across roles only within the existing rules: administrators/managers may read the collection, while other active staff can read only documents whose `employeeId` equals their authenticated Firebase UID. The client listener now applies that same UID filter for non-management users and does not start a payroll listener when no UID is available.
+
+These checks are covered by `npm run test:firestore-listener-permissions`. The GitHub Actions run for commit `451d4285fdf722b07bd25e24c845e830f3538f8a` completed successfully: [SHINE app checks](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/38614970029). The workflow ran the TypeScript check, listener permission tests, quality tests, Firestore access audit, and production build.
+
+**Important limitation:** the staff payroll query assumes payroll documents store the authenticated UID in `employeeId`. That matches the current Firestore rule, but still needs validation against real payroll records and a live staff login. If the stored field uses a separate employee-record ID, that mismatch must be corrected deliberately without broadening permissions.
+
+### Staff roster: intentionally not gated yet
+
+The staff roster listener is separate from the main data listeners. Code search confirms `allStaff` feeds staff-facing reminders, messaging/announcement recipient selection, case-action assignment, safeguarding assignment options, and payroll staff mapping, as well as the Administrator staff-management screen. Removing it for non-admin users without replacing those dependencies could break workflows. Keep it unchanged until those features are given a smaller, purpose-specific data path.
+
+### Current verified state
+
+The latest automated workflow passed after the management-only listener gates and UID-scoped staff payroll query were committed. The next safe step is a live role-by-role check (Administrator, Manager, Staff, and View Only), especially initial sync and payroll visibility, followed by measurement of Firestore billed reads. The current changes reduce unauthorized/needless listener attempts by role; no billed-read savings have been measured and no Cloudflare KV data cache is active.
