@@ -136,3 +136,13 @@ A second pass checked the central Firestore sync service, staff messaging subscr
 - **Contacts import review:** the import wizard fetches the existing contacts list once to compare candidate records. No second contacts query was found in that path. The directory save/merge duplicate query was removed in the preceding change.
 
 The main remaining cost opportunity is likely to depend on production scale and usage: initial/live collection snapshots, message history size, report attachment counts, and full backup/restore frequency. Before designing a general cache, collect Firebase usage metrics and identify one non-sensitive one-shot read whose freshness requirements and write invalidation are explicit. No production billing measurements or live database contents were available during this source review, so no dollar or percentage savings are claimed.
+
+## Contact import and attachment export follow-up — 14 October 2026
+
+The contact-import review path calls `listContacts()` once to compare imported candidates with existing records. No duplicate contacts-collection read is required within that operation, so no further code change was justified there. The directory's save/merge duplicate read was addressed separately.
+
+The comprehensive report currently requests report-eligible attachment metadata when the report modal opens. That is a one-shot read rather than a permanent live listener. It can be expensive if the attachment collection grows, but adding a limit would risk silently omitting report evidence. A safe future design would add explicit pagination or query attachments only for the records selected for a report, with a clear indication when more records are available and tests for report completeness and health-record permissions.
+
+The JSON backup path intentionally includes all attachment metadata so the export can represent a complete database backup. Do not narrow that query for cost reasons. If backup size or latency becomes a problem, redesign it as a paginated/streamed export while preserving completeness and restore compatibility.
+
+No additional implementation change was made in this pass because the remaining candidates require a user-visible pagination/export design or production usage evidence. Prefer measuring query counts and document volume before making these changes.
