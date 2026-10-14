@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   ImportPreviewItem,
@@ -928,6 +927,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const handleSpreadsheetKindChange = async (kind: SpreadsheetKind) => {
     setSpreadsheetKindOverride(kind);
     if (!selectedFile || !spreadsheetAnalysis) return;
+    const XLSX = await import('xlsx');
     const workbook = XLSX.read(await selectedFile.arrayBuffer(), {
       type: 'array',
       cellFormula: true,
@@ -938,7 +938,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setParseError('Payroll spreadsheet imports are restricted to Administrators and Managers.');
       return;
     }
-    const parsed = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff, db.employees || [], selectedFile.name);
+    const parsed = await createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff, db.employees || [], selectedFile.name);
     setSpreadsheetPreview(parsed);
     setPreviewItems(parsed.lines.map((line) =>
       spreadsheetLineToPreview(line, db.workplans || [])

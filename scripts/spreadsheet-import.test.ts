@@ -52,13 +52,13 @@ const detectorFixtures: Array<{ kind: string; rows: Array<Array<string | number>
 ];
 
 for (const fixture of detectorFixtures) {
-  assert.equal(detectSpreadsheetKind(workbook(fixture.rows)), fixture.kind);
+  assert.equal(await detectSpreadsheetKind(workbook(fixture.rows)), fixture.kind);
 }
 
 const formulaWorkbook = workbook([['Amount'], [10]]);
 const formulaSheet = formulaWorkbook.Sheets.Sheet1;
 formulaSheet.A2 = { t: 'n', f: '5+5', v: 9, z: '#,##0' };
-const formulaCell = analyzeSpreadsheetWorkbook(formulaWorkbook).sheets[0].cells.find((cell) => cell.address === 'A2');
+const formulaCell = (await analyzeSpreadsheetWorkbook(formulaWorkbook)).sheets[0].cells.find((cell) => cell.address === 'A2');
 assert.equal(formulaCell?.formula, '5+5');
 assert.equal(formulaCell?.cachedValue, 9);
 assert.equal(formulaCell?.numberFormat, '#,##0');
@@ -68,8 +68,8 @@ const budgetWorkbook = workbook([
   ['Early Years', 'Food', 'Maize 3000kg', 3, 100, 400, 300],
   ['Early Years', 'Food', 'Beans', 2, 50, 0, 100],
 ]);
-const budgetAnalysis = analyzeSpreadsheetWorkbook(budgetWorkbook);
-const budgetPreview = createSpreadsheetImportPreview(budgetWorkbook, budgetAnalysis, 'budget-monthly');
+const budgetAnalysis = await analyzeSpreadsheetWorkbook(budgetWorkbook);
+const budgetPreview = await createSpreadsheetImportPreview(budgetWorkbook, budgetAnalysis, 'budget-monthly');
 const budgetLines = budgetPreview.lines.filter((line) => line.kind === 'budget');
 assert.equal(budgetLines.length, 3);
 assert.equal(budgetLines[0].budgetAmount, 300);
@@ -82,7 +82,7 @@ const listWorkbook = workbook([
   ['Item No', 'Description', 'Quantity', 'Unit', 'Unit Price', 'Notes'],
   ['1', 'Pipe fittings', 4, 'pieces', '', 'Price not clearly written'],
 ]);
-const listPreview = createSpreadsheetImportPreview(listWorkbook, analyzeSpreadsheetWorkbook(listWorkbook), 'item-list');
+const listPreview = await createSpreadsheetImportPreview(listWorkbook, await analyzeSpreadsheetWorkbook(listWorkbook), 'item-list');
 const listLine = listPreview.lines.find((line) => line.kind === 'procurement');
 assert.equal(listLine?.items[0].priceStatus, 'unclear');
 
@@ -93,7 +93,7 @@ const projectionWorkbook = workbook([
   ['Chicks', ''],
   ['Incubator', ''],
 ]);
-const projectionPreview = createSpreadsheetImportPreview(projectionWorkbook, analyzeSpreadsheetWorkbook(projectionWorkbook), 'profit-loss');
+const projectionPreview = await createSpreadsheetImportPreview(projectionWorkbook, await analyzeSpreadsheetWorkbook(projectionWorkbook), 'profit-loss');
 const projection = projectionPreview.lines.find((line) => line.kind === 'projection');
 assert.equal(projection?.costLines.filter((line) => line.status === 'unpriced').length, 2);
 assert.equal(projection?.netProfitMWK, undefined);
@@ -101,9 +101,9 @@ assert.equal(projection?.netProfitMWK, undefined);
 const mismatchWorkbook = workbook([['Value', 'Total'], [10, 99]]);
 const mismatchSheet = mismatchWorkbook.Sheets.Sheet1;
 mismatchSheet.B2 = { t: 'n', f: 'A2*2', v: 99 };
-const mismatchPreview = createSpreadsheetImportPreview(
+const mismatchPreview = await createSpreadsheetImportPreview(
   mismatchWorkbook,
-  analyzeSpreadsheetWorkbook(mismatchWorkbook),
+  await analyzeSpreadsheetWorkbook(mismatchWorkbook),
   'unknown',
 );
 assert.equal(mismatchPreview.formulaDisagreements.length, 1);
@@ -112,9 +112,9 @@ const payrollWorkbook = workbook([
   ['Staff Name', 'Salary', 'January', 'SEPTMBER', 'JULY ', 'LOAN', 'Arrears'],
   ['Synthetic Staff', 1000, 1000, 1000, 1000, 50, 40],
 ]);
-const payrollPreview = createSpreadsheetImportPreview(
+const payrollPreview = await createSpreadsheetImportPreview(
   payrollWorkbook,
-  analyzeSpreadsheetWorkbook(payrollWorkbook),
+  await analyzeSpreadsheetWorkbook(payrollWorkbook),
   'payroll-grid',
 );
 const payrollLines = payrollPreview.lines.filter((line) => line.kind === 'payroll');
@@ -131,9 +131,9 @@ const gratuityWorkbook = workbook([
   ['Security', 'Synthetic Worker', 576000, 120000, 0.05, 96],
   ['Security', 'Another Worker', 288000, 80000, 0.05, 48],
 ]);
-const gratuityAnalysis = analyzeSpreadsheetWorkbook(gratuityWorkbook);
+const gratuityAnalysis = await analyzeSpreadsheetWorkbook(gratuityWorkbook);
 assert.equal(gratuityAnalysis.detectedKind, 'payroll-grid');
-const gratuityPreview = createSpreadsheetImportPreview(
+const gratuityPreview = await createSpreadsheetImportPreview(
   gratuityWorkbook,
   gratuityAnalysis,
   gratuityAnalysis.detectedKind,
@@ -153,9 +153,9 @@ const uploadedGratuityWorkbook = XLSX.read(
   fs.readFileSync('public/sample_reports/Gratuity all workers.xlsx'),
   { cellFormula: true },
 );
-const uploadedGratuityAnalysis = analyzeSpreadsheetWorkbook(uploadedGratuityWorkbook);
+const uploadedGratuityAnalysis = await analyzeSpreadsheetWorkbook(uploadedGratuityWorkbook);
 assert.equal(uploadedGratuityAnalysis.detectedKind, 'payroll-grid');
-const uploadedGratuityPreview = createSpreadsheetImportPreview(
+const uploadedGratuityPreview = await createSpreadsheetImportPreview(
   uploadedGratuityWorkbook,
   uploadedGratuityAnalysis,
   uploadedGratuityAnalysis.detectedKind,
@@ -171,9 +171,9 @@ assert.equal(uploadedGratuityEmployees.flatMap((line) => line.otherPayrollAmount
 assert.ok(uploadedGratuityEmployees.every((line) => line.salaryHistory.length === 0));
 
 const unknownWorkbook = workbook([['Column A', 'Column B'], ['value 1', 'value 2']]);
-const unknownPreview = createSpreadsheetImportPreview(
+const unknownPreview = await createSpreadsheetImportPreview(
   unknownWorkbook,
-  analyzeSpreadsheetWorkbook(unknownWorkbook),
+  await analyzeSpreadsheetWorkbook(unknownWorkbook),
   'unknown',
 );
 assert.ok(unknownPreview.lines.length > 0, 'unknown data stays in the review preview for user classification');
@@ -191,9 +191,9 @@ const payrollWithSummaryRows = workbook([
   ['', 'SUMMARY - STAFF', 1244000, 1244000],
   ['', 'Jane Synthetic', 50000, 55000],
 ], 'PAYMENTS');
-const summaryRowsPreview = createSpreadsheetImportPreview(
+const summaryRowsPreview = await createSpreadsheetImportPreview(
   payrollWithSummaryRows,
-  analyzeSpreadsheetWorkbook(payrollWithSummaryRows),
+  await analyzeSpreadsheetWorkbook(payrollWithSummaryRows),
   'payroll-grid',
 );
 assert.deepEqual(
@@ -216,10 +216,10 @@ const matrixPayrollWorkbook = workbook([
   ['', 'MILL', '', ''],
   ['', '', 'Synthetic Mill Employee', 125000],
 ], 'Employees salary 2026');
-assert.equal(detectSpreadsheetKind(matrixPayrollWorkbook), 'payroll-grid');
-const matrixPayrollPreview = createSpreadsheetImportPreview(
+assert.equal(await detectSpreadsheetKind(matrixPayrollWorkbook), 'payroll-grid');
+const matrixPayrollPreview = await createSpreadsheetImportPreview(
   matrixPayrollWorkbook,
-  analyzeSpreadsheetWorkbook(matrixPayrollWorkbook),
+  await analyzeSpreadsheetWorkbook(matrixPayrollWorkbook),
   'payroll-grid',
 );
 const matrixPayrollLines = matrixPayrollPreview.lines.filter((line) => line.kind === 'employee');
@@ -237,9 +237,9 @@ const repeatedEmployeePayrollWorkbook = workbook([
   ['', 'GRADUITY'],
   ['', '', 'Synthetic Employee', 0, 50000],
 ], 'Payroll 2026');
-const repeatedEmployeePreview = createSpreadsheetImportPreview(
+const repeatedEmployeePreview = await createSpreadsheetImportPreview(
   repeatedEmployeePayrollWorkbook,
-  analyzeSpreadsheetWorkbook(repeatedEmployeePayrollWorkbook),
+  await analyzeSpreadsheetWorkbook(repeatedEmployeePayrollWorkbook),
   'payroll-grid',
   [],
   [],
@@ -257,9 +257,9 @@ for (const fileName of [
   'scripts/fixtures/SEPTEMBER SHINE RELEIF SLARY TEMPLATE JUNE 2026-1.xlsx',
 ]) {
   const fixtureWorkbook = XLSX.read(fs.readFileSync(fileName), { cellFormula: true });
-  const fixtureAnalysis = analyzeSpreadsheetWorkbook(fixtureWorkbook);
+  const fixtureAnalysis = await analyzeSpreadsheetWorkbook(fixtureWorkbook);
   assert.equal(fixtureAnalysis.detectedKind, 'payroll-grid', `${fileName} should be detected as payroll`);
-  const fixturePreview = createSpreadsheetImportPreview(
+  const fixturePreview = await createSpreadsheetImportPreview(
     fixtureWorkbook, fixtureAnalysis, fixtureAnalysis.detectedKind, [], [], fileName,
   );
   const detectedEmployees = fixturePreview.lines.filter((line) => line.kind === 'employee');
@@ -293,8 +293,8 @@ const onlySeptemberWorkbook = XLSX.read(
   fs.readFileSync('scripts/fixtures/only sep employees salary 2026.xlsx'),
   { cellFormula: true },
 );
-const onlySeptemberAnalysis = analyzeSpreadsheetWorkbook(onlySeptemberWorkbook);
-const onlySeptemberPreview = createSpreadsheetImportPreview(
+const onlySeptemberAnalysis = await analyzeSpreadsheetWorkbook(onlySeptemberWorkbook);
+const onlySeptemberPreview = await createSpreadsheetImportPreview(
   onlySeptemberWorkbook,
   onlySeptemberAnalysis,
   onlySeptemberAnalysis.detectedKind,
@@ -325,9 +325,9 @@ const missingPayrollWorkbook = workbook([
   ['Synthetic Security Guard', 80000, 'Missing from App', 'Verify and add'],
   ['Total September Salary Unaccounted', 380000, '', ''],
 ], 'Sept Payroll Missing Employees');
-const missingPayrollAnalysis = analyzeSpreadsheetWorkbook(missingPayrollWorkbook);
+const missingPayrollAnalysis = await analyzeSpreadsheetWorkbook(missingPayrollWorkbook);
 assert.equal(missingPayrollAnalysis.detectedKind, 'payroll-grid');
-const missingPayrollPreview = createSpreadsheetImportPreview(
+const missingPayrollPreview = await createSpreadsheetImportPreview(
   missingPayrollWorkbook,
   missingPayrollAnalysis,
   missingPayrollAnalysis.detectedKind,
@@ -348,8 +348,8 @@ const alternatePayrollLayout = workbook([
   ['Department', 'Employee Full Name', 'Pay September 2026 (MWK)'],
   ['Operations', 'Synthetic Layout Employee', 85000],
 ], 'September Payroll Exceptions');
-const alternatePayrollAnalysis = analyzeSpreadsheetWorkbook(alternatePayrollLayout);
-const alternatePayrollPreview = createSpreadsheetImportPreview(
+const alternatePayrollAnalysis = await analyzeSpreadsheetWorkbook(alternatePayrollLayout);
+const alternatePayrollPreview = await createSpreadsheetImportPreview(
   alternatePayrollLayout,
   alternatePayrollAnalysis,
   alternatePayrollAnalysis.detectedKind,

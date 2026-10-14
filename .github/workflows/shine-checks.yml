@@ -66,6 +66,9 @@ jobs:
       - name: Test error boundary
         run: npm run test:error-boundary
 
+      - name: Test code splitting
+        run: npm run test:code-splitting
+
       - name: Audit Firestore access patterns
         run: npm run audit:firestore-access
 

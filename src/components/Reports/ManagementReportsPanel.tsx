@@ -304,7 +304,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const handleExcelExport = async () => {
     if (!ensureQualityOverride()) return;
     try {
-      const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
+      const bytes = await generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
       const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;

@@ -23,6 +23,7 @@
     "test:offline": "tsx scripts/offline-sync.test.ts",
     "test:storage": "tsx scripts/storage-failures.test.ts",
     "test:error-boundary": "tsx scripts/error-boundary.test.tsx",
+    "test:code-splitting": "tsx scripts/code-splitting.test.ts",
     "test:deployment-smoke": "tsx scripts/cloudflare-deployment-smoke.test.ts"
   },
   "dependencies": {

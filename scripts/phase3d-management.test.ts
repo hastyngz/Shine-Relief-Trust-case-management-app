@@ -162,7 +162,7 @@ const categoryExpenseReport = buildManagementReportRows('expenditure-category', 
   ],
 } as any, {});
 assert.deepEqual(categoryExpenseReport.rows, [['Food', 2, 150], ['Repairs', 1, 25]]);
-const managementWorkbook = XLSX.read(generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
+const managementWorkbook = XLSX.read(await generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
 assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data', 'Quality Issues']);
 assert.equal(managementWorkbook.Sheets['Report Data']['J2']?.v, 20);
 assert.ok(managementWorkbook.Sheets['Report Data']['!autofilter']);
@@ -298,10 +298,10 @@ const caseDocx = await generateWordReport(caseReportDb, caseReportConfig);
 const caseDocxText = await mammoth.extractRawText({ buffer: Buffer.from(await caseDocx.arrayBuffer()) } as any);
 assert.match(caseDocxText.value, /School follow-up/);
 assert.match(caseDocxText.value, /Attendance improved/);
-const caseWorkbook = XLSX.read(generateExcelWorkbook(caseReportDb, caseReportConfig), { type: 'array' });
+const caseWorkbook = XLSX.read(await generateExcelWorkbook(caseReportDb, caseReportConfig), { type: 'array' });
 assert.ok(caseWorkbook.SheetNames.includes('Case Actions'));
 assert.ok(caseWorkbook.SheetNames.includes('Case Reviews'));
-const completeCaseWorkbook = XLSX.read(generateExcelWorkbook({
+const completeCaseWorkbook = XLSX.read(await generateExcelWorkbook({
   ...caseReportDb,
   educationalFollowUps: [{ id: 'edu-x', girlId: 'g1', date: '2026-01-10', school: 'School A', classLevel: 'Form 1', academicIssue: 'Attendance', problemsExperienced: '', supportProvided: 'Visit', progressOutcome: 'Improved', recommendations: '', furtherActionRequired: false }],
   educationHistory: [{ id: 'history-x', girlId: 'g1', academicYear: '2026', school: 'School A', classLevel: 'Form 1', status: 'Current' }],
@@ -321,7 +321,7 @@ const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, att
   selectedPhotoIds: ['photo-1'],
   includeSections: { ...reportConfig.includeSections, photoGallery: true },
 });
-const excelReport = generateExcelWorkbook(reportDb, reportConfig);
+const excelReport = await generateExcelWorkbook(reportDb, reportConfig);
 assert.ok(wordReport.size > 0);
 const wordBytes = new Uint8Array(await wordReport.arrayBuffer());
 assert.deepEqual(Array.from(wordBytes.slice(0, 2)), [0x50, 0x4b]);
@@ -330,7 +330,7 @@ assert.ok(excelReport.byteLength > 0 || excelReport.length > 0);
 const selectedWorkbook = XLSX.read(excelReport, { type: 'array' });
 assert.deepEqual(selectedWorkbook.SheetNames, ['Executive Summary', 'Quality Issues']);
 
-const budgetWorkbookBytes = generateExcelWorkbook(reportDb, {
+const budgetWorkbookBytes = await generateExcelWorkbook(reportDb, {
   ...reportConfig,
   includeSections: { ...reportConfig.includeSections, budgets: true },
 });
@@ -353,7 +353,7 @@ const wordWithEmbeddedPhoto = await generateWordReport({
   includeSections: { ...reportConfig.includeSections, photoGallery: true },
 });
 assert.ok(wordWithEmbeddedPhoto.size > wordReport.size);
-const pdfWithEmbeddedPhoto = generatePdfReport({
+const pdfWithEmbeddedPhoto = await generatePdfReport({
   ...reportDb,
   attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
@@ -373,11 +373,11 @@ const longReportDb = {
   healthFollowUps: Array.from({ length: 35 }, (_, index) => ({ id: `health-long-${index}`, girlId: 'g1', date: '2026-01-01', reasonForVisit: `Visit ${index}`, medicalFacility: 'Clinic', treatmentProvided: 'Recorded' })),
   familyFollowUps: [{ id: 'family-pdf', girlId: 'g1', date: '2026-01-01', contactType: 'Home visit', familySituation: 'Recorded family situation', supportProvided: 'Recorded support' }],
 } as any;
-const longPdf = generatePdfReport(longReportDb, {
+const longPdf = await generatePdfReport(longReportDb, {
   ...reportConfig,
   includeSections: { ...reportConfig.includeSections, educationalFollowUps: true, healthFollowUps: true, familyFollowUps: true },
 });
-const emptyTextPdf = generatePdfReport(reportDb, {
+const emptyTextPdf = await generatePdfReport(reportDb, {
   ...reportConfig,
   includeSections: { ...reportConfig.includeSections, educationalFollowUps: true, healthFollowUps: true, familyFollowUps: true },
 });

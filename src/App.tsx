@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   AppDatabase,
   Girl,
@@ -48,31 +48,18 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { MessagingProvider } from './contexts/MessagingContext';
 import { useVisualSettings, VisualSettingsProvider } from './contexts/VisualSettingsContext';
 import { StaffLoginView } from './components/StaffLoginView';
-import { StaffManagement } from './components/StaffManagement';
 import { ShineLogo } from './components/ShineLogo';
 
 import { Header } from './components/Header';
 import { Navigation, NavTab } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
-import { ManagementDashboard } from './components/ManagementDashboard';
 import { canAccessManagementDashboard } from './services/managementAnalytics';
 import { detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from './services/caseIntelligenceService';
 import { GirlsList } from './components/GirlsList';
 import { HouseholdsList } from './components/HouseholdsList';
 import { ActivitiesList } from './components/ActivitiesList';
-import { Reports } from './components/Reports';
-import { ReportBuilder } from './components/Reports/ReportBuilder';
 import { GirlProfile } from './components/GirlProfile';
 import { HouseholdProfile } from './components/HouseholdProfile';
-import { AIAssistantView } from './components/AIAssistant/AIAssistantView';
-import { MessagingView } from './components/Messaging/MessagingView';
-import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkplansView';
-import { PayrollDashboard } from './components/PayrollDashboard';
-import { CaseManagementView } from './components/CaseManagementView';
-import { DataImportWizard } from './components/Import/DataImportWizard';
-import { ContactsView } from './components/Contacts/ContactsView';
-import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
-import { ProgrammesView } from './components/Programmes/ProgrammesView';
 import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from './data/programmes';
 import type { QualityIssue } from './services/qualityRules';
 import {
@@ -129,6 +116,50 @@ type AppView =
   | 'form-rent'
   | 'form-expense'
   | 'form-activity';
+
+// Heavy views are split out of the first download so the dashboard and
+// navigation load quickly on a weak connection. Each is fetched on first use.
+const ManagementDashboard = lazy(() =>
+  import('./components/ManagementDashboard').then((module) => ({ default: module.ManagementDashboard })));
+const Reports = lazy(() =>
+  import('./components/Reports').then((module) => ({ default: module.Reports })));
+const ReportBuilder = lazy(() =>
+  import('./components/Reports/ReportBuilder').then((module) => ({ default: module.ReportBuilder })));
+const AIAssistantView = lazy(() =>
+  import('./components/AIAssistant/AIAssistantView').then((module) => ({ default: module.AIAssistantView })));
+const MessagingView = lazy(() =>
+  import('./components/Messaging/MessagingView').then((module) => ({ default: module.MessagingView })));
+const BudgetsAndWorkplansView = lazy(() =>
+  import('./components/Planning/BudgetsAndWorkplansView').then((module) => ({ default: module.BudgetsAndWorkplansView })));
+const PayrollDashboard = lazy(() =>
+  import('./components/PayrollDashboard').then((module) => ({ default: module.PayrollDashboard })));
+const CaseManagementView = lazy(() =>
+  import('./components/CaseManagementView').then((module) => ({ default: module.CaseManagementView })));
+const DataImportWizard = lazy(() =>
+  import('./components/Import/DataImportWizard').then((module) => ({ default: module.DataImportWizard })));
+const ContactsView = lazy(() =>
+  import('./components/Contacts/ContactsView').then((module) => ({ default: module.ContactsView })));
+const Phase5OperationsView = lazy(() =>
+  import('./components/Intelligence/Phase5OperationsView').then((module) => ({ default: module.Phase5OperationsView })));
+const ProgrammesView = lazy(() =>
+  import('./components/Programmes/ProgrammesView').then((module) => ({ default: module.ProgrammesView })));
+const StaffManagement = lazy(() =>
+  import('./components/StaffManagement').then((module) => ({ default: module.StaffManagement })));
+
+/** Lightweight placeholder shown while a split view is downloading. */
+function ViewSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4" aria-label="Loading" role="status">
+      <div className="h-7 w-48 rounded-lg bg-stone-200" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="h-28 rounded-2xl bg-stone-200" />
+        <div className="h-28 rounded-2xl bg-stone-200" />
+        <div className="h-28 rounded-2xl bg-stone-200" />
+      </div>
+      <div className="h-64 rounded-2xl bg-stone-200" />
+    </div>
+  );
+}
 
 // Helper to parse route from URL hash
 function parseHash(): {
@@ -1312,6 +1343,7 @@ function AppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Keyed by view so a crash in one view clears when the user navigates. */}
         <ErrorBoundary key={view} label={view}>
+        <Suspense fallback={<ViewSkeleton />}>
         {/* VIEW 1: DASHBOARD */}
         {view === 'dashboard' && (
           <Dashboard
@@ -1709,6 +1741,7 @@ function AppContent() {
             />
           </div>
         )}
+        </Suspense>
         </ErrorBoundary>
       </main>
 

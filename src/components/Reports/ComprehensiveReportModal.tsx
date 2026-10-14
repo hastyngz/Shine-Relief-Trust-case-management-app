@@ -381,7 +381,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'Word document securely archived and downloaded.' : 'Word document downloaded; secure archiving was unavailable.');
       } else if (format === 'xlsx') {
-        const bytes = generateExcelWorkbook(reportDb, config);
+        const bytes = await generateExcelWorkbook(reportDb, config);
         const blob = new Blob([bytes as any], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         });
@@ -390,7 +390,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'Excel workbook securely archived and downloaded.' : 'Excel workbook downloaded; secure archiving was unavailable.');
       } else {
-        const blob = generatePdfReport(reportDb, { ...config, photoImageData: imageData });
+        const blob = await generatePdfReport(reportDb, { ...config, photoImageData: imageData });
         const archived = await persistReportHistory('pdf', fileName, chosenPhotos.length, blob);
         await persistReportExportAudit('pdf', fileName, blob);
         triggerFileDownload(blob, fileName);

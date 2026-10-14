@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   Girl,
@@ -94,14 +93,15 @@ export async function parseExcelFile(
   employees: EmployeeRecord[] = [],
 ): Promise<FileAnalysisResult> {
   const buffer = await file.arrayBuffer();
+  const XLSX = await import('xlsx');
   const workbook = XLSX.read(buffer, {
     type: 'array',
     cellFormula: true,
     cellNF: true,
     cellText: true,
   });
-  const spreadsheetAnalysis = analyzeSpreadsheetWorkbook(workbook);
-  const spreadsheetImportPreview = createSpreadsheetImportPreview(
+  const spreadsheetAnalysis = await analyzeSpreadsheetWorkbook(workbook);
+  const spreadsheetImportPreview = await createSpreadsheetImportPreview(
     workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff, employees, file.name,
   );
   const sheetNames = workbook.SheetNames;

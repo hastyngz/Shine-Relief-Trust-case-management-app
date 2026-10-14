@@ -6,6 +6,32 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        output: {
+          advancedChunks: {
+            groups: [
+              {
+                name: 'vendor-vite-runtime',
+                test: /vite\/preload-helper|vite\/modulepreload-polyfill/,
+              },
+              {
+                name: 'vendor-react',
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              },
+              {
+                name: 'vendor-firebase',
+                test: /[\\/]node_modules[\\/](firebase|@firebase)[\\/]/,
+              },
+              {
+                name: 'vendor-documents',
+                test: /[\\/]node_modules[\\/](xlsx|docx|jspdf|jspdf-autotable|mammoth|jszip|fflate|pako)[\\/]/,
+              },
+            ],
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

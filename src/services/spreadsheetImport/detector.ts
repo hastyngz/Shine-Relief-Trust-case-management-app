@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import type * as XLSX from 'xlsx';
 
 export type SpreadsheetKind =
   | 'budget-monthly'
@@ -39,7 +39,7 @@ function normalize(value: unknown): string {
     .trim();
 }
 
-function worksheetRows(sheet: XLSX.WorkSheet): string[][] {
+function worksheetRows(XLSX: typeof import('xlsx'), sheet: XLSX.WorkSheet): string[][] {
   return XLSX.utils.sheet_to_json<string[]>(sheet, {
     header: 1,
     raw: false,
@@ -111,7 +111,7 @@ function detectRows(rows: string[][], sheetName = ''): SpreadsheetKind {
   return 'unknown';
 }
 
-function getSheetCells(sheet: XLSX.WorkSheet): SpreadsheetCell[] {
+function getSheetCells(XLSX: typeof import('xlsx'), sheet: XLSX.WorkSheet): SpreadsheetCell[] {
   const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
   const cells: SpreadsheetCell[] = [];
   for (let row = range.s.r; row <= range.e.r; row += 1) {
@@ -130,8 +130,9 @@ function getSheetCells(sheet: XLSX.WorkSheet): SpreadsheetCell[] {
   return cells;
 }
 
-export function detectSpreadsheetKind(workbook: XLSX.WorkBook): SpreadsheetKind {
-  const kinds = workbook.SheetNames.map((name) => detectRows(worksheetRows(workbook.Sheets[name]), name));
+export async function detectSpreadsheetKind(workbook: XLSX.WorkBook): Promise<SpreadsheetKind> {
+  const XLSX = await import('xlsx');
+  const kinds = workbook.SheetNames.map((name) => detectRows(worksheetRows(XLSX, workbook.Sheets[name]), name));
   const preference: SpreadsheetKind[] = [
     'workplan-matrix',
     'payroll-grid',
@@ -143,14 +144,15 @@ export function detectSpreadsheetKind(workbook: XLSX.WorkBook): SpreadsheetKind 
   return preference.find((kind) => kinds.includes(kind)) || 'unknown';
 }
 
-export function analyzeSpreadsheetWorkbook(workbook: XLSX.WorkBook): SpreadsheetAnalysis {
+export async function analyzeSpreadsheetWorkbook(workbook: XLSX.WorkBook): Promise<SpreadsheetAnalysis> {
+  const XLSX = await import('xlsx');
   const sheets = workbook.SheetNames.map((name) => {
     const sheet = workbook.Sheets[name];
     return {
       name,
-      rowsRead: worksheetRows(sheet).length,
-      cells: getSheetCells(sheet),
+      rowsRead: worksheetRows(XLSX, sheet).length,
+      cells: getSheetCells(XLSX, sheet),
     };
   });
-  return { detectedKind: detectSpreadsheetKind(workbook), sheets };
+  return { detectedKind: await detectSpreadsheetKind(workbook), sheets };
 }

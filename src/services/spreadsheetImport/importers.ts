@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import type * as XLSX from 'xlsx';
 import { BudgetCategory, BudgetPeriodType, EmployeeRecord, StaffUser, WorkplanPeriodType } from '../../types';
 import { ProgrammeId, PROGRAMMES } from '../../data/programmes';
 import { SpreadsheetAnalysis, SpreadsheetCell, SpreadsheetKind } from './detector';
@@ -245,7 +245,7 @@ function nonEmptyRow(row: unknown[]): boolean {
   return row.some((value) => text(value) !== '');
 }
 
-function worksheetRows(sheet: XLSX.WorkSheet): unknown[][] {
+function worksheetRows(XLSX: typeof import('xlsx'), sheet: XLSX.WorkSheet): unknown[][] {
   return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1, raw: true, defval: '', blankrows: false,
   });
@@ -876,18 +876,19 @@ function formulaDisagreements(analysis: SpreadsheetAnalysis): SpreadsheetImportP
   }));
 }
 
-export function createSpreadsheetImportPreview(
+export async function createSpreadsheetImportPreview(
   workbook: XLSX.WorkBook,
   analysis: SpreadsheetAnalysis,
   kind: SpreadsheetKind,
   staff: StaffUser[] = [],
   employees: EmployeeRecord[] = [],
   sourceName = '',
-): SpreadsheetImportPreview {
+): Promise<SpreadsheetImportPreview> {
+  const XLSX = await import('xlsx');
   const lines: ImportedSpreadsheetLine[] = [];
   const procurementGroups: ImportedProcurementLine[] = [];
   const sheetStats = analysis.sheets.map((sheet) => {
-    const rawRows = worksheetRows(workbook.Sheets[sheet.name]);
+    const rawRows = worksheetRows(XLSX, workbook.Sheets[sheet.name]);
     let result: { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number };
     if (kind === 'budget-monthly') {
       result = parseBudgetRows(sheet.name, rawRows);
