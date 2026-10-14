@@ -20,6 +20,7 @@ import {
   persistStaffUserToFirestore,
   deleteStaffUserFromFirestore,
   subscribeStaffUsers,
+  subscribeStaffUserDoc,
 } from '../services/firestoreSync';
 
 export const PRIMARY_ADMIN_EMAIL = 'hastingszidanamot@gmail.com';
@@ -160,28 +161,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  // Subscribe to staff roster ONLY when an authenticated user is signed in
+  // Load the full staff roster only after the signed-in user is confirmed active.
+  // Suspended registered users keep a listener on their own profile so an
+  // administrator can reactivate them without requiring a fresh login. Unknown
+  // accounts do not start a collection-wide listener that rules will reject.
   useEffect(() => {
     if (!currentUser) {
       setAllStaff([]);
       return;
     }
 
-    const unsubStaff = subscribeStaffUsers((list) => {
-      setAllStaff(list);
-      // Also update current user's profile in real time if admin changes their role
-      if (auth.currentUser) {
-        const matching = list.find((s) => s.uid === auth.currentUser?.uid || s.id === auth.currentUser?.uid);
+    const isPrimaryAdmin = currentUser.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL;
+    const profileBelongsToUser = staffProfile?.uid === currentUser.uid || staffProfile?.id === currentUser.uid;
+    const profileResolved = profileBelongsToUser && staffProfile !== null;
+    const isRegisteredProfile = profileResolved && staffProfile.createdBy !== 'Unregistered User';
+    const canReadRoster = isPrimaryAdmin || (isRegisteredProfile && staffProfile.status === 'Active');
+
+    if (canReadRoster) {
+      const unsubStaff = subscribeStaffUsers((list) => {
+        setAllStaff(list);
+        // Keep role/status changes live while the user has roster access.
+        const matching = list.find((staff) =>
+          staff.uid === currentUser.uid || staff.id === currentUser.uid
+        );
         if (matching) {
           setStaffProfile(matching);
+        } else if (!isPrimaryAdmin) {
+          setStaffProfile((previous) => previous && (
+            previous.uid === currentUser.uid || previous.id === currentUser.uid
+          ) ? { ...previous, status: 'Suspended', createdBy: 'Unregistered User' } : previous);
         }
-      }
-    });
+      });
+      return () => {
+        unsubStaff();
+      };
+    }
 
-    return () => {
-      unsubStaff();
-    };
-  }, [currentUser]);
+    setAllStaff([]);
+    // Only listen to a single profile document when a known staff member is
+    // suspended. This keeps status/reactivation changes live without exposing
+    // or repeatedly attempting to read the full roster.
+    if (profileResolved && isRegisteredProfile) {
+      const unsubOwnProfile = subscribeStaffUserDoc(currentUser.uid, (profile) => {
+        if (profile) {
+          setStaffProfile(profile);
+        } else {
+          setStaffProfile((previous) => previous && (
+            previous.uid === currentUser.uid || previous.id === currentUser.uid
+          ) ? { ...previous, status: 'Suspended', createdBy: 'Unregistered User' } : previous);
+        }
+      });
+      return () => {
+        unsubOwnProfile();
+      };
+    }
+  }, [currentUser, staffProfile]);
 
   const refreshStaffProfile = async () => {
     if (auth.currentUser) {
