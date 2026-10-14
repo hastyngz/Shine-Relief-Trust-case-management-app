@@ -62,3 +62,11 @@ The loader now updates `lastLoginAt` only when the stored timestamp is not from 
 
 Expected effect: fewer redundant `staffUsers` writes and potentially fewer listener-triggered reads when the same staff member logs in repeatedly during a day. Actual savings depend on session count and Firestore billing/usage measurements; no numerical reduction is claimed. Verify last-login display expectations and run the automated workflow before deploying.
 
+
+## Staff roster listener review — intentionally not gated yet
+
+The authentication provider starts the full `staffUsers` collection listener as soon as Firebase Auth reports a signed-in user. The Firestore rules allow an unregistered user to read only a matching invitation/profile document, not the whole roster, so an unregistered account can trigger a permission-denied collection listener before profile loading finishes. A suspended account can also be denied by the active-staff rule.
+
+It may be possible to avoid those failed full-collection listener attempts by waiting for profile resolution and starting the roster listener only for an active, registered user. However, the current listener also refreshes the signed-in user's role/status in real time and supplies the staff roster for assignments, recipient lists, payroll mapping, and staff administration. Simply stopping it for suspended users would mean later reactivation may not be reflected until a refresh or new login. A safer design would need a separate, narrowly scoped listener for the user's own staff document plus the full roster listener only while the user is active, with role/status revocation and reactivation tested explicitly.
+
+No roster-listener code change was made in this pass because changing this lifecycle without tests could break role updates or reactivation. This is a confirmed code/rules mismatch opportunity, not a measured billing saving. Before implementing, add tests for initial profile-loading races, invited/unregistered users, active staff, suspension, reactivation, and role changes; preserve the existing Firestore rules and allStaff consumers.
