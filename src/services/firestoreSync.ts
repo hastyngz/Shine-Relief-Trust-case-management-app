@@ -1350,11 +1350,13 @@ export function initFirestoreListeners(
       return;
     }
     const colRef = collection(firestore, colName);
-    const source: Query = colName === COLLECTIONS.CASE_ACTIONS && options.uid && !options.canViewTeamTasks
-      ? query(colRef, where('assignedStaffId', '==', options.uid))
-      : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
-        ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
-        : colRef;
+    const source: Query = colName === COLLECTIONS.PAYROLL_RECORDS && options.canReadManagementPlanning !== true
+      ? query(colRef, where('employeeId', '==', options.uid))
+      : colName === COLLECTIONS.CASE_ACTIONS && options.uid && !options.canViewTeamTasks
+        ? query(colRef, where('assignedStaffId', '==', options.uid))
+        : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
+          ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
+          : colRef;
     const unsub = onSnapshot(
       source,
       (snapshot) => {
