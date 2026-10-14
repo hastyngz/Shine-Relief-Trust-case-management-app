@@ -45,3 +45,12 @@ The risk is not limited to the Firestore listener. In `src/services/payrollServi
 This is confirmed as a code-path risk, not confirmed as a live-data defect. The live Firebase records and import workbook need to be checked before choosing a repair. A safe follow-up should establish an explicit employee-to-auth-UID link (or another stable immutable payroll identity), then use it consistently for payroll records, salary history, imported employee records, and the staff-only Firestore query. Preserve historical records and keep managers/admins as the only roles that can read the full payroll collection. Add tests for different IDs belonging to one linked employee, unlinked imported employees, and staff-only visibility before rollout.
 
 No code-level identity migration has been made because the current repository connection cannot inspect the live Firestore documents, and guessing the mapping could expose payroll or merge two different people.
+
+## Agreed employee/staff ID convention
+
+The project owner has confirmed that people who are represented in both the employee records and staff-user records will be assigned the same ID. Apply this convention to new and corrected records rather than trying to merge people by name.
+
+For staff self-service payroll to work with the current Firestore rule and query, that shared ID must also be the person's Firebase Authentication UID, because the existing rule checks `employeeId == request.auth.uid`. If an employee record already has a different ID, do not silently overwrite it or merge on name alone. Review the existing record and its salary/payment history, then perform a controlled, auditable migration that preserves the historical documents and validates staff-only access.
+
+With matching IDs, the monthly payroll summary's current ID-based de-duplication can represent the same person once across the employee and staff lists. Unlinked imported employees should remain separate until their identity is explicitly confirmed. This convention is a data-entry/record-management agreement; it does not prove that existing live records already comply. The repository connection cannot inspect production Firestore data, so verify current records and role-based behavior before rollout.
+
