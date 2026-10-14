@@ -50,7 +50,7 @@ const db: AppDatabase = {
   caseReviews: [],
 };
 
-function verifyPayrollYearInference() {
+async function verifyPayrollYearInference() {
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet([
     ['SHINE Payroll Year 2025'],
@@ -59,9 +59,9 @@ function verifyPayrollYearInference() {
   ]);
   XLSX.utils.book_append_sheet(workbook, sheet, 'Payroll');
 
-  const analysis = analyzeSpreadsheetWorkbook(workbook);
+  const analysis = await analyzeSpreadsheetWorkbook(workbook);
   assert.equal(analysis.detectedKind, 'payroll-grid');
-  const preview = createSpreadsheetImportPreview(
+  const preview = await createSpreadsheetImportPreview(
     workbook,
     analysis,
     'payroll-grid',
@@ -79,7 +79,7 @@ function verifyPayrollYearInference() {
 }
 
 async function run() {
-  verifyPayrollYearInference();
+  await verifyPayrollYearInference();
   const healthPreview = analyzeImportRows([
     {
       GirlID: 'SG-001',
