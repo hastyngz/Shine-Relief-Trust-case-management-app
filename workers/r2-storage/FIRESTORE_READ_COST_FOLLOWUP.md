@@ -186,3 +186,12 @@ This reduces the number of simultaneously registered listeners for profiles with
 **Cost limitation:** this is a listener-count/overhead optimization, not a claim of lower billed document reads. Every matching attachment document still has to be delivered, and Firestore may bill document reads on initial snapshots, document changes, or reconnections. The app still fetches secure R2 download URLs for matching attachments. No attachment data is cached in Cloudflare KV.
 
 **Verification still required:** the GitHub Actions build and checks should pass on the resulting commit. Also verify a girl with several follow-ups, a household with rent/expense/activity records, attachment add/delete, and a health-restricted staff account. The current attachment rules remain the security boundary; do not broaden them if a query is denied.
+
+## Attachment-listener batching review — reverted for security compatibility
+
+A follow-up review of the Firestore rules found that attachment reads are authorised per document using `targetType`, `targetId`, and (for health-related records) `category`. Firestore security rules are not result filters: a query that could return a protected safeguarding or health attachment may be rejected as a whole.
+
+The temporary batched `targetId in [...]` listeners could combine unrelated target records into one query and therefore make rule evaluation less specific than the previous per-target listeners. To avoid risking denied subscriptions or weakening the rules, the batching change has been reverted on `Replit`. The existing per-target realtime subscriptions and secure R2 URL handling remain.
+
+This means the planned reduction in listener count for girl/household attachments is **not currently delivered**. A future safe reduction needs a data model and rules design that makes the authorised target/category scope explicit, followed by emulator tests covering ordinary staff, health-authorised users, and safeguarding permissions. Do not change the rules to permit broader attachment reads merely to reduce listener count.
+
