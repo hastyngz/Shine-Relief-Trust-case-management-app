@@ -14,8 +14,13 @@ export function shouldSubscribeToCollection(
   if (colName === 'restrictedImportSources' && options.canReadImportSourceData !== true) {
     return false;
   }
+  // These collections are manager/admin-only in firestore.rules. Employees
+  // contains employment and salary-related details and must not be loaded for
+  // ordinary staff or view-only sessions.
   if (
-    (colName === 'whatIfScenarios' || colName === 'projectProjections') &&
+    (colName === 'whatIfScenarios' ||
+      colName === 'projectProjections' ||
+      colName === 'employees') &&
     options.canReadManagementPlanning !== true
   ) {
     return false;
