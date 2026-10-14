@@ -106,3 +106,20 @@ New test: `scripts/firestore-listener-permissions.test.ts`
 Command: `npm run test:firestore-listener-permissions`
 
 The test covers default-deny for manager/admin-only planning listeners, opt-in access, existing restricted collection gates, and unchanged default behavior for ordinary collections. It does not replace the separate runtime checks for actual Administrator, Manager, Staff, and View Only sessions, nor does it prove billed-read savings. The GitHub-connected workflow used for these commits cannot execute the npm command, so the test and production build are **added but not yet run**. Keep the changes on `Replit` until those checks pass.
+
+
+### Automated verification result (14 October 2026)
+
+Added `.github/workflows/shine-checks.yml`, triggered on pushes and pull requests targeting `Replit` (and manually). Run: [SHINE app checks](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/38613572831).
+
+**Result: all workflow steps passed** on commit `40c99c4`:
+- dependency installation
+- TypeScript check (`npm run lint`)
+- Firestore listener permission regression test
+- existing quality tests
+- Firestore access-pattern audit
+- production build
+
+The first run exposed that the committed `package-lock.json` is out of sync with `package.json` (including Wrangler/Cloudflare dependency entries). The workflow currently uses `npm install` to reconcile dependencies in its temporary runner, which allowed all checks to pass. This does **not** repair the committed lockfile; a later maintenance change should regenerate and commit the lockfile from a trusted Node/npm environment so clean installs can use `npm ci` reproducibly.
+
+CI success verifies compile/build and the listed automated tests only. It does not replace a live role-by-role login check or prove reduced Firestore billing. No changes were made to `main`.
