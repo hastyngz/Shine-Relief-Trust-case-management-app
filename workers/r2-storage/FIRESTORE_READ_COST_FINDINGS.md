@@ -100,7 +100,7 @@ This is a permission-alignment and unnecessary-listener fix, not a verified bill
 
 ### Regression coverage added (14 October 2026)
 
-The listener-option rules have been extracted into the pure helper `shouldSubscribeToCollection` in `src/services/firestoreSync.ts`. This lets a small test exercise the opt-in management-planning rule and the existing health/review/import-source gates without opening a live Firestore connection.
+The listener-option rules have been extracted into the Firebase-independent helper `shouldSubscribeToCollection` in `src/services/firestoreListenerPermissions.ts`. This lets a small test exercise the opt-in management-planning rule and the existing health/review/import-source gates without opening a live Firestore connection.
 
 New test: `scripts/firestore-listener-permissions.test.ts`  
 Command: `npm run test:firestore-listener-permissions`
