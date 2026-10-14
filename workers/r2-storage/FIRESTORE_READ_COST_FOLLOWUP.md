@@ -176,3 +176,13 @@ This does **not** reduce Firestore document reads and does not replace, delay, o
 The report attachment metadata service now shares an in-flight request when the same permission class opens the report flow more than once concurrently. Health-authorized and non-health-authorized requests are keyed separately, and each entry is removed when the request succeeds or fails. Later opens fetch fresh metadata; this is not a persistent cache and does not weaken the existing health-record filtering.
 
 This can avoid duplicate Firestore queries if multiple consumers request the same report metadata at the same time. It does not reduce reads for a single request, and no billing savings have been measured.
+
+## Linked-record attachment listener batching — 14 October 2026
+
+The girl and household profile attachment helpers previously created one live Firestore listener per linked record ID. They now split the deduplicated target-ID list into batches of at most 30 and use Firestore `in` queries, preserving real-time snapshots and grouping returned attachments back to their target IDs.
+
+This reduces the number of simultaneously registered listeners for profiles with multiple follow-up/expense/rent/activity records. It also ignores stale asynchronous snapshot processing when a newer snapshot arrives before secure download URLs have been prepared.
+
+**Cost limitation:** this is a listener-count/overhead optimization, not a claim of lower billed document reads. Every matching attachment document still has to be delivered, and Firestore may bill document reads on initial snapshots, document changes, or reconnections. The app still fetches secure R2 download URLs for matching attachments. No attachment data is cached in Cloudflare KV.
+
+**Verification still required:** the GitHub Actions build and checks should pass on the resulting commit. Also verify a girl with several follow-ups, a household with rent/expense/activity records, attachment add/delete, and a health-restricted staff account. The current attachment rules remain the security boundary; do not broaden them if a query is denied.
