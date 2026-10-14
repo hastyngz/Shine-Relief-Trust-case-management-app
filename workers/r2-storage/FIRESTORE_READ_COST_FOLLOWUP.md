@@ -102,3 +102,16 @@ The payroll dashboard previously attempted to read salary-history documents for 
 The dashboard now fetches salary history only when `canProcessPayroll` is true (Manager/Administrator). Other roles clear the management-only salary-history state and do not issue that query. This does not change access rules or payroll-record visibility; staff payroll access remains governed by the existing UID-scoped `payrollRecords` rule.
 
 Expected effect: avoids a known unauthorized query attempt on staff payroll-dashboard visits. It is not a reduction in successful billed document reads because the restricted query should already be denied. Verify the payroll screen with staff, manager, and administrator accounts before deployment.
+
+## Messaging listener review — 14 October 2026
+
+Reviewed `src/services/messagingService.ts` as another potential source of recurring reads:
+
+- Conversations are scoped to documents where the signed-in UID is a participant.
+- Notifications are scoped to the current user's UID.
+- Message listeners are scoped to the currently selected conversation.
+- Announcements use a collection-wide live listener, which may be reasonable for a small organisation-wide announcement feed but scales with the number of announcements and active staff sessions.
+
+No KV cache or arbitrary result limit was added. These feeds are intentionally live, and caching messages/notifications risks stale unread counts or delayed delivery. Adding a limit to messages without implementing older-message pagination would silently hide conversation history. A safer future improvement is UI-backed message pagination (load the newest page first, then fetch older pages on demand) and, if announcement history grows, an explicit product decision about retention or pagination.
+
+This is a source-code review, not a measurement of production traffic. No billing savings are claimed. Any later pagination change should preserve Firestore security rules, message ordering, unread counts, and the existing realtime behavior for the newest messages.
