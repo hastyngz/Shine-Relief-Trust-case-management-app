@@ -148,6 +148,13 @@ async function run() {
     await assertFails(getDoc(doc(viewer, 'healthFollowUps/health-1')));
     await assertSucceeds(getDoc(doc(manager, 'healthFollowUps/health-1')));
     await assertFails(getDoc(doc(viewer, 'attachments/medical-photo')));
+    // A broad targetId `in` query can mix ordinary and health-sensitive attachments.
+    // Firestore rules are not filters, so an ordinary viewer must not be able to
+    // read the mixed result set just because one target is otherwise accessible.
+    await assertFails(getDocs(query(
+      collection(viewer, 'attachments'),
+      where('targetId', 'in', ['girl-1', 'household-1']),
+    )));
     await assertSucceeds(getDoc(doc(manager, 'attachments/medical-photo')));
     const safeAttachmentTypes = ['girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity', 'rentPayment', 'expense'];
     await Promise.all(safeAttachmentTypes.map((targetType) => assertSucceeds(getDocs(query(collection(viewer, 'attachments'), where('targetType', '==', targetType), where('category', 'not-in', ['Medical Document', 'Prescription']))))));
