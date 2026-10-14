@@ -45,14 +45,18 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
   const [saving, setSaving] = useState(false);
 
   const actor = { uid: currentUser?.uid || 'unknown', name: staffProfile?.fullName || currentUser?.displayName || 'Staff member' };
-  const refreshContacts = async () => {
+  const refreshContacts = async (): Promise<ContactRecord[]> => {
     setLoading(true);
     try {
-      setContacts(await listContacts());
+      const loadedContacts = await listContacts();
+      setContacts(loadedContacts);
       setError('');
+      return loadedContacts;
     } catch (loadError) {
-      setContacts(db.contacts || []);
+      const fallbackContacts = db.contacts || [];
+      setContacts(fallbackContacts);
       setError('Could not load the live contacts directory. Showing locally available contacts.');
+      return fallbackContacts;
     } finally {
       setLoading(false);
     }
@@ -130,9 +134,9 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
       } else {
         await createContact({ ...changes, aliases: [changes.name] }, actor);
       }
-      await refreshContacts();
+      const refreshedContacts = await refreshContacts();
       setEditing(false);
-      if (selected) setSelected((await listContacts()).find((contact) => contact.id === selected.id) || null);
+      if (selected) setSelected(refreshedContacts.find((contact) => contact.id === selected.id) || null);
     } catch (saveError) {
       setError('Contact could not be saved. Check your staff access and try again.');
     } finally {
@@ -145,8 +149,8 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
     setSaving(true);
     try {
       await mergeContacts(selected.id, mergeTarget, actor);
-      await refreshContacts();
-      setSelected((await listContacts()).find((contact) => contact.id === selected.id) || null);
+      const refreshedContacts = await refreshContacts();
+      setSelected(refreshedContacts.find((contact) => contact.id === selected.id) || null);
       setMergeTarget('');
     } catch {
       setError('Contacts could not be merged. Both records must still exist.');
