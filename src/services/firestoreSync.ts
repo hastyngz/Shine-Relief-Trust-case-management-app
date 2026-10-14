@@ -356,6 +356,22 @@ export async function deleteStaffUserFromFirestore(staffId: string): Promise<voi
   }
 }
 
+export function subscribeStaffUserDoc(
+  uid: string,
+  onUpdated: (staffUser: StaffUser | null) => void,
+): Unsubscribe {
+  const ref = doc(firestore, COLLECTIONS.STAFF_USERS, uid);
+  return onSnapshot(
+    ref,
+    (snapshot) => {
+      onUpdated(snapshot.exists() ? snapshot.data() as StaffUser : null);
+    },
+    (error) => {
+      console.error('Firestore staff user document snapshot error:', error);
+    },
+  );
+}
+
 export function subscribeStaffUsers(onUpdated: (staffList: StaffUser[]) => void): () => void {
   const ref = collection(firestore, COLLECTIONS.STAFF_USERS);
   return onSnapshot(
