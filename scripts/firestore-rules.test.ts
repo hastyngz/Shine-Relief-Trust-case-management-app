@@ -151,6 +151,14 @@ async function run() {
     await assertSucceeds(getDoc(doc(manager, 'attachments/medical-photo')));
     const safeAttachmentTypes = ['girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity', 'rentPayment', 'expense'];
     await Promise.all(safeAttachmentTypes.map((targetType) => assertSucceeds(getDocs(query(collection(viewer, 'attachments'), where('targetType', '==', targetType), where('category', 'not-in', ['Medical Document', 'Prescription']))))));
+    const reportAttachmentTypes = [
+      'girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity',
+      'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense', 'healthFollowUp',
+    ];
+    await assertSucceeds(getDocs(query(
+      collection(manager, 'attachments'),
+      where('targetType', 'in', reportAttachmentTypes),
+    )));
     await assertFails(getDoc(doc(admin, 'safeguardingCases/case-1')));
     await assertFails(getDoc(doc(viewer, 'employeeSalaryHistory/salary-1')));
     await assertFails(getDoc(doc(worker, 'employeeSalaryHistory/salary-1')));
