@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, BadgeDollarSign, BriefcaseBusiness, CalendarRange, Filter, Pencil, Plus, Trash2, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { AppDatabase, CaseAction, PayrollRecord, PayrollPaymentStatus, SalaryHistoryRecord } from '../types';
+import { EmployeeContractPanel } from './EmployeeContractPanel';
+import { AppDatabase, CaseAction, PayrollRecord, PayrollPaymentStatus, SalaryHistoryRecord, StaffUser } from '../types';
 import { addCaseAction, addPayrollRecord, deletePayrollRecord, updateCaseAction, updatePayrollRecord } from '../utils/storage';
 import { getEmployeeSalaryHistoryForStaff } from '../services/firestoreSync';
 import { notifyPayrollProcessors } from '../services/messagingService';
@@ -18,7 +19,7 @@ const MONTHS = [
 ];
 
 export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefresh }) => {
-  const { isAdmin, role, currentUser, staffProfile, allStaff } = useAuth();
+  const { isAdmin, role, currentUser, staffProfile, allStaff, updateStaffAccount } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod);
@@ -34,6 +35,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('ALL');
   const [showPayrollModal, setShowPayrollModal] = useState<boolean>(false);
   const [editingPayroll, setEditingPayroll] = useState<PayrollRecord | null>(null);
+  const [contractEmployee, setContractEmployee] = useState<StaffUser | null>(null);
 
   const canViewPayroll = isAdmin || role === 'Manager' || role === 'Staff';
   const canProcessPayroll = isAdmin || role === 'Manager';
@@ -322,7 +324,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
             <tbody>
               {monthlySummary.employees.filter((employee) => !showOutstandingOnly || employee.status !== 'Paid').map((employee) => (
                 <tr key={employee.employeeId} className="border-t border-stone-100">
-                  <td className="px-3 py-2"><strong>{employee.employeeName}</strong><div className="text-xs text-stone-500">{employee.positionTitle || employee.department || 'Employee'}</div></td>
+                  <td className="px-3 py-2"><div className="flex flex-col items-start gap-1"><button type="button" disabled={!canProcessPayroll || !allStaff.some((person) => person.id === employee.employeeId)} onClick={() => { const person = allStaff.find((candidate) => candidate.id === employee.employeeId); if (person) setContractEmployee(person); }} className="text-left font-bold text-teal-800 underline decoration-dotted underline-offset-2 hover:text-teal-950 disabled:cursor-default disabled:text-stone-900 disabled:no-underline" title={canProcessPayroll ? 'Open staff profile and contract' : 'Contract access is restricted to payroll managers'}>{employee.employeeName}</button><div className="text-xs text-stone-500">{employee.positionTitle || employee.department || 'Employee'}</div>{canProcessPayroll && allStaff.some((person) => person.id === employee.employeeId) && <span className="text-[10px] text-teal-700">View staff profile & contract</span>}</div></td>
                   <td className="px-3 py-2">MWK {employee.applicableSalary.toLocaleString()}</td>
                   <td className="px-3 py-2">MWK {employee.paidAmount.toLocaleString()}</td>
                   <td className="px-3 py-2">MWK {employee.outstandingAmount.toLocaleString()}</td>
@@ -488,6 +490,20 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
         </div>
       </div>
 
+      {contractEmployee && staffProfile && (
+        <EmployeeContractPanel
+          staff={contractEmployee}
+          actorUid={currentUser?.uid || staffProfile.uid}
+          actorName={staffProfile.fullName || currentUser?.displayName || 'SHINE Staff'}
+          canEdit={canProcessPayroll}
+          onUpdate={async (staffId, updates) => {
+            await updateStaffAccount(staffId, updates);
+            setContractEmployee((current) => current ? { ...current, ...updates } : current);
+            onRefresh();
+          }}
+          onClose={() => setContractEmployee(null)}
+        />
+      )}
       {showPayrollModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-stone-200">
