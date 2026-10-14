@@ -9,6 +9,12 @@ assert.equal(shouldSubscribeToCollection('whatIfScenarios', { canReadManagementP
 assert.equal(shouldSubscribeToCollection('projectProjections', { canReadManagementPlanning: true }), true);
 assert.equal(shouldSubscribeToCollection('employees', { canReadManagementPlanning: true }), true);
 
+// Case-action listeners must be UID-scoped for non-management callers.
+assert.equal(shouldSubscribeToCollection('caseActions'), false);
+assert.equal(shouldSubscribeToCollection('caseActions', { canViewTeamTasks: false }), false);
+assert.equal(shouldSubscribeToCollection('caseActions', { uid: 'staff-uid', canViewTeamTasks: false }), true);
+assert.equal(shouldSubscribeToCollection('caseActions', { canViewTeamTasks: true }), true);
+
 // Non-management staff must have a UID for payroll, and their listener is
 // constrained by the same employeeId == authenticated UID rule as Firestore.
 assert.equal(shouldSubscribeToCollection('payrollRecords'), false);
