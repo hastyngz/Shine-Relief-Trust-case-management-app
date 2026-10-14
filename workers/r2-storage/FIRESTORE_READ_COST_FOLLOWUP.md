@@ -195,3 +195,11 @@ The temporary batched `targetId in [...]` listeners could combine unrelated targ
 
 This means the planned reduction in listener count for girl/household attachments is **not currently delivered**. A future safe reduction needs a data model and rules design that makes the authorised target/category scope explicit, followed by emulator tests covering ordinary staff, health-authorised users, and safeguarding permissions. Do not change the rules to permit broader attachment reads merely to reduce listener count.
 
+## Startup listener scope review — lazy loading deferred
+
+The central `initFirestoreListeners` service currently subscribes to 38 application collections (some are skipped by explicit role gates). Its snapshots are assembled into a shared `AppDatabase` consumed across screens, reports, imports, offline persistence, and programme/financial workflows. Simply attaching listeners only when a screen opens would leave other screens and the shared offline state stale, and could cause missing data during cross-module workflows.
+
+For that reason, no speculative lazy-listener refactor has been applied. A safe design needs an explicit collection-to-feature dependency map and a lifecycle-aware data repository that can preserve cross-screen updates, initial-sync status, offline persistence, and role restrictions. A future implementation should be introduced in small stages, with tests for navigation between screens, cross-user updates, offline/reconnect, and role changes before removing any existing listeners.
+
+The current safe reductions remain limited to role-gated subscriptions, scoped queries where the rules support them, deduplicated overlapping reads, and coalesced UI updates. None of these changes is represented as a measured billing saving without Firebase usage evidence.
+
