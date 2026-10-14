@@ -115,3 +115,11 @@ Reviewed `src/services/messagingService.ts` as another potential source of recur
 No KV cache or arbitrary result limit was added. These feeds are intentionally live, and caching messages/notifications risks stale unread counts or delayed delivery. Adding a limit to messages without implementing older-message pagination would silently hide conversation history. A safer future improvement is UI-backed message pagination (load the newest page first, then fetch older pages on demand) and, if announcement history grows, an explicit product decision about retention or pagination.
 
 This is a source-code review, not a measurement of production traffic. No billing savings are claimed. Any later pagination change should preserve Firestore security rules, message ordering, unread counts, and the existing realtime behavior for the newest messages.
+
+## Contact directory duplicate refresh reads — 14 October 2026
+
+The contact directory save and merge handlers refreshed the directory with `listContacts()`, then called `listContacts()` again to find the selected contact. Each call reads the contacts collection, so the second query was redundant after a successful refresh.
+
+The refresh helper now returns the list it just loaded (or the existing local fallback on error), and the save/merge handlers reuse that result when restoring the selected contact. This removes one full contacts-collection read after a successful save and one after a successful merge. It does not cache contacts across sessions, alter contact permissions, or change how the directory initially loads.
+
+The contacts collection may include people and organisations used in case follow-ups and programme operations, so no broad shared KV cache was introduced. Verify create, edit, merge, and refresh-error behavior in the app. This is a source-level reduction in duplicate queries; actual billed-read savings depend on how often staff save or merge contacts.
