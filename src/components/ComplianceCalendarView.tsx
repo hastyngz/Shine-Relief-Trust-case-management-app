@@ -107,7 +107,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     const updates: Partial<ScheduleItem> = {
       status,
       completedAt: status === 'Completed' ? new Date().toISOString() : undefined,
-      completionNote: status === 'Completed' ? undefined : undefined,
+      completionNote: undefined,
       verifiedBy: undefined,
       verifiedAt: undefined,
       complianceHistory: appendHistory(item, status === 'Completed' ? 'Completed' : status === 'In Progress' ? 'Started' : 'Reopened'),
