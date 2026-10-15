@@ -29,6 +29,7 @@ import { AppView } from '../routing/appRoutes';
 import { AdministrationHub } from '../components/AdministrationHub';
 import { InventoryView } from '../components/InventoryView';
 import { AssetRegisterView } from '../components/AssetRegisterView';
+import { DocumentsFilingView } from '../components/DocumentsFilingView';
 import type { PendingPhoto } from '../components/Attachments/FormPhotoSection';
 
 /**
@@ -261,6 +262,41 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
 
       {view === 'inventory' && <InventoryView items={db.inventoryItems || []} onRefresh={reloadData} />}
       {view === 'assets' && <AssetRegisterView assets={db.assets || []} onRefresh={reloadData} />}
+      {view === 'documents' && (
+        <DocumentsFilingView
+          db={db}
+          onOpenTarget={(targetType, targetId) => {
+            if (targetType === 'girl') {
+              handleOpenGirlProfile(targetId);
+            } else if (targetType === 'household') {
+              handleOpenHouseProfile(targetId);
+            } else if (targetType === 'educationalFollowUp' || targetType === 'healthFollowUp' || targetType === 'familyFollowUp') {
+              const girlId = db.educationalFollowUps.find((item) => item.id === targetId)?.girlId
+                || db.healthFollowUps.find((item) => item.id === targetId)?.girlId
+                || db.familyFollowUps.find((item) => item.id === targetId)?.girlId;
+              if (girlId) handleOpenGirlProfile(girlId);
+            } else if (targetType === 'rentPayment' || targetType === 'expense' || targetType === 'householdActivity') {
+              const householdId = targetType === 'rentPayment'
+                ? db.rentPayments.find((item) => item.id === targetId)?.householdId
+                : targetType === 'expense'
+                  ? db.expenses.find((item) => item.id === targetId)?.householdId
+                  : db.householdActivities.find((item) => item.id === targetId)?.householdId;
+              if (householdId) handleOpenHouseProfile(householdId);
+            } else if (targetType === 'programme') {
+              openProgramme(targetId as ProgrammeId);
+            } else if (targetType === 'programmeLog') {
+              const record = (db.programmeLogs || []).find((item) => item.id === targetId);
+              if (record) openProgramme(record.programmeId as ProgrammeId);
+            } else if (targetType === 'importBatch') {
+              navigateTo('reports', 'reports');
+            } else {
+              showToast('No direct screen link is available for this attachment type yet.');
+            }
+          }}
+        />
+      )}
+
+
 
       {/* VIEW 5: REPORTS */}
       {view === 'reports' && (
