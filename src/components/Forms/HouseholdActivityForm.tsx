@@ -12,7 +12,7 @@ interface HouseholdActivityFormProps {
   onSave: (
     data: Omit<HouseholdActivity, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onCancel: () => void;
 }
 
@@ -70,7 +70,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
     setError('');
     setSaveStatus('saving');
     try {
-      await onSave(
+      const result = await onSave(
       {
         householdId: household.id,
         date,
@@ -90,6 +90,11 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
       },
       pendingPhotos
       );
+      if (result === false) {
+        setError('This record was not saved. Check your permissions and try again.');
+        setSaveStatus('error');
+        return;
+      }
       setSaveStatus('done');
     } catch {
       setError('Could not save this activity. Your changes are still on this form; please try again.');
