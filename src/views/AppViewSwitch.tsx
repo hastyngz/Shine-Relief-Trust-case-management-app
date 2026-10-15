@@ -26,6 +26,7 @@ import { RentPaymentForm } from '../components/Forms/RentPaymentForm';
 import { HouseholdExpenseForm } from '../components/Forms/HouseholdExpenseForm';
 import { HouseholdActivityForm } from '../components/Forms/HouseholdActivityForm';
 import { AppView } from '../routing/appRoutes';
+import { AdministrationHub } from '../components/AdministrationHub';
 import type { PendingPhoto } from '../components/Attachments/FormPhotoSection';
 
 /**
@@ -253,6 +254,8 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       )}
 
       {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} onNavigateToProgramme={openProgramme} />}
+
+      {view === 'administration' && <AdministrationHub db={db} onNavigate={(nextView) => navigateTo(nextView, nextView === 'staff' ? 'staff' : nextView === 'payroll' || nextView === 'contracts' ? 'payroll' : nextView === 'reports' ? 'reports' : nextView === 'import' ? 'import' : nextView === 'planning' ? 'planning' : 'operations')} />}
 
       {/* VIEW 5: REPORTS */}
       {view === 'reports' && (
