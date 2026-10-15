@@ -108,7 +108,7 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
           </div>
         </div>
       ))}
-      <p className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-xs leading-5 text-stone-600">Inventory & Stores is now available for stock registration, receipts, issues and movement history. Other planned modules are marked clearly and do not collect or save data yet.</p>
+      <p className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-xs leading-5 text-stone-600">Inventory & Stores, the Asset Register, Document Index and Compliance Calendar now open functional workflows. Other planned modules remain clearly marked and do not collect or save data yet.</p>
     </section>
   );
 };
