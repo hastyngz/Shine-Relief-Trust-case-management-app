@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
 import { EmployeeContractPanel } from './EmployeeContractPanel';
@@ -37,6 +37,23 @@ export const StaffManagement: React.FC = () => {
     sendResetPassword,
   } = useAuth();
   const [selectedEmployee, setSelectedEmployee] = useState<StaffUser | null>(null);
+
+  // Payroll links directly to this staff member's contract page. Wait for the
+  // staff directory to load before resolving the employee ID from the URL.
+  useEffect(() => {
+    const query = window.location.hash.split('?')[1] || '';
+    const employeeId = new URLSearchParams(query).get('employeeId');
+    if (!employeeId) return;
+    const employee = allStaff.find((person) => person.id === employeeId);
+    if (employee) setSelectedEmployee(employee);
+  }, [allStaff]);
+
+  const closeEmployeeContract = () => {
+    setSelectedEmployee(null);
+    if (new URLSearchParams(window.location.hash.split('?')[1] || '').has('employeeId')) {
+      window.location.hash = '#/staff';
+    }
+  };
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -745,7 +762,7 @@ export const StaffManagement: React.FC = () => {
             await updateStaffAccount(staffId, updates);
             setSelectedEmployee((current) => current ? { ...current, ...updates } : current);
           }}
-          onClose={() => setSelectedEmployee(null)}
+          onClose={closeEmployeeContract}
         />
       )}
     </div>
