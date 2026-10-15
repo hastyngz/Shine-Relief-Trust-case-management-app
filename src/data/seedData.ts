@@ -26,4 +26,5 @@ export const INITIAL_DATABASE: AppDatabase = {
   programmeLogs: [],
   people: [],
   customPersonTypes: [],
+  inventoryItems: [],
 };
