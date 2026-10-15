@@ -47,7 +47,8 @@ const cases: Array<[string, string, string]> = [
   ['#/add-house', 'form-house', 'houses'],
   ['#/operations', 'operations', 'operations'],
   ['#/administration', 'administration', 'administration'],
-  ['#/documents', 'documents', 'administration'],\n  ['#/compliance', 'compliance', 'administration'],\n  ['#/compliance-calendar', 'compliance', 'administration'],
+  ['#/documents', 'documents', 'administration'],\n  ['#/compliance', 'compliance', 'administration'],
+  ['#/compliance-calendar', 'compliance', 'administration'],
   ['#/admin-operations', 'administration', 'administration'],
 ];
 
@@ -77,7 +78,8 @@ assert.equal(buildHash('form-girl'), '#/register-girl');
 assert.equal(buildHash('ai-assistant'), '#/ai-assistant');
 assert.equal(buildHash('contracts'), '#/contracts');
 assert.equal(buildHash('administration'), '#/administration');
-assert.equal(buildHash('documents'), '#/documents');\nassert.equal(buildHash('compliance'), '#/compliance');
+assert.equal(buildHash('documents'), '#/documents');
+assert.equal(buildHash('compliance'), '#/compliance');
 assert.equal(buildHash('inventory'), '#/inventory');
 assert.equal(buildHash('assets'), '#/assets');
 
