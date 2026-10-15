@@ -103,3 +103,9 @@ Before substantial work, inspect `.agents/skills/` and read the relevant `SKILL.
 - Preserve the phone layout of `src/components/AIAssistant/AIAssistantView.tsx`.
 - Follow existing dependency, styling, storage, routing, and testing conventions. Reuse shared UI primitives where applicable.
 - Do not expose secrets, credentials, tokens, private records, or signed storage URLs in logs, tests, screenshots, or reports.
+
+## Round 2 effects
+- Shared helpers in `src/components/ui/`: `CountUp` (counts up once, screen readers get the final number immediately), `Collapse` (smooth open/close, closed content is `inert`), `SwipeRow` (swipe reveals one action, never runs it by itself; keep the normal buttons as the keyboard route), `EmptySun` (the sun rises once on empty states). `SaveButton` shakes once on error.
+- `src/effects/EffectsRuntime.tsx` is mounted once in `src/main.tsx` (wrapped so a crash renders nothing): header shadow after scroll (`html[data-scrolled]`), pull down at the top of the page to nudge a sync, a "Draft saved on this phone" chip when an edit is queued offline, a "Report ready" card when a docx/xlsx/pdf download starts, and sparks via `celebrate()` from that file.
+- CSS-only effects in `src/styles/effects.css`: screen slide-in on `#app-shell main > *`, soft field focus ring, `.fx-pulse` (runs three times), `.fx-shake`, `.fx-progress-fill`.
+- Wired so far: dashboard totals (`CountUp`), Overdue badges (`.fx-pulse`), empty Girls and Households lists (`EmptySun`), Case Actions rows (`SwipeRow` revealing "Complete"). `Collapse`, `celebrate()` and `.fx-progress-fill` are available but not wired to a screen yet.
