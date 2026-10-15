@@ -44,6 +44,8 @@ const cases: Array<[string, string, string]> = [
   ['#/register-girl', 'form-girl', 'girls'],
   ['#/add-house', 'form-house', 'houses'],
   ['#/operations', 'operations', 'operations'],
+  ['#/administration', 'administration', 'administration'],
+  ['#/admin-operations', 'administration', 'administration'],
 ];
 
 for (const [hash, view, tab] of cases) {
