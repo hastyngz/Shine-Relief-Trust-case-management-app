@@ -7,7 +7,11 @@ export interface InventoryExpiryResult {
 
 /** Classify a date-only expiry value without relying on local timezone parsing. */
 export function getInventoryExpiryStatus(expiryDate?: string, today = new Date().toISOString().slice(0, 10)): InventoryExpiryResult {
-  const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`));
+  const validDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const timestamp = Date.parse(`${value}T00:00:00Z`);
+    return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+  };
   if (!expiryDate || !validDate(expiryDate) || !validDate(today)) return { status: 'not-tracked', daysRemaining: null };
   const expiry = Date.parse(`${expiryDate}T00:00:00Z`);
   const current = Date.parse(`${today}T00:00:00Z`);
