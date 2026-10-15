@@ -1175,7 +1175,7 @@ function AppContent() {
 
       {/* Toast Notification Alert */}
       {toastMessage && (
-        <div className="fixed bottom-18 md:bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div data-fx-toast className="fixed bottom-18 md:bottom-6 right-6 z-50 fx-toast-enter">
           <div className="bg-teal-950 text-white px-4 py-3 rounded-xl shadow-2xl border border-teal-800 flex items-center gap-3 text-xs font-semibold max-w-md">
             <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0" />
             <span>{toastMessage}</span>
