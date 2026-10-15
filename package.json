@@ -12,6 +12,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "audit:firestore-access": "node scripts/audit-firestore-access.mjs",
+    "test:ui-effects": "tsx scripts/ui-effects.test.tsx",
     "test:quality": "tsx scripts/quality-rules.test.ts && tsx scripts/programme-separation.test.ts && tsx scripts/phase3b-financial.test.ts",
     "test:report-writing-help": "tsx scripts/report-writing-help.test.ts",
     "test:early-warning": "tsx scripts/early-warning-service.test.ts",
