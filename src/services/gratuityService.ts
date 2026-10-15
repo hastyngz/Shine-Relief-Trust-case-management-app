@@ -40,9 +40,11 @@ function parseDate(value: string, fieldName: string): Date {
 
 function fullMonthsBetween(start: Date, end: Date): number {
   if (end <= start) return 0;
-  const months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
-    end.getUTCMonth() - start.getUTCMonth();
-  return months - (end.getUTCDate() < start.getUTCDate() ? 1 : 0);
+  const calendarMonths = (end.getUTCFullYear() - start.getUTCFullYear()) * 12
+    + end.getUTCMonth() - start.getUTCMonth();
+  // Treat the last day of a shorter month as the anniversary for contracts
+  // that began near month-end (for example, 31 January → 28 February).
+  return addAnchoredMonths(start, calendarMonths) > end ? calendarMonths - 1 : calendarMonths;
 }
 
 function formatDate(date: Date): string {
