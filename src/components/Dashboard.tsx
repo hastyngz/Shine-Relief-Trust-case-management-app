@@ -287,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Girls Card */}
         <div
           onClick={() => onNavigateToGirlsList()}
-          className="fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -609,7 +609,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   key={house.id}
                   style={{ "--i": index } as React.CSSProperties}
                   onClick={() => onNavigateToHouse(house.id)}
-                  className="fx-rise fx-card p-3.5 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/30 cursor-pointer transition-transform flex items-center justify-between gap-3"
+                  className="fx-rise fx-press fx-card p-3.5 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/30 cursor-pointer transition-transform flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-900 flex items-center justify-center font-bold text-xs shrink-0">
@@ -673,7 +673,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   key={item.id}
                   style={{ "--i": index } as React.CSSProperties}
                   onClick={() => onNavigateToGirl(item.targetId)}
-                  className={`fx-rise fx-card p-3 rounded-lg border cursor-pointer transition-transform flex items-center justify-between gap-3 ${
+                  className={`fx-rise fx-press fx-card p-3 rounded-lg border cursor-pointer transition-transform flex items-center justify-between gap-3 ${
                     item.isOverdue
                       ? 'bg-rose-50/50 border-rose-200 hover:border-rose-400'
                       : 'bg-stone-50 border-stone-200 hover:border-teal-700'
