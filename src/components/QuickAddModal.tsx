@@ -106,8 +106,8 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden">
+    <div className="fx-backdrop-enter fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="fx-sheet-enter bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden">
         {/* Header */}
         <div className="bg-teal-950 text-white px-5 py-4 flex items-center justify-between">
           <div>
@@ -135,7 +135,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('register-girl')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
