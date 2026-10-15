@@ -1410,6 +1410,9 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       COLLECTIONS.PROGRAMME_LOGS,
       COLLECTIONS.CASE_REVIEWS,
       COLLECTIONS.CASE_GOALS,
+      COLLECTIONS.PROCUREMENT_LISTS,
+      COLLECTIONS.PROJECT_PROJECTIONS,
+      COLLECTIONS.INVENTORY_ITEMS,
     ];
 
     for (const colName of collectionNames) {
@@ -1492,10 +1495,11 @@ export function initFirestoreListeners(
     caseGoals: [],
     procurementLists: [],
     projectProjections: [],
+    inventoryItems: [],
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 38;
+  const TOTAL_COLLECTIONS = 39;
 
   // Firestore emits a snapshot with `fromCache === true` for optimistic local
   // writes that the server has not confirmed yet (and when the client is
