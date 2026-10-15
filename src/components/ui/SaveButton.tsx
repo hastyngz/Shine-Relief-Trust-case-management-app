@@ -33,7 +33,7 @@ export const SaveButton: React.FC<SaveButtonProps> = ({
     >
       {status === 'saving' ? <LoaderCircle aria-hidden="true" className="fx-spinner h-4 w-4" /> :
        status === 'done' ? <span className="fx-success-pop inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" className="fx-tick h-4 w-4" /></span> :
-       status === 'error' ? null : <Save aria-hidden="true" className="h-4 w-4" />}
+       status === 'error' ? <AlertTriangle aria-hidden="true" className="h-4 w-4 text-red-700" /> : <Save aria-hidden="true" className="h-4 w-4" />}
       <span aria-live="polite" aria-atomic="true">{status === 'idle' ? (children ?? label) : label}</span>
     </button>
   );
