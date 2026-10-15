@@ -160,6 +160,8 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       </div>
     </header>
 
+    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">Privacy reminder: use this register for administrative obligations and training/policy completion only. Do not enter child-identifying details, safeguarding allegations, health information or confidential case notes here; use the restricted SHINE records and reporting pathway.</p>
+
     {error && <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">{error}</div>}
     {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div>}
 
