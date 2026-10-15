@@ -42,7 +42,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
-  const persist = (item: InventoryItem) => {
+  const persist = (item: InventoryItem): boolean => {
     setSaving(true);
     setError('');
     setNotice('');
@@ -50,8 +50,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       saveInventoryItem({ ...item, updatedBy: actor, updatedByUid: currentUser?.uid });
       setNotice('Inventory record saved on this device. Cloud sync will follow the app’s normal sync process.');
       onRefresh();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the inventory record.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -86,7 +88,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       movements: openingMovement, createdAt: now, updatedAt: now, createdBy: actor, updatedBy: actor,
       createdByUid: currentUser?.uid, updatedByUid: currentUser?.uid,
     };
-    persist(item);
+    if (!persist(item)) return;
     setShowAdd(false);
     setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', notes: '' });
   };
@@ -115,7 +117,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
     };
     const nextQuantity = movement.type === 'Received' ? movementTarget.quantityOnHand + quantity : movementTarget.quantityOnHand - quantity;
-    persist({ ...movementTarget, quantityOnHand: nextQuantity, movements: [...(movementTarget.movements || []), entry], updatedAt: now });
+    if (!persist({ ...movementTarget, quantityOnHand: nextQuantity, movements: [...(movementTarget.movements || []), entry], updatedAt: now })) return;
     setMovementTarget(null);
     setMovement({ type: 'Received', quantity: '', date: new Date().toISOString().slice(0, 10), destination: '', reference: '', reason: '' });
   };
