@@ -15,7 +15,7 @@ export function spreadsheetEmployeeLineToPreview(line: ImportedEmployeeLine): Im
     tempId: id,
     resultType: line.status === 'matched' ? 'CONFLICT' : 'NEW_RECORD',
     targetEntity: 'employee',
-    classification: 'EMPLOYEE_PAYROLL_RECORD',
+    classification: 'STAFF_PAYROLL_RECORD',
     classificationLabel: line.contractFields ? 'Employee Contract / Payroll Record' : 'Employee Payroll / Salary Record',
     isDateUnknown: !line.contractFields?.contractStartDate,
     title: line.employeeName,
