@@ -59,9 +59,9 @@ Repository memory for the SHINE Relief Trust case-management app.
 
 ## Shared UI polish effects
 - Shared, dependency-free motion and depth tokens live in `src/styles/effects.css`, imported once from `src/main.tsx`.
-- Shared React components: `src/components/ui/SaveButton.tsx` exposes idle/saving/done/error visual states, and `src/components/ui/Skeleton.tsx` provides accessible loading placeholders. Parent forms must own save timing and error handling; never show a success state after a failed save.
-- Regression test: `npm run test:ui-effects` checks SaveButton states and reduced-motion CSS.
+- Shared React components: `src/components/ui/SaveButton.tsx` exposes idle/saving/done/error visual states, and `src/components/ui/Skeleton.tsx` provides accessible loading placeholders. Parent forms own save timing and error handling; a save callback may return `false` to reject a save, and rejected/throwing saves must never show success. Successful local record saves use the accessible `Saved on this phone` toast.
+- Regression test: `npm run test:ui-effects` checks SaveButton states, visible failure feedback, Skeleton accessibility, and reduced-motion CSS; the Replit push workflow runs it.
 - Available primitives: `.fx-press` for tactile press feedback, `.fx-card` for soft card depth and optional pointer-hover lift, `.fx-rise` for opacity/transform entrance with a capped `--i` stagger index, `.fx-skeleton` for loading placeholders, `.fx-btn-main` for the primary orange gradient, `.fx-spinner`, `.fx-sheet-enter`, `.fx-backdrop-enter`, `.fx-toast-enter`, `.fx-success-pop`, and `.fx-tick`.
-- Use only transform and opacity for motion; respect `prefers-reduced-motion`, keep touch targets accessible, and never let motion conceal an error or offline/sync warning.
+- Keep motion to transform/opacity except the intentional skeleton shimmer and drawn success tick; respect `prefers-reduced-motion`, provide visible keyboard focus, keep touch targets accessible, and never let motion conceal an error or offline/sync warning.
 - New buttons, cards, sheets and loading states must use these shared pieces rather than creating duplicate primitives.
 - Preserve existing layouts, routes, colours, copy, data logic, auth, storage, offline sync, AI chat phone layout, and Firestore rules when applying visual polish.
