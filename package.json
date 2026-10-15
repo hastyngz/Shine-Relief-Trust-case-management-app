@@ -13,6 +13,7 @@
     "lint": "tsc --noEmit",
     "audit:firestore-access": "node scripts/audit-firestore-access.mjs",
     "test:quality": "tsx scripts/quality-rules.test.ts && tsx scripts/programme-separation.test.ts && tsx scripts/phase3b-financial.test.ts",
+    "test:report-writing-help": "tsx scripts/report-writing-help.test.ts",
     "test:payroll": "tsx scripts/payroll-service.test.ts && tsx scripts/gratuity.test.ts",
     "test:firestore-listener-permissions": "tsx scripts/firestore-listener-permissions.test.ts",
     "test:rules": "firebase emulators:exec --only firestore \"tsx scripts/firestore-rules.test.ts\"",
