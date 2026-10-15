@@ -12,6 +12,7 @@ Object.assign(globalThis, {
   IS_REACT_ACT_ENVIRONMENT: true,
 });
 const { SaveButton } = await import('../src/components/ui/SaveButton');
+const { Skeleton } = await import('../src/components/ui/Skeleton');
 const container = document.getElementById('root');
 assert.ok(container);
 const root = createRoot(container);
@@ -32,10 +33,17 @@ await render('error');
 assert.equal(container.querySelector('button')?.dataset.saveState, 'error');
 assert.equal(container.querySelector('button')?.textContent?.trim(), 'Try again');
 assert.equal((container.querySelector('button') as HTMLButtonElement).disabled, false);
+assert.equal(container.querySelector('button .fx-success-pop'), null, 'failed save never displays success feedback');
+assert.equal(container.querySelector('button span[aria-live="polite"]')?.textContent, 'Try again');
+await act(async () => root.render(<Skeleton lines={3} label="Loading records" />));
+assert.equal(container.querySelector('[role="status"]')?.getAttribute('aria-label'), 'Loading records');
+assert.equal(container.querySelectorAll('.fx-skeleton').length, 3);
 const css = await readFile(new URL('../src/styles/effects.css', import.meta.url), 'utf8');
 assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
 assert.match(css, /\.fx-skeleton\s*\{\s*animation:\s*none\s*!important/);
 assert.match(css, /\.fx-spinner\s*\{\s*animation:\s*none\s*!important/);
+assert.match(css, /\.fx-card\s*\{[^}]*transition:\s*transform/);
+assert.doesNotMatch(css, /\.fx-card\s*\{[^}]*transition:[^;}]*box-shadow/);
 await act(async () => root.unmount());
 dom.window.close();
 console.log('SaveButton states and reduced-motion CSS checks passed.');
