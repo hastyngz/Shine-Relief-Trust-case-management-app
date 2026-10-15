@@ -86,6 +86,17 @@ function updatedAtOf(record: Record<string, any> | undefined): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+/** Compact deterministic fingerprint used when updatedAt is absent/unreliable. */
+export function contentHash(record: unknown): string {
+  const input = stableStringify(record);
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
 const stableStringCache = new WeakMap<object, string>();
 
 function stableStringify(value: unknown): string {
@@ -153,6 +164,7 @@ export function computeChangeEntries(
         operation: 'set',
         data: record,
         baseUpdatedAt: updatedAtOf(baseRecord),
+        baseHash: baseRecord && !updatedAtOf(baseRecord) ? contentHash(baseRecord) : null,
         queuedAt,
       });
     }
@@ -171,6 +183,7 @@ export function computeChangeEntries(
         operation: 'delete',
         data: null,
         baseUpdatedAt: updatedAtOf(baseline.get(id)),
+        baseHash: baseline.get(id) && !updatedAtOf(baseline.get(id)) ? contentHash(baseline.get(id)) : null,
         queuedAt,
       });
     }
