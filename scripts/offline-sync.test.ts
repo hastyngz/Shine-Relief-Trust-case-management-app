@@ -159,6 +159,23 @@ assert.equal(flushResult.applied, 0, 'a newer server edit must not be overwritte
 assert.equal(flushResult.conflicts.length, 1);
 assert.equal(server.get('girls', 'SG-001').fullName, 'Edited on phone B', 'the newer server value is preserved');
 
+// --- 2b. Records without updatedAt still detect two-device conflicts -------
+server.reset();
+const noTimestampBase = { id: 'SG-NO-TIME', fullName: 'Baseline name', notes: 'baseline' };
+server.seed('girls', 'SG-NO-TIME', noTimestampBase);
+const noTimestampQueue = computeChangeEntries(
+  db({ girls: [{ ...noTimestampBase, fullName: 'Edited on phone A' }] }),
+  db({ girls: [noTimestampBase] }),
+);
+assert.equal(noTimestampQueue.length, 1);
+assert.ok(noTimestampQueue[0].baseHash, 'records without updatedAt receive a baseline content hash');
+// Another device changes the server copy without an updatedAt field.
+server.seed('girls', 'SG-NO-TIME', { ...noTimestampBase, fullName: 'Edited on phone B' });
+const noTimestampResult = await syncChangeEntriesToFirestore(noTimestampQueue);
+assert.equal(noTimestampResult.applied, 0, 'a timestamp-less server change is not overwritten');
+assert.equal(noTimestampResult.conflicts.length, 1, 'a timestamp-less server change becomes a conflict');
+assert.equal(server.get('girls', 'SG-NO-TIME').fullName, 'Edited on phone B');
+
 // --- 3. An untouched record is not overwritten by a stale snapshot ----------
 server.reset();
 server.seed('girls', 'SG-002', girl('SG-002', T3, 'Edited elsewhere'));
