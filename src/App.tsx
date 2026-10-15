@@ -706,10 +706,10 @@ function AppContent() {
   const handleSaveGirl = (
     girlData: Omit<Girl, 'createdAt' | 'updatedAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
+  ): boolean => {
     if (isViewOnly) {
       showToast('View-only accounts cannot save changes.');
-      return;
+      return false;
     }
     let targetId = '';
     if (editingGirl) {
@@ -770,6 +770,7 @@ function AppContent() {
         }
       });
     }
+    return true;
   };
 
   const handleSaveHouse = (
@@ -807,8 +808,8 @@ function AppContent() {
   const handleSaveEduFollowUp = (
     data: Omit<EducationalFollowUp, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
-    if (isViewOnly) return;
+  ): boolean => {
+    if (isViewOnly) return false;
     const created = addEducationalFollowUp(data, auditActor);
     // Sync current school & class in girl profile if altered in follow up
     const girl = db.girls.find((g) => g.id === data.girlId);
@@ -826,6 +827,7 @@ function AppContent() {
     notifyDataChange({ type: 'edu_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
 
     navigateTo('girl-profile', 'girls', data.girlId);
+    return true;
   };
 
   const handleSaveHealthFollowUp = (
@@ -881,8 +883,8 @@ function AppContent() {
   const handleSaveExpense = (
     data: Omit<HouseholdExpense, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
-    if (isViewOnly) return;
+  ): boolean => {
+    if (isViewOnly) return false;
     const created = addExpense(data, auditActor);
     showToast('Saved on this phone. Household expense recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
@@ -891,13 +893,14 @@ function AppContent() {
       processPendingPhotos('expense', created.id, pendingPhotos);
     }
     navigateTo('house-profile', 'houses', undefined, data.householdId);
+    return true;
   };
 
   const handleSaveActivity = (
     data: Omit<HouseholdActivity, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
-    if (isViewOnly) return;
+  ): boolean => {
+    if (isViewOnly) return false;
     const created = addHouseholdActivity(data, auditActor);
     showToast('Saved on this phone. Household group activity recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
@@ -906,6 +909,7 @@ function AppContent() {
       processPendingPhotos('householdActivity', created.id, pendingPhotos);
     }
     navigateTo('house-profile', 'houses', undefined, data.householdId);
+    return true;
   };
 
   // Deletion Handlers
