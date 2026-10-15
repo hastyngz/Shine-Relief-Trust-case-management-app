@@ -4,6 +4,7 @@ import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
 import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
+import { AssetVerificationDialog } from './AssetVerificationDialog';
 import { getLocalDateInputValue } from '../utils/inventory';
 
 interface AssetRegisterViewProps {
@@ -53,6 +54,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [maintenanceTarget, setMaintenanceTarget] = useState<AssetRecord | null>(null);
+  const [verificationTarget, setVerificationTarget] = useState<AssetRecord | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -70,7 +72,12 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   });
   const attention = assets.filter((asset) => ['Damaged', 'Needs Repair', 'Missing', 'Written Off'].includes(asset.condition) || asset.status === 'Missing' || asset.status === 'Under Repair');
   const warrantyDue = assets.filter((asset) => { const days = daysFromToday(asset.warrantyExpiryDate); return days !== null && days <= 30 && asset.status !== 'Disposed'; });
-  const activeValue = assets.filter((asset) => asset.status !== 'Disposed').reduce((sum, asset) => sum + (Number.isFinite(asset.acquisitionCostMWK) ? asset.acquisitionCostMWK || 0 : 0), 0);
+  const activeAssets = assets.filter((asset) => asset.status !== 'Disposed');
+  const currentYear = getLocalDateInputValue().slice(0, 4);
+  const checkedThisYear = activeAssets.filter((asset) => asset.verificationDate?.startsWith(currentYear));
+  const locatedThisYear = checkedThisYear.filter((asset) => asset.verificationOutcome === 'Verified' || asset.verificationOutcome === 'Discrepancy');
+  const notCheckedThisYear = activeAssets.length - checkedThisYear.length;
+  const activeValue = activeAssets.reduce((sum, asset) => sum + (Number.isFinite(asset.acquisitionCostMWK) ? asset.acquisitionCostMWK || 0 : 0), 0);
 
   const openNew = () => { setEditing(null); setForm(blankForm()); setError(''); setNotice(''); setShowForm(true); };
   const openEdit = (asset: AssetRecord) => {
@@ -159,12 +166,14 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
             {!isViewOnly && <button type="button" onClick={openNew} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Register asset</button>}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5 sm:p-6">
+        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6 sm:p-6">
           <div className="rounded-2xl bg-stone-50 p-4"><Archive className="h-5 w-5 text-teal-800" /><p className="mt-2 text-2xl font-bold">{assets.length}</p><p className="text-xs text-stone-600">Registered assets</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><AlertTriangle className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{attention.length}</p><p className="text-xs text-stone-600">Need attention</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{serviceDue.length}</p><p className="text-xs text-stone-600">Service due / overdue</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{warrantyDue.length}</p><p className="text-xs text-stone-600">Warranty expiring / expired</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-2 text-lg font-bold">{money(activeValue)}</p><p className="text-xs text-stone-600">Recorded cost (not valuation)</p></div>
+          <div className="rounded-2xl bg-emerald-50 p-4"><ClipboardCheck className="h-5 w-5 text-emerald-800" /><p className="mt-2 text-2xl font-bold">{locatedThisYear.length}/{activeAssets.length}</p><p className="text-xs text-stone-600">Located this year · registered active assets</p></div>
+          <div className="rounded-2xl bg-amber-50 p-4"><ClipboardList className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{notCheckedThisYear}</p><p className="text-xs text-stone-600">Not checked this year</p></div>
         </div>
       </header>
 
@@ -184,12 +193,14 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-stone-500">Status</p><p className="mt-1 font-semibold">{asset.status}</p></div><div><p className="text-xs text-stone-500">Assigned to</p><p className="mt-1 break-words font-semibold">{asset.assignedTo || 'Not assigned'}</p></div><div><p className="text-xs text-stone-500">Acquisition cost</p><p className="mt-1 font-semibold">{money(asset.acquisitionCostMWK)}</p></div><div><p className="text-xs text-stone-500">Serial number</p><p className="mt-1 break-words font-semibold">{asset.serialNumber || 'Not recorded'}</p></div></div>
             {serviceDays !== null && serviceDays <= 30 && asset.status !== 'Disposed' && <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${serviceDays < 0 ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900'}`}>Service {serviceDays < 0 ? `overdue by ${Math.abs(serviceDays)} day(s)` : serviceDays === 0 ? 'due today' : `due in ${serviceDays} day(s)`} · {asset.nextServiceDate}</p>}
             {(() => { const warrantyDays = daysFromToday(asset.warrantyExpiryDate); return warrantyDays !== null && warrantyDays <= 30 && asset.status !== 'Disposed' ? <p className={`mt-2 rounded-xl px-3 py-2 text-xs font-semibold ${warrantyDays < 0 ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900'}`}>Warranty {warrantyDays < 0 ? `expired ${Math.abs(warrantyDays)} day(s) ago` : warrantyDays === 0 ? 'expires today' : `expires in ${warrantyDays} day(s)`} · {asset.warrantyExpiryDate}</p> : null; })()}
-            <div className="mt-4 flex flex-wrap gap-2">{!isViewOnly && <><button type="button" onClick={() => openEdit(asset)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-700"><Pencil className="h-4 w-4" /> Edit asset</button><button type="button" onClick={() => openMaintenance(asset)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 text-xs font-bold text-teal-900"><CalendarClock className="h-4 w-4" /> Log maintenance</button></>}<button type="button" aria-expanded={expandedNow} onClick={() => setExpanded(expandedNow ? null : asset.id)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-teal-900"><ClipboardList className="h-4 w-4" /> {expandedNow ? 'Hide history' : `History (${asset.history?.length || 0})`}</button></div>
+            <p className="mt-3 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">{asset.verificationDate ? "Last physical check: " + asset.verificationDate + " · " + (asset.verificationOutcome || "Outcome not recorded") + " · " + (asset.verifiedBy || "Staff") : "No physical verification recorded yet"}</p>
+            <div className="mt-4 flex flex-wrap gap-2">{!isViewOnly && <><button type="button" onClick={() => setVerificationTarget(asset)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-900"><ClipboardCheck className="h-4 w-4" /> Verify physically</button><button type="button" onClick={() => openEdit(asset)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-700"><Pencil className="h-4 w-4" /> Edit asset</button><button type="button" onClick={() => openMaintenance(asset)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 text-xs font-bold text-teal-900"><CalendarClock className="h-4 w-4" /> Log maintenance</button></>}<button type="button" aria-expanded={expandedNow} onClick={() => setExpanded(expandedNow ? null : asset.id)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-teal-900"><ClipboardList className="h-4 w-4" /> {expandedNow ? 'Hide history' : `History (${asset.history?.length || 0})`}</button></div>
             {expandedNow && <div className="mt-4 border-t border-stone-200 pt-4"><h3 className="text-sm font-bold">Asset history</h3>{asset.history?.length ? <ol className="mt-3 space-y-3">{[...asset.history].reverse().map((entry) => <li key={entry.id} className="rounded-xl bg-stone-50 p-3"><div className="flex flex-wrap justify-between gap-2"><span className="text-sm font-bold">{entry.action}</span><time className="text-xs text-stone-500">{entry.date}</time></div><p className="mt-1 text-sm text-stone-700">{entry.note}</p>{entry.previousValue !== undefined && <p className="mt-1 text-xs text-stone-600">{entry.previousValue} → {entry.newValue}</p>}<p className="mt-1 text-xs text-stone-500">Recorded by {entry.recordedBy}</p></li>)}</ol> : <p className="mt-2 text-sm text-stone-500">No history has been recorded.</p>}</div>}
           </article>;
         })}
       </div>}
 
+      {verificationTarget && <AssetVerificationDialog asset={verificationTarget} actor={actor} onClose={() => setVerificationTarget(null)} onSaved={(updatedAsset) => { try { saveAssetRecord(updatedAsset); setVerificationTarget(null); setNotice("Physical verification recorded for " + updatedAsset.assetTag + ". Register values were not silently changed."); onRefresh(); } catch (err) { setError(err instanceof Error ? err.message : "Could not save the verification."); } }} />}
       {maintenanceTarget && <AssetMaintenanceDialog asset={maintenanceTarget} onClose={() => setMaintenanceTarget(null)} onSaved={() => { setMaintenanceTarget(null); setNotice('Maintenance record saved to the asset history.'); onRefresh(); }} />}
       {showForm && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}><section role="dialog" aria-modal="true" aria-labelledby="asset-form-title" className="fx-sheet-enter max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-start justify-between gap-3"><div><h2 id="asset-form-title" className="text-xl font-bold">{editing ? 'Edit asset' : 'Register asset'}</h2><p className="mt-1 text-sm text-stone-600">Record ownership, location, condition and service information.</p></div><button type="button" aria-label="Close asset form" onClick={() => setShowForm(false)} className="rounded-xl p-2 hover:bg-stone-100"><X className="h-5 w-5" /></button></div>
         <form onSubmit={submit} className="space-y-4"><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
