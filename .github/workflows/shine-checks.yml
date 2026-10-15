@@ -42,6 +42,9 @@ jobs:
       - name: Check TypeScript
         run: npm run lint
 
+      - name: Test shared UI effects and save feedback
+        run: npm run test:ui-effects
+
       - name: Test Firestore listener permissions
         run: npm run test:firestore-listener-permissions
 
