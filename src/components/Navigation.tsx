@@ -14,6 +14,7 @@ import {
   ClipboardList,
   BarChart3,
   BrainCircuit,
+  Building2,
   UserRound,
   Sprout,
   MoreHorizontal,
@@ -39,7 +40,8 @@ export type NavTab =
   | 'ai-assistant'
   | 'staff'
   | 'case-management'
-  | 'operations';
+  | 'operations'
+  | 'administration';
 
 interface NavigationProps {
   activeTab: NavTab;
@@ -76,7 +78,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'programmes', label: 'Programmes', icon: Sprout },
     { id: 'contacts', label: 'Contacts', icon: UserRound },
     { id: 'case-management', label: 'Case Management', icon: ClipboardList },
-    { id: 'operations', label: 'Operations', icon: BrainCircuit, count: pendingReviewCount > 0 ? pendingReviewCount : undefined },
+    { id: 'operations', label: 'Operations & Intelligence', icon: BrainCircuit, count: pendingReviewCount > 0 ? pendingReviewCount : undefined },
+    { id: 'administration', label: 'Administration & Operations', icon: Building2 },
     {
       id: 'messages',
       label: 'Messages',
