@@ -28,6 +28,7 @@ import {
   IntelligenceSuggestion,
   AISettings,
   InventoryItem,
+  AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
@@ -178,6 +179,7 @@ export function getDatabase(): AppDatabase {
       procurementLists: parsed.procurementLists || [],
       projectProjections: parsed.projectProjections || [],
       inventoryItems: Array.isArray(parsed.inventoryItems) ? parsed.inventoryItems : [],
+      assets: Array.isArray(parsed.assets) ? parsed.assets : [],
     };
   } catch (error) {
     console.error('Error reading database from localStorage:', error);
@@ -1531,6 +1533,20 @@ export function saveInventoryItem(item: InventoryItem): InventoryItem {
   // saveDatabase dispatches the shared db-updated event; App.tsx diffs this record into
   // the per-record offline queue, preserving conflict detection instead of racing it
   // with a direct Firestore write from this helper.
+  return saved;
+}
+
+export function saveAssetRecord(asset: AssetRecord): AssetRecord {
+  const db = getDatabase();
+  if (!db.assets) db.assets = [];
+  const now = new Date().toISOString();
+  const index = db.assets.findIndex((entry) => entry.id === asset.id);
+  const saved: AssetRecord = { ...asset, updatedAt: now, history: Array.isArray(asset.history) ? asset.history : [] };
+  if (index >= 0) db.assets[index] = saved;
+  else db.assets.unshift({ ...saved, createdAt: asset.createdAt || now });
+  const result = saveDatabase(db);
+  if (!result.ok) throw new Error('Could not save asset changes on this device. Check available storage and try again.');
+  // Shared database event feeds the conflict-aware offline queue.
   return saved;
 }
 
