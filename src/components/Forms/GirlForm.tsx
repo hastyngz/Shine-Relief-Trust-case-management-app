@@ -12,7 +12,7 @@ interface GirlFormProps {
   onSave: (
     girlData: Omit<Girl, 'createdAt' | 'updatedAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onCancel: () => void;
 }
 
@@ -73,7 +73,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
     setError('');
     setSaveStatus('saving');
     try {
-      await onSave(
+      const result = await onSave(
       {
         id,
         fullName: fullName.trim(),
@@ -96,6 +96,11 @@ export const GirlForm: React.FC<GirlFormProps> = ({
       },
       pendingPhotos
       );
+      if (result === false) {
+        setError('This record was not saved. Check your permissions and try again.');
+        setSaveStatus('error');
+        return;
+      }
       setSaveStatus('done');
     } catch {
       setError('Could not save this girl record. Your changes are still on this form; please try again.');
