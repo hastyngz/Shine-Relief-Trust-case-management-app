@@ -388,7 +388,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             }
             onNavigateToHousesList();
           }}
-          className="fx-card shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-transform group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-transform group"
         >
           <span className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-amber-900 uppercase tracking-wider">Payments &amp; Sales Outstanding</span>
