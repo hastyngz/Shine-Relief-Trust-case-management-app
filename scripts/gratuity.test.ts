@@ -48,6 +48,20 @@ assert.equal(
   10000,
   'month-end contracts should use the clamped calendar anniversary',
 );
+assert.equal(
+  calculateGratuity({ ...employee('Other Staff'), contractStartDate: '2026-01-31' }, '2026-02-28', [
+    salary('2026-01-31', 100000),
+  ]).employmentMonths,
+  1,
+  'completed employment months should use the same clamped anniversary rule as gratuity accrual',
+);
+assert.equal(
+  calculateGratuity({ ...employee('Other Staff'), contractStartDate: '2026-01-31' }, '2026-02-27', [
+    salary('2026-01-31', 100000),
+  ]).employmentMonths,
+  0,
+  'a day before the clamped month-end anniversary is not a full month',
+);
 
 const midMonthChange = calculateGratuity(employee('Other Staff'), '2026-02-01', [
   salary('2026-01-01', 100000),
