@@ -5,8 +5,16 @@ export interface InventoryExpiryResult {
   daysRemaining: number | null;
 }
 
+/** Format a calendar date in the device's local timezone for date inputs. */
+export function getLocalDateInputValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /** Classify a date-only expiry value without relying on local timezone parsing. */
-export function getInventoryExpiryStatus(expiryDate?: string, today = new Date().toISOString().slice(0, 10)): InventoryExpiryResult {
+export function getInventoryExpiryStatus(expiryDate?: string, today = getLocalDateInputValue()): InventoryExpiryResult {
   const validDate = (value: string) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const timestamp = Date.parse(`${value}T00:00:00Z`);
