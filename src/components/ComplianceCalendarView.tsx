@@ -148,7 +148,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       </div>
     </header>
 
-    <p className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-950">Management verification is not enabled yet. The existing shared schedule permissions do not enforce manager-only verification at the database boundary, so this phase records completion evidence and history without claiming an independently secured approval.</p>
+    <p className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-950">Management verification is not enabled yet. The existing shared schedule permissions do not enforce manager-only verification at the database boundary. Completion history is stored with the schedule record and is not an immutable, server-authenticated audit log; use it for operational tracking, not as the sole evidence for a formal audit or approval.</p>
     <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">Privacy reminder: use this register for general administrative obligations and training/policy completion only. Do not enter child-identifying details, safeguarding allegations, health information, confidential personnel details or sensitive financial case notes. Use the appropriate restricted SHINE records for sensitive information.</p>
 
     {error && <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">{error}</div>}
