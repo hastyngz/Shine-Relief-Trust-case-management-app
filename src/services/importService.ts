@@ -651,6 +651,7 @@ export async function commitImportBatch(
     procurementLists: [...(db.procurementLists || [])],
     projectProjections: [...(db.projectProjections || [])],
     inventoryItems: [...(db.inventoryItems || [])],
+    assets: [...(db.assets || [])],
     payrollRecords: [...(db.payrollRecords || [])],
     employees: [...(db.employees || [])],
     earlyYearsRecords: [...(db.earlyYearsRecords || [])],
