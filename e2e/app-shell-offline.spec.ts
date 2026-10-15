@@ -12,18 +12,46 @@ function looksLikeNewVersionError(message: string): boolean {
   return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(message);
 }
 
-async function waitForServiceWorkerControl(page: import('@playwright/test').Page): Promise<void> {
+async function waitForServiceWorkerActive(page: import('@playwright/test').Page): Promise<void> {
   // The app registers /sw.js after the 'load' event. Wait until the worker is
-  // registered, then reload once so this page is controlled by it (the worker
-  // calls clients.claim(), but a reload makes the control state unambiguous).
+  // fully activated (which is when it calls clients.claim()).
   await page.waitForFunction(
     async () => {
       const registration = await navigator.serviceWorker.getRegistration('/');
-      return !!(registration && (registration.active || registration.installing || registration.waiting));
+      return registration?.active?.state === 'activated';
     },
     undefined,
     { timeout: 30_000 },
   );
+}
+
+/**
+ * Navigates (via reload) until the current document is controlled by the
+ * app-shell worker.
+ *
+ * A freshly activated service worker does not reliably attach to the document
+ * that triggered its install: `clients.claim()` races the in-flight page load,
+ * so a single reload can leave `navigator.serviceWorker.controller` null
+ * indefinitely (it never recovers without another navigation). This is normal
+ * PWA behaviour — the first load after install may be uncontrolled and the next
+ * navigation is controlled — so retry the reload a bounded number of times
+ * rather than assuming one reload is enough.
+ */
+async function reloadUntilControlled(page: import('@playwright/test').Page, attempts = 4): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await page.reload();
+    try {
+      await page.waitForFunction(
+        () => navigator.serviceWorker.controller !== null,
+        undefined,
+        { timeout: 10_000 },
+      );
+      return;
+    } catch {
+      // Not controlled by this reload; try once more.
+    }
+  }
+  throw new Error('the page never became controlled by the app-shell service worker');
 }
 
 test.describe('offline app shell', () => {
@@ -32,14 +60,10 @@ test.describe('offline app shell', () => {
     // The login screen is part of the app shell and renders without a session.
     await expect(page.getByText('SHINE Relief Trust', { exact: false }).first()).toBeVisible({ timeout: 30_000 });
 
-    await waitForServiceWorkerControl(page);
-    // Reload so the page is controlled and the shell is precached.
-    await page.reload();
-    await page.waitForFunction(
-      () => navigator.serviceWorker.controller !== null,
-      undefined,
-      { timeout: 30_000 },
-    );
+    await waitForServiceWorkerActive(page);
+    // Reload (retrying if needed) so this document is controlled and the shell
+    // is precached.
+    await reloadUntilControlled(page);
 
     // A shell cache must exist with the app HTML / built assets.
     const shellCacheNames = await page.evaluate(async () => {
@@ -73,9 +97,8 @@ test.describe('offline app shell', () => {
   test('opens from the cache when the phone has no signal', async ({ page, context }) => {
     await page.goto('/#/');
     await expect(page.getByText('SHINE Relief Trust', { exact: false }).first()).toBeVisible({ timeout: 30_000 });
-    await waitForServiceWorkerControl(page);
-    await page.reload();
-    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 30_000 });
+    await waitForServiceWorkerActive(page);
+    await reloadUntilControlled(page);
 
     // Go offline, then reload. The cached app shell must still render.
     await context.setOffline(true);
