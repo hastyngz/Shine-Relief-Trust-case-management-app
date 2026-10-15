@@ -19,10 +19,11 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const targetLabel = (type: string) => ({
+const targetLabels: Record<string, string> = {
   girl: 'Girl record',
   household: 'Household record',
   educationalFollowUp: 'Education follow-up',
+  healthFollowUp: 'Health follow-up',
   familyFollowUp: 'Family follow-up',
   householdActivity: 'Household activity',
   programme: 'Programme',
@@ -30,7 +31,8 @@ const targetLabel = (type: string) => ({
   importBatch: 'Import record',
   rentPayment: 'Rent payment',
   expense: 'Expense record',
-}[type] || type);
+};
+const targetLabel = (type: string) => targetLabels[type] || type;
 
 const isImage = (attachment: PhotoAttachment) => attachment.contentType?.startsWith('image/');
 
