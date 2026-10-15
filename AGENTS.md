@@ -71,3 +71,33 @@ Repository memory for the SHINE Relief Trust case-management app.
 - `sunrise` is the warm orange look: off-white page, slim white header, soft cards, and a bottom nav with four tabs (Home, Girls, Houses, Messages) plus a "More" sheet. Its styles live only in `src/styles/sunrise.css`, scoped under `#app-shell[data-mobile-view="sunrise"]`, and its nav markup is the Sunrise branch of `src/components/Navigation.tsx`.
 - Sunrise reads the active colour theme through the `--theme-*` variables, so all colour themes keep working. Do not hard-code a single orange there.
 - Effects from `src/styles/effects.css` apply in every view and colour theme. Anything new must work in all four views.
+
+
+## Agent Skills
+
+Before substantial work, inspect `.agents/skills/` and read the relevant `SKILL.md` files before editing. Skill files provide task-specific procedures; this file remains the source of project-wide rules. If a skill conflicts with this file, existing architecture, privacy requirements, or a user's explicit instruction, follow the higher-priority requirement and explain the conflict.
+
+### Skill selection
+- Before committing any meaningful change, use `shine-code-review` to inspect the planned diff, affected call sites, risks, and unintended side effects.
+- For bugs, offline behaviour, queued writes, storage quota, conflicts, service workers, or reconnect flows, use `shine-offline-testing` and the relevant regression tests.
+- For React components, hooks, state, routing, or TypeScript changes, use `shine-react-typescript`.
+- For authentication, role checks, Firestore/Storage rules, server endpoints, uploads, logs, or beneficiary data, use `shine-security-review`.
+- For slow screens, rendering, bundles, images, database reads, or network requests, use `shine-performance`.
+- When a task spans several areas, load all relevant skills; do not treat the list as mutually exclusive.
+
+### Required working method
+1. Inspect the current implementation, repository guidance, tests, and related call sites before proposing edits.
+2. State the likely cause and the smallest safe fix; reproduce a reported bug where practical before changing code.
+3. Preserve existing behaviour and public interfaces unless the task explicitly requires a change. Avoid broad rewrites and new dependencies without a clear need.
+4. Add or update focused regression tests for changed behaviour. For offline-sensitive work, test queued edits, stale snapshots/conflicts, reload/reopen, and reconnect behaviour where practical.
+5. Review the final diff for data loss, permission regressions, duplicate logic, accessibility, mobile layouts, and unintended side effects.
+6. Run `npm run lint` and relevant `test:*` scripts documented in `package.json`; run the production build when available and appropriate. Never claim a check passed unless it was actually run. Report blocked or skipped checks explicitly.
+7. Summarise files changed, user-visible effects, tests and results, remaining risks, and the commit SHA.
+
+### SHINE-specific non-negotiables
+- Never weaken `firestore.rules`, Storage access controls, authentication, or role-based permissions to make a test pass.
+- Girl and beneficiary information is sensitive. Never send it to external logging, analytics, or unrelated services.
+- Offline correctness wins: never silently discard local edits or overwrite newer server data with stale snapshots. Preserve the existing per-record queue and conflict flow.
+- Preserve the phone layout of `src/components/AIAssistant/AIAssistantView.tsx`.
+- Follow existing dependency, styling, storage, routing, and testing conventions. Reuse shared UI primitives where applicable.
+- Do not expose secrets, credentials, tokens, private records, or signed storage URLs in logs, tests, screenshots, or reports.
