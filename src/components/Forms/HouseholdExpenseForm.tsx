@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Household, HouseholdExpense, ExpenseCategory } from '../../types';
-import { ShoppingBag, Save, X } from 'lucide-react';
+import { ShoppingBag, X } from 'lucide-react';
+import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 import { PROGRAMMES } from '../../data/programmes';
 
@@ -56,6 +57,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
   const [notes, setNotes] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveButtonStatus>('idle');
 
   const handleUnitCostChange = (val: string) => {
     setUnitCost(val);
@@ -75,7 +77,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemDescription.trim()) {
       setError('Please provide an item description.');
@@ -91,7 +93,10 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
       return;
     }
 
-    onSave(
+    setError('');
+    setSaveStatus('saving');
+    try {
+      await onSave(
       {
         householdId: household.id,
         date,
@@ -119,7 +124,12 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
         notes: notes.trim() || undefined,
       },
       pendingPhotos
-    );
+      );
+      setSaveStatus('done');
+    } catch {
+      setError('Could not save this expense. Your changes are still on this form; please try again.');
+      setSaveStatus('error');
+    }
   };
 
   return (
@@ -384,13 +394,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="fx-press fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm flex items-center gap-2 transition-colors min-h-11"
-          >
-            <Save className="w-4 h-4" />
-            Save Expense
-          </button>
+          <SaveButton status={saveStatus} idleLabel="Save Expense" doneLabel="Saved on this phone" className="fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition-colors" />
         </div>
       </form>
     </div>
