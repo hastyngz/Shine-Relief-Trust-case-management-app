@@ -26,7 +26,12 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-export const StaffManagement: React.FC = () => {
+interface StaffManagementProps {
+  initialEmployeeId?: string | null;
+  onInitialEmployeeOpened?: () => void;
+}
+
+export const StaffManagement: React.FC<StaffManagementProps> = ({ initialEmployeeId, onInitialEmployeeOpened }) => {
   const {
     staffProfile,
     allStaff,
@@ -37,6 +42,16 @@ export const StaffManagement: React.FC = () => {
     sendResetPassword,
   } = useAuth();
   const [selectedEmployee, setSelectedEmployee] = useState<StaffUser | null>(null);
+
+  // Payroll can route directly to a staff member. Open their contract panel once
+  // their profile is available, then clear the navigation request in the app shell.
+  useEffect(() => {
+    if (!initialEmployeeId) return;
+    const employee = allStaff.find((person) => person.id === initialEmployeeId);
+    if (!employee) return;
+    setSelectedEmployee(employee);
+    onInitialEmployeeOpened?.();
+  }, [initialEmployeeId, allStaff, onInitialEmployeeOpened]);
 
   // Payroll links directly to this staff member's contract page. Wait for the
   // staff directory to load before resolving the employee ID from the URL.
