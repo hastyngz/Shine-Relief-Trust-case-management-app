@@ -65,12 +65,50 @@ function monthlySalary(amount: number, frequency: SalaryFrequency, date: Date): 
   return amount;
 }
 
-function calculateSalaryPeriodMonths(start: Date, end: Date, amount: number, frequency: SalaryFrequency, rate: number): { months: number; gratuity: number } {
+function addAnchoredMonths(anchor: Date, monthOffset: number): Date {
+  const absoluteMonth = anchor.getUTCFullYear() * 12 + anchor.getUTCMonth() + monthOffset;
+  const year = Math.floor(absoluteMonth / 12);
+  const month = absoluteMonth % 12;
+  const day = Math.min(anchor.getUTCDate(), new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
+  return new Date(Date.UTC(year, month, day));
+}
+
+function calculateSalaryPeriodMonths(
+  start: Date,
+  end: Date,
+  amount: number,
+  frequency: SalaryFrequency,
+  rate: number,
+  employmentStart: Date,
+): { months: number; gratuity: number } {
   let cursor = start;
   let months = 0;
   let gratuity = 0;
 
   while (cursor < end) {
+    if (frequency === 'Monthly') {
+      // A month of employment runs from one contract anniversary to the next.
+      // Using calendar-month fractions here overcounts periods such as 15 Jan–15 Feb
+      // because January and February have different numbers of days.
+      let offset = (cursor.getUTCFullYear() - employmentStart.getUTCFullYear()) * 12
+        + cursor.getUTCMonth() - employmentStart.getUTCMonth();
+      let windowStart = addAnchoredMonths(employmentStart, offset);
+      if (windowStart > cursor) {
+        offset -= 1;
+        windowStart = addAnchoredMonths(employmentStart, offset);
+      }
+      const windowEnd = addAnchoredMonths(employmentStart, offset + 1);
+      const segmentEnd = windowEnd < end ? windowEnd : end;
+      const segmentDays = (segmentEnd.getTime() - cursor.getTime()) / 86400000;
+      const windowDays = (windowEnd.getTime() - windowStart.getTime()) / 86400000;
+      const monthFraction = windowDays > 0 ? segmentDays / windowDays : 0;
+      months += monthFraction;
+      gratuity += amount * monthFraction * rate;
+      cursor = segmentEnd;
+      continue;
+    }
+
+    // Preserve the established pro-rating for weekly, daily and annual salaries.
     const nextMonth = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
     const segmentEnd = nextMonth < end ? nextMonth : end;
     const segmentDays = (segmentEnd.getTime() - cursor.getTime()) / 86400000;
@@ -115,7 +153,7 @@ export function calculateGratuity(
     const nextEffectiveDate = validRecords[index + 1]?.date;
     const periodEnd = nextEffectiveDate && nextEffectiveDate < end ? nextEffectiveDate : end;
     if (periodEnd > periodStart) {
-      const accrued = calculateSalaryPeriodMonths(periodStart, periodEnd, record.salaryAmount, record.salaryFrequency, rate);
+      const accrued = calculateSalaryPeriodMonths(periodStart, periodEnd, record.salaryAmount, record.salaryFrequency, rate, start);
       periods.push({
         startDate: formatDate(periodStart),
         endDate: formatDate(periodEnd),
