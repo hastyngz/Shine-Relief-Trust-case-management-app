@@ -54,6 +54,9 @@ jobs:
       - name: Test report-writing guidance coverage
         run: npm run test:report-writing-help
 
+      - name: Test local early-warning rules
+        run: npm run test:early-warning
+
       - name: Test spreadsheet import and AI access boundaries
         run: npm run test:phase2
 
