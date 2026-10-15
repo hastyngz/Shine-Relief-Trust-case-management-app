@@ -25,7 +25,7 @@
 
 .fx-press { transition: transform var(--fx-duration-quick) var(--fx-ease-standard); -webkit-tap-highlight-color: transparent; }
 .fx-press:active { transform: scale(.97); }
-.fx-card { box-shadow: var(--fx-shadow-card); transition: transform var(--fx-duration-quick) var(--fx-ease-out), box-shadow var(--fx-duration-quick) var(--fx-ease-out); }
+.fx-card { box-shadow: var(--fx-shadow-card); transition: transform var(--fx-duration-quick) var(--fx-ease-out); }
 .fx-card:focus-visible { box-shadow: var(--fx-shadow-raised); }
 @media (hover: hover) and (pointer: fine) {
   .fx-card:hover { transform: translateY(-2px); box-shadow: var(--fx-shadow-raised); }
