@@ -86,6 +86,8 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
     setError(''); setNotice(''); setShowForm(true);
   };
 
+  const openMaintenance = (asset: AssetRecord) => { setError(''); setNotice(''); setMaintenanceTarget(asset); };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setError(''); setNotice('');
