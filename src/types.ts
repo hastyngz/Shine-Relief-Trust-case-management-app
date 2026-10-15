@@ -1443,6 +1443,8 @@ export interface OfflineChangeEntry {
   operation: OfflineChangeOperation;
   data: Record<string, any> | null;
   baseUpdatedAt: string | null;
+  /** Content fingerprint for records that lack dependable updatedAt metadata. */
+  baseHash?: string | null;
   queuedAt: string;
 }
 
