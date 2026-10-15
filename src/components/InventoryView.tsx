@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, 
 import type { InventoryItem, InventoryMovement, InventoryMovementType } from '../types';
 import { saveInventoryItem } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
-import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment } from '../utils/inventory';
+import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../utils/inventory';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -28,13 +28,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [showAdd, setShowAdd] = useState(false);
   const [movementTarget, setMovementTarget] = useState<InventoryItem | null>(null);
   const [stocktakeTarget, setStocktakeTarget] = useState<InventoryItem | null>(null);
-  const [stocktake, setStocktake] = useState({ countedQuantity: '', date: new Date().toISOString().slice(0, 10), reason: '' });
+  const [stocktake, setStocktake] = useState({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', notes: '' });
-  const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: new Date().toISOString().slice(0, 10), destination: '', reference: '', reason: '' });
+  const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -123,7 +123,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const nextQuantity = movement.type === 'Received' ? movementTarget.quantityOnHand + quantity : movementTarget.quantityOnHand - quantity;
     if (!persist({ ...movementTarget, quantityOnHand: nextQuantity, movements: [...(movementTarget.movements || []), entry], updatedAt: now })) return;
     setMovementTarget(null);
-    setMovement({ type: 'Received', quantity: '', date: new Date().toISOString().slice(0, 10), destination: '', reference: '', reason: '' });
+    setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
   };
 
   const submitStocktake = (event: FormEvent) => {
@@ -153,7 +153,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     };
     if (!persist({ ...stocktakeTarget, quantityOnHand: counted, movements: [...(stocktakeTarget.movements || []), entry], updatedAt: now })) return;
     setStocktakeTarget(null);
-    setStocktake({ countedQuantity: '', date: new Date().toISOString().slice(0, 10), reason: '' });
+    setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
   };
 
   return (
@@ -192,7 +192,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600"><span>Supplier: {item.supplier || 'Not recorded'}</span><span>Unit cost: {money(item.unitCostMWK)}</span></div>
                 {item.expiryDate && (() => { const expiry = getInventoryExpiryStatus(item.expiryDate); return <p className={`mt-2 rounded-lg px-3 py-2 text-xs font-semibold ${expiry.status === 'expired' ? 'bg-red-100 text-red-800' : expiry.status === 'expiring-soon' ? 'bg-amber-100 text-amber-900' : 'bg-stone-50 text-stone-600'}`}>Expiry: {item.expiryDate}{expiry.status === 'expired' ? ' · EXPIRED' : expiry.status === 'expiring-soon' ? ` · Expires in ${expiry.daysRemaining} day${expiry.daysRemaining === 1 ? '' : 's'}` : ''}</p>; })()}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {!isViewOnly && <><button type="button" disabled={saving} onClick={() => { setError(''); setStocktakeTarget(item); setStocktake({ countedQuantity: String(item.quantityOnHand), date: new Date().toISOString().slice(0, 10), reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Stocktake</button><button type="button" disabled={saving} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Received', quantity: '', date: new Date().toISOString().slice(0, 10), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><ArrowDownToLine className="h-4 w-4" /> Receive stock</button><button type="button" disabled={saving || item.quantityOnHand <= 0} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Issued', quantity: '', date: new Date().toISOString().slice(0, 10), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-xs font-bold text-stone-800 disabled:opacity-50"><ArrowUpFromLine className="h-4 w-4" /> Issue stock</button></>}
+                  {!isViewOnly && <><button type="button" disabled={saving} onClick={() => { setError(''); setStocktakeTarget(item); setStocktake({ countedQuantity: String(item.quantityOnHand), date: getLocalDateInputValue(), reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Stocktake</button><button type="button" disabled={saving} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><ArrowDownToLine className="h-4 w-4" /> Receive stock</button><button type="button" disabled={saving || item.quantityOnHand <= 0} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-xs font-bold text-stone-800 disabled:opacity-50"><ArrowUpFromLine className="h-4 w-4" /> Issue stock</button></>}
                   <button type="button" aria-expanded={expandedId === item.id} onClick={() => setExpandedId(expandedId === item.id ? null : item.id)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700">{expandedId === item.id ? 'Hide history' : `Movement history (${item.movements?.length || 0})`}</button>
                 </div>
                 {expandedId === item.id && <div className="mt-4 border-t border-stone-200 pt-3"><h4 className="mb-2 text-sm font-bold text-stone-800">Stock movement history</h4>{!item.movements?.length ? <p className="text-sm text-stone-500">No movements recorded.</p> : <ol className="space-y-2">{[...item.movements].reverse().map((entry) => <li key={entry.id} className="rounded-xl bg-stone-50 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><strong>{entry.type} · {entry.quantity} {item.unit}</strong><span className="text-xs text-stone-500">{entry.date}</span></div><p className="mt-1 text-stone-700">{entry.reason}</p><p className="mt-1 text-xs text-stone-500">{entry.recordedBy}{entry.destination ? ` · Destination: ${entry.destination}` : ''}{entry.reference ? ` · Ref: ${entry.reference}` : ''}</p></li>)}</ol>}</div>}
