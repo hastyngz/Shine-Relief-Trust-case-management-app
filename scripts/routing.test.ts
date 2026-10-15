@@ -47,7 +47,8 @@ const cases: Array<[string, string, string]> = [
   ['#/add-house', 'form-house', 'houses'],
   ['#/operations', 'operations', 'operations'],
   ['#/administration', 'administration', 'administration'],
-  ['#/documents', 'documents', 'administration'],\n  ['#/compliance', 'compliance', 'administration'],
+  ['#/documents', 'documents', 'administration'],
+  ['#/compliance', 'compliance', 'administration'],
   ['#/compliance-calendar', 'compliance', 'administration'],
   ['#/admin-operations', 'administration', 'administration'],
 ];
