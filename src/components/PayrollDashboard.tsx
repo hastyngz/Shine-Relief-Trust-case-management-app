@@ -10,6 +10,7 @@ import { buildMonthlyPayrollSummary, formatPayrollPeriod, monthlyPayrollTaskId, 
 interface PayrollDashboardProps {
   db: AppDatabase;
   onRefresh: () => void;
+  onOpenStaffProfile: (staffId: string) => void;
 }
 
 const MONTHS = [
@@ -17,7 +18,7 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefresh }) => {
+export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefresh, onOpenStaffProfile }) => {
   const { isAdmin, role, currentUser, staffProfile, allStaff } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
