@@ -108,8 +108,6 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       status,
       completedAt: status === 'Completed' ? new Date().toISOString() : undefined,
       completionNote: undefined,
-      verifiedBy: undefined,
-      verifiedAt: undefined,
       complianceHistory: appendHistory(item, status === 'Completed' ? 'Completed' : status === 'In Progress' ? 'Started' : 'Reopened'),
     };
     const updated = updateScheduleItem(item.id, updates, actor);
