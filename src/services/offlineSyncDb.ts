@@ -14,6 +14,15 @@ const DB_NAME = 'shine_relief_trust_offline';
 const DB_VERSION = 1;
 const STORE_NAME = 'queue';
 
+function notifyStorageFailure(error: unknown): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('shine_storage_warning', {
+      detail: { quotaExceeded: !!error && typeof error === 'object' && 'name' in error && (error as { name?: unknown }).name === 'QuotaExceededError' },
+    }));
+  } catch { /* storage warning is best-effort if browser event APIs are unavailable */ }
+}
+
 function hasLocalStorage(): boolean {
   return typeof window !== 'undefined' && !!window.localStorage;
 }
@@ -81,7 +90,12 @@ function readLocalEntries(): OfflineChangeEntry[] {
 
 function writeLocalEntries(entries: OfflineChangeEntry[]): void {
   if (!hasLocalStorage()) return;
-  window.localStorage.setItem(QUEUE_KEY, JSON.stringify(entries));
+  try {
+    window.localStorage.setItem(QUEUE_KEY, JSON.stringify(entries));
+  } catch (error) {
+    notifyStorageFailure(error);
+    throw error;
+  }
 }
 
 /**
@@ -120,7 +134,7 @@ export async function saveQueueEntries(entries: OfflineChangeEntry[]): Promise<v
     await writeIdbEntries(entries);
   } catch (error) {
     console.warn('Could not save the offline queue to IndexedDB; using localStorage:', error);
-    writeLocalEntries(entries);
+    try { writeLocalEntries(entries); } catch (fallbackError) { notifyStorageFailure(fallbackError); throw fallbackError; }
   }
 }
 
@@ -143,6 +157,7 @@ export async function writeConflicts(conflicts: SyncConflict[]): Promise<void> {
     window.localStorage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts));
   } catch (error) {
     console.warn('Could not persist sync conflicts:', error);
+    notifyStorageFailure(error);
   }
 }
 
