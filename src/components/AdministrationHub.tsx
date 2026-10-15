@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { AppDatabase } from '../types';
 import type { AppView } from '../routing/appRoutes';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AdministrationHubProps {
   db: AppDatabase;
@@ -39,12 +40,14 @@ const modules: ModuleCard[] = [
 ];
 
 export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavigate }) => {
-  const availableCount = modules.filter((item) => item.status === 'Available now').length;
-  const upcomingCount = modules.length - availableCount;
+  const { isAdmin } = useAuth();
+  const visibleModules = modules.filter((item) => item.title !== 'Staff & Personnel' || isAdmin);
+  const availableCount = visibleModules.filter((item) => item.status === 'Available now').length;
+  const upcomingCount = visibleModules.length - availableCount;
   const staffCount = db.employees?.length || 0;
   const meetingCount = db.meetings?.length || 0;
   const scheduleCount = db.schedules?.length || 0;
-  const groups = Array.from(new Set(modules.map((item) => item.group)));
+  const groups = Array.from(new Set(visibleModules.map((item) => item.group)));
 
   return (
     <section className="mx-auto max-w-7xl space-y-6 px-1 pb-8" aria-labelledby="admin-hub-title">
@@ -63,7 +66,7 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
           <div className="rounded-2xl bg-stone-50 p-4"><Users className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{staffCount}</p><p className="text-xs text-stone-600">Employee records</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><CalendarDays className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{meetingCount}</p><p className="text-xs text-stone-600">Meeting records</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><Clock3 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{scheduleCount}</p><p className="text-xs text-stone-600">Scheduled items</p></div>
-          <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{availableCount}/{modules.length}</p><p className="text-xs text-stone-600">Modules linked today</p></div>
+          <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{availableCount}/{modules.length}</p><p className="text-xs text-stone-600">Existing app links</p></div>
         </div>
       </div>
 
@@ -76,7 +79,7 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
         <div key={group} className="space-y-3">
           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-500">{group}</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {modules.filter((item) => item.group === group).map((item) => {
+            {visibleModules.filter((item) => item.group === group).map((item) => {
               const Icon = item.icon;
               const available = item.status === 'Available now';
               return (
