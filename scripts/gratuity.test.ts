@@ -27,6 +27,28 @@ assert.equal(calculateGratuity(employee('Other Staff'), '2026-02-01', [salary('2
 assert.equal(calculateGratuity(employee('Other Staff'), '2026-02-01', [salary('2026-01-01', 10000, 'Daily')]).totalGratuity, 31000);
 assert.equal(calculateGratuity(employee('Other Staff'), '2026-02-01', [salary('2026-01-01', 3650000, 'Annual')]).totalGratuity, 31000);
 
+const midMonthContract = { ...employee('Other Staff'), contractStartDate: '2026-01-15' };
+assert.equal(
+  calculateGratuity(midMonthContract, '2026-02-15', [salary('2026-01-15', 100000)]).totalGratuity,
+  10000,
+  'one contract-anniversary month should accrue exactly one monthly salary times the gratuity rate',
+);
+const midContractSalaryChange = calculateGratuity(midMonthContract, '2026-02-15', [
+  salary('2026-01-15', 100000),
+  salary('2026-02-01', 200000),
+]);
+assert.ok(
+  Math.abs(midContractSalaryChange.totalGratuity - (4500000 / 31 * 0.1)) < 0.001,
+  'salary changes within a contract-anniversary month should be prorated across that same month',
+);
+assert.equal(
+  calculateGratuity({ ...employee('Other Staff'), contractStartDate: '2026-01-31' }, '2026-02-28', [
+    salary('2026-01-31', 100000),
+  ]).totalGratuity,
+  10000,
+  'month-end contracts should use the clamped calendar anniversary',
+);
+
 const midMonthChange = calculateGratuity(employee('Other Staff'), '2026-02-01', [
   salary('2026-01-01', 100000),
   salary('2026-01-16', 200000),
