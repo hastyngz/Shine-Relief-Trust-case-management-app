@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Girl, EducationalFollowUp } from '../../types';
-import { GraduationCap, Save, X } from 'lucide-react';
+import { GraduationCap, X } from 'lucide-react';
+import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 
 interface EducationalFollowUpFormProps {
@@ -31,8 +32,9 @@ export const EducationalFollowUpForm: React.FC<EducationalFollowUpFormProps> = (
   const [recordedBy, setRecordedBy] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveButtonStatus>('idle');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!academicIssue.trim()) {
       setError('Please state the academic issue or area of concern.');
@@ -43,7 +45,10 @@ export const EducationalFollowUpForm: React.FC<EducationalFollowUpFormProps> = (
       return;
     }
 
-    onSave(
+    setError('');
+    setSaveStatus('saving');
+    try {
+      await onSave(
       {
         girlId: girl.id,
         date,
@@ -60,7 +65,12 @@ export const EducationalFollowUpForm: React.FC<EducationalFollowUpFormProps> = (
         recordedBy: recordedBy.trim() || undefined,
       },
       pendingPhotos
-    );
+      );
+      setSaveStatus('done');
+    } catch {
+      setError('Could not save this educational record. Your changes are still on this form; please try again.');
+      setSaveStatus('error');
+    }
   };
 
   return (
@@ -283,13 +293,7 @@ export const EducationalFollowUpForm: React.FC<EducationalFollowUpFormProps> = (
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="fx-press fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm flex items-center gap-2 transition-colors min-h-11"
-          >
-            <Save className="w-4 h-4" />
-            Save Educational Record
-          </button>
+          <SaveButton status={saveStatus} idleLabel="Save Educational Record" doneLabel="Saved on this phone" className="fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition-colors" />
         </div>
       </form>
     </div>
