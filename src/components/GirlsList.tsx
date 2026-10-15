@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Girl, Household, GirlStatus, AppDatabase } from '../types';
 import { formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { EmptySun } from './ui/EmptySun';
 import {
   Users,
   Search,
@@ -291,7 +292,11 @@ export const GirlsList: React.FC<GirlsListProps> = ({
       {/* Girls Cards Grid */}
       {filteredGirls.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-stone-200 p-6">
-          <Users className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          {girls.length === 0 ? (
+            <div className="flex justify-center mb-2"><EmptySun /></div>
+          ) : (
+            <Users className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          )}
           <h3 className="text-base font-bold text-stone-800">
             {girls.length === 0 ? 'No SHINE Girls Registered Yet' : 'No Girls Found'}
           </h3>

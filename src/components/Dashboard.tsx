@@ -8,6 +8,7 @@ import { outstandingExpenseSummary } from '../services/financialCalculations';
 import { PROGRAMMES, ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from '../services/programmeSummary';
 import { PROGRAMME_ICONS } from './Programmes/programmeIcons';
+import { CountUp } from './ui/CountUp';
 import {
   Users,
   Home,
@@ -298,7 +299,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
-            {totalGirls}
+            <CountUp value={totalGirls} />
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-emerald-700 font-bold">{activeGirls} Active</span>
@@ -321,7 +322,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-blue-900 mt-2">
-            {completedGirls}
+            <CountUp value={completedGirls} />
           </div>
           <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-blue-700 font-semibold">Completed SHINE</span>
@@ -343,7 +344,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
-            {totalHouses}
+            <CountUp value={totalHouses} />
           </div>
           <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-emerald-700 font-bold">{activeHouses} Active Homes</span>
@@ -711,7 +712,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <span>{formatDate(item.date)}</span>
                     </div>
                     {item.isOverdue && (
-                      <span className="text-[10px] font-extrabold text-rose-600 block uppercase">
+                      <span className="fx-pulse text-[10px] font-extrabold text-rose-600 block uppercase">
                         Overdue
                       </span>
                     )}

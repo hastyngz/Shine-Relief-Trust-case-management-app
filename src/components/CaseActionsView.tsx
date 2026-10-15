@@ -4,6 +4,7 @@ import { AppDatabase, CaseAction, CaseActionPriority, CaseActionStatus, CaseActi
 import { addCaseAction, updateCaseAction } from '../utils/storage';
 import { persistPhase2Record } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
+import { SwipeRow } from './ui/SwipeRow';
 
 interface CaseActionsViewProps {
   db: AppDatabase;
@@ -327,12 +328,18 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
           const assignee = allStaff.find((staff) => staff.uid === action.assignedStaffId);
           const canUpdate = canAssignTeamTasks || action.assignedStaffId === actor.uid;
           return (
-            <article key={action.id} className="py-4 flex flex-col gap-2">
+            <SwipeRow
+              key={action.id}
+              actionLabel="Complete"
+              onAction={() => changeStatus(action, 'Completed')}
+              disabled={!canUpdate || ['Completed', 'Cancelled'].includes(action.status)}
+            >
+            <article className="py-4 flex flex-col gap-2">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-bold text-stone-900">{action.title}</h3>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${currentStatus === 'Overdue' ? 'bg-rose-100 text-rose-800' : currentStatus === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{currentStatus}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${currentStatus === 'Overdue' ? 'fx-pulse bg-rose-100 text-rose-800' : currentStatus === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{currentStatus}</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-900">{action.priority}</span>
                   </div>
                   {action.description && <p className="mt-1 text-xs text-stone-600 whitespace-pre-line">{action.description}</p>}
@@ -357,6 +364,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
               </div>
               {action.completionNotes && <p className="text-xs text-emerald-900 bg-emerald-50 rounded-md p-2">Completion notes: {action.completionNotes}</p>}
             </article>
+            </SwipeRow>
           );
         })}
         {visibleActions.length === 0 && <div className="py-10 text-center text-xs text-stone-500"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-stone-400" />No case actions match this filter.</div>}
