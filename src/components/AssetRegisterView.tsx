@@ -116,11 +116,11 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
         if (previous !== next) history.push(entry(action, form.changeReason.trim() || `${label} updated.`, previous, next));
       });
       const otherFieldsChanged = editing.assetTag !== form.assetTag.trim() || editing.name !== form.name.trim()
-        || editing.category !== form.category || editing.description !== form.description.trim()
-        || editing.serialNumber !== form.serialNumber.trim() || editing.acquisitionDate !== (form.acquisitionDate || undefined)
-        || editing.acquisitionCostMWK !== cost || editing.fundingSource !== form.fundingSource.trim()
-        || editing.warrantyExpiryDate !== (form.warrantyExpiryDate || undefined)
-        || editing.nextServiceDate !== (form.nextServiceDate || undefined) || editing.notes !== form.notes.trim();
+        || editing.category !== form.category || (editing.description || '') !== form.description.trim()
+        || (editing.serialNumber || '') !== form.serialNumber.trim() || (editing.acquisitionDate || '') !== form.acquisitionDate
+        || editing.acquisitionCostMWK !== cost || (editing.fundingSource || '') !== form.fundingSource.trim()
+        || (editing.warrantyExpiryDate || '') !== form.warrantyExpiryDate
+        || (editing.nextServiceDate || '') !== form.nextServiceDate || (editing.notes || '') !== form.notes.trim();
       if (otherFieldsChanged) history.push(entry('Details Updated', form.changeReason.trim() || 'Asset details updated.'));
     }
     const saved: AssetRecord = {
