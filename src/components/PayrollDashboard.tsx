@@ -431,7 +431,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                 filteredRecords.map((record) => (
                   <tr key={record.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-stone-900">{record.employeeName}</div>
+                      <button type="button" disabled={!canProcessPayroll || !allStaff.some((person) => person.id === record.employeeId)} onClick={() => onOpenStaffProfile(record.employeeId)} className="text-left font-semibold text-teal-800 underline decoration-dotted underline-offset-2 hover:text-teal-950 disabled:cursor-default disabled:text-stone-900 disabled:no-underline" title={canProcessPayroll ? 'Open staff profile and contract' : 'Contract access is restricted to payroll managers'}>{record.employeeName}</button>
                       <div className="text-xs text-stone-500">{record.departmentOrProgramme || 'General'}</div>
                     </td>
                     <td className="px-4 py-3">
