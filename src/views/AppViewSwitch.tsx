@@ -87,6 +87,9 @@ export interface AppViewSwitchProps {
 
   // Navigation.
   navigateTo: (newView: AppView, tab?: NavTab, girlId?: string | null, houseId?: string | null, programmeId?: ProgrammeId | null) => void;
+  onOpenStaffProfile: (staffId: string) => void;
+  staffContractTargetId: string | null;
+  onStaffContractTargetHandled: () => void;
   openProgramme: (id: ProgrammeId | null) => void;
   openQualityRecord: (issue: QualityIssue) => void;
   setGirlsStatusFilter: (status?: string) => void;
@@ -143,7 +146,7 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
     ManagementDashboard, Reports, ReportBuilder, AIAssistantView, MessagingView,
     BudgetsAndWorkplansView, PayrollDashboard, CaseManagementView, DataImportWizard,
     ContactsView, Phase5OperationsView, ProgrammesView, StaffManagement, Dashboard,
-    navigateTo, openProgramme, openQualityRecord, setGirlsStatusFilter, onOpenQuickAdd,
+    navigateTo, onOpenStaffProfile, staffContractTargetId, onStaffContractTargetHandled, openProgramme, openQualityRecord, setGirlsStatusFilter, onOpenQuickAdd,
     onInitialFileConsumed, onProgrammeCreateHandled, onCreateProgrammePlan,
     handleOpenGirlProfile, handleOpenHouseProfile,
     handleStartRegisterGirl, handleStartAddHouse, handleStartRentPayment, handleStartExpense,
@@ -268,12 +271,12 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       )}
 
       {view === 'payroll' && (
-        <PayrollDashboard db={db} onRefresh={reloadData} />
+        <PayrollDashboard db={db} onRefresh={reloadData} onOpenStaffProfile={onOpenStaffProfile} />
       )}
 
       {/* VIEW: STAFF MANAGEMENT (ADMINISTRATORS ONLY) */}
       {view === 'staff' && (
-        <StaffManagement />
+        <StaffManagement initialEmployeeId={staffContractTargetId} onInitialEmployeeOpened={onStaffContractTargetHandled} />
       )}
 
       {/* VIEW: SHINE AI ASSISTANT */}
