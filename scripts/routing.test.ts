@@ -73,6 +73,7 @@ assert.equal(buildHash('programmes', undefined, undefined, 'education' as any), 
 assert.equal(buildHash('form-girl'), '#/register-girl');
 assert.equal(buildHash('ai-assistant'), '#/ai-assistant');
 assert.equal(buildHash('contracts'), '#/contracts');
+assert.equal(buildHash('administration'), '#/administration');
 
 for (const [hash, view] of cases) {
   const route = withHash(hash, parseHash);
