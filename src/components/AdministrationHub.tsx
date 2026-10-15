@@ -29,7 +29,7 @@ const modules: ModuleCard[] = [
   { title: 'Tasks & Planning', description: 'Review workplans, schedules and operational follow-ups.', icon: ClipboardList, status: 'Available now', view: 'planning', group: 'Coordination' },
   { title: 'Reports & Accountability', description: 'Generate organisational reports and export existing records.', icon: BarChart3, status: 'Available now', view: 'reports', group: 'Records' },
   { title: 'Document Ingestion', description: 'Bring supported documents into SHINE’s existing import workflow.', icon: FileText, status: 'Available now', view: 'import', group: 'Records' },
-  { title: 'Inventory & Stores', description: 'Track consumable stock, receipts, issues, balances, low-stock alerts and stock counts.', icon: Boxes, status: 'Build next', group: 'Resources' },
+  { title: 'Inventory & Stores', description: 'Register stock, record receipts and issues, monitor minimum levels and review movement history.', icon: Boxes, status: 'Available now', view: 'inventory', group: 'Resources' },
   { title: 'Asset Register', description: 'Register equipment and property, locations, assigned users, condition and repairs.', icon: Archive, status: 'Build next', group: 'Resources' },
   { title: 'Procurement & Suppliers', description: 'Connect purchase requests, approvals, quotations, orders and received goods.', icon: ShoppingCart, status: 'Build next', group: 'Resources' },
   { title: 'Documents & Filing', description: 'A searchable central filing system with linked records, version history and access controls.', icon: FileText, status: 'Build next', group: 'Records' },
@@ -66,7 +66,7 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
           <div className="rounded-2xl bg-stone-50 p-4"><Users className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{staffCount}</p><p className="text-xs text-stone-600">Employee records</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><CalendarDays className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{meetingCount}</p><p className="text-xs text-stone-600">Meeting records</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><Clock3 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{scheduleCount}</p><p className="text-xs text-stone-600">Scheduled items</p></div>
-          <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{availableCount}/{modules.length}</p><p className="text-xs text-stone-600">Existing app links</p></div>
+          <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{availableCount}/{visibleModules.length}</p><p className="text-xs text-stone-600">Existing app links</p></div>
         </div>
       </div>
 
@@ -107,7 +107,7 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
           </div>
         </div>
       ))}
-      <p className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-xs leading-5 text-stone-600">Availability labels describe the current app navigation, not a guarantee that every underlying workflow has been fully tested. Planned modules are clearly marked and do not collect or save data yet.</p>
+      <p className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-xs leading-5 text-stone-600">Inventory & Stores is now available for stock registration, receipts, issues and movement history. Other planned modules are marked clearly and do not collect or save data yet.</p>
     </section>
   );
 };
