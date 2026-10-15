@@ -30,7 +30,7 @@ const modules: ModuleCard[] = [
   { title: 'Reports & Accountability', description: 'Generate organisational reports and export existing records.', icon: BarChart3, status: 'Available now', view: 'reports', group: 'Records' },
   { title: 'Document Ingestion', description: 'Bring supported documents into SHINE’s existing import workflow.', icon: FileText, status: 'Available now', view: 'import', group: 'Records' },
   { title: 'Inventory & Stores', description: 'Register stock, record receipts and issues, monitor minimum levels and review movement history.', icon: Boxes, status: 'Available now', view: 'inventory', group: 'Resources' },
-  { title: 'Asset Register', description: 'Register equipment and property, locations, assigned users, condition and repairs.', icon: Archive, status: 'Build next', group: 'Resources' },
+  { title: 'Asset Register', description: 'Register equipment and property, locations, assigned users, condition, warranties and service dates.', icon: Archive, status: 'Available now', view: 'assets', group: 'Resources' },
   { title: 'Procurement Lists & Quotations', description: 'Open the existing procurement-list and quotation workflow. Supplier register, formal approvals and stock receipt integration remain planned.', icon: ShoppingCart, status: 'Available now', view: 'planning', group: 'Resources' },
   { title: 'Documents & Filing', description: 'A searchable central filing system with linked records, version history and access controls.', icon: FileText, status: 'Build next', group: 'Records' },
   { title: 'Compliance Calendar', description: 'Track renewals, contract reviews, training, reporting and other due dates.', icon: ShieldCheck, status: 'Build next', group: 'Compliance' },
