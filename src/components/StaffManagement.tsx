@@ -53,15 +53,15 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({ initialEmploye
     onInitialEmployeeOpened?.();
   }, [initialEmployeeId, allStaff, onInitialEmployeeOpened]);
 
-  // Payroll links directly to this staff member's contract page. Wait for the
-  // staff directory to load before resolving the employee ID from the URL.
+  // Payroll can route directly to this employee's contract. Wait until the
+  // staff directory is loaded, then consume the target without closing the panel.
   useEffect(() => {
-    const query = window.location.hash.split('?')[1] || '';
-    const employeeId = new URLSearchParams(query).get('employeeId');
-    if (!employeeId) return;
-    const employee = allStaff.find((person) => person.id === employeeId);
-    if (employee) setSelectedEmployee(employee);
-  }, [allStaff]);
+    if (!initialEmployeeId) return;
+    const employee = allStaff.find((person) => person.id === initialEmployeeId);
+    if (!employee) return;
+    setSelectedEmployee(employee);
+    onInitialEmployeeOpened?.();
+  }, [allStaff, initialEmployeeId, onInitialEmployeeOpened]);
 
   const closeEmployeeContract = () => {
     setSelectedEmployee(null);
