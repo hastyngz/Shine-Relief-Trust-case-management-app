@@ -1409,7 +1409,7 @@ export type AssetStatus = 'In Use' | 'In Storage' | 'Under Repair' | 'Missing' |
 export interface AssetHistoryEntry {
   id: string;
   date: string;
-  action: 'Registered' | 'Details Updated' | 'Condition Changed' | 'Status Changed' | 'Location Changed' | 'Assignment Changed' | 'Maintenance';
+  action: 'Registered' | 'Details Updated' | 'Condition Changed' | 'Status Changed' | 'Location Changed' | 'Assignment Changed' | 'Maintenance' | 'Physical Verification';
   note: string;
   previousValue?: string;
   newValue?: string;
@@ -1434,6 +1434,13 @@ export interface AssetRecord {
   warrantyExpiryDate?: string;
   nextServiceDate?: string;
   notes?: string;
+  /** Last physical verification against the asset register; never implies the whole organisation's asset list is complete. */
+  verificationDate?: string;
+  verifiedBy?: string;
+  verificationOutcome?: 'Verified' | 'Discrepancy' | 'Not Located';
+  verificationNote?: string;
+  observedLocation?: string;
+  observedCondition?: AssetCondition;
   history: AssetHistoryEntry[];
   createdAt: string;
   updatedAt: string;
