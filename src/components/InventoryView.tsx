@@ -1,5 +1,5 @@
 import React, { FormEvent, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Plus, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement, InventoryMovementType } from '../types';
 import { saveInventoryItem } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +26,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const { currentUser, staffProfile, isViewOnly } = useAuth();
   const [query, setQuery] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<InventoryItem | null>(null);
   const [movementTarget, setMovementTarget] = useState<InventoryItem | null>(null);
   const [stocktakeTarget, setStocktakeTarget] = useState<InventoryItem | null>(null);
   const [stocktake, setStocktake] = useState({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
@@ -76,11 +77,32 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Quantities and costs must be zero or greater.');
       return;
     }
-    if (items.some((item) => item.stockCode.trim().toLowerCase() === newItem.stockCode.trim().toLowerCase())) {
+    if (items.some((item) => item.id !== editingTarget?.id && item.stockCode.trim().toLowerCase() === newItem.stockCode.trim().toLowerCase())) {
       setError('That stock code is already in use. Choose a unique code.');
       return;
     }
     const now = new Date().toISOString();
+    if (editingTarget) {
+      const updated: InventoryItem = {
+        ...editingTarget,
+        stockCode: newItem.stockCode.trim(),
+        name: newItem.name.trim(),
+        category: newItem.category,
+        unit: newItem.unit,
+        minimumStockLevel: minimum,
+        location: newItem.location,
+        supplier: newItem.supplier.trim() || undefined,
+        unitCostMWK: cost,
+        expiryDate: newItem.expiryDate || undefined,
+        notes: newItem.notes.trim() || undefined,
+        updatedAt: now,
+      };
+      if (!persist(updated)) return;
+      setShowAdd(false);
+      setEditingTarget(null);
+      setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', notes: '' });
+      return;
+    }
     const openingMovement: InventoryMovement[] = opening > 0 ? [{
       id: makeId('mov'), type: 'Received', quantity: opening, date: now.slice(0, 10), location: newItem.location,
       reason: 'Opening balance at item registration', recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
@@ -165,7 +187,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
               <div className="rounded-2xl bg-white/10 p-3"><Boxes className="h-7 w-7 text-amber-300" /></div>
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">Administration &amp; Operations</p><h1 id="inventory-title" className="mt-1 text-2xl font-bold sm:text-3xl">Inventory &amp; Stores</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-teal-50">Register stock, record receipts and issues, monitor minimum levels and retain a movement history for each item.</p></div>
             </div>
-            {!isViewOnly && <button type="button" onClick={() => { setError(''); setShowAdd(true); }} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Add stock item</button>}
+            {!isViewOnly && <button type="button" onClick={() => { setError(''); setEditingTarget(null); setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', notes: '' }); setShowAdd(true); }} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Add stock item</button>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5 sm:p-6">
@@ -193,6 +215,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
                 {item.expiryDate && (() => { const expiry = getInventoryExpiryStatus(item.expiryDate); return <p className={`mt-2 rounded-lg px-3 py-2 text-xs font-semibold ${expiry.status === 'expired' ? 'bg-red-100 text-red-800' : expiry.status === 'expiring-soon' ? 'bg-amber-100 text-amber-900' : 'bg-stone-50 text-stone-600'}`}>Expiry: {item.expiryDate}{expiry.status === 'expired' ? ' · EXPIRED' : expiry.status === 'expiring-soon' ? ` · Expires in ${expiry.daysRemaining} day${expiry.daysRemaining === 1 ? '' : 's'}` : ''}</p>; })()}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {!isViewOnly && <><button type="button" disabled={saving} onClick={() => { setError(''); setStocktakeTarget(item); setStocktake({ countedQuantity: String(item.quantityOnHand), date: getLocalDateInputValue(), reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Stocktake</button><button type="button" disabled={saving} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><ArrowDownToLine className="h-4 w-4" /> Receive stock</button><button type="button" disabled={saving || item.quantityOnHand <= 0} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-xs font-bold text-stone-800 disabled:opacity-50"><ArrowUpFromLine className="h-4 w-4" /> Issue stock</button></>}
+                  <button type="button" disabled={saving} onClick={() => { setError(''); setEditingTarget(item); setNewItem({ name: item.name, stockCode: item.stockCode, category: item.category, unit: item.unit, quantity: String(item.quantityOnHand), minimum: String(item.minimumStockLevel), location: item.location, supplier: item.supplier || '', unitCost: item.unitCostMWK === undefined ? '' : String(item.unitCostMWK), expiryDate: item.expiryDate || '', notes: item.notes || '' }); setShowAdd(true); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700 disabled:opacity-50"><Pencil className="h-4 w-4" /> Edit details</button>
                   <button type="button" aria-expanded={expandedId === item.id} onClick={() => setExpandedId(expandedId === item.id ? null : item.id)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700">{expandedId === item.id ? 'Hide history' : `Movement history (${item.movements?.length || 0})`}</button>
                 </div>
                 {expandedId === item.id && <div className="mt-4 border-t border-stone-200 pt-3"><h4 className="mb-2 text-sm font-bold text-stone-800">Stock movement history</h4>{!item.movements?.length ? <p className="text-sm text-stone-500">No movements recorded.</p> : <ol className="space-y-2">{[...item.movements].reverse().map((entry) => <li key={entry.id} className="rounded-xl bg-stone-50 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><strong>{entry.type} · {entry.quantity} {item.unit}</strong><span className="text-xs text-stone-500">{entry.date}</span></div><p className="mt-1 text-stone-700">{entry.reason}</p><p className="mt-1 text-xs text-stone-500">{entry.recordedBy}{entry.destination ? ` · Destination: ${entry.destination}` : ''}{entry.reference ? ` · Ref: ${entry.reference}` : ''}</p></li>)}</ol>}</div>}
@@ -202,20 +225,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         )}
       </section>
 
-      {showAdd && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}><section role="dialog" aria-modal="true" aria-labelledby="add-inventory-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-center justify-between gap-3"><div><h2 id="add-inventory-title" className="text-xl font-bold text-stone-900">Register stock item</h2><p className="mt-1 text-sm text-stone-600">An opening quantity is recorded as the first stock movement.</p></div><button type="button" aria-label="Close form" onClick={() => setShowAdd(false)} className="fx-press rounded-xl p-2 hover:bg-stone-100"><X className="h-5 w-5" /></button></div>
+      {showAdd && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}><section role="dialog" aria-modal="true" aria-labelledby="add-inventory-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-center justify-between gap-3"><div><h2 id="add-inventory-title" className="text-xl font-bold text-stone-900">{editingTarget ? 'Edit stock item' : 'Register stock item'}</h2><p className="mt-1 text-sm text-stone-600">{editingTarget ? 'Update item details. Use stocktake to change the recorded quantity.' : 'An opening quantity is recorded as the first stock movement.'}</p></div><button type="button" aria-label="Close form" onClick={() => setShowAdd(false)} className="fx-press rounded-xl p-2 hover:bg-stone-100"><X className="h-5 w-5" /></button></div>
         <form onSubmit={submitNewItem} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold text-stone-700">Item name *<input required value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Unique stock code *<input required value={newItem.stockCode} onChange={(e) => setNewItem({ ...newItem, stockCode: e.target.value })} placeholder="e.g. FOOD-001" className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Category<select value={newItem.category} onChange={(e) => setNewItem({ ...newItem, category: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{categories.map((v) => <option key={v}>{v}</option>)}</select></label>
           <label className="text-sm font-semibold text-stone-700">Unit of measure *<select value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{units.map((v) => <option key={v}>{v}</option>)}</select></label>
-          <label className="text-sm font-semibold text-stone-700">Opening quantity<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
+          {!editingTarget ? <label className="text-sm font-semibold text-stone-700">Opening quantity<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
           <label className="text-sm font-semibold text-stone-700">Minimum stock level<input type="number" min="0" step="0.01" value={newItem.minimum} onChange={(e) => setNewItem({ ...newItem, minimum: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Storage location<select value={newItem.location} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{locations.map((v) => <option key={v}>{v}</option>)}</select></label>
           <label className="text-sm font-semibold text-stone-700">Unit cost (MWK)<input type="number" min="0" step="0.01" value={newItem.unitCost} onChange={(e) => setNewItem({ ...newItem, unitCost: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Supplier<input value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Expiry date (if applicable)<input type="date" value={newItem.expiryDate} onChange={(e) => setNewItem({ ...newItem, expiryDate: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700 sm:col-span-2">Notes<textarea value={newItem.notes} onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-xl border border-stone-300 p-3 font-normal" /></label>
-          <div className="flex flex-col-reverse gap-2 pt-2 sm:col-span-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setShowAdd(false)} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Cancel</button><button type="submit" disabled={saving} className="fx-press fx-btn-main min-h-11 rounded-xl px-5 text-sm font-bold disabled:opacity-50">{saving ? 'Saving…' : 'Save stock item'}</button></div>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:col-span-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => { setShowAdd(false); setEditingTarget(null); }} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Cancel</button><button type="submit" disabled={saving} className="fx-press fx-btn-main min-h-11 rounded-xl px-5 text-sm font-bold disabled:opacity-50">{saving ? 'Saving…' : editingTarget ? 'Save changes' : 'Save stock item'}</button></div>
         </form></section></div>}
 
       {movementTarget && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setMovementTarget(null); }}><section role="dialog" aria-modal="true" aria-labelledby="movement-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-start justify-between gap-3"><div><h2 id="movement-title" className="text-xl font-bold">{movement.type === 'Received' ? 'Receive stock' : 'Issue stock'}</h2><p className="mt-1 text-sm text-stone-600">{movementTarget.name} · Balance: {movementTarget.quantityOnHand} {movementTarget.unit}</p></div><button type="button" aria-label="Close movement form" onClick={() => setMovementTarget(null)}><X className="h-5 w-5" /></button></div>
