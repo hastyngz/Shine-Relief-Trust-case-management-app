@@ -142,7 +142,11 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
       fundingSource: form.fundingSource.trim() || undefined, location: form.location.trim(),
       assignedTo: form.assignedTo.trim() || undefined, condition: form.condition, status: form.status,
       warrantyExpiryDate: form.warrantyExpiryDate || undefined, nextServiceDate: form.nextServiceDate || undefined,
-      notes: form.notes.trim() || undefined, history, createdAt: editing?.createdAt || now,
+      notes: form.notes.trim() || undefined,
+      verificationDate: editing?.verificationDate, verifiedBy: editing?.verifiedBy,
+      verificationOutcome: editing?.verificationOutcome, verificationNote: editing?.verificationNote,
+      observedLocation: editing?.observedLocation, observedCondition: editing?.observedCondition,
+      history, createdAt: editing?.createdAt || now,
       updatedAt: now, createdBy: editing?.createdBy || actor, updatedBy: actor,
       createdByUid: editing?.createdByUid || currentUser?.uid, updatedByUid: currentUser?.uid,
     };
