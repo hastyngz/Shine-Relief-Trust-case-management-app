@@ -115,7 +115,8 @@ export const GirlForm: React.FC<GirlFormProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-stone-300 hover:text-white p-1 rounded-lg transition-colors"
+          aria-label="Close form"
+          className="fx-press text-stone-300 hover:text-white p-1 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
         >
           <X className="w-5 h-5" />
         </button>
