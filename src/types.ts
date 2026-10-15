@@ -1389,7 +1389,7 @@ export interface ImportPreviewItem {
     | 'MARK_FOR_REVIEW';
 }
 
-export type InventoryMovementType = 'Received' | 'Issued' | 'Returned' | 'Damaged' | 'Adjustment' | 'Transfer In' | 'Transfer Out';
+export type InventoryMovementType = 'Received' | 'Issued' | 'Returned' | 'Damaged' | 'Adjustment' | 'Transfer In' | 'Transfer Out' | 'Stocktake';
 
 export interface InventoryMovement {
   id: string; type: InventoryMovementType; quantity: number; date: string; location: string;
