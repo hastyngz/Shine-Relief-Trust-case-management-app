@@ -292,4 +292,41 @@ await recordOfflineChanges(echoedEdit);
 assert.equal(getPendingOfflineSnapshotCount(), 1, 'an edit echoed back as a pending local write is still queued');
 assert.equal((await loadQueue())[0].recordId, 'SG-400');
 
+// --- 9. Compliance obligations use the same conflict-aware schedule queue ----
+const complianceItem = {
+  id: 'CMP-001',
+  type: 'other',
+  title: 'Annual policy review',
+  scheduledDate: '2026-12-31',
+  targetType: 'general',
+  assignedStaffId: 'uid-a',
+  assignedStaffName: 'Staff A',
+  status: 'Scheduled',
+  createdAt: T1,
+  updatedAt: T2,
+  complianceCategory: 'Staff training & policies',
+  compliancePriority: 'High',
+  complianceRecurrence: 'Annually',
+  complianceHistory: [{ id: 'H-1', action: 'Created', actor: 'Staff A', at: T2 }],
+};
+const scheduleEntry = computeChangeEntries(
+  db({ schedules: [complianceItem] }),
+  db({ schedules: [] }),
+);
+assert.equal(scheduleEntry.length, 1, 'new compliance obligations should be queued as individual schedule records');
+assert.equal(scheduleEntry[0].collection, 'schedules');
+assert.equal(scheduleEntry[0].recordId, 'CMP-001');
+assert.equal(scheduleEntry[0].operation, 'set');
+assert.equal(scheduleEntry[0].data.complianceRecurrence, 'Annually');
+assert.equal(scheduleEntry[0].data.complianceHistory[0].action, 'Created');
+
+const changedCompliance = { ...complianceItem, updatedAt: T3, status: 'Completed', completionNote: 'Reviewed and signed' };
+const changedScheduleEntry = computeChangeEntries(
+  db({ schedules: [changedCompliance] }),
+  db({ schedules: [complianceItem] }),
+);
+assert.equal(changedScheduleEntry.length, 1, 'completion updates should be queued');
+assert.equal(changedScheduleEntry[0].collection, 'schedules');
+assert.equal(changedScheduleEntry[0].data.completionNote, 'Reviewed and signed');
+
 console.log('Offline per-record queue and conflict tests passed.');
