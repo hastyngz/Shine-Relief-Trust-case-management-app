@@ -29,7 +29,7 @@ export const SaveButton: React.FC<SaveButtonProps> = ({
       disabled={disabled || status === 'saving'}
       aria-busy={status === 'saving'}
       data-save-state={status}
-      className={`fx-press min-h-11 inline-flex items-center justify-center gap-2 ${className}`.trim()}
+      className={`fx-press min-h-11 inline-flex items-center justify-center gap-2 ${status === 'error' ? 'fx-shake' : ''} ${className}`.replace(/\s+/g, ' ').trim()}
     >
       {status === 'saving' ? <LoaderCircle aria-hidden="true" className="fx-spinner h-4 w-4" /> :
        status === 'done' ? <span className="fx-success-pop inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" className="fx-tick h-4 w-4" /></span> :
