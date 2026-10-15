@@ -214,7 +214,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-edu')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
