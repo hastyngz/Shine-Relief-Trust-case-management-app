@@ -54,6 +54,7 @@ for (const [hash, view, tab] of cases) {
 // 2. Profile routes carry the record id.
 assert.equal(withHash('#/girl/abc123', parseHash).girlId, 'abc123');
 assert.equal(withHash('#/house/h-9', parseHash).houseId, 'h-9');
+assert.equal(withHash('#/staff?employeeId=staff%2F123', parseHash).staffId, 'staff/123');
 
 // 3. The planning quality target is preserved.
 const quality = withHash('#/planning?qualityKind=budget-item&qualityId=b%2F7', parseHash).qualityTarget;
@@ -80,4 +81,4 @@ for (const [hash, view] of cases) {
 // 5. qualityTargetHash encodes the id.
 assert.equal(qualityTargetHash('workplan-item', 'a b/c'), '#/planning?qualityKind=workplan-item&qualityId=a%20b%2Fc');
 
-console.log('Routing tests passed: parseHash/buildHash round trips and profile routes.');
+console.log('Routing tests passed: parseHash/buildHash round trips, profile routes, and staff contract deep links.');
