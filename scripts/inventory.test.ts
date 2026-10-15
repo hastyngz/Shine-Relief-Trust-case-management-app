@@ -3,6 +3,7 @@ import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment } from '../sr
 
 assert.deepEqual(getInventoryExpiryStatus(undefined, '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
 assert.deepEqual(getInventoryExpiryStatus('not-a-date', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
+assert.deepEqual(getInventoryExpiryStatus('2026-02-31', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
 assert.deepEqual(getInventoryExpiryStatus('2026-10-14', '2026-10-15'), { status: 'expired', daysRemaining: -1 });
 assert.deepEqual(getInventoryExpiryStatus('2026-10-15', '2026-10-15'), { status: 'expiring-soon', daysRemaining: 0 });
 assert.deepEqual(getInventoryExpiryStatus('2026-11-14', '2026-10-15'), { status: 'expiring-soon', daysRemaining: 30 });
