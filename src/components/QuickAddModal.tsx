@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AppDatabase, Girl, Household } from '../types';
 import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from '../data/programmes';
 import {
@@ -49,6 +49,44 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   const [targetGirlId, setTargetGirlId] = useState<string>('');
   const [targetHouseId, setTargetHouseId] = useState<string>('');
   const [targetProgrammeId, setTargetProgrammeId] = useState<ProgrammeId | ''>('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFirst = () => dialogRef.current?.querySelector<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    )?.focus();
+    const frame = window.requestAnimationFrame(focusFirst);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current.focus();
+      } else if (event.shiftKey && document.activeElement === focusable[0]) {
+        event.preventDefault();
+        focusable[focusable.length - 1].focus();
+      } else if (!event.shiftKey && document.activeElement === focusable[focusable.length - 1]) {
+        event.preventDefault();
+        focusable[0].focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -107,7 +145,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
   return (
     <div className="fx-backdrop-enter fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="fx-sheet-enter bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Record new information" tabIndex={-1} className="fx-sheet-enter bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden">
         {/* Header */}
         <div className="bg-teal-950 text-white px-5 py-4 flex items-center justify-between">
           <div>
@@ -119,7 +157,9 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
               setSelectedAction(null);
               onClose();
             }}
-            className="text-stone-300 hover:text-white p-1 rounded-md"
+            className="fx-press text-stone-300 hover:text-white p-1 rounded-md min-h-11 min-w-11 inline-flex items-center justify-center"
+            aria-label="Close record new information"
+            type="button"
           >
             <X className="w-5 h-5" />
           </button>
