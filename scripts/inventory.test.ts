@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment } from '../src/utils/inventory';
+import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../src/utils/inventory';
 
+assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
 assert.deepEqual(getInventoryExpiryStatus(undefined, '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
 assert.deepEqual(getInventoryExpiryStatus('not-a-date', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
 assert.deepEqual(getInventoryExpiryStatus('2026-02-31', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
