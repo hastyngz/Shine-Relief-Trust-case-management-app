@@ -27,6 +27,7 @@ import {
   WhatIfScenario,
   IntelligenceSuggestion,
   AISettings,
+  InventoryItem,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
@@ -176,6 +177,7 @@ export function getDatabase(): AppDatabase {
       caseGoals: parsed.caseGoals || [],
       procurementLists: parsed.procurementLists || [],
       projectProjections: parsed.projectProjections || [],
+      inventoryItems: Array.isArray(parsed.inventoryItems) ? parsed.inventoryItems : [],
     };
   } catch (error) {
     console.error('Error reading database from localStorage:', error);
@@ -264,6 +266,7 @@ export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
       caseReviews: Array.isArray(parsed.caseReviews) ? parsed.caseReviews : [],
       procurementLists: Array.isArray(parsed.procurementLists) ? parsed.procurementLists : [],
       projectProjections: Array.isArray(parsed.projectProjections) ? parsed.projectProjections : [],
+      inventoryItems: Array.isArray(parsed.inventoryItems) ? parsed.inventoryItems : [],
     };
     await syncEntireDatabaseToFirestore(validatedDb, true);
     saveDatabase(validatedDb);
@@ -1513,6 +1516,20 @@ export function deletePerson(id: string): boolean {
   );
 
   return true;
+}
+
+export function saveInventoryItem(item: InventoryItem): InventoryItem {
+  const db = getDatabase();
+  if (!db.inventoryItems) db.inventoryItems = [];
+  const now = new Date().toISOString();
+  const index = db.inventoryItems.findIndex((entry) => entry.id === item.id);
+  const saved: InventoryItem = { ...item, updatedAt: now, movements: Array.isArray(item.movements) ? item.movements : [] };
+  if (index >= 0) db.inventoryItems[index] = saved;
+  else db.inventoryItems.unshift({ ...saved, createdAt: item.createdAt || now });
+  const result = saveDatabase(db);
+  if (!result.ok) throw new Error('Could not save inventory changes on this device. Check available storage and try again.');
+  persistPhase2Record('inventoryItems', saved).catch((error) => console.error('Failed to persist inventory item:', error));
+  return saved;
 }
 
 export function addCustomPersonType(type: string): string[] {
