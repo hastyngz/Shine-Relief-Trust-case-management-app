@@ -137,12 +137,13 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredActivities.map((act) => {
+          {filteredActivities.map((act, index) => {
             const houseName = act.householdId ? houseMap.get(act.householdId) || 'Unknown House' : '';
             return (
               <div
                 key={act.id}
-                className={`p-5 rounded-xl border bg-white shadow-xs ${
+                style={{ "--i": index } as React.CSSProperties}
+                className={`fx-rise fx-card p-5 rounded-xl border bg-white shadow-xs ${
                   act.furtherActionRequired ? 'border-amber-300' : 'border-stone-200'
                 }`}
               >
