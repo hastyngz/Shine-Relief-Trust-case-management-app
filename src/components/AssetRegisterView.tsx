@@ -67,6 +67,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
     return days !== null && days <= 30 && asset.status !== 'Disposed';
   });
   const attention = assets.filter((asset) => ['Damaged', 'Needs Repair', 'Missing', 'Written Off'].includes(asset.condition) || asset.status === 'Missing' || asset.status === 'Under Repair');
+  const warrantyDue = assets.filter((asset) => { const days = daysFromToday(asset.warrantyExpiryDate); return days !== null && days <= 30 && asset.status !== 'Disposed'; });
   const activeValue = assets.filter((asset) => asset.status !== 'Disposed').reduce((sum, asset) => sum + (Number.isFinite(asset.acquisitionCostMWK) ? asset.acquisitionCostMWK || 0 : 0), 0);
 
   const openNew = () => { setEditing(null); setForm(blankForm()); setError(''); setNotice(''); setShowForm(true); };
@@ -154,10 +155,11 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
             {!isViewOnly && <button type="button" onClick={openNew} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Register asset</button>}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-6">
+        <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5 sm:p-6">
           <div className="rounded-2xl bg-stone-50 p-4"><Archive className="h-5 w-5 text-teal-800" /><p className="mt-2 text-2xl font-bold">{assets.length}</p><p className="text-xs text-stone-600">Registered assets</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><AlertTriangle className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{attention.length}</p><p className="text-xs text-stone-600">Need attention</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{serviceDue.length}</p><p className="text-xs text-stone-600">Service due / overdue</p></div>
+          <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{warrantyDue.length}</p><p className="text-xs text-stone-600">Warranty expiring / expired</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-2 text-lg font-bold">{money(activeValue)}</p><p className="text-xs text-stone-600">Recorded cost (not valuation)</p></div>
         </div>
       </header>
