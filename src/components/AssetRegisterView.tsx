@@ -3,6 +3,7 @@ import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Pen
 import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
+import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
 import { getLocalDateInputValue } from '../utils/inventory';
 
 interface AssetRegisterViewProps {
