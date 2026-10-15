@@ -265,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <>
                 <button
                   onClick={onOpenQuickAdd}
-                  className="hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95"
+                  className="fx-press fx-btn-main hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform min-h-11"
                 >
                   <PlusCircle className="w-4 h-4" />
                   <span>Record New Entry</span>
