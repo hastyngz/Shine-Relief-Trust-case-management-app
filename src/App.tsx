@@ -211,6 +211,7 @@ function AppContent() {
   const [selectedHouseId, setSelectedHouseId] = useState<string | null>(
     initialRoute.houseId || null
   );
+  const [staffContractTargetId, setStaffContractTargetId] = useState<string | null>(initialRoute.staffId || null);
   const [staffContractTargetId, setStaffContractTargetId] = useState<string | null>(null);
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<ProgrammeId | null>(
     initialRoute.programmeId || null
@@ -355,6 +356,7 @@ function AppContent() {
       setActiveTab(route.activeTab);
       setSelectedProgrammeId(route.programmeId || null);
       setQualityRecordFocus(route.qualityTarget || null);
+      setStaffContractTargetId(route.staffId || null);
       if (route.girlId) setSelectedGirlId(route.girlId);
       if (route.houseId) setSelectedHouseId(route.houseId);
     };
@@ -383,6 +385,15 @@ function AppContent() {
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const onOpenStaffProfile = (staffId: string) => {
+    setStaffContractTargetId(staffId);
+    navigateTo('staff', 'staff');
+    const targetHash = `#/staff?employeeId=${encodeURIComponent(staffId)}`;
+    if (window.location.hash !== targetHash) window.location.hash = targetHash;
+  };
+
+  const onStaffContractTargetHandled = () => setStaffContractTargetId(null);
 
   const openQualityRecord = (issue: QualityIssue) => {
     const target = issue.target;
@@ -1238,6 +1249,9 @@ function AppContent() {
               StaffManagement={StaffManagement}
               Dashboard={Dashboard}
               navigateTo={navigateTo}
+              onOpenStaffProfile={onOpenStaffProfile}
+              staffContractTargetId={staffContractTargetId}
+              onStaffContractTargetHandled={onStaffContractTargetHandled}
               openProgramme={openProgramme}
               openQualityRecord={openQualityRecord}
               setGirlsStatusFilter={setGirlsStatusFilter}
