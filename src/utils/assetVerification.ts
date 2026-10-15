@@ -35,8 +35,11 @@ export function recordAssetVerification(
   if (input.outcome !== 'Verified' && !note) {
     throw new Error('Add a note explaining the discrepancy or why the asset was not located.');
   }
-  if (input.outcome === 'Verified' && observedLocation && observedLocation !== asset.location && !note) {
-    throw new Error('The observed location differs from the register. Add a note and record this as a discrepancy.');
+  if (input.outcome === 'Verified' && (
+    (observedLocation && observedLocation !== asset.location) ||
+    (input.observedCondition && input.observedCondition !== asset.condition)
+  )) {
+    throw new Error('The observed location or condition differs from the register. Record this as a discrepancy and add a note.');
   }
 
   const id = `AV-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
