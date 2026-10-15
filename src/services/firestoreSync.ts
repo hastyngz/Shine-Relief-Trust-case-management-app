@@ -165,6 +165,7 @@ export const COLLECTIONS = {
   PROCUREMENT_LISTS: 'procurementLists',
   PROJECT_PROJECTIONS: 'projectProjections',
   INVENTORY_ITEMS: 'inventoryItems',
+  ASSETS: 'assets',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -1149,6 +1150,7 @@ export async function syncEntireDatabaseToFirestore(
       ['procurementLists', COLLECTIONS.PROCUREMENT_LISTS],
       ['projectProjections', COLLECTIONS.PROJECT_PROJECTIONS],
       ['inventoryItems', COLLECTIONS.INVENTORY_ITEMS],
+      ['assets', COLLECTIONS.ASSETS],
     ];
     for (const [field, collectionName] of phase2Collections) {
       const records = db[field] as Array<{ id: string }> | undefined;
@@ -1498,6 +1500,7 @@ export function initFirestoreListeners(
     procurementLists: [],
     projectProjections: [],
     inventoryItems: [],
+    assets: [],
   };
 
   const initialLoadedCollections = new Set<string>();
@@ -1568,6 +1571,7 @@ export function initFirestoreListeners(
       procurementLists: [...(liveState.procurementLists || [])],
       projectProjections: [...(liveState.projectProjections || [])],
       inventoryItems: [...(liveState.inventoryItems || [])],
+      assets: [...(liveState.assets || [])],
       }, { fromCache, hasPendingWrites });
     }, 50);
   };
@@ -1657,6 +1661,7 @@ export function initFirestoreListeners(
   handleCollection<ProcurementList>(COLLECTIONS.PROCUREMENT_LISTS, 'procurementLists');
   handleCollection<ProjectProjection>(COLLECTIONS.PROJECT_PROJECTIONS, 'projectProjections');
   handleCollection<import('../types').InventoryItem>(COLLECTIONS.INVENTORY_ITEMS, 'inventoryItems');
+  handleCollection<AssetRecord>(COLLECTIONS.ASSETS, 'assets');
 
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());
