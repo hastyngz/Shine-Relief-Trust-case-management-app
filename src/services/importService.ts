@@ -18,7 +18,6 @@ import {
   BudgetItem,
   ProcurementList,
   ProjectProjection,
-  InventoryItem,
   StaffUser,
   PayrollRecord,
   EmployeeRecord,
