@@ -318,15 +318,16 @@ export const GirlsList: React.FC<GirlsListProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredGirls.map((girl) => {
+          {filteredGirls.map((girl, index) => {
             const hasActionRequired = girlActionMap.has(girl.id);
             const houseName = houseMap.get(girl.householdId) || 'Unassigned';
 
             return (
               <div
                 key={girl.id}
+                style={{ "--i": index } as React.CSSProperties}
                 onClick={() => onSelectGirl(girl.id)}
-                className={`p-4 rounded-xl border bg-white hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group ${
+                className={`fx-rise fx-card p-4 rounded-xl border bg-white cursor-pointer transition-transform flex flex-col justify-between group ${
                   hasActionRequired
                     ? 'border-amber-300 hover:border-amber-400'
                     : 'border-stone-200 hover:border-teal-700'
