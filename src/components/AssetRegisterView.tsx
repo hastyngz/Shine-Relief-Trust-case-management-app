@@ -4,7 +4,6 @@ import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
 import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
-import { buildAssetsCsv } from '../utils/assetExport';
 import { getLocalDateInputValue } from '../utils/inventory';
 
 interface AssetRegisterViewProps {
