@@ -25,7 +25,7 @@ import {
 import { SyncStatus } from '../services/firestoreSync';
 import { getPendingOfflineSnapshotCount, refreshPendingOfflineSnapshotCount, getSyncConflictCount } from '../services/offlineSync';
 import { useAuth } from '../contexts/AuthContext';
-import { themes, useVisualSettings } from '../contexts/VisualSettingsContext';
+import { appViews, themes, useVisualSettings } from '../contexts/VisualSettingsContext';
 import { StaffRole } from '../types';
 import { NotificationBellDropdown } from './Notifications/NotificationBellDropdown';
 import { ShineLogo } from './ShineLogo';
@@ -344,42 +344,25 @@ export const Header: React.FC<HeaderProps> = ({
                   aria-label="App view and appearance settings"
                   className="absolute right-0 top-full mt-2 w-[min(19rem,calc(100vw-1rem))] max-h-[min(75vh,36rem)] overflow-y-auto rounded-xl border border-stone-200 bg-white p-3 text-stone-900 shadow-xl z-50"
                 >
-                  <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-3">
-                    <div className="flex items-center gap-2">
+                  <div className="border-b border-stone-100 pb-3">
+                    <div className="mb-2 flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-stone-500" />
                       <span className="text-sm font-semibold">App view</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="App view style">
-                      <button
-                        type="button"
-                        aria-pressed={mobileViewMode === 'classic'}
-                        onClick={() => setMobileViewMode('classic')}
-                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          mobileViewMode === 'classic' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        Classic
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={mobileViewMode === 'ios'}
-                        onClick={() => setMobileViewMode('ios')}
-                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          mobileViewMode === 'ios' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        iOS
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={mobileViewMode === 'foundation'}
-                        onClick={() => setMobileViewMode('foundation')}
-                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          mobileViewMode === 'foundation' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        Foundation
-                      </button>
+                    <div className="grid grid-cols-2 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="App view style">
+                      {appViews.map((view) => (
+                        <button
+                          key={view.id}
+                          type="button"
+                          aria-pressed={mobileViewMode === view.id}
+                          onClick={() => setMobileViewMode(view.id)}
+                          className={`rounded-md px-2 py-2 text-[11px] font-semibold transition-colors ${
+                            mobileViewMode === view.id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                          }`}
+                        >
+                          {view.name}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   {mobileViewMode === 'foundation' && (
