@@ -230,7 +230,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-health')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-rose-400 hover:bg-rose-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-rose-400 hover:bg-rose-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-800 flex items-center justify-center shrink-0">
@@ -246,7 +246,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-family')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-amber-400 hover:bg-amber-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-amber-400 hover:bg-amber-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
@@ -266,7 +266,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-activity')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-purple-400 hover:bg-purple-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-purple-400 hover:bg-purple-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
@@ -282,7 +282,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-rent')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-emerald-400 hover:bg-emerald-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-emerald-400 hover:bg-emerald-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
@@ -298,7 +298,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-expense')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
@@ -318,7 +318,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
               <button
                 onClick={() => handleActionClick('add-programme-record')}
-                className="w-full p-3 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between transition-colors text-left"
+                className="fx-press w-full p-3 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
