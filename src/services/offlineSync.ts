@@ -232,8 +232,13 @@ export function setLastSyncedSnapshot(db: AppDatabase): void {
   try {
     window.localStorage.setItem(LAST_SYNCED_KEY, JSON.stringify(db));
   } catch (error) {
-    // The database itself already failed to persist; the queue keeps the edits.
-    console.warn('Could not record the last synced database copy:', error);
+    // A missing baseline can make later diffs unsafe, so surface the failure.
+    console.warn('Could not record the last synced database copy.');
+    try {
+      window.dispatchEvent(new CustomEvent('shine_storage_warning', {
+        detail: { quotaExceeded: !!error && typeof error === 'object' && 'name' in error && (error as { name?: unknown }).name === 'QuotaExceededError' },
+      }));
+    } catch { /* best effort only; do not log record contents */ }
   }
 }
 
