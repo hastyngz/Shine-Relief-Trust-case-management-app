@@ -379,7 +379,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                         onClose();
                         setSelectedAction(null);
                       }}
-                      className="px-3.5 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg"
+                      className="fx-press fx-btn-main px-3.5 py-2 text-xs font-bold text-white rounded-lg min-h-11"
                     >
                       Register SHINE Girl Now
                     </button>
@@ -414,7 +414,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                         onClose();
                         setSelectedAction(null);
                       }}
-                      className="px-3.5 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg"
+                      className="fx-press fx-btn-main px-3.5 py-2 text-xs font-bold text-white rounded-lg min-h-11"
                     >
                       Add Household Now
                     </button>
@@ -457,7 +457,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
                   </button>
                   <button
                     onClick={handleConfirmTarget}
-                    className="flex-1 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg"
+                    className="fx-press fx-btn-main flex-1 py-2 text-xs font-bold text-white rounded-lg min-h-11"
                   >
                     {selectedAction === 'add-programme-record' ? 'Open Programme' : 'Continue to Form'}
                   </button>
