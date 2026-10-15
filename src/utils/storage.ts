@@ -10,6 +10,7 @@ import {
   HouseholdActivity,
   BudgetItem,
   AnnualBudgetPlan,
+  EmployeeRecord,
   PayrollRecord,
   WorkplanItem,
   ScheduleItem,
@@ -53,6 +54,7 @@ import {
   deleteAnnualBudgetPlanFromFirestore,
   persistPayrollRecordToFirestore,
   deletePayrollRecordFromFirestore,
+  persistEmployeeRecordToFirestore,
   persistWorkplanItemToFirestore,
   deleteWorkplanItemFromFirestore,
   persistScheduleItemToFirestore,
@@ -1052,6 +1054,31 @@ export function deletePayrollRecord(id: string): boolean {
     console.error('Failed to delete payroll record from Firestore:', err)
   );
   return true;
+}
+
+export async function updateEmployeeRecord(
+  id: string,
+  updates: Partial<EmployeeRecord>,
+  auditActor?: string
+): Promise<EmployeeRecord | null> {
+  const db = getDatabase();
+  if (!db.employees) db.employees = [];
+  const index = db.employees.findIndex((employee) => employee.id === id);
+  if (index < 0) return null;
+  const existing = db.employees[index];
+  const now = new Date().toISOString();
+  const updated: EmployeeRecord = {
+    ...existing,
+    ...updates,
+    createdAt: existing.createdAt,
+    createdBy: existing.createdBy,
+    updatedAt: now,
+    updatedBy: auditActor || existing.updatedBy,
+  };
+  db.employees[index] = updated;
+  saveDatabase(db);
+  await persistEmployeeRecordToFirestore(updated);
+  return updated;
 }
 
 // ----------------------------------------------------------------------

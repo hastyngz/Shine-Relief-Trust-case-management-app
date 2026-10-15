@@ -20,6 +20,7 @@ export type AppView =
   | 'reports'
   | 'report-builder'
   | 'payroll'
+  | 'contracts'
   | 'staff'
   | 'ai-assistant'
   | 'case-management'
@@ -40,7 +41,6 @@ export interface AppRoute {
   activeTab: NavTab;
   girlId?: string;
   houseId?: string;
-  staffId?: string;
   programmeId?: ProgrammeId | null;
   qualityTarget?: { kind: 'budget-item' | 'workplan-item'; id: string };
 }
@@ -88,10 +88,8 @@ export function parseHash(): AppRoute {
   if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
   if (hash === 'report-builder') return { view: 'report-builder', activeTab: 'reports' };
   if (hash === 'payroll') return { view: 'payroll', activeTab: 'payroll' };
-  if (hash === 'staff' || hash === 'staff-management') {
-    const params = new URLSearchParams(query);
-    return { view: 'staff', activeTab: 'staff', staffId: params.get('employeeId') || undefined };
-  }
+  if (hash === 'contracts') return { view: 'contracts', activeTab: 'payroll' };
+  if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
   if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
   if (hash === 'register-girl') return { view: 'form-girl', activeTab: 'girls' };
   if (hash === 'add-house') return { view: 'form-house', activeTab: 'houses' };
@@ -133,6 +131,8 @@ export function buildHash(newView: AppView, girlId?: string | null, houseId?: st
       return '#/report-builder';
     case 'payroll':
       return '#/payroll';
+    case 'contracts':
+      return '#/contracts';
     case 'staff':
       return '#/staff';
     case 'ai-assistant':

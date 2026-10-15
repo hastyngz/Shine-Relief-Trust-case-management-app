@@ -37,6 +37,7 @@ const cases: Array<[string, string, string]> = [
   ['#/reports', 'reports', 'reports'],
   ['#/report-builder', 'report-builder', 'reports'],
   ['#/payroll', 'payroll', 'payroll'],
+  ['#/contracts', 'contracts', 'payroll'],
   ['#/staff', 'staff', 'staff'],
   ['#/ai-assistant', 'ai-assistant', 'ai-assistant'],
   ['#/ai', 'ai-assistant', 'ai-assistant'],
@@ -54,7 +55,7 @@ for (const [hash, view, tab] of cases) {
 // 2. Profile routes carry the record id.
 assert.equal(withHash('#/girl/abc123', parseHash).girlId, 'abc123');
 assert.equal(withHash('#/house/h-9', parseHash).houseId, 'h-9');
-assert.equal(withHash('#/staff?employeeId=staff%2F123', parseHash).staffId, 'staff/123');
+assert.equal(withHash('#/staff?employeeId=staff%2F123', parseHash).view, 'staff');
 
 // 3. The planning quality target is preserved.
 const quality = withHash('#/planning?qualityKind=budget-item&qualityId=b%2F7', parseHash).qualityTarget;
@@ -69,6 +70,7 @@ assert.equal(buildHash('house-profile', undefined, 'h1'), '#/house/h1');
 assert.equal(buildHash('programmes', undefined, undefined, 'education' as any), '#/programmes/education');
 assert.equal(buildHash('form-girl'), '#/register-girl');
 assert.equal(buildHash('ai-assistant'), '#/ai-assistant');
+assert.equal(buildHash('contracts'), '#/contracts');
 
 for (const [hash, view] of cases) {
   const route = withHash(hash, parseHash);

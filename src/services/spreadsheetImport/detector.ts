@@ -61,6 +61,10 @@ function detectRows(rows: string[][], sheetName = ''): SpreadsheetKind {
     row.some((cell) => /\b(name|employee|staff|worker)\b/.test(cell)) &&
     row.some((cell) => /\bgratuity\b/.test(cell))
   );
+  const hasContractTable = rows.some((row) =>
+    row.some((cell) => /\b(employee name|staff name|worker name|personnel name|name)\b/.test(cell)) &&
+    row.some((cell) => /\b(contract start|contract end|contract type|contract duration|contract status|employment status)\b/.test(cell))
+  );
   const payrollSheetName = /\b(payments?|payroll|salar(?:y|ies)|staff|employees?)\b/i.test(sheetName);
   const hasCost = hasHeader(rows, /\b(cost|unit cost|amount|price|budget)\b/);
   const hasQuantity = hasHeader(rows, /\b(qty|quantity)\b/);
@@ -87,6 +91,7 @@ function detectRows(rows: string[][], sheetName = ''): SpreadsheetKind {
   }
 
   if (hasGratuityTable) return 'payroll-grid';
+  if (hasContractTable) return 'payroll-grid';
 
   if (
     hasMonths &&

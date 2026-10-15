@@ -66,7 +66,6 @@ async function verifyPayrollYearInference() {
     analysis,
     'payroll-grid',
     [],
-    [],
     'only sep employees salary 2026.xlsx',
   );
   const maria = preview.lines.find((line) => line.kind === 'employee' && line.employeeName === 'Maria Chipelesa');

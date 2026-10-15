@@ -77,6 +77,7 @@ export interface AppViewSwitchProps {
   MessagingView: LazyView;
   BudgetsAndWorkplansView: LazyView;
   PayrollDashboard: LazyView;
+  ContractsDashboard: LazyView;
   CaseManagementView: LazyView;
   DataImportWizard: LazyView;
   ContactsView: LazyView;
@@ -87,9 +88,6 @@ export interface AppViewSwitchProps {
 
   // Navigation.
   navigateTo: (newView: AppView, tab?: NavTab, girlId?: string | null, houseId?: string | null, programmeId?: ProgrammeId | null) => void;
-  onOpenStaffProfile: (staffId: string) => void;
-  staffContractTargetId: string | null;
-  onStaffContractTargetHandled: () => void;
   openProgramme: (id: ProgrammeId | null) => void;
   openQualityRecord: (issue: QualityIssue) => void;
   setGirlsStatusFilter: (status?: string) => void;
@@ -144,9 +142,9 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
     currentGirlHealth, currentGirlFamily, currentHouse, currentHouseResidents,
     currentHouseRent, currentHouseExpenses, currentHouseActivities,
     ManagementDashboard, Reports, ReportBuilder, AIAssistantView, MessagingView,
-    BudgetsAndWorkplansView, PayrollDashboard, CaseManagementView, DataImportWizard,
+    BudgetsAndWorkplansView, PayrollDashboard, ContractsDashboard, CaseManagementView, DataImportWizard,
     ContactsView, Phase5OperationsView, ProgrammesView, StaffManagement, Dashboard,
-    navigateTo, onOpenStaffProfile, staffContractTargetId, onStaffContractTargetHandled, openProgramme, openQualityRecord, setGirlsStatusFilter, onOpenQuickAdd,
+    navigateTo, openProgramme, openQualityRecord, setGirlsStatusFilter, onOpenQuickAdd,
     onInitialFileConsumed, onProgrammeCreateHandled, onCreateProgrammePlan,
     handleOpenGirlProfile, handleOpenHouseProfile,
     handleStartRegisterGirl, handleStartAddHouse, handleStartRentPayment, handleStartExpense,
@@ -271,12 +269,16 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       )}
 
       {view === 'payroll' && (
-        <PayrollDashboard db={db} onRefresh={reloadData} onOpenStaffProfile={onOpenStaffProfile} />
+        <PayrollDashboard db={db} onRefresh={reloadData} onNavigateToContracts={() => navigateTo('contracts', 'payroll')} />
+      )}
+
+      {view === 'contracts' && (
+        <ContractsDashboard db={db} onRefresh={reloadData} onBackToPayroll={() => navigateTo('payroll', 'payroll')} />
       )}
 
       {/* VIEW: STAFF MANAGEMENT (ADMINISTRATORS ONLY) */}
       {view === 'staff' && (
-        <StaffManagement initialEmployeeId={staffContractTargetId} onInitialEmployeeOpened={onStaffContractTargetHandled} />
+        <StaffManagement />
       )}
 
       {/* VIEW: SHINE AI ASSISTANT */}

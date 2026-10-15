@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
-import { EmployeeContractPanel } from './EmployeeContractPanel';
 import {
   Users,
   UserPlus,
@@ -26,12 +25,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-interface StaffManagementProps {
-  initialEmployeeId?: string | null;
-  onInitialEmployeeOpened?: () => void;
-}
-
-export const StaffManagement: React.FC<StaffManagementProps> = ({ initialEmployeeId, onInitialEmployeeOpened }) => {
+export const StaffManagement: React.FC = () => {
   const {
     staffProfile,
     allStaff,
@@ -41,26 +35,6 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({ initialEmploye
     deleteStaffAccount,
     sendResetPassword,
   } = useAuth();
-  const [selectedEmployee, setSelectedEmployee] = useState<StaffUser | null>(null);
-
-  // Payroll can route directly to a staff member. Open their contract panel once
-  // their profile is available, then clear the navigation request in the app shell.
-  useEffect(() => {
-    if (!initialEmployeeId) return;
-    const employee = allStaff.find((person) => person.id === initialEmployeeId);
-    if (!employee) return;
-    setSelectedEmployee(employee);
-    onInitialEmployeeOpened?.();
-  }, [initialEmployeeId, allStaff, onInitialEmployeeOpened]);
-
-
-  const closeEmployeeContract = () => {
-    setSelectedEmployee(null);
-    if (new URLSearchParams(window.location.hash.split('?')[1] || '').has('employeeId')) {
-      window.location.hash = '#/staff';
-    }
-  };
-
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
@@ -561,14 +535,6 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({ initialEmploye
                       {/* Actions */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedEmployee(staff)}
-                            title="Open contract, salary history and gratuity"
-                            className="px-2 py-1 text-[10px] font-bold text-teal-900 bg-teal-50 hover:bg-teal-100 rounded-lg"
-                          >
-                            Contract & gratuity
-                          </button>
                           {/* Send Reset Email */}
                           {isAdmin && <button
                             type="button"
@@ -757,19 +723,6 @@ export const StaffManagement: React.FC<StaffManagementProps> = ({ initialEmploye
             </form>
           </div>
         </div>
-      )}
-      {selectedEmployee && staffProfile && (
-        <EmployeeContractPanel
-          staff={selectedEmployee}
-          actorUid={staffProfile.uid}
-          actorName={staffProfile.fullName}
-          canEdit={isAdmin || staffProfile.role === 'Manager'}
-          onUpdate={async (staffId, updates) => {
-            await updateStaffAccount(staffId, updates);
-            setSelectedEmployee((current) => current ? { ...current, ...updates } : current);
-          }}
-          onClose={closeEmployeeContract}
-        />
       )}
     </div>
   );

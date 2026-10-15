@@ -59,6 +59,20 @@ export interface EmploymentPeriod {
   status: ContractStatus;
 }
 
+export interface EmployeeContractFields {
+  employeeCategory?: EmployeeCategory;
+  position?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
+  contractType?: string;
+  contractDuration?: string;
+  contractStatus?: ContractStatus;
+  renewalInformation?: string;
+  employmentStatus?: EmploymentStatus;
+  originalContractStartDate?: string;
+  employmentPeriods?: EmploymentPeriod[];
+}
+
 export interface SalaryHistoryRecord {
   id: string;
   employeeId: string;
@@ -86,7 +100,7 @@ export interface SafeguardingPermissions {
   canClose: boolean;
 }
 
-export interface StaffUser {
+export interface StaffUser extends EmployeeContractFields {
   id: string; // document id / uid
   uid: string;
   email: string;
@@ -104,20 +118,9 @@ export interface StaffUser {
   canEditHealthRecords?: boolean;
   canViewCaseReviews?: boolean;
   canEditCaseReviews?: boolean;
-  employeeCategory?: EmployeeCategory;
-  position?: string;
-  contractStartDate?: string;
-  contractEndDate?: string;
-  contractType?: string;
-  contractDuration?: string;
-  contractStatus?: ContractStatus;
-  renewalInformation?: string;
-  employmentStatus?: EmploymentStatus;
-  originalContractStartDate?: string;
-  employmentPeriods?: EmploymentPeriod[];
 }
 
-export interface EmployeeRecord {
+export interface EmployeeRecord extends EmployeeContractFields {
   id: string;
   fullName: string;
   department?: string;

@@ -102,7 +102,7 @@ export async function parseExcelFile(
   });
   const spreadsheetAnalysis = await analyzeSpreadsheetWorkbook(workbook);
   const spreadsheetImportPreview = await createSpreadsheetImportPreview(
-    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff, employees, file.name,
+    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, employees, file.name,
   );
   const sheetNames = workbook.SheetNames;
   const primarySheet = workbook.Sheets[sheetNames[0]];
@@ -780,16 +780,21 @@ export async function commitImportBatch(
       const importedOtherAmounts = Array.isArray(data.otherPayrollAmounts)
         ? data.otherPayrollAmounts as Array<{ type: string; amount: number; payPeriod?: string; sourceReference?: string }>
         : [];
+      const contractFields = data.contractFields && typeof data.contractFields === 'object'
+        ? data.contractFields
+        : {};
       const employee: EmployeeRecord = {
         ...existingEmployee,
+        ...contractFields,
         id: employeeId,
         fullName: String(data.employeeName || item.title || '').trim(),
         department: data.department || existingEmployee?.department,
-        positionTitle: data.positionTitle || existingEmployee?.positionTitle,
+        positionTitle: contractFields.position || data.positionTitle || existingEmployee?.positionTitle,
+        position: contractFields.position || existingEmployee?.position,
         sourceYear: Number(data.sourceYear) || existingEmployee?.sourceYear,
-        employmentStatus: useImportedEmploymentStatus
+        employmentStatus: contractFields.employmentStatus || (useImportedEmploymentStatus
           ? data.employmentStatus
-          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active',
+          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active'),
         needsEmploymentReview: false,
         salaryMWK: useImportedSalary ? Number(data.currentSalary) : existingEmployee?.salaryMWK || 0,
         latestSalaryPeriod: useImportedSalary ? importedSalaryPeriod : existingEmployee?.latestSalaryPeriod,

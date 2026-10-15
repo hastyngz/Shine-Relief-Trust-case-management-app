@@ -137,17 +137,39 @@ const gratuityPreview = await createSpreadsheetImportPreview(
   gratuityWorkbook,
   gratuityAnalysis,
   gratuityAnalysis.detectedKind,
-  [{ id: 'staff-1', uid: 'staff-1', email: 'worker@example.org', fullName: 'Synthetic Worker', role: 'Staff', status: 'Active', createdAt: '', updatedAt: '' }],
-  [],
+  [{ id: 'employee-1', fullName: 'Synthetic Worker', salaryMWK: 120000, createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' }],
   'Gratuity all workers.xlsx',
 );
 const gratuityEmployees = gratuityPreview.lines.filter((line) => line.kind === 'employee');
 assert.equal(gratuityEmployees.length, 2);
-assert.equal(gratuityEmployees[0].matchedEmployeeId, 'staff-1');
+assert.equal(gratuityEmployees[0].matchedEmployeeId, 'employee-1');
 assert.equal(gratuityEmployees[0].salaryHistory.length, 0);
 assert.equal(gratuityEmployees[0].otherPayrollAmounts[0].type, 'gratuity');
 assert.equal(gratuityEmployees[0].otherPayrollAmounts[0].amount, 576000);
 assert.match(spreadsheetEmployeeLineToPreview(gratuityEmployees[0]).summary, /gratuity MWK 576,000/);
+
+const contractWorkbook = workbook([
+  ['Employee Name', 'Department', 'Position', 'Employee Category', 'Contract Start Date', 'Contract End Date', 'Contract Type', 'Contract Duration', 'Contract Status', 'Employment Status', 'Renewal Information'],
+  ['Synthetic Contract Employee', 'Operations', 'Driver', 'Ground Worker/Gardener', '2026-01-15', '2026-12-31', 'Fixed term', '12 months', 'Active', 'Active', 'Review in November'],
+], 'Employee Contracts 2026');
+const contractAnalysis = await analyzeSpreadsheetWorkbook(contractWorkbook);
+assert.equal(contractAnalysis.detectedKind, 'payroll-grid');
+const contractPreview = await createSpreadsheetImportPreview(
+  contractWorkbook,
+  contractAnalysis,
+  contractAnalysis.detectedKind,
+  [{ id: 'employee-contract-1', fullName: 'Synthetic Contract Employee', salaryMWK: 0, createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' }],
+  'Employee Contracts 2026.xlsx',
+);
+const contractLine = contractPreview.lines.find((line) => line.kind === 'employee');
+assert.equal(contractLine?.matchedEmployeeId, 'employee-contract-1');
+assert.equal(contractLine?.contractFields?.position, 'Driver');
+assert.equal(contractLine?.contractFields?.contractStartDate, '2026-01-15');
+assert.equal(contractLine?.contractFields?.contractEndDate, '2026-12-31');
+assert.equal(contractLine?.contractFields?.contractType, 'Fixed term');
+assert.equal(contractLine?.contractFields?.contractStatus, 'Active');
+assert.equal(contractLine?.contractFields?.employeeCategory, 'Ground Worker/Gardener');
+assert.match(spreadsheetEmployeeLineToPreview(contractLine!).summary, /contract 2026-01-15 to 2026-12-31/);
 
 const uploadedGratuityWorkbook = XLSX.read(
   fs.readFileSync('public/sample_reports/Gratuity all workers.xlsx'),
@@ -159,7 +181,6 @@ const uploadedGratuityPreview = await createSpreadsheetImportPreview(
   uploadedGratuityWorkbook,
   uploadedGratuityAnalysis,
   uploadedGratuityAnalysis.detectedKind,
-  [],
   [],
   'Gratuity all workers.xlsx',
 );
@@ -242,7 +263,6 @@ const repeatedEmployeePreview = await createSpreadsheetImportPreview(
   await analyzeSpreadsheetWorkbook(repeatedEmployeePayrollWorkbook),
   'payroll-grid',
   [],
-  [],
   'Payroll 2026.xlsx',
 );
 const repeatedEmployee = repeatedEmployeePreview.lines.find((line) => line.kind === 'employee');
@@ -260,7 +280,7 @@ for (const fileName of [
   const fixtureAnalysis = await analyzeSpreadsheetWorkbook(fixtureWorkbook);
   assert.equal(fixtureAnalysis.detectedKind, 'payroll-grid', `${fileName} should be detected as payroll`);
   const fixturePreview = await createSpreadsheetImportPreview(
-    fixtureWorkbook, fixtureAnalysis, fixtureAnalysis.detectedKind, [], [], fileName,
+    fixtureWorkbook, fixtureAnalysis, fixtureAnalysis.detectedKind, [], fileName,
   );
   const detectedEmployees = fixturePreview.lines.filter((line) => line.kind === 'employee');
   assert.ok(detectedEmployees.length > 0, `${fileName} should produce employee preview rows`);
@@ -299,7 +319,6 @@ const onlySeptemberPreview = await createSpreadsheetImportPreview(
   onlySeptemberAnalysis,
   onlySeptemberAnalysis.detectedKind,
   [],
-  [],
   'only sep employees salary 2026.xlsx',
 );
 const employeePreviewCards = onlySeptemberPreview.lines
@@ -332,7 +351,6 @@ const missingPayrollPreview = await createSpreadsheetImportPreview(
   missingPayrollAnalysis,
   missingPayrollAnalysis.detectedKind,
   [],
-  [],
   'september_2026_missing_payroll_report.xlsx',
 );
 const missingPayrollEmployees = missingPayrollPreview.lines.filter((line) => line.kind === 'employee');
@@ -353,7 +371,6 @@ const alternatePayrollPreview = await createSpreadsheetImportPreview(
   alternatePayrollLayout,
   alternatePayrollAnalysis,
   alternatePayrollAnalysis.detectedKind,
-  [],
   [],
   'alternate_september_payroll.xlsx',
 );

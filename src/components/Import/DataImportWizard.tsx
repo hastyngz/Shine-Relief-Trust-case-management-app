@@ -728,7 +728,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setParseError('Payroll spreadsheet imports are restricted to Administrators and Managers.');
       return;
     }
-    const parsed = await createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff, db.employees || [], selectedFile.name);
+    const parsed = await createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, db.employees || [], selectedFile.name);
     setSpreadsheetPreview(parsed);
     setPreviewItems(parsed.lines.map((line) =>
       spreadsheetLineToPreview(line, db.workplans || [])
