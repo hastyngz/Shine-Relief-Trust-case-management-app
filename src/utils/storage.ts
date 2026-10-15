@@ -1528,7 +1528,9 @@ export function saveInventoryItem(item: InventoryItem): InventoryItem {
   else db.inventoryItems.unshift({ ...saved, createdAt: item.createdAt || now });
   const result = saveDatabase(db);
   if (!result.ok) throw new Error('Could not save inventory changes on this device. Check available storage and try again.');
-  persistPhase2Record('inventoryItems', saved).catch((error) => console.error('Failed to persist inventory item:', error));
+  // saveDatabase dispatches the shared db-updated event; App.tsx diffs this record into
+  // the per-record offline queue, preserving conflict detection instead of racing it
+  // with a direct Firestore write from this helper.
   return saved;
 }
 
