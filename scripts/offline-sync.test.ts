@@ -119,7 +119,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: f
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, storage: undefined } });
 Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore } = await import('../src/services/firestoreSync');
@@ -272,5 +272,24 @@ await resolveSyncConflict(mineConflicts[0].id, 'keep-mine', { uid: 'uid-a', name
 await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(server.get('girls', 'SG-300').fullName, 'Mine again', 'keep-mine applies the local edit');
 assert.equal((await readSyncConflicts()).length, 0);
+
+// --- 8. Local-write echoes must not advance the sync baseline ---------------
+// A snapshot that came from the cache, or that carries this device's own pending
+// writes, is an optimistic echo rather than a confirmed server copy. Adopting it
+// as the baseline makes the next diff see "no change" and silently loses the
+// edit (the offline data-loss bug this guards against).
+assert.equal(isConfirmedServerSnapshot(undefined), true, 'missing metadata is treated as confirmed');
+assert.equal(isConfirmedServerSnapshot({ fromCache: false, hasPendingWrites: false }), true);
+assert.equal(isConfirmedServerSnapshot({ fromCache: true, hasPendingWrites: false }), false, 'cache reads are not confirmed');
+assert.equal(isConfirmedServerSnapshot({ fromCache: false, hasPendingWrites: true }), false, 'pending local writes are not confirmed');
+
+values.clear();
+server.reset();
+setLastSyncedSnapshot(db({ girls: [girl('SG-400', T1)] }));
+const echoedEdit = db({ girls: [girl('SG-400', T2, 'Offline edit')] });
+// The listener sees a pending-write echo and (correctly) does not set the baseline.
+await recordOfflineChanges(echoedEdit);
+assert.equal(getPendingOfflineSnapshotCount(), 1, 'an edit echoed back as a pending local write is still queued');
+assert.equal((await loadQueue())[0].recordId, 'SG-400');
 
 console.log('Offline per-record queue and conflict tests passed.');

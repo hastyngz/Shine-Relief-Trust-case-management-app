@@ -1433,7 +1433,7 @@ let activeUnsubscribers: Unsubscribe[] = [];
  * Dispatches 'shine_db_updated' whenever Firestore records are loaded or changed.
  */
 export function initFirestoreListeners(
-  onDatabaseSynced: (updatedDb: AppDatabase) => void,
+  onDatabaseSynced: (updatedDb: AppDatabase, meta?: { fromCache: boolean; hasPendingWrites: boolean }) => void,
   options: {
     uid?: string;
     canViewTeamTasks?: boolean;
@@ -1494,6 +1494,15 @@ export function initFirestoreListeners(
   const initialLoadedCollections = new Set<string>();
   const TOTAL_COLLECTIONS = 38;
 
+  // Firestore emits a snapshot with `fromCache === true` for optimistic local
+  // writes that the server has not confirmed yet (and when the client is
+  // offline). The caller must not treat such a snapshot as a confirmed server
+  // copy — doing so advances the sync baseline past an unsynced edit and loses
+  // it. A snapshot is only reported as server-confirmed when every collection
+  // that contributed to it came from the server and carried no pending writes.
+  let allContributingFromServer = true;
+  let anyPendingWrites = false;
+
   // Coalesce bursts of independent collection snapshots into one app-state
   // update. This does not change Firestore reads or realtime subscription
   // semantics; it prevents a burst of callbacks from repeatedly rebuilding
@@ -1503,6 +1512,10 @@ export function initFirestoreListeners(
     if (notifyTimer !== null) clearTimeout(notifyTimer);
     notifyTimer = setTimeout(() => {
       notifyTimer = null;
+      const fromCache = !allContributingFromServer;
+      const hasPendingWrites = anyPendingWrites;
+      allContributingFromServer = true;
+      anyPendingWrites = false;
       onDatabaseSynced({
       girls: [...liveState.girls],
       households: [...liveState.households],
@@ -1545,7 +1558,7 @@ export function initFirestoreListeners(
       caseGoals: [...(liveState.caseGoals || [])],
       procurementLists: [...(liveState.procurementLists || [])],
       projectProjections: [...(liveState.projectProjections || [])],
-      });
+      }, { fromCache, hasPendingWrites });
     }, 50);
   };
 
@@ -1567,9 +1580,15 @@ export function initFirestoreListeners(
           : colRef;
     const unsub = onSnapshot(
       source,
+      { includeMetadataChanges: true },
       (snapshot) => {
         const records = snapshot.docs.map((d) => d.data() as T);
         (liveState[stateField] as unknown as T[]) = records;
+
+        // Remember whether this snapshot is server-confirmed before the
+        // coalesced callback reads the flags.
+        if (snapshot.metadata.fromCache) allContributingFromServer = false;
+        if (snapshot.metadata.hasPendingWrites) anyPendingWrites = true;
 
         const firstSnapshot = !initialLoadedCollections.has(colName);
         initialLoadedCollections.add(colName);

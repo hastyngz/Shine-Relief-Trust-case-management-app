@@ -256,6 +256,19 @@ export function setLastSyncedSnapshot(db: AppDatabase): void {
 }
 
 /**
+ * A Firestore snapshot may only become the sync baseline when it reflects
+ * server-confirmed state. Snapshots served from the cache, or carrying this
+ * device's own pending writes, are optimistic echoes of an unsynced local edit;
+ * adopting them as the baseline makes the next diff see "no change" and the edit
+ * is silently lost.
+ */
+export function isConfirmedServerSnapshot(
+  meta: { fromCache?: boolean; hasPendingWrites?: boolean } | undefined,
+): boolean {
+  return !meta?.fromCache && !meta?.hasPendingWrites;
+}
+
+/**
  * Records the diff between the last synced copy and the current database.
  * Called whenever a local edit is made, so nothing is lost if the app closes
  * before the next online flush.

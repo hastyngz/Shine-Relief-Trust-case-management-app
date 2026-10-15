@@ -62,7 +62,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { flushPendingOfflineSnapshots, recordOfflineChanges, setLastSyncedSnapshot, isBrowserOnline } from './services/offlineSync';
+import { flushPendingOfflineSnapshots, recordOfflineChanges, setLastSyncedSnapshot, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -276,9 +276,13 @@ function AppContent() {
     if (!currentUser || isSuspended) {
       return;
     }
-    const unsub = initFirestoreListeners((cloudDb) => {
+    const unsub = initFirestoreListeners((cloudDb, meta) => {
       saveDatabase(cloudDb, false);
-      setLastSyncedSnapshot(cloudDb);
+      // Only a server-confirmed copy may become the sync baseline. A snapshot
+      // that came from the cache, or that still has pending local writes, is an
+      // optimistic echo of this device's own edit; treating it as confirmed
+      // would advance the baseline past an unsynced edit and lose it.
+      if (isConfirmedServerSnapshot(meta)) setLastSyncedSnapshot(cloudDb);
       setDb(cloudDb);
     }, {
       uid: currentUser.uid,
@@ -290,6 +294,18 @@ function AppContent() {
     });
     return () => unsub();
   }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews]);
+
+  // On load, drain any queue left by a previous offline session. Without this a
+  // phone that was closed while offline and reopened already-online would keep
+  // the edits queued until the next connectivity change. The queue is only
+  // flushed when online; conflicts are surfaced instead of overwritten.
+  useEffect(() => {
+    if (!currentUser || isSuspended) return;
+    if (!isBrowserOnline()) return;
+    void flushPendingOfflineSnapshots({
+      actor: { uid: currentUser.uid, name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff' },
+    });
+  }, [currentUser?.uid, isSuspended]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
