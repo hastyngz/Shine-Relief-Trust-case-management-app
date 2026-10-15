@@ -29,6 +29,7 @@ const cases: Array<[string, string, string]> = [
   ['#/contacts', 'contacts', 'contacts'],
   ['#/case-management', 'case-management', 'case-management'],
   ['#/inventory', 'inventory', 'administration'],
+  ['#/assets', 'assets', 'administration'],
   ['#/messages', 'messages', 'messages'],
   ['#/inbox', 'messages', 'messages'],
   ['#/planning', 'planning', 'planning'],
