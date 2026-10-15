@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Girl, Household, GirlStatus } from '../../types';
 import { generateGirlId } from '../../utils/storage';
-import { UserPlus, Save, X } from 'lucide-react';
+import { UserPlus, X } from 'lucide-react';
+import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 
 interface GirlFormProps {
@@ -50,8 +51,9 @@ export const GirlForm: React.FC<GirlFormProps> = ({
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveButtonStatus>('idle');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) {
       setError('Please provide the full name of the girl.');
@@ -68,7 +70,10 @@ export const GirlForm: React.FC<GirlFormProps> = ({
 
     const id = initialData?.id || generateGirlId(existingGirls);
 
-    onSave(
+    setError('');
+    setSaveStatus('saving');
+    try {
+      await onSave(
       {
         id,
         fullName: fullName.trim(),
@@ -90,7 +95,12 @@ export const GirlForm: React.FC<GirlFormProps> = ({
         notes: notes.trim(),
       },
       pendingPhotos
-    );
+      );
+      setSaveStatus('done');
+    } catch {
+      setError('Could not save this girl record. Your changes are still on this form; please try again.');
+      setSaveStatus('error');
+    }
   };
 
   return (
@@ -358,13 +368,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="fx-press fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm flex items-center gap-2 transition-colors min-h-11"
-          >
-            <Save className="w-4 h-4" />
-            {initialData ? 'Update Profile' : 'Save Registration'}
-          </button>
+          <SaveButton status={saveStatus} idleLabel={initialData ? 'Update Profile' : 'Save Registration'} doneLabel="Saved on this phone" className="fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition-colors" />
         </div>
       </form>
     </div>
