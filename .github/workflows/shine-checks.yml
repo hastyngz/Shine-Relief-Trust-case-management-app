@@ -96,6 +96,9 @@ jobs:
       - name: Test asset CSV export
         run: npm run test:asset-export
 
+      - name: Test physical asset verification
+        run: npm run test:asset-verification
+
       - name: Test hash routing
         run: npm run test:routing
 
