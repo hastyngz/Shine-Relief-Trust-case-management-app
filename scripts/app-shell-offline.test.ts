@@ -163,6 +163,14 @@ assert.deepEqual(unsaved.deleted, ['shine-shell-abc', 'shine-shell-def']);
 assert.equal(unsavedOutcome?.reloaded, false, 'the reload is skipped while a form holds unsaved data');
 assert.equal(unsaved.reloads(), 0);
 
+// A blocked reload must not consume the one-reload guard: once the form is clean,
+// a subsequent status check should reload the now-uncached network app.
+reloadGuard.clear();
+const laterClean = deps({ enabled: false });
+const laterOutcome = await killSwitch.checkAppShellKillSwitch(laterClean.deps as any);
+assert.equal(laterOutcome?.reloaded, true, 'the kill switch reloads once a previously dirty form is clean');
+assert.equal(laterClean.reloads(), 1);
+
 // 7e. A lazy chunk failure is recognised so the friendly message can be shown.
 assert.equal(isChunkLoadError(new Error('Failed to fetch dynamically imported module: /assets/Foo.js')), true);
 assert.equal(isChunkLoadError(new Error('Importing a module script failed.')), true);
