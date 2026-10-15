@@ -900,6 +900,15 @@ export interface ScheduleItem {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+  /** Optional metadata for records explicitly managed in the compliance register. */
+  complianceCategory?: string;
+  compliancePriority?: 'Low' | 'Medium' | 'High' | 'Urgent';
+  complianceRecurrence?: 'One-off' | 'Monthly' | 'Quarterly' | 'Every 6 months' | 'Annually';
+  evidenceReference?: string;
+  completionNote?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened' | 'Verified'; actor: string; at: string; note?: string }>;
 }
 
 export type MeetingStatus = 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
