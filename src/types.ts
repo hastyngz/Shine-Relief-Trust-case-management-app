@@ -1403,6 +1403,46 @@ export interface InventoryItem {
   createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; createdByUid?: string; updatedByUid?: string;
 }
 
+export type AssetCondition = 'Good' | 'Fair' | 'Damaged' | 'Needs Repair' | 'Written Off';
+export type AssetStatus = 'In Use' | 'In Storage' | 'Under Repair' | 'Missing' | 'Disposed';
+
+export interface AssetHistoryEntry {
+  id: string;
+  date: string;
+  action: 'Registered' | 'Details Updated' | 'Condition Changed' | 'Status Changed' | 'Location Changed' | 'Assignment Changed' | 'Maintenance';
+  note: string;
+  previousValue?: string;
+  newValue?: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+export interface AssetRecord {
+  id: string;
+  assetTag: string;
+  name: string;
+  category: string;
+  description?: string;
+  serialNumber?: string;
+  acquisitionDate?: string;
+  acquisitionCostMWK?: number;
+  fundingSource?: string;
+  location: string;
+  assignedTo?: string;
+  condition: AssetCondition;
+  status: AssetStatus;
+  warrantyExpiryDate?: string;
+  nextServiceDate?: string;
+  notes?: string;
+  history: AssetHistoryEntry[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  createdByUid?: string;
+  updatedByUid?: string;
+}
+
 export interface AppDatabase {
   girls: Girl[];
   households: Household[];
@@ -1445,6 +1485,7 @@ export interface AppDatabase {
   procurementLists?: ProcurementList[];
   projectProjections?: ProjectProjection[];
   inventoryItems?: InventoryItem[];
+  assets?: AssetRecord[];
 }
 
 export type OfflineChangeOperation = 'set' | 'delete';
