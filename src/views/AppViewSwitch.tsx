@@ -122,14 +122,14 @@ export interface AppViewSwitchProps {
   handleUpdateExpense: (id: string, changes: Partial<Omit<HouseholdExpense, 'id' | 'householdId' | 'createdAt'>>) => void;
   handleDeleteActivity: (id: string) => void;
   handleSaveGirl: (girlData: Omit<Girl, 'createdAt' | 'updatedAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
-  handleSaveHouse: (houseData: Omit<Household, 'createdAt' | 'updatedAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
+  handleSaveHouse: (houseData: Omit<Household, 'createdAt' | 'updatedAt'>, pendingPhotos?: PendingPhoto[]) => void;
   handleSaveEduFollowUp: (data: Omit<AppDatabase['educationalFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
-  handleSaveHealthFollowUp: (data: Omit<AppDatabase['healthFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
+  handleSaveHealthFollowUp: (data: Omit<AppDatabase['healthFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
   handleSaveFamilyFollowUp: (data: Omit<AppDatabase['familyFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
   handleSaveRentPayment: (data: Omit<HouseholdRentPayment, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
   handleSaveExpense: (data: Omit<HouseholdExpense, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
   handleSaveActivity: (data: Omit<HouseholdActivity, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
-  reloadData: () => boolean;
+  reloadData: () => void;
   notifyDataChange: (change: any) => void;
   showToast: (message: string) => void;
   openImportFilePicker: () => void;
