@@ -1389,6 +1389,20 @@ export interface ImportPreviewItem {
     | 'MARK_FOR_REVIEW';
 }
 
+export type InventoryMovementType = 'Received' | 'Issued' | 'Returned' | 'Damaged' | 'Adjustment' | 'Transfer In' | 'Transfer Out';
+
+export interface InventoryMovement {
+  id: string; type: InventoryMovementType; quantity: number; date: string; location: string;
+  destination?: string; reference?: string; reason: string; recordedBy: string; recordedByUid?: string; createdAt: string;
+}
+
+export interface InventoryItem {
+  id: string; stockCode: string; name: string; category: string; description?: string; unit: string;
+  quantityOnHand: number; minimumStockLevel: number; location: string; supplier?: string; unitCostMWK?: number;
+  expiryDate?: string; condition?: 'Good' | 'Fair' | 'Damaged' | 'Expired'; notes?: string; movements: InventoryMovement[];
+  createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; createdByUid?: string; updatedByUid?: string;
+}
+
 export interface AppDatabase {
   girls: Girl[];
   households: Household[];
@@ -1430,6 +1444,7 @@ export interface AppDatabase {
   caseGoals?: CaseGoal[];
   procurementLists?: ProcurementList[];
   projectProjections?: ProjectProjection[];
+  inventoryItems?: InventoryItem[];
 }
 
 export type OfflineChangeOperation = 'set' | 'delete';
