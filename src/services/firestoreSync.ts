@@ -62,6 +62,7 @@ import {
   RestrictedImportSourceData,
   ContactRecord,
   EmployeeRecord,
+  AssetRecord,
   OfflineChangeEntry,
   SyncConflict,
   SyncConflictResolution,
