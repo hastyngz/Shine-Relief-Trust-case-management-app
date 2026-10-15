@@ -906,9 +906,7 @@ export interface ScheduleItem {
   complianceRecurrence?: 'One-off' | 'Monthly' | 'Quarterly' | 'Every 6 months' | 'Annually';
   evidenceReference?: string;
   completionNote?: string;
-  verifiedBy?: string;
-  verifiedAt?: string;
-  complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened' | 'Verified'; actor: string; at: string; note?: string }>;
+  complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened'; actor: string; at: string; note?: string }>;
 }
 
 export type MeetingStatus = 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
