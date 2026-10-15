@@ -82,7 +82,9 @@ Before substantial work, inspect `.agents/skills/` and read the relevant `SKILL.
 - For bugs, offline behaviour, queued writes, storage quota, conflicts, service workers, or reconnect flows, use `shine-offline-testing` and the relevant regression tests.
 - For React components, hooks, state, routing, or TypeScript changes, use `shine-react-typescript`.
 - For authentication, role checks, Firestore/Storage rules, server endpoints, uploads, logs, or beneficiary data, use `shine-security-review`.
-- For slow screens, rendering, bundles, images, database reads, or network requests, use `shine-performance`.
+- For browser-level user workflows, mobile viewport checks, navigation, authentication flows, or offline/reconnect browser tests, use `shine-e2e-testing`.
+- For visual consistency, motion, loading/saving feedback, accessibility, touch targets, responsive layouts, or theme compatibility, use `shine-ui-polish`.
+- For slow screens, React re-renders, component state/context behaviour, bundles, images, database reads, or network requests, use `shine-performance`.
 - When a task spans several areas, load all relevant skills; do not treat the list as mutually exclusive.
 
 ### Required working method
