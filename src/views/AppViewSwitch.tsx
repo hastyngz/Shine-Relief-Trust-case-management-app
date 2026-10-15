@@ -28,6 +28,7 @@ import { HouseholdActivityForm } from '../components/Forms/HouseholdActivityForm
 import { AppView } from '../routing/appRoutes';
 import { AdministrationHub } from '../components/AdministrationHub';
 import { InventoryView } from '../components/InventoryView';
+import { AssetRegisterView } from '../components/AssetRegisterView';
 import type { PendingPhoto } from '../components/Attachments/FormPhotoSection';
 
 /**
@@ -259,6 +260,7 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       {view === 'administration' && <AdministrationHub db={db} onNavigate={(nextView) => navigateTo(nextView, nextView === 'staff' ? 'staff' : nextView === 'payroll' || nextView === 'contracts' ? 'payroll' : nextView === 'reports' ? 'reports' : nextView === 'import' ? 'import' : nextView === 'planning' ? 'planning' : nextView === 'inventory' ? 'administration' : 'operations')} />}
 
       {view === 'inventory' && <InventoryView items={db.inventoryItems || []} onRefresh={reloadData} />}
+      {view === 'assets' && <AssetRegisterView assets={db.assets || []} onRefresh={reloadData} />}
 
       {/* VIEW 5: REPORTS */}
       {view === 'reports' && (
