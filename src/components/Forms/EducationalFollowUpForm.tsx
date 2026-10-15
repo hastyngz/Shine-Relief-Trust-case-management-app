@@ -9,7 +9,7 @@ interface EducationalFollowUpFormProps {
   onSave: (
     data: Omit<EducationalFollowUp, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onCancel: () => void;
 }
 
@@ -48,7 +48,7 @@ export const EducationalFollowUpForm: React.FC<EducationalFollowUpFormProps> = (
     setError('');
     setSaveStatus('saving');
     try {
-      await onSave(
+      const result = await onSave(
       {
         girlId: girl.id,
         date,
@@ -66,6 +66,11 @@ export const EducationalFollowUpForm: React.FC<EducationalFollowUpFormProps> = (
       },
       pendingPhotos
       );
+      if (result === false) {
+        setError('This record was not saved. Check your permissions and try again.');
+        setSaveStatus('error');
+        return;
+      }
       setSaveStatus('done');
     } catch {
       setError('Could not save this educational record. Your changes are still on this form; please try again.');
