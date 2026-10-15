@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +16,8 @@ import {
   BrainCircuit,
   UserRound,
   Sprout,
+  MoreHorizontal,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMessaging } from '../contexts/MessagingContext';
@@ -101,6 +103,57 @@ export const Navigation: React.FC<NavigationProps> = ({
   ];
   const mobileNavItems = navItems.filter((item) => item.id !== 'staff' && item.id !== 'messages');
 
+  // Sunrise view: four main tabs plus a "More" sheet for everything else.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const closeMoreRef = useRef<HTMLButtonElement>(null);
+  const sunriseMainIds: NavTab[] = ['dashboard', 'girls', 'houses', 'messages'];
+  const sunriseMainLabels: Partial<Record<NavTab, string>> = {
+    dashboard: 'Home',
+    girls: 'Girls',
+    houses: 'Houses',
+    messages: 'Messages',
+  };
+  const sunriseMain = navItems.filter((item) => sunriseMainIds.includes(item.id));
+  const sunriseMore = navItems.filter((item) => !sunriseMainIds.includes(item.id));
+  const sunriseActiveIndex = sunriseMain.findIndex((item) => item.id === activeTab);
+  const sunrisePillIndex = sunriseActiveIndex === -1 ? sunriseMain.length : sunriseActiveIndex;
+
+  useEffect(() => {
+    if (mobileViewMode !== 'sunrise') setMoreOpen(false);
+  }, [mobileViewMode]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    closeMoreRef.current?.focus();
+  }, [moreOpen]);
+
+  const closeMore = () => {
+    setMoreOpen(false);
+    moreButtonRef.current?.focus();
+  };
+
+  const handleSheetKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      closeMore();
+      return;
+    }
+    if (event.key !== 'Tab' || !sheetRef.current) return;
+    const focusable = Array.from(sheetRef.current.querySelectorAll<HTMLElement>('button:not([disabled])'));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <>
       {/* Desktop & Tablet Navigation */}
@@ -149,7 +202,107 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
       </nav>
 
+      {/* Sunrise view: 4 main tabs + More */}
+      {mobileViewMode === 'sunrise' && (
+        <>
+          <nav
+            id="mobile-bottom-nav"
+            aria-label="Main"
+            className="mobile-bottom-nav--sunrise md:hidden fixed bottom-0 left-0 right-0 z-40"
+          >
+            <span
+              className="sunrise-nav-pill"
+              aria-hidden="true"
+              style={{ transform: `translateX(${sunrisePillIndex * 100}%)` }}
+            />
+            <div className="sunrise-nav-grid">
+              {sunriseMain.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    id={`mobile-nav-tab-${item.id}`}
+                    type="button"
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => onSelectTab(item.id)}
+                    className={`sunrise-nav-item fx-press${isActive ? ' is-active' : ''}`}
+                  >
+                    <span className="sunrise-nav-icon">
+                      <Icon className="h-6 w-6" />
+                      {item.count !== undefined && item.count > 0 && item.id === 'messages' && (
+                        <span className="sunrise-nav-badge">{item.count > 99 ? '99+' : item.count}</span>
+                      )}
+                    </span>
+                    <span>{sunriseMainLabels[item.id] ?? item.label}</span>
+                  </button>
+                );
+              })}
+              <button
+                ref={moreButtonRef}
+                id="mobile-nav-more"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={moreOpen}
+                aria-current={sunriseActiveIndex === -1 ? 'page' : undefined}
+                onClick={() => setMoreOpen(true)}
+                className={`sunrise-nav-item fx-press${sunriseActiveIndex === -1 ? ' is-active' : ''}`}
+              >
+                <span className="sunrise-nav-icon">
+                  <MoreHorizontal className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <span>More</span>
+              </button>
+            </div>
+          </nav>
+          {moreOpen && (
+            <div className="sunrise-sheet-layer md:hidden">
+              <div className="sunrise-backdrop fx-backdrop-enter" onClick={closeMore} aria-hidden="true" />
+              <div
+                ref={sheetRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="More sections"
+                onKeyDown={handleSheetKeyDown}
+                className="sunrise-sheet fx-sheet-enter"
+              >
+                <div className="sunrise-sheet-handle" aria-hidden="true" />
+                <div className="sunrise-sheet-head">
+                  <h2>More</h2>
+                  <button ref={closeMoreRef} type="button" aria-label="Close" onClick={closeMore} className="fx-press">
+                    <X className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="sunrise-sheet-grid">
+                  {sunriseMore.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-current={isActive ? 'page' : undefined}
+                        onClick={() => {
+                          setMoreOpen(false);
+                          onSelectTab(item.id);
+                        }}
+                        className={`sunrise-sheet-item fx-press${isActive ? ' is-active' : ''}`}
+                      >
+                        <Icon className="h-6 w-6" />
+                        <span>{item.label}</span>
+                        {item.count !== undefined && item.count > 0 && <span className="sunrise-sheet-count">{item.count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Mobile Bottom Navigation Bar */}
+      {mobileViewMode !== 'sunrise' && (
       <nav
         id="mobile-bottom-nav"
         className={`mobile-bottom-nav--${mobileViewMode} md:hidden fixed bottom-0 left-0 right-0 z-40 px-2 pt-2 shadow-lg`}
@@ -208,6 +361,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           })}
         </div>
       </nav>
+      )}
     </>
   );
 };

@@ -65,3 +65,9 @@ Repository memory for the SHINE Relief Trust case-management app.
 - Keep motion to transform/opacity except the intentional skeleton shimmer and drawn success tick; respect `prefers-reduced-motion`, provide visible keyboard focus, keep touch targets accessible, and never let motion conceal an error or offline/sync warning.
 - New buttons, cards, sheets and loading states must use these shared pieces rather than creating duplicate primitives.
 - Preserve existing layouts, routes, colours, copy, data logic, auth, storage, offline sync, AI chat phone layout, and Firestore rules when applying visual polish.
+
+## App views and the Sunrise view
+- There are four app views (`AppViewMode` in `src/contexts/VisualSettingsContext.tsx`: `classic`, `ios`, `foundation`, `sunrise`). The list shown in the picker is `appViews` in the same file, rendered by the app view picker in `src/components/Header.tsx`. An unknown saved view falls back to the default.
+- `sunrise` is the warm orange look: off-white page, slim white header, soft cards, and a bottom nav with four tabs (Home, Girls, Houses, Messages) plus a "More" sheet. Its styles live only in `src/styles/sunrise.css`, scoped under `#app-shell[data-mobile-view="sunrise"]`, and its nav markup is the Sunrise branch of `src/components/Navigation.tsx`.
+- Sunrise reads the active colour theme through the `--theme-*` variables, so all colour themes keep working. Do not hard-code a single orange there.
+- Effects from `src/styles/effects.css` apply in every view and colour theme. Anything new must work in all four views.
