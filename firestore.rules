@@ -459,6 +459,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /assets/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
     match /projectProjections/{id} {
       allow read: if isManagerOrAdmin();
       allow create, update: if isManagerOrAdmin();
