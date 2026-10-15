@@ -310,7 +310,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Girls Outcomes Card */}
         <div
           onClick={() => onNavigateToGirlsList('Completed')}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -332,7 +332,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* SHINE Houses Card */}
         <div
           onClick={onNavigateToHousesList}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -354,7 +354,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Expenditure Card */}
         <div
           onClick={onNavigateToReports}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
