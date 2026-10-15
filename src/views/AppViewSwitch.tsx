@@ -29,7 +29,8 @@ import { AppView } from '../routing/appRoutes';
 import { AdministrationHub } from '../components/AdministrationHub';
 import { InventoryView } from '../components/InventoryView';
 import { AssetRegisterView } from '../components/AssetRegisterView';
-import { DocumentsFilingView } from '../components/DocumentsFilingView';\nimport { ComplianceCalendarView } from '../components/ComplianceCalendarView';
+import { DocumentsFilingView } from '../components/DocumentsFilingView';
+import { ComplianceCalendarView } from '../components/ComplianceCalendarView';
 import type { PendingPhoto } from '../components/Attachments/FormPhotoSection';
 
 /**
