@@ -750,12 +750,12 @@ function AppContent() {
       }
       updateGirl(editingGirl.id, girlData, auditActor);
       notifyDataChange({ type: 'record_updated', entityId: editingGirl.id, entityTitle: girlData.fullName, girlId: editingGirl.id, detail: 'girl profile' });
-      showToast(`Profile updated for ${girlData.fullName}`);
+      showToast(`Saved on this phone. Profile updated for ${girlData.fullName}`);
       navigateTo('girl-profile', 'girls', editingGirl.id);
     } else {
       const newGirl = addGirl(girlData, auditActor);
       targetId = newGirl.id;
-      showToast(`Successfully registered ${newGirl.fullName} (ID: ${newGirl.id})`);
+      showToast(`Saved on this phone. Successfully registered ${newGirl.fullName} (ID: ${newGirl.id})`);
       navigateTo('girl-profile', 'girls', newGirl.id);
 
       // Notify staff of new registration
@@ -818,7 +818,7 @@ function AppContent() {
         classLevel: data.classLevel || girl.classLevel,
       }, auditActor);
     }
-    showToast('Educational follow-up recorded successfully.');
+    showToast('Saved on this phone. Educational follow-up recorded successfully.');
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('educationalFollowUp', created.id, pendingPhotos);
     }
@@ -884,7 +884,7 @@ function AppContent() {
   ) => {
     if (isViewOnly) return;
     const created = addExpense(data, auditActor);
-    showToast('Household expense recorded.');
+    showToast('Saved on this phone. Household expense recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
     notifyDataChange({ type: 'expense_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
     if (pendingPhotos && pendingPhotos.length > 0) {
@@ -899,7 +899,7 @@ function AppContent() {
   ) => {
     if (isViewOnly) return;
     const created = addHouseholdActivity(data, auditActor);
-    showToast('Household group activity recorded.');
+    showToast('Saved on this phone. Household group activity recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
     notifyDataChange({ type: 'activity_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
     if (pendingPhotos && pendingPhotos.length > 0) {
