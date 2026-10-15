@@ -262,7 +262,8 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       {view === 'administration' && <AdministrationHub db={db} onNavigate={(nextView) => navigateTo(nextView, nextView === 'staff' ? 'staff' : nextView === 'payroll' || nextView === 'contracts' ? 'payroll' : nextView === 'reports' ? 'reports' : nextView === 'import' ? 'import' : nextView === 'planning' ? 'planning' : nextView === 'inventory' || nextView === 'documents' || nextView === 'compliance' ? 'administration' : 'operations')} />}
 
       {view === 'inventory' && <InventoryView items={db.inventoryItems || []} onRefresh={reloadData} />}
-      {view === 'assets' && <AssetRegisterView assets={db.assets || []} onRefresh={reloadData} />}\n      {view === 'compliance' && <ComplianceCalendarView schedules={db.schedules || []} onRefresh={reloadData} />}
+      {view === 'assets' && <AssetRegisterView assets={db.assets || []} onRefresh={reloadData} />}
+      {view === 'compliance' && <ComplianceCalendarView schedules={db.schedules || []} onRefresh={reloadData} />}
       {view === 'documents' && (
         <DocumentsFilingView
           db={db}
