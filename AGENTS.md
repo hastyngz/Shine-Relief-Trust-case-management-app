@@ -55,3 +55,11 @@ Repository memory for the SHINE Relief Trust case-management app.
 - Large views keep helpers/modals in sibling files
   (`src/components/Import/importWizardHelpers.tsx`,
   `src/components/Planning/PlanningModals.tsx`).
+
+
+## Shared UI polish effects
+- Shared, dependency-free motion and depth tokens live in `src/styles/effects.css`, imported once from `src/main.tsx`.
+- Available primitives: `.fx-press` for tactile press feedback, `.fx-card` for soft card depth and optional pointer-hover lift, `.fx-rise` for opacity/transform entrance with a capped `--i` stagger index, `.fx-skeleton` for loading placeholders, `.fx-btn-main` for the primary orange gradient, `.fx-spinner`, `.fx-sheet-enter`, `.fx-backdrop-enter`, `.fx-toast-enter`, `.fx-success-pop`, and `.fx-tick`.
+- Use only transform and opacity for motion; respect `prefers-reduced-motion`, keep touch targets accessible, and never let motion conceal an error or offline/sync warning.
+- New buttons, cards, sheets and loading states must use these shared pieces rather than creating duplicate primitives.
+- Preserve existing layouts, routes, colours, copy, data logic, auth, storage, offline sync, AI chat phone layout, and Firestore rules when applying visual polish.
