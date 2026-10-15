@@ -52,3 +52,11 @@
   .fx-spinner { animation: none !important; }
   .fx-press:active, .fx-card:hover { transform: none !important; }
 }
+
+/* Progressive enhancement for existing shared shell and dialog primitives. */
+#app-shell > header { box-shadow: var(--fx-shadow-header); }
+#app-shell > nav { box-shadow: var(--fx-shadow-navigation); }
+#app-shell [role="dialog"] { animation: fx-sheet-up var(--fx-duration-normal) var(--fx-ease-out) both; }
+#app-shell button, #app-shell a[role="button"] { -webkit-tap-highlight-color: transparent; }
+#app-shell [data-fx-toast], #app-shell [role="status"][aria-live] { animation: fx-toast-up var(--fx-duration-normal) var(--fx-ease-out) both; }
+#app-shell [data-fx-card], #app-shell .fx-card { box-shadow: var(--fx-shadow-card); }
