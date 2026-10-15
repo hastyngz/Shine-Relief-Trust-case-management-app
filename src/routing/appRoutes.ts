@@ -40,6 +40,7 @@ export interface AppRoute {
   activeTab: NavTab;
   girlId?: string;
   houseId?: string;
+  staffId?: string;
   programmeId?: ProgrammeId | null;
   qualityTarget?: { kind: 'budget-item' | 'workplan-item'; id: string };
 }
@@ -87,7 +88,10 @@ export function parseHash(): AppRoute {
   if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
   if (hash === 'report-builder') return { view: 'report-builder', activeTab: 'reports' };
   if (hash === 'payroll') return { view: 'payroll', activeTab: 'payroll' };
-  if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
+  if (hash === 'staff' || hash === 'staff-management') {
+    const params = new URLSearchParams(query);
+    return { view: 'staff', activeTab: 'staff', staffId: params.get('employeeId') || undefined };
+  }
   if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
   if (hash === 'register-girl') return { view: 'form-girl', activeTab: 'girls' };
   if (hash === 'add-house') return { view: 'form-house', activeTab: 'houses' };
