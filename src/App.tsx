@@ -212,7 +212,6 @@ function AppContent() {
     initialRoute.houseId || null
   );
   const [staffContractTargetId, setStaffContractTargetId] = useState<string | null>(initialRoute.staffId || null);
-  const [staffContractTargetId, setStaffContractTargetId] = useState<string | null>(null);
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<ProgrammeId | null>(
     initialRoute.programmeId || null
   );
@@ -359,6 +358,7 @@ function AppContent() {
       setStaffContractTargetId(route.staffId || null);
       if (route.girlId) setSelectedGirlId(route.girlId);
       if (route.houseId) setSelectedHouseId(route.houseId);
+      setStaffContractTargetId(route.staffId || null);
     };
 
     window.addEventListener('hashchange', handleHashChange);
