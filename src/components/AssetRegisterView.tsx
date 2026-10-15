@@ -52,6 +52,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [maintenanceTarget, setMaintenanceTarget] = useState<AssetRecord | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
