@@ -145,6 +145,9 @@ export async function checkAppShellKillSwitch(deps?: KillSwitchDeps): Promise<Ki
   if (!resolved) return null;
   const status = await fetchSwStatus(resolved.fetchFn);
   if (!status || status.enabled) return null;
+  // Clear the worker and caches immediately, but do not consume the one-reload
+  // guard while a form is dirty. A later startup/online check can reload safely.
+  if (resolved.hasUnsaved()) return applyKillSwitch(resolved);
   if (guardAlreadyReloaded()) {
     // Already reloaded once for this session; still make sure caching is off.
     const unregistered = await unregisterAppShellWorkers(resolved);
