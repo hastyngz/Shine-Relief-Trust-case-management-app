@@ -51,6 +51,9 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
   const [targetProgrammeId, setTargetProgrammeId] = useState<ProgrammeId | ''>('');
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -62,7 +65,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !dialogRef.current) return;
@@ -86,7 +89,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
