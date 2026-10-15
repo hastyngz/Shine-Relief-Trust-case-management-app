@@ -39,3 +39,55 @@ Updating the app shell cannot disturb push.
 
 Automated coverage lives in `scripts/app-shell-offline.test.ts`
 (`npm run test:app-shell`).
+
+## Switching the app-shell cache off (Task 1)
+
+There are two independent switches. Use them if a release's caching misbehaves.
+
+### 1. Build-time flag
+`VITE_ENABLE_APP_SHELL_CACHE` defaults to enabled. Build with it set to `false`
+to ship a build that never registers the service worker:
+
+```bash
+VITE_ENABLE_APP_SHELL_CACHE=false npm run build
+```
+
+The flag only stops *new* registrations; it does not remove an already
+installed worker. Use the kill switch for that.
+
+### 2. Remote kill switch (no rebuild needed)
+The app fetches `/sw-status.json` at startup and whenever it comes back online,
+always with `cache: 'no-store'` (the worker never caches it). To switch caching
+off for everyone, change the deployed file to:
+
+```json
+{ "enabled": false }
+```
+
+When the app sees that, it unregisters the app-shell worker, deletes every cache
+whose name starts with `shine-shell-`, and reloads once. The reload is skipped
+while a form holds unsaved data (it happens on the next visit instead). The
+push-notification worker at `/push/` is deliberately left alone so background
+notifications keep working. If the file cannot be fetched (offline), nothing
+happens.
+
+To turn caching back on, set `{ "enabled": true }` (or delete the file).
+
+## Recovering a device stuck on a broken version
+
+1. If you can reach the device: set `/sw-status.json` to `{ "enabled": false }`
+   and ask the person to reopen the app or tap reload. The worker unregisters
+   and the shell caches are cleared on the next load.
+2. If you cannot: tell the person to open the app, then in the browser menu
+   choose "Clear browsing data" / "Site settings" for the site, or open the app
+   in a private/incognito tab. Both bypass or remove the cached worker.
+3. Reinstall from the Play Store / Add to Home Screen once the fix is deployed.
+
+## Keeping open pages safe from stale lazy chunks
+
+The worker keeps the previous `shine-shell-*` cache for up to 7 days, so a page
+that is still open can keep fetching its own hashed lazy chunks after a deploy.
+If a lazy chunk still fails to load, the app shows a friendly "A new version is
+available, reload" message (through `src/components/Error/ErrorBoundary.tsx`)
+instead of a blank screen.
+

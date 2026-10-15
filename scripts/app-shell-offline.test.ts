@@ -71,4 +71,104 @@ if (existsSync(swPath)) {
   assert.ok(existsSync(join(root, 'dist/push/firebase-messaging-sw.js')), 'the push worker is copied into the build');
 }
 
-console.log('Offline app shell tests passed: shell precache, no sensitive caching, separate push worker, safe update prompt.');
+// 7. Task 1: kill switch and lazy-chunk safety.
+const reloadGuard = new Map<string, string>();
+Object.defineProperty(globalThis, 'window', {
+  configurable: true,
+  value: {
+    sessionStorage: {
+      getItem: (key: string) => reloadGuard.get(key) ?? null,
+      setItem: (key: string, value: string) => { reloadGuard.set(key, value); },
+    },
+    location: { reload: () => {} },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => true,
+  },
+});
+const { isAppShellCacheFlagEnabled } = await import('../src/pwa/appShellFlag');
+const { isChunkLoadError } = await import('../src/pwa/registerServiceWorker');
+const killSwitch = await import('../src/pwa/killSwitch');
+
+// 7a. The build flag can switch registration off (default stays on).
+assert.equal(isAppShellCacheFlagEnabled(undefined), true, 'caching defaults to enabled when the flag is unset');
+assert.equal(isAppShellCacheFlagEnabled('true'), true);
+assert.equal(isAppShellCacheFlagEnabled('false'), false, 'VITE_ENABLE_APP_SHELL_CACHE=false disables registration');
+assert.equal(isAppShellCacheFlagEnabled('0'), false);
+assert.ok(register.includes('isAppShellCacheEnabled'), 'registration is gated on the flag');
+
+// 7b. A failed/hanging status fetch changes nothing.
+const neverFetch = async () => { throw new Error('offline'); };
+assert.equal(await killSwitch.fetchSwStatus(neverFetch), null, 'a failed status fetch is ignored');
+const notOkFetch = async () => ({ ok: false, json: async () => ({ enabled: false }) });
+assert.equal(await killSwitch.fetchSwStatus(notOkFetch), null, 'a non-OK status response is ignored');
+const missingEnabled = async () => ({ ok: true, json: async () => ({}) });
+assert.equal(await killSwitch.fetchSwStatus(missingEnabled), null, 'a status file without an enabled flag is ignored');
+const disabledStatus = async () => ({ ok: true, json: async () => ({ enabled: false }) });
+assert.deepEqual(await killSwitch.fetchSwStatus(disabledStatus), { enabled: false });
+const enabledStatus = async () => ({ ok: true, json: async () => ({ enabled: true }) });
+assert.deepEqual(await killSwitch.fetchSwStatus(enabledStatus), { enabled: true });
+
+// 7c. Kill switch on unregisters shell workers (not push) and deletes shell caches.
+function deps(status: { enabled: boolean } | null | (() => Promise<never>), options: { unsaved?: boolean } = {}) {
+  const unregistered: string[] = [];
+  const deleted: string[] = [];
+  let reloads = 0;
+  const registrations = [
+    { scope: 'https://app.example.com/', unregister: async () => { unregistered.push('/'); return true; } },
+    { scope: 'https://app.example.com/push/', unregister: async () => { unregistered.push('/push/'); return true; } },
+  ];
+  const cacheKeys = ['shine-shell-abc', 'shine-shell-def', 'firebase-messaging-sw-cache', 'other-cache'];
+  const fetchFn = async () => {
+    if (typeof status === 'function') return status();
+    return { ok: true, json: async () => status };
+  };
+  return {
+    deps: {
+      fetchFn: fetchFn as any,
+      getRegistrations: async () => registrations,
+      getCacheKeys: async () => cacheKeys,
+      deleteCache: async (name: string) => { deleted.push(name); return true; },
+      reload: () => { reloads += 1; },
+      hasUnsaved: () => options.unsaved === true,
+    },
+    unregistered,
+    deleted,
+    reloads: () => reloads,
+  };
+}
+
+const disabled = deps({ enabled: false });
+const outcome = await killSwitch.checkAppShellKillSwitch(disabled.deps as any);
+assert.equal(outcome?.disabled, true, 'the kill switch reports it ran');
+assert.deepEqual(disabled.unregistered, ['/'], 'only the shell worker is unregistered, not push');
+assert.deepEqual(disabled.deleted, ['shine-shell-abc', 'shine-shell-def'], 'only shine-shell-* caches are deleted');
+assert.equal(disabled.reloads(), 1, 'the app reloads once when caching is switched off');
+
+const enabled = deps({ enabled: true });
+const noOutcome = await killSwitch.checkAppShellKillSwitch(enabled.deps as any);
+assert.equal(noOutcome, null, 'an enabled status leaves caching untouched');
+assert.equal(enabled.reloads(), 0, 'no reload when caching is still enabled');
+
+const unreachable = deps(null);
+assert.equal(await killSwitch.checkAppShellKillSwitch(unreachable.deps as any), null, 'an unreachable status file leaves everything alone');
+assert.equal(unreachable.reloads(), 0);
+
+// 7d. Unsaved form data blocks the reload but still unregisters and clears caches.
+const unsaved = deps({ enabled: false }, { unsaved: true });
+const unsavedOutcome = await killSwitch.checkAppShellKillSwitch(unsaved.deps as any);
+assert.equal(unsavedOutcome?.disabled, true);
+assert.deepEqual(unsaved.unregistered, ['/'], 'caching is still switched off with unsaved changes');
+assert.deepEqual(unsaved.deleted, ['shine-shell-abc', 'shine-shell-def']);
+assert.equal(unsavedOutcome?.reloaded, false, 'the reload is skipped while a form holds unsaved data');
+assert.equal(unsaved.reloads(), 0);
+
+// 7e. A lazy chunk failure is recognised so the friendly message can be shown.
+assert.equal(isChunkLoadError(new Error('Failed to fetch dynamically imported module: /assets/Foo.js')), true);
+assert.equal(isChunkLoadError(new Error('Importing a module script failed.')), true);
+assert.equal(isChunkLoadError(new Error('Some unrelated render error')), false);
+assert.ok(read('src/components/Error/ErrorBoundary.tsx').includes('isChunkLoadError'), 'the error boundary shows the update message for a missing chunk');
+assert.ok(read('src/components/Update/UpdateAvailableBanner.tsx').includes('CHUNK_LOAD_FAILED_EVENT'), 'the update banner reacts to chunk-load failures');
+
+console.log('Offline app shell tests passed: shell precache, no sensitive caching, separate push worker, safe update prompt, kill switch.');
+

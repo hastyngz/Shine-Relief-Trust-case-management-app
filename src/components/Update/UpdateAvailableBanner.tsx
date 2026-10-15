@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import {
   applyServiceWorkerUpdate,
   SW_UPDATE_AVAILABLE_EVENT,
+  CHUNK_LOAD_FAILED_EVENT,
 } from '../../pwa/registerServiceWorker';
 import { hasUnsavedChanges, UNSAVED_CHANGES_EVENT } from '../../pwa/unsavedChanges';
 
@@ -19,9 +20,11 @@ export const UpdateAvailableBanner: React.FC = () => {
     const onUpdate = () => setAvailable(true);
     const onUnsaved = () => setUnsaved(hasUnsavedChanges());
     window.addEventListener(SW_UPDATE_AVAILABLE_EVENT, onUpdate);
+    window.addEventListener(CHUNK_LOAD_FAILED_EVENT, onUpdate);
     window.addEventListener(UNSAVED_CHANGES_EVENT, onUnsaved);
     return () => {
       window.removeEventListener(SW_UPDATE_AVAILABLE_EVENT, onUpdate);
+      window.removeEventListener(CHUNK_LOAD_FAILED_EVENT, onUpdate);
       window.removeEventListener(UNSAVED_CHANGES_EVENT, onUnsaved);
     };
   }, []);
