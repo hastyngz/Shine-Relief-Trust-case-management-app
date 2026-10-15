@@ -171,7 +171,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
 
     <div className="space-y-3">
       {filtered.map((item) => {
-        const overdueItem = isDueOverdue(item, today);
+        const overdueItem = isComplianceOverdue(item, today);
         const dueSoonItem = isComplianceDueSoon(item, today);
         return <article key={item.id} className="fx-card rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
