@@ -101,7 +101,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       if (!persist(updated)) return;
       setShowAdd(false);
       setEditingTarget(null);
-      setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', notes: '' });
+      setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
       return;
     }
     const openingMovement: InventoryMovement[] = opening > 0 ? [{
@@ -117,7 +117,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     };
     if (!persist(item)) return;
     setShowAdd(false);
-    setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', notes: '' });
+    setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   };
 
   const submitMovement = (event: FormEvent) => {
@@ -188,7 +188,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
               <div className="rounded-2xl bg-white/10 p-3"><Boxes className="h-7 w-7 text-amber-300" /></div>
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">Administration &amp; Operations</p><h1 id="inventory-title" className="mt-1 text-2xl font-bold sm:text-3xl">Inventory &amp; Stores</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-teal-50">Register stock, record receipts and issues, monitor minimum levels and retain a movement history for each item.</p></div>
             </div>
-            {!isViewOnly && <button type="button" onClick={() => { setError(''); setEditingTarget(null); setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', notes: '' }); setShowAdd(true); }} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Add stock item</button>}
+            {!isViewOnly && <button type="button" onClick={() => { setError(''); setEditingTarget(null); setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' }); setShowAdd(true); }} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Add stock item</button>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5 sm:p-6">
