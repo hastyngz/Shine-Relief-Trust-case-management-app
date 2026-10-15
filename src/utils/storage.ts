@@ -59,8 +59,6 @@ import {
   persistEmployeeRecordToFirestore,
   persistWorkplanItemToFirestore,
   deleteWorkplanItemFromFirestore,
-  persistScheduleItemToFirestore,
-  deleteScheduleItemFromFirestore,
   persistHistoricalCaseRecordToFirestore,
   deleteHistoricalCaseRecordFromFirestore,
   persistImportAuditToFirestore,
@@ -1205,9 +1203,9 @@ export function addScheduleItem(
   };
   db.schedules.unshift(newItem);
   saveDatabase(db);
-  persistScheduleItemToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist schedule item to Firestore:', err)
-  );
+  // The app's database-updated listener records this change in the per-record
+  // offline queue. Do not also write directly with setDoc: that bypasses the
+  // queue's baseUpdatedAt conflict check and can overwrite a newer server edit.
   return newItem;
 }
 
@@ -1228,9 +1226,8 @@ export function updateScheduleItem(
   };
   db.schedules[index] = updated;
   saveDatabase(db);
-  persistScheduleItemToFirestore(updated).catch((err) =>
-    console.error('Failed to update schedule item in Firestore:', err)
-  );
+  // Schedule edits use the shared per-record offline queue so a stale local
+  // snapshot cannot overwrite a newer server version.
   return updated;
 }
 
@@ -1241,9 +1238,8 @@ export function deleteScheduleItem(id: string): boolean {
   if (index === -1) return false;
   db.schedules.splice(index, 1);
   saveDatabase(db);
-  deleteScheduleItemFromFirestore(id).catch((err) =>
-    console.error('Failed to delete schedule item from Firestore:', err)
-  );
+  // Deletions are detected by the shared per-record queue against its confirmed
+  // baseline and are transactionally flushed with conflict protection.
   return true;
 }
 
