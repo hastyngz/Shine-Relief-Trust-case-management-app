@@ -27,6 +27,7 @@ export type AppView =
   | 'operations'
   | 'administration'
   | 'documents'
+  | 'compliance'
   | 'inventory'
   | 'assets'
   | 'girl-profile'
