@@ -200,8 +200,8 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     [programmeFilteredDb.budgets, permittedDb.forecastSettings]
   );
   const attentionItems = useMemo(
-    () => buildNeedsAttention(permittedDb, today, canViewCaseReviews),
-    [permittedDb, today, canViewCaseReviews]
+    () => buildNeedsAttention(permittedDb, today, canViewCaseReviews, canViewHealthRecords),
+    [permittedDb, today, canViewCaseReviews, canViewHealthRecords]
   );
   const programmePerformance = useMemo(() => [...PROGRAMMES, ...LEGACY_PROGRAMMES]
     .filter((item) => programmeId === 'ALL' || item.id === programmeId)
