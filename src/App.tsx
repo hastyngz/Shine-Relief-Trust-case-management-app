@@ -325,26 +325,34 @@ function AppContent() {
     };
   }, []);
 
+  // Debounce expensive full-database diffing, but flush at lifecycle and
+  // connectivity boundaries so a phone going offline or closing still queues edits.
   useEffect(() => {
-    const handleOffline = () => { void recordOfflineChanges(db); };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flushLocalChanges = () => {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      void recordOfflineChanges(db);
+    };
     const handleConnectivityChange = () => {
-      if (isBrowserOnline()) {
-        void flushPendingOfflineSnapshots();
-      }
+      if (isBrowserOnline()) void flushPendingOfflineSnapshots();
+      else flushLocalChanges();
     };
-
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushLocalChanges();
+    };
+    timer = setTimeout(flushLocalChanges, 1000);
     window.addEventListener('online', handleConnectivityChange);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener('offline', handleConnectivityChange);
+    window.addEventListener('pagehide', flushLocalChanges);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
+      if (timer) clearTimeout(timer);
       window.removeEventListener('online', handleConnectivityChange);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('offline', handleConnectivityChange);
+      window.removeEventListener('pagehide', flushLocalChanges);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [db]);
-
-  // Record the diff against the last synced copy after every local edit so an
-  // offline edit is never lost, whether or not the browser reports offline.
-  useEffect(() => {
-    void recordOfflineChanges(db);
   }, [db]);
 
   // Listen for browser Back/Forward navigation via hashchange
