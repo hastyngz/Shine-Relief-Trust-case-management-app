@@ -77,7 +77,7 @@ export function getReportAttachmentMetadata(canViewHealthRecords: boolean): Prom
   return request;
 }
 
-async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean, includeDownloadUrls = true): Promise<PhotoAttachment[]> {
   const targetTypes: AttachmentTargetType[] = [
     'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
     'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
@@ -105,7 +105,15 @@ async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean): Pro
       attachment.category !== 'Prescription'
     ))
     .sort((a, b) => b.date.localeCompare(a.date));
-  return Promise.all(attachments.map(withDownloadUrl));
+  // Filing search only needs metadata. Create a short-lived signed URL only
+  // after the user chooses a file, rather than signing every result up front.
+  return includeDownloadUrls ? Promise.all(attachments.map(withDownloadUrl)) : attachments;
+}
+
+export function getFilingAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  // Reuse the report's bounded, role-aware query scope. Safeguarding attachments
+  // are intentionally excluded; health documents remain permission-filtered.
+  return fetchReportAttachmentMetadata(canViewHealthRecords, false);
 }
 
 export async function getAuthorizedReportImage(
