@@ -60,6 +60,9 @@ jobs:
       - name: Test offline sync queue
         run: npm run test:offline
 
+      - name: Test offline diff performance budget
+        run: npm run test:offline-perf
+
       - name: Test local storage failure handling
         run: npm run test:storage
 
