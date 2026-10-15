@@ -121,13 +121,13 @@ export interface AppViewSwitchProps {
   handleMarkExpensePaid: (id: string, payment: Pick<HouseholdExpense, 'datePaid' | 'paymentMethod' | 'paymentReference'>) => void;
   handleUpdateExpense: (id: string, changes: Partial<Omit<HouseholdExpense, 'id' | 'householdId' | 'createdAt'>>) => void;
   handleDeleteActivity: (id: string) => void;
-  handleSaveGirl: (girlData: Omit<Girl, 'createdAt' | 'updatedAt'>, pendingPhotos?: PendingPhoto[]) => void;
+  handleSaveGirl: (girlData: Omit<Girl, 'createdAt' | 'updatedAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
   handleSaveHouse: (houseData: Omit<Household, 'createdAt' | 'updatedAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
-  handleSaveEduFollowUp: (data: Omit<AppDatabase['educationalFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
+  handleSaveEduFollowUp: (data: Omit<AppDatabase['educationalFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
   handleSaveHealthFollowUp: (data: Omit<AppDatabase['healthFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
   handleSaveFamilyFollowUp: (data: Omit<AppDatabase['familyFollowUps'][number], 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
   handleSaveRentPayment: (data: Omit<HouseholdRentPayment, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
-  handleSaveExpense: (data: Omit<HouseholdExpense, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => void;
+  handleSaveExpense: (data: Omit<HouseholdExpense, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
   handleSaveActivity: (data: Omit<HouseholdActivity, 'id' | 'createdAt'>, pendingPhotos?: PendingPhoto[]) => boolean;
   reloadData: () => boolean;
   notifyDataChange: (change: any) => void;
