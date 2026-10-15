@@ -57,6 +57,9 @@ assert.equal(failed.ok, false, 'a failed save reports failure');
 assert.equal(failed.quotaExceeded, true, 'QuotaExceededError is detected specifically');
 assert.ok(events.includes(STORAGE_WARNING_EVENT), 'a failed save dispatches the warning event');
 
+
+assert.equal(values.get('shine_relief_trust_prod_v1'), before, 'the previously stored data is left intact');
+
 // dispatchEvent=false suppresses only shine_db_updated, never storage health signals.
 events.length = 0;
 failNext = true;
@@ -69,7 +72,6 @@ events.length = 0;
 const quietRecovered = saveDatabase(getDatabase(), false);
 assert.equal(quietRecovered.ok, true);
 assert.ok(events.includes(STORAGE_RECOVERED_EVENT), 'recovery is dispatched even when database-updated events are suppressed');
-assert.equal(values.get('shine_relief_trust_prod_v1'), before, 'the previously stored data is left intact');
 
 // The in-memory database is never discarded: callers still hold their object.
 const db = getDatabase();
