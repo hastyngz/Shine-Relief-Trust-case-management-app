@@ -94,7 +94,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
   };
 
   return (
-    <div id="girl-registration-form" className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
+    <div id="girl-registration-form" className="fx-card bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
       <div className="bg-teal-900 text-white px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <UserPlus className="w-5 h-5 text-amber-400" />
@@ -360,7 +360,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
           </button>
           <button
             type="submit"
-            className="px-5 py-2 text-sm font-semibold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm flex items-center gap-2 transition-colors"
+            className="fx-press fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm flex items-center gap-2 transition-colors min-h-11"
           >
             <Save className="w-4 h-4" />
             {initialData ? 'Update Profile' : 'Save Registration'}
