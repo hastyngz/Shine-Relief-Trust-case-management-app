@@ -41,7 +41,8 @@ export type NavTab =
   | 'staff'
   | 'case-management'
   | 'operations'
-  | 'administration';
+  | 'administration'
+  | 'inventory';
 
 interface NavigationProps {
   activeTab: NavTab;
