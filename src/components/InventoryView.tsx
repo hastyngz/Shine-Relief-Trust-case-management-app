@@ -138,6 +138,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Record who/what was checked or why the stocktake was performed.');
       return;
     }
+    if (!Number.isFinite(stocktakeTarget.quantityOnHand) || stocktakeTarget.quantityOnHand < 0) {
+      setError('The recorded stock balance is invalid. Review this item before stocktaking.');
+      return;
+    }
     const adjustment = getInventoryStocktakeAdjustment(stocktakeTarget.quantityOnHand, counted);
     const now = new Date().toISOString();
     const entry: InventoryMovement = {
