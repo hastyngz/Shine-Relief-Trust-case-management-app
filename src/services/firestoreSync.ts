@@ -1192,6 +1192,7 @@ export async function syncEntireDatabaseToFirestore(
         COLLECTIONS.PROCUREMENT_LISTS,
         COLLECTIONS.PROJECT_PROJECTIONS,
         COLLECTIONS.INVENTORY_ITEMS,
+        COLLECTIONS.ASSETS,
       ];
       const restoredIds = new Map<string, Set<string>>();
       operations.forEach(({ ref }) => {
@@ -1499,7 +1500,7 @@ export function initFirestoreListeners(
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 39;
+  const TOTAL_COLLECTIONS = 40;
 
   // Firestore emits a snapshot with `fromCache === true` for optimistic local
   // writes that the server has not confirmed yet (and when the client is
