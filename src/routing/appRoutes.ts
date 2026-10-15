@@ -25,6 +25,7 @@ export type AppView =
   | 'ai-assistant'
   | 'case-management'
   | 'operations'
+  | 'administration'
   | 'girl-profile'
   | 'house-profile'
   | 'form-girl'
@@ -81,6 +82,7 @@ export function parseHash(): AppRoute {
   if (hash === 'contacts') return { view: 'contacts', activeTab: 'contacts' };
   if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
   if (hash === 'operations' || hash === 'intelligence' || hash === 'calendar') return { view: 'operations', activeTab: 'operations' };
+  if (hash === 'administration' || hash === 'admin-operations') return { view: 'administration', activeTab: 'administration' };
   if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
   if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
   if (hash === 'management' || hash === 'executive-overview') return { view: 'management', activeTab: 'management' };
@@ -117,6 +119,8 @@ export function buildHash(newView: AppView, girlId?: string | null, houseId?: st
       return '#/contacts';
     case 'case-management':
       return '#/case-management';
+    case 'administration':
+      return '#/administration';
     case 'messages':
       return '#/messages';
     case 'planning':
