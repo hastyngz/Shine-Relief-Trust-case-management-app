@@ -86,13 +86,25 @@ function updatedAtOf(record: Record<string, any> | undefined): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+const stableStringCache = new WeakMap<object, string>();
+
 function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
+    const cached = stableStringCache.get(value as object);
+    if (cached !== undefined) return cached;
+  }
+  if (Array.isArray(value)) {
+    const result = `[${value.map(stableStringify).join(',')}]`;
+    stableStringCache.set(value, result);
+    return result;
+  }
+  if (value && typeof value === 'object') {
+    const result = `{${Object.keys(value as Record<string, unknown>)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`)
       .join(',')}}`;
+    stableStringCache.set(value as object, result);
+    return result;
   }
   return JSON.stringify(value) ?? 'null';
 }
@@ -113,13 +125,22 @@ export function computeChangeEntries(
   const entries: OfflineChangeEntry[] = [];
 
   for (const [field, collection] of SYNC_COLLECTION_FIELDS) {
+    const currentArray = (currentDb[field] as Array<Record<string, any>> | undefined) || [];
+    const baselineArray = baselineDb ? ((baselineDb[field] as Array<Record<string, any>> | undefined) || []) : [];
+    // Avoid allocating ID maps for untouched collections. This is common when
+    // a single form edits one record in an otherwise unchanged database.
+    if (baselineDb && currentArray === baselineArray && currentArray.length === baselineArray.length) continue;
     const current = recordsById(currentDb, field);
     const baseline = baselineDb ? recordsById(baselineDb, field) : new Map<string, Record<string, any>>();
 
     for (const [id, record] of current) {
       const baseRecord = baseline.get(id);
       const previous = previousByKey.get(`${collection}/${id}`);
-      const changed = !baseRecord || stableStringify(baseRecord) !== stableStringify(record);
+      const baseUpdatedAt = updatedAtOf(baseRecord);
+      const recordUpdatedAt = updatedAtOf(record);
+      const changed = !baseRecord ||
+        (baseRecord !== record && baseUpdatedAt !== null && recordUpdatedAt !== null && baseUpdatedAt !== recordUpdatedAt) ||
+        (baseRecord !== record && stableStringify(baseRecord) !== stableStringify(record));
       if (!changed) continue;
       // A record already queued and left unchanged since keeps its original base.
       if (previous && previous.operation === 'set' && stableStringify(previous.data) === stableStringify(record)) {
