@@ -73,7 +73,7 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
         {!isViewOnly && (
           <button
             onClick={onAddHouse}
-            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95 self-start sm:self-center"
+            className="fx-press fx-btn-main px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform min-h-11 self-start sm:self-center"
           >
             <Plus className="w-4 h-4 text-amber-300" />
             <span>Add New Household</span>
