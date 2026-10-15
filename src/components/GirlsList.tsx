@@ -327,7 +327,7 @@ export const GirlsList: React.FC<GirlsListProps> = ({
                 key={girl.id}
                 style={{ "--i": index } as React.CSSProperties}
                 onClick={() => onSelectGirl(girl.id)}
-                className={`fx-rise fx-card p-4 rounded-xl border bg-white cursor-pointer transition-transform flex flex-col justify-between group ${
+                className={`fx-rise fx-press fx-card p-4 rounded-xl border bg-white cursor-pointer transition-transform flex flex-col justify-between group ${
                   hasActionRequired
                     ? 'border-amber-300 hover:border-amber-400'
                     : 'border-stone-200 hover:border-teal-700'
