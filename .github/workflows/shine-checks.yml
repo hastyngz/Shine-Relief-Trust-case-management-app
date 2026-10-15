@@ -93,6 +93,9 @@ jobs:
       - name: Test inventory expiry and stocktake helpers
         run: npm run test:inventory
 
+      - name: Test asset CSV export
+        run: npm run test:asset-export
+
       - name: Test hash routing
         run: npm run test:routing
 
