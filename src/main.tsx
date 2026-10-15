@@ -6,6 +6,7 @@ import { registerAppShellServiceWorker } from './pwa/registerServiceWorker.ts';
 import './index.css';
 import './styles/effects.css';
 import './styles/sunrise.css';
+import './styles/ai-assistant-viewport.css';
 import { EffectsRuntime } from './effects/EffectsRuntime.tsx';
 
 // Cache the app shell so the app opens without signal. Production builds only.
