@@ -145,7 +145,7 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredHouses.map((house) => {
+          {filteredHouses.map((house, index) => {
           const houseGirls = girls.filter((g) => g.householdId === house.id);
           const houseRent = db.rentPayments.filter((r) => r.householdId === house.id);
           const houseExpenses = db.expenses.filter((e) => e.householdId === house.id);
@@ -154,7 +154,8 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
           return (
             <div
               key={house.id}
-              className="bg-white rounded-xl border border-stone-200 shadow-xs hover:border-teal-700 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+              style={{ "--i": index } as React.CSSProperties}
+              className="fx-rise fx-card bg-white rounded-xl border border-stone-200 shadow-xs hover:border-teal-700 transition-transform flex flex-col justify-between overflow-hidden"
             >
               {/* Card Header */}
               <div className="p-5 border-b border-stone-100">
