@@ -127,6 +127,20 @@ async function run() {
     await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Forged editor', updatedByUid: 'manager' }));
     await assertFails(deleteDoc(doc(worker, 'contacts/contact-worker')));
 
+    // Asset register follows the same active-staff / manager-staff / admin-delete policy.
+    const assetRecord = {
+      id: 'asset-worker', assetTag: 'SHINE-AST-001', name: 'Office laptop', category: 'IT & Electronics',
+      location: 'Main Office', condition: 'Good', status: 'In Use', history: [],
+      createdAt: '2026-10-15T00:00:00.000Z', updatedAt: '2026-10-15T00:00:00.000Z',
+      createdBy: 'worker', updatedBy: 'worker', createdByUid: 'worker', updatedByUid: 'worker',
+    };
+    await assertSucceeds(setDoc(doc(worker, 'assets/asset-worker'), assetRecord));
+    await assertSucceeds(getDoc(doc(viewer, 'assets/asset-worker')));
+    await assertSucceeds(updateDoc(doc(worker, 'assets/asset-worker'), { condition: 'Fair', updatedByUid: 'worker' }));
+    await assertFails(deleteDoc(doc(worker, 'assets/asset-worker')));
+    await assertSucceeds(deleteDoc(doc(admin, 'assets/asset-worker')));
+
+
     await assertSucceeds(getDoc(doc(viewer, 'caseActions/action-1')));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
