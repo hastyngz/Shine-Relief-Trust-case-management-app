@@ -358,7 +358,6 @@ function AppContent() {
       setStaffContractTargetId(route.staffId || null);
       if (route.girlId) setSelectedGirlId(route.girlId);
       if (route.houseId) setSelectedHouseId(route.houseId);
-      setStaffContractTargetId(route.staffId || null);
     };
 
     window.addEventListener('hashchange', handleHashChange);
