@@ -74,6 +74,7 @@ import { AppView, parseHash, buildHash, qualityTargetHash } from './routing/appR
 import { AppViewSwitch } from './views/AppViewSwitch';
 import { useAppModals } from './hooks/useAppModals';
 import { AppModals } from './views/AppModals';
+import { Skeleton } from './components/ui/Skeleton';
 
 // Heavy views are split out of the first download so the dashboard and
 // navigation load quickly on a weak connection. Each is fetched on first use.
@@ -107,14 +108,14 @@ const StaffManagement = lazy(() =>
 /** Lightweight placeholder shown while a split view is downloading. */
 function ViewSkeleton() {
   return (
-    <div className="animate-pulse space-y-4" aria-label="Loading" role="status">
-      <div className="h-7 w-48 rounded-lg bg-stone-200" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="h-28 rounded-2xl bg-stone-200" />
-        <div className="h-28 rounded-2xl bg-stone-200" />
-        <div className="h-28 rounded-2xl bg-stone-200" />
+    <div className="space-y-4" aria-label="Loading view" role="status">
+      <Skeleton className="w-48" label="Loading view heading" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+        <div className="fx-skeleton h-28 rounded-2xl" />
+        <div className="fx-skeleton h-28 rounded-2xl" />
+        <div className="fx-skeleton h-28 rounded-2xl" />
       </div>
-      <div className="h-64 rounded-2xl bg-stone-200" />
+      <div className="fx-skeleton h-64 rounded-2xl" aria-hidden="true" />
     </div>
   );
 }
