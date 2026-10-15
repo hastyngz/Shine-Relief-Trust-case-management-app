@@ -108,8 +108,8 @@ const StaffManagement = lazy(() =>
 /** Lightweight placeholder shown while a split view is downloading. */
 function ViewSkeleton() {
   return (
-    <div className="space-y-4" aria-label="Loading view" role="status">
-      <Skeleton className="w-48" label="Loading view heading" />
+    <div className="space-y-4">
+      <Skeleton className="w-48" label="Loading view" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
         <div className="fx-skeleton h-28 rounded-2xl" />
         <div className="fx-skeleton h-28 rounded-2xl" />
