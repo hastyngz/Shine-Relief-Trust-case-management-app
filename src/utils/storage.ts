@@ -194,10 +194,9 @@ export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): St
   } catch (error) {
     const quotaExceeded = isQuotaExceededError(error);
     console.error('Error saving database to localStorage:', error);
-    if (dispatchEvent) {
-      // The in-memory database is left untouched; the offline queue keeps edits.
-      dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
-    }
+    // Storage health must always reach the warning banner. dispatchEvent only
+    // controls the database-updated notification, not failure/recovery signals.
+    dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
     return { ok: false, quotaExceeded, error };
   }
 }
