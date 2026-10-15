@@ -4,6 +4,8 @@ import { loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } fro
 
 const LEGACY_SNAPSHOT_KEY = 'shine_relief_trust_pending_sync_v1';
 const LAST_SYNCED_KEY = 'shine_relief_trust_last_synced_v1';
+let cachedBaselineRaw: string | null = null;
+let cachedBaselineDb: AppDatabase | null = null;
 export const OFFLINE_QUEUE_UPDATED_EVENT = 'shine_offline_queue_updated';
 export const SYNC_CONFLICTS_UPDATED_EVENT = 'shine_sync_conflicts_updated';
 
@@ -219,10 +221,18 @@ export function getLastSyncedSnapshot(): AppDatabase | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(LAST_SYNCED_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as AppDatabase;
+    if (!raw) {
+      cachedBaselineRaw = null;
+      cachedBaselineDb = null;
+      return null;
+    }
+    if (raw === cachedBaselineRaw && cachedBaselineDb) return cachedBaselineDb;
+    const parsed = JSON.parse(raw) as AppDatabase;
+    cachedBaselineRaw = raw;
+    cachedBaselineDb = parsed;
+    return parsed;
   } catch (error) {
-    console.warn('Could not read the last synced database copy:', error);
+    console.warn('Could not read the last synced database copy.');
     return null;
   }
 }
@@ -230,7 +240,10 @@ export function getLastSyncedSnapshot(): AppDatabase | null {
 export function setLastSyncedSnapshot(db: AppDatabase): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(LAST_SYNCED_KEY, JSON.stringify(db));
+    const raw = JSON.stringify(db);
+    window.localStorage.setItem(LAST_SYNCED_KEY, raw);
+    cachedBaselineRaw = raw;
+    cachedBaselineDb = db;
   } catch (error) {
     // A missing baseline can make later diffs unsafe, so surface the failure.
     console.warn('Could not record the last synced database copy.');
