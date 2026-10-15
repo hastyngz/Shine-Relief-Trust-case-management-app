@@ -25,6 +25,7 @@
 
 .fx-press { transition: transform var(--fx-duration-quick) var(--fx-ease-standard); -webkit-tap-highlight-color: transparent; }
 .fx-press:active { transform: scale(.97); }
+.fx-press:focus-visible { outline: 2px solid #c45c0c; outline-offset: 2px; }
 .fx-card { box-shadow: var(--fx-shadow-card); transition: transform var(--fx-duration-quick) var(--fx-ease-out); }
 .fx-card:focus-visible { box-shadow: var(--fx-shadow-raised); }
 @media (hover: hover) and (pointer: fine) {
