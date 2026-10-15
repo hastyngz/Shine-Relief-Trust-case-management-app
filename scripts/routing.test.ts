@@ -76,6 +76,7 @@ assert.equal(buildHash('ai-assistant'), '#/ai-assistant');
 assert.equal(buildHash('contracts'), '#/contracts');
 assert.equal(buildHash('administration'), '#/administration');
 assert.equal(buildHash('inventory'), '#/inventory');
+assert.equal(buildHash('assets'), '#/assets');
 
 for (const [hash, view] of cases) {
   const route = withHash(hash, parseHash);
