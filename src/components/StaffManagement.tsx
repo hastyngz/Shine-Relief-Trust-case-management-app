@@ -55,7 +55,7 @@ export const StaffManagement: React.FC = () => {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Guard: Admin only
-  if (!isAdmin && staffProfile?.role !== 'Manager') {
+  if (!isAdmin) {
     return (
       <div className="max-w-4xl mx-auto py-12 px-4 text-center">
         <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
