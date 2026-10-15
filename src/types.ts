@@ -1446,6 +1446,12 @@ export interface OfflineChangeEntry {
   /** Content fingerprint for records that lack dependable updatedAt metadata. */
   baseHash?: string | null;
   queuedAt: string;
+  /**
+   * Storage-only composite key `collection/recordId`. The queue is keyed by
+   * this so several changed records in the same collection never collide.
+   * Always set on read (see offlineSync.loadQueue) before an entry is used.
+   */
+  queueKey?: string;
 }
 
 export type SyncConflictResolution = 'keep-mine' | 'keep-theirs';

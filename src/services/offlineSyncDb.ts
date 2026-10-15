@@ -11,8 +11,17 @@ import type { OfflineChangeEntry, SyncConflict } from '../types';
 const QUEUE_KEY = 'shine_relief_trust_offline_queue_v2';
 const CONFLICTS_KEY = 'shine_relief_trust_sync_conflicts_v1';
 const DB_NAME = 'shine_relief_trust_offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'queue';
+
+/**
+ * Composite storage key for a change entry. A queue keyed by `collection` alone
+ * would make every changed record in the same collection overwrite the previous
+ * one, silently dropping edits — so both parts are used.
+ */
+function queueKeyOf(entry: Pick<OfflineChangeEntry, 'collection' | 'recordId'>): string {
+  return `${entry.collection}/${entry.recordId}`;
+}
 
 function notifyStorageFailure(error: unknown): void {
   if (typeof window === 'undefined') return;
@@ -36,24 +45,34 @@ function openDb(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'collection' });
+      // Recreate the store so it is keyed by the composite key. Existing rows
+      // (from the previous, collision-prone key) are migrated by loadQueue
+      // from the localStorage fallback / deduced from the record id.
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
       }
+      db.createObjectStore(STORE_NAME, { keyPath: 'queueKey' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
+/** Ensures every entry carries its composite key before it is stored. */
+function withQueueKey(entry: OfflineChangeEntry): OfflineChangeEntry {
+  return { ...entry, queueKey: queueKeyOf(entry) };
+}
+
 async function readIdbEntries(): Promise<OfflineChangeEntry[]> {
   const db = await openDb();
   try {
-    return await new Promise<OfflineChangeEntry[]>((resolve, reject) => {
+    const entries = await new Promise<OfflineChangeEntry[]>((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readonly');
       const request = transaction.objectStore(STORE_NAME).getAll();
       request.onsuccess = () => resolve((request.result as OfflineChangeEntry[]) || []);
       request.onerror = () => reject(request.error);
     });
+    return entries.map(withQueueKey);
   } finally {
     db.close();
   }
@@ -66,7 +85,7 @@ async function writeIdbEntries(entries: OfflineChangeEntry[]): Promise<void> {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       store.clear();
-      entries.forEach((entry) => store.put(entry));
+      entries.forEach((entry) => store.put(withQueueKey(entry)));
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
     });
