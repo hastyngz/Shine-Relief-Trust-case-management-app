@@ -1,5 +1,5 @@
 import React, { FormEvent, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Clock3, Plus, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Clock3, Plus } from 'lucide-react';
 import type { ScheduleItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { addScheduleItem, updateScheduleItem } from '../utils/storage';
@@ -26,7 +26,7 @@ const blankForm = (uid: string): ComplianceForm => ({
 });
 
 export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ schedules, onRefresh }) => {
-  const { currentUser, staffProfile, allStaff, canEdit, isAdmin, role, isViewOnly } = useAuth();
+  const { currentUser, staffProfile, allStaff, canEdit, isViewOnly } = useAuth();
   const today = getLocalDateInputValue();
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
   const staff = (allStaff || []).filter((person) => person.status === 'Active');
@@ -135,17 +135,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     onRefresh();
   };
 
-  const verify = (item: ScheduleItem) => {
-    if (!isAdmin && role !== 'Manager') return;
-    const updated = updateScheduleItem(item.id, {
-      verifiedBy: actor,
-      verifiedAt: new Date().toISOString(),
-      complianceHistory: appendHistory(item, 'Verified', 'Completion verified by an authorised manager.'),
-    }, actor);
-    if (!updated) { setError('This compliance record could not be found. Refresh and try again.'); return; }
-    setNotice(`Completion verified for “${item.title}”.`);
-    onRefresh();
-  };
+
 
   return <section className="mx-auto max-w-7xl space-y-5 pb-8" aria-labelledby="compliance-title">
     <header className="rounded-3xl bg-teal-950 p-5 text-white sm:p-7">
@@ -160,6 +150,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       </div>
     </header>
 
+    <p className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-950">Management verification is not enabled yet. The existing shared schedule permissions do not enforce manager-only verification at the database boundary, so this phase records completion evidence and history without claiming an independently secured approval.</p>
     <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">Privacy reminder: use this register for administrative obligations and training/policy completion only. Do not enter child-identifying details, safeguarding allegations, health information or confidential case notes here; use the restricted SHINE records and reporting pathway.</p>
 
     {error && <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">{error}</div>}
@@ -201,14 +192,12 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
               </div>
               {item.evidenceReference && <p className="mt-2 break-words text-xs text-stone-600"><strong>Evidence/reference:</strong> {item.evidenceReference}</p>}
               {item.completionNote && <p className="mt-2 text-xs text-stone-700"><strong>Completion note:</strong> {item.completionNote}</p>}
-              {item.verifiedAt && <p className="mt-2 flex items-center gap-1 text-xs text-emerald-800"><ShieldCheck className="h-4 w-4" />Verified by {item.verifiedBy || 'authorised manager'} on {item.verifiedAt.slice(0, 10)}</p>}
               {(item.complianceHistory || []).length > 0 && <details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-teal-900">History ({item.complianceHistory?.length})</summary><ol className="mt-2 space-y-1 border-l-2 border-stone-200 pl-3 text-xs text-stone-600">{[...(item.complianceHistory || [])].reverse().map((entry) => <li key={entry.id}><strong>{entry.action}</strong> · {entry.actor} · {entry.at.slice(0, 16).replace('T', ' ')}{entry.note ? ` — ${entry.note}` : ''}</li>)}</ol></details>}
             </div>
             {canEdit && !isViewOnly && <div className="flex flex-wrap gap-2 sm:max-w-48 sm:justify-end">
               {item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'In Progress' && <button type="button" onClick={() => updateStatus(item, 'In Progress')} className="min-h-10 rounded-lg border border-stone-300 px-3 text-xs font-semibold">Start</button>}
               {item.status !== 'Completed' && item.status !== 'Cancelled' && <button type="button" onClick={() => { setCompletionTarget(item); setCompletionNote(item.completionNote || ''); setCompletionEvidence(item.evidenceReference || ''); setError(''); }} className="min-h-10 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Complete</button>}
               {item.status === 'Completed' && <button type="button" onClick={() => updateStatus(item, 'Scheduled')} className="min-h-10 rounded-lg border border-stone-300 px-3 text-xs font-semibold">Reopen</button>}
-              {item.status === 'Completed' && (isAdmin || role === 'Manager') && !item.verifiedAt && <button type="button" onClick={() => verify(item)} className="min-h-10 rounded-lg border border-emerald-300 px-3 text-xs font-semibold text-emerald-800">Verify</button>}
             </div>}
           </div>
         </article>;
