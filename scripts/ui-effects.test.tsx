@@ -34,6 +34,7 @@ assert.equal(container.querySelector('button')?.dataset.saveState, 'error');
 assert.equal(container.querySelector('button')?.textContent?.trim(), 'Try again');
 assert.equal((container.querySelector('button') as HTMLButtonElement).disabled, false);
 assert.equal(container.querySelector('button .fx-success-pop'), null, 'failed save never displays success feedback');
+assert.ok(container.querySelector('button svg.text-red-700'), 'failed save has a visible error icon');
 assert.equal(container.querySelector('button span[aria-live="polite"]')?.textContent, 'Try again');
 await act(async () => root.render(<Skeleton lines={3} label="Loading records" />));
 assert.equal(container.querySelector('[role="status"]')?.getAttribute('aria-label'), 'Loading records');
