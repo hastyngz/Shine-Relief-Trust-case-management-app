@@ -211,6 +211,7 @@ function AppContent() {
   const [selectedHouseId, setSelectedHouseId] = useState<string | null>(
     initialRoute.houseId || null
   );
+  const [staffContractTargetId, setStaffContractTargetId] = useState<string | null>(null);
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<ProgrammeId | null>(
     initialRoute.programmeId || null
   );
