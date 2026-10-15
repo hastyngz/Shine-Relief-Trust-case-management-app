@@ -287,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Girls Card */}
         <div
           onClick={() => onNavigateToGirlsList()}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -388,7 +388,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             }
             onNavigateToHousesList();
           }}
-          className="shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-all group"
+          className="fx-card shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-transform group"
         >
           <span className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-amber-900 uppercase tracking-wider">Payments &amp; Sales Outstanding</span>
@@ -435,7 +435,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <button
                 key={programme.id}
                 onClick={() => onNavigateToProgramme(programme.id)}
-                className="shine-card dashboard-programme-card bg-white p-4 rounded-xl border border-stone-200 text-left transition-colors"
+                className="fx-press fx-card shine-card dashboard-programme-card bg-white p-4 rounded-xl border border-stone-200 text-left transition-colors"
               >
                 <span className="flex items-start justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-bold text-stone-900">
@@ -602,13 +602,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               </div>
             ) : (
-              db.households.map((house) => {
+              db.households.map((house, index) => {
               const girlsInHouse = db.girls.filter((g) => g.householdId === house.id);
               return (
                 <div
                   key={house.id}
+                  style={{ "--i": index } as React.CSSProperties}
                   onClick={() => onNavigateToHouse(house.id)}
-                  className="p-3.5 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/30 cursor-pointer transition-all flex items-center justify-between gap-3"
+                  className="fx-rise fx-card p-3.5 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/30 cursor-pointer transition-transform flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-900 flex items-center justify-center font-bold text-xs shrink-0">
@@ -667,11 +668,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           ) : (
             <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
-              {upcomingFollowUps.slice(0, 5).map((item) => (
+              {upcomingFollowUps.slice(0, 5).map((item, index) => (
                 <div
                   key={item.id}
+                  style={{ "--i": index } as React.CSSProperties}
                   onClick={() => onNavigateToGirl(item.targetId)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                  className={`fx-rise fx-card p-3 rounded-lg border cursor-pointer transition-transform flex items-center justify-between gap-3 ${
                     item.isOverdue
                       ? 'bg-rose-50/50 border-rose-200 hover:border-rose-400'
                       : 'bg-stone-50 border-stone-200 hover:border-teal-700'
@@ -755,9 +757,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         ) : (
           <div className="divide-y divide-stone-100">
-            {recentActivities.map((act) => (
+            {recentActivities.map((act, index) => (
               <div
                 key={act.id}
+                style={{ "--i": index } as React.CSSProperties}
                 onClick={() => {
                   if (act.type === 'act') {
                     onNavigateToHouse(act.targetId);
@@ -765,7 +768,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     onNavigateToGirl(act.targetId);
                   }
                 }}
-                className="py-3 flex items-start gap-3 hover:bg-stone-50/70 p-2 rounded-lg cursor-pointer transition-colors"
+                className="fx-rise fx-press py-3 flex items-start gap-3 hover:bg-stone-50/70 p-2 rounded-lg cursor-pointer transition-transform"
               >
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 mt-0.5 ${
