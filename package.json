@@ -34,7 +34,8 @@
     "test:deployment-smoke": "tsx scripts/cloudflare-deployment-smoke.test.ts",
     "test:offline-queue": "tsx scripts/offline-queue-idb.test.ts",
     "test:e2e": "playwright test",
-    "test:inventory": "tsx scripts/inventory.test.ts"
+    "test:inventory": "tsx scripts/inventory.test.ts",
+    "test:asset-export": "tsx scripts/asset-export.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",
