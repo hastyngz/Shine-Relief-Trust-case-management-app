@@ -1,9 +1,10 @@
 import React, { FormEvent, useMemo, useState } from 'react';
-import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
+import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Download, Pencil, Plus, Search, X } from 'lucide-react';
 import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
 import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
+import { buildAssetsCsv } from '../utils/assetExport';
 import { getLocalDateInputValue } from '../utils/inventory';
 
 interface AssetRegisterViewProps {
