@@ -73,7 +73,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Enter an item name, stock code, unit and storage location.');
       return;
     }
-    if (!Number.isFinite(opening) || opening < 0 || !Number.isFinite(minimum) || minimum < 0 || (cost !== undefined && (!Number.isFinite(cost) || cost < 0))) {
+    if ((!editingTarget && (!Number.isFinite(opening) || opening < 0)) || !Number.isFinite(minimum) || minimum < 0 || (cost !== undefined && (!Number.isFinite(cost) || cost < 0))) {
       setError('Quantities and costs must be zero or greater.');
       return;
     }
@@ -104,7 +104,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       return;
     }
     const openingMovement: InventoryMovement[] = opening > 0 ? [{
-      id: makeId('mov'), type: 'Received', quantity: opening, date: now.slice(0, 10), location: newItem.location,
+      id: makeId('mov'), type: 'Received', quantity: opening, date: getLocalDateInputValue(), location: newItem.location,
       reason: 'Opening balance at item registration', recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
     }] : [];
     const item: InventoryItem = {
