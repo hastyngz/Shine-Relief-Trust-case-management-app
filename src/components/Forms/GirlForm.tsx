@@ -123,7 +123,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
 
       <form onSubmit={handleSubmit} className="p-5 space-y-6 max-h-[80vh] overflow-y-auto">
         {error && (
-          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+          <div role="alert" aria-live="assertive" className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
             {error}
           </div>
         )}
