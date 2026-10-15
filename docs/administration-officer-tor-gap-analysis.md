@@ -12,7 +12,7 @@
 | Staff and personnel | Staff management, employee records, payroll, contracts and salary history | **Existing foundations; partial ToR coverage.** Reuse the same employee identity and link payroll to the employee profile. Attendance, leave, onboarding checklists, training/policy acknowledgements and structured performance reviews still need assessment/implementation. Sensitive HR documents must not become visible to every staff role. |
 | Meetings and follow-up | Meeting records, minutes/transcription fields, extracted action IDs, schedules, workplans and operations view | **Existing foundations; integration to verify.** Ensure meeting decisions create traceable tasks/action items with owner, deadline, evidence, status and history rather than duplicate task stores. |
 | Reporting | Reports/export, report builder, programme/workplan/budget data | **Existing foundations; partial administrative reporting.** A monthly Administration Officer report should draw from actual records, show missing data, and never fabricate completed work or imply that incomplete records are complete. |
-| Document ingestion | Existing import/document-ingestion workflow and attachment metadata/storage services | **Not equivalent to central Document & Filing.** Ingestion helps process source files; it does not itself provide a cross-organisation filing register with metadata search, record links, versioning, expiry tracking and role-aware retrieval. Avoid a second upload/storage mechanism; build on existing private attachment storage where its authorization model supports the target. |
+| Document ingestion / filing | Existing import workflow, private R2 attachment storage and `src/components/DocumentsFilingView.tsx` | **Phase 1 index implemented; full filing still partial.** The new index searches accessible existing attachments by filename, caption, category, date, uploader and linked record; it downloads through the authenticated storage client and links supported records back into SHINE. It reuses the existing attachment store, excludes safeguarding attachments and respects health-record query permissions. It is not yet a complete organisation-wide filing register: staff/contracts, procurement, assets, meetings and finance targets are not all supported by the attachment model; title/reference/expiry/confidentiality metadata and controlled version history remain to be implemented. |
 | Compliance calendar | Existing schedules/calendar concepts and contract date fields | **Partial.** Dates and schedules exist, but a managed register of obligations with owner, recurrence, due date, evidence, review/approval and completion history needs a dedicated workflow or carefully extended existing records. |
 | Suppliers | Supplier names are currently available in inventory/procurement fields | **Partial.** A reusable supplier/service-provider register with quotation/purchase history, documents, delivery performance and declared conflicts is not established. |
 | Finance administration | Budgets, expenses, payroll, procurement lists and financial reports | **Partial.** Missing-document checks, commitments vs actuals vs unpaid invoices, and a properly reconciled petty-cash workflow need explicit models and permissions. Never count internal stock issues as new expenditure. |
@@ -22,14 +22,14 @@
 
 ## Implementation sequence
 
-### Workstream 1 — Documents & Filing (next)
-1. Inventory existing attachment metadata, upload/download authorization, private storage paths, supported target types and deletion/version behaviour before adding UI.
-2. Provide a searchable index of documents already accessible to the logged-in user; filter at the authoritative data boundary, not only in the UI.
-3. Support useful metadata (title, category, reference, date, owner, linked record, confidentiality classification and optional expiry date) without copying file bytes or creating duplicate uploads.
-4. Link existing documents to procurement, assets, staff/contract records, meetings, reports and finance records where permissions allow.
+### Workstream 1 — Documents & Filing (Phase 1 index delivered; continue)
+1. **Delivered:** searchable index over existing report-eligible attachments, metadata-only loading, authenticated file download, supported linked-record navigation, refresh/loading/error/empty states and route regression coverage.
+2. Keep the existing private R2 store; do not copy file bytes or introduce a parallel upload path.
+3. Extend target types and attachment authorization for procurement, assets, staff/contracts, meetings, reports and finance only after defining their role-specific rules and validating server-side access.
+4. Add title/reference/owner/confidentiality/optional expiry metadata with a migration-safe model and audit trail.
 5. Add version history only with explicit retention semantics; never silently replace an approved policy or destroy the previous version.
-6. Exclude safeguarding and restricted health/child documents from general search unless the current user is specifically authorized. Avoid broad collection reads that return records the user cannot access.
-7. Add tests for authorization, missing/deleted files, unsupported types, metadata search, mobile layout, and offline/error states.
+6. Keep safeguarding outside general search and health records permission-filtered. Do not broaden collection reads to make the index appear complete.
+7. Add tests for authorization, missing/deleted files, metadata search, linked-record navigation, mobile layout and offline/error states.
 
 ### Workstream 2 — Compliance & Deadlines
 - Reuse the existing schedule/calendar and staff identity where possible.
