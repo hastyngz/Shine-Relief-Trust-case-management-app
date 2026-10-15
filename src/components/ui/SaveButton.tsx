@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, LoaderCircle, Save } from 'lucide-react';
+import { AlertTriangle, Check, LoaderCircle, Save } from 'lucide-react';
 
 export type SaveButtonStatus = 'idle' | 'saving' | 'done' | 'error';
 
