@@ -1249,6 +1249,24 @@ export type SyncChangeResult = {
  * conflict so the caller can store it for manual resolution instead of
  * silently overwriting a newer edit.
  */
+function stableContentHash(value: unknown): string {
+  const stable = (input: unknown): string => {
+    if (Array.isArray(input)) return `[${input.map(stable).join(',')}]`;
+    if (input && typeof input === 'object') {
+      return `{${Object.keys(input as Record<string, unknown>).sort()
+        .map((key) => `${JSON.stringify(key)}:${stable((input as Record<string, unknown>)[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(input) ?? 'null';
+  };
+  const text = stable(value);
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
 export async function syncChangeEntriesToFirestore(
   entries: OfflineChangeEntry[],
   actor?: { uid: string; name: string },
@@ -1268,6 +1286,22 @@ export async function syncChangeEntriesToFirestore(
 
         // Already applied by this device (its own online write): not a conflict.
         if (serverUpdatedAt && localUpdatedAt && serverUpdatedAt === localUpdatedAt) return null;
+
+        // Records without reliable timestamps use a content fingerprint. A
+        // different server copy means another device changed it since our baseline.
+        if (serverData && entry.baseHash && stableContentHash(serverData) !== entry.baseHash) {
+          // If the server already contains this exact local payload, treat it as
+          // an idempotent retry rather than reporting our own write as a conflict.
+          if (!entry.data || stableContentHash(serverData) !== stableContentHash(entry.data)) {
+            return {
+              collection: entry.collection,
+              recordId: entry.recordId,
+              data: serverData,
+              updatedAt: serverUpdatedAt,
+              updatedBy: typeof serverData?.updatedBy === 'string' ? serverData.updatedBy : null,
+            };
+          }
+        }
 
         // The server changed the record after this device last saw it.
         if (serverUpdatedAt && entry.baseUpdatedAt && serverUpdatedAt > entry.baseUpdatedAt) {
