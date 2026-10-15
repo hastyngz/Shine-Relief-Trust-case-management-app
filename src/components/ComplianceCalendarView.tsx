@@ -4,6 +4,7 @@ import type { ScheduleItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { addScheduleItem, updateScheduleItem } from '../utils/storage';
 import { getLocalDateInputValue } from '../utils/inventory';
+import { isComplianceDueSoon, isComplianceOverdue } from '../utils/compliance';
 
 interface ComplianceCalendarViewProps {
   schedules: ScheduleItem[];
@@ -14,13 +15,6 @@ const categories = ['Employment & contracts', 'Staff training & policies', 'Orga
 const recurrences = ['One-off', 'Monthly', 'Quarterly', 'Every 6 months', 'Annually'] as const;
 const priorities = ['Low', 'Medium', 'High', 'Urgent'] as const;
 const makeId = () => `CMP-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-const isDueOverdue = (item: ScheduleItem, today: string) => item.status !== 'Completed' && item.status !== 'Cancelled' && item.scheduledDate < today;
-const isDueSoon = (item: ScheduleItem, today: string) => {
-  if (item.status === 'Completed' || item.status === 'Cancelled') return false;
-  const due = Date.parse(`${item.scheduledDate}T00:00:00Z`);
-  const current = Date.parse(`${today}T00:00:00Z`);
-  return Number.isFinite(due) && due >= current && due - current <= 30 * 86400000;
-};
 
 type ComplianceForm = {
   title: string; category: string; description: string; dueDate: string; priority: typeof priorities[number];
@@ -55,14 +49,14 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
         .some((value) => value?.toLowerCase().includes(term));
       const statusMatches = statusFilter === 'All'
         || (statusFilter === 'Completed' ? item.status === 'Completed'
-          : statusFilter === 'Overdue' ? isDueOverdue(item, today)
+          : statusFilter === 'Overdue' ? isComplianceOverdue(item, today)
             : item.status !== 'Completed' && item.status !== 'Cancelled');
       return textMatches && statusMatches && (categoryFilter === 'All' || item.complianceCategory === categoryFilter);
     }).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.title.localeCompare(b.title));
   }, [records, query, statusFilter, categoryFilter, today]);
 
-  const overdue = records.filter((item) => isDueOverdue(item, today)).length;
-  const dueSoon = records.filter((item) => isDueSoon(item, today)).length;
+  const overdue = records.filter((item) => isComplianceOverdue(item, today)).length;
+  const dueSoon = records.filter((item) => isComplianceDueSoon(item, today)).length;
   const completed = records.filter((item) => item.status === 'Completed').length;
   const appendHistory = (item: ScheduleItem, action: NonNullable<ScheduleItem['complianceHistory']>[number]['action'], note?: string) => [
     ...(item.complianceHistory || []),
@@ -113,6 +107,9 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     const updates: Partial<ScheduleItem> = {
       status,
       completedAt: status === 'Completed' ? new Date().toISOString() : undefined,
+      completionNote: status === 'Completed' ? undefined : undefined,
+      verifiedBy: undefined,
+      verifiedAt: undefined,
       complianceHistory: appendHistory(item, status === 'Completed' ? 'Completed' : status === 'In Progress' ? 'Started' : 'Reopened'),
     };
     const updated = updateScheduleItem(item.id, updates, actor);
@@ -184,7 +181,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     <div className="space-y-3">
       {filtered.map((item) => {
         const overdueItem = isDueOverdue(item, today);
-        const dueSoonItem = isDueSoon(item, today);
+        const dueSoonItem = isComplianceDueSoon(item, today);
         return <article key={item.id} className="fx-card rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
