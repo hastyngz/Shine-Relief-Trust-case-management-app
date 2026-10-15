@@ -317,8 +317,8 @@ assert.equal(scheduleEntry.length, 1, 'new compliance obligations should be queu
 assert.equal(scheduleEntry[0].collection, 'schedules');
 assert.equal(scheduleEntry[0].recordId, 'CMP-001');
 assert.equal(scheduleEntry[0].operation, 'set');
-assert.equal(scheduleEntry[0].data.complianceRecurrence, 'Annually');
-assert.equal(scheduleEntry[0].data.complianceHistory[0].action, 'Created');
+assert.equal(scheduleEntry[0].data?.complianceRecurrence, 'Annually');
+assert.equal(scheduleEntry[0].data?.complianceHistory?.[0]?.action, 'Created');
 
 const changedCompliance = { ...complianceItem, updatedAt: T3, status: 'Completed', completionNote: 'Reviewed and signed' };
 const changedScheduleEntry = computeChangeEntries(
@@ -327,6 +327,6 @@ const changedScheduleEntry = computeChangeEntries(
 );
 assert.equal(changedScheduleEntry.length, 1, 'completion updates should be queued');
 assert.equal(changedScheduleEntry[0].collection, 'schedules');
-assert.equal(changedScheduleEntry[0].data.completionNote, 'Reviewed and signed');
+assert.equal(changedScheduleEntry[0].data?.completionNote, 'Reviewed and signed');
 
 console.log('Offline per-record queue and conflict tests passed.');
