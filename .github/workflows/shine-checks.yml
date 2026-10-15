@@ -90,6 +90,9 @@ jobs:
       - name: Test rate limiting
         run: npm run test:rate-limit
 
+      - name: Test inventory expiry and stocktake helpers
+        run: npm run test:inventory
+
       - name: Test hash routing
         run: npm run test:routing
 
