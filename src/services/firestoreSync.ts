@@ -18,6 +18,7 @@ import {
 import { firestore } from '../firebase';
 import { deleteStoredFile } from './r2StorageClient';
 import { shouldSubscribeToCollection } from './firestoreListenerPermissions';
+import { OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
 import {
   AppDatabase,
   Girl,
@@ -1385,39 +1386,7 @@ export async function clearAllFirestoreCollections(): Promise<void> {
       }
     }
 
-    const collectionNames = [
-      COLLECTIONS.GIRLS,
-      COLLECTIONS.HOUSEHOLDS,
-      COLLECTIONS.EDU_FOLLOW_UPS,
-      COLLECTIONS.HEALTH_FOLLOW_UPS,
-      COLLECTIONS.FAMILY_FOLLOW_UPS,
-      COLLECTIONS.RENT_PAYMENTS,
-      COLLECTIONS.EXPENSES,
-      COLLECTIONS.ACTIVITIES,
-      COLLECTIONS.BUDGETS,
-      COLLECTIONS.ANNUAL_BUDGETS,
-      COLLECTIONS.PAYROLL_RECORDS,
-      COLLECTIONS.WORKPLANS,
-      COLLECTIONS.SCHEDULES,
-      COLLECTIONS.HISTORICAL_RECORDS,
-      COLLECTIONS.IMPORT_AUDITS,
-      COLLECTIONS.RESTRICTED_IMPORT_SOURCES,
-      COLLECTIONS.EARLY_YEARS,
-      COLLECTIONS.PEOPLE,
-      COLLECTIONS.ATTACHMENTS,
-      COLLECTIONS.CASE_ACTIONS,
-      COLLECTIONS.EDUCATION_HISTORY,
-      COLLECTIONS.ACADEMIC_SUPPORTS,
-      COLLECTIONS.EXAMINATION_RECORDS,
-      COLLECTIONS.ATTENDANCE_RECORDS,
-      COLLECTIONS.GIRL_LEAVES,
-      COLLECTIONS.PROGRAMME_LOGS,
-      COLLECTIONS.CASE_REVIEWS,
-      COLLECTIONS.CASE_GOALS,
-      COLLECTIONS.PROCUREMENT_LISTS,
-      COLLECTIONS.PROJECT_PROJECTIONS,
-      COLLECTIONS.INVENTORY_ITEMS,
-    ];
+    const collectionNames: readonly string[] = OPERATIONAL_COLLECTIONS_TO_CLEAR;
 
     for (const colName of collectionNames) {
       const snap = await getDocs(collection(firestore, colName));
