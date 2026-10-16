@@ -52,3 +52,12 @@ export const OPERATIONAL_COLLECTIONS_TO_CLEAR = [
   'inventoryItems',
   'assets',
 ] as const;
+
+/**
+ * Cloud-backed operational collections represented by AppDatabase backups.
+ * Employee salary history is maintained separately from AppDatabase and is
+ * therefore excluded from backup replacement unless a dedicated export is added.
+ */
+export const BACKUP_RESTORE_COLLECTIONS = OPERATIONAL_COLLECTIONS_TO_CLEAR.filter(
+  (collection) => collection !== 'employeeSalaryHistory',
+);
