@@ -1267,7 +1267,8 @@ export function addPayrollRecord(
   if (!db.payrollRecords) db.payrollRecords = [];
   const existing = db.payrollRecords.find((item) =>
     item.employeeId === record.employeeId &&
-    (item.payPeriod === record.payPeriod || item.payPeriodStartDate === record.payPeriodStartDate));
+    (item.payPeriod === record.payPeriod ||
+      (Boolean(record.payPeriodStartDate) && item.payPeriodStartDate === record.payPeriodStartDate)));
   if (existing) return existing;
   const now = new Date().toISOString();
   const newRecord: PayrollRecord = {
@@ -1280,8 +1281,14 @@ export function addPayrollRecord(
     createdByUid: record.createdByUid || auditActorUid || 'system',
     updatedByUid: record.updatedByUid || auditActorUid || 'system',
   };
+  const previousPayrollRecords = [...db.payrollRecords];
   db.payrollRecords.unshift(newRecord);
-  saveDatabaseOrThrow(db, 'Payroll record');
+  try {
+    saveDatabaseOrThrow(db, 'Payroll record');
+  } catch (error) {
+    db.payrollRecords = previousPayrollRecords;
+    throw error;
+  }
   persistPayrollRecordToFirestore(newRecord).catch((err) =>
     console.error('Failed to persist payroll record to Firestore:', err)
   );
@@ -1305,8 +1312,14 @@ export function updatePayrollRecord(
     updatedBy: updates.updatedBy || auditActor || db.payrollRecords[index].updatedBy || 'SHINE Staff',
     updatedByUid: updates.updatedByUid || auditActorUid || db.payrollRecords[index].updatedByUid || 'system',
   };
+  const previousPayrollRecords = [...db.payrollRecords];
   db.payrollRecords[index] = updated;
-  saveDatabaseOrThrow(db, 'Payroll update');
+  try {
+    saveDatabaseOrThrow(db, 'Payroll update');
+  } catch (error) {
+    db.payrollRecords = previousPayrollRecords;
+    throw error;
+  }
   persistPayrollRecordToFirestore(updated).catch((err) =>
     console.error('Failed to update payroll record in Firestore:', err)
   );
@@ -1318,9 +1331,13 @@ export function deletePayrollRecord(id: string): boolean {
   if (!db.payrollRecords) return false;
   const index = db.payrollRecords.findIndex((record) => record.id === id);
   if (index === -1) return false;
+  const previousPayrollRecords = [...db.payrollRecords];
   db.payrollRecords.splice(index, 1);
   const saveResult = saveDatabase(db);
-  if (!saveResult.ok) return false;
+  if (!saveResult.ok) {
+    db.payrollRecords = previousPayrollRecords;
+    return false;
+  }
   deletePayrollRecordFromFirestore(id).catch((err) =>
     console.error('Failed to delete payroll record from Firestore:', err)
   );
@@ -1346,8 +1363,14 @@ export async function updateEmployeeRecord(
     updatedAt: now,
     updatedBy: auditActor || existing.updatedBy,
   };
+  const previousEmployees = [...db.employees];
   db.employees[index] = updated;
-  saveDatabaseOrThrow(db, 'Employee record');
+  try {
+    saveDatabaseOrThrow(db, 'Employee record');
+  } catch (error) {
+    db.employees = previousEmployees;
+    throw error;
+  }
   await persistEmployeeRecordToFirestore(updated);
   return updated;
 }
