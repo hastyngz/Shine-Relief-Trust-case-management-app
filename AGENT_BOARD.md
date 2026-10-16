@@ -254,8 +254,8 @@ Suggestion format:
 - Type: bug
 - Evidence: the import normalizer's collection list did not include `assets` or `caseGoals`, although both are part of `AppDatabase` and the export/local-load paths. Restoring a JSON backup could therefore drop those collections from the restored local database and cloud sync payload.
 - Change: extracted `normalizeImportedDatabase` in `src/utils/storage.ts`, included both collections with backward-compatible empty-array defaults, and added regression assertions to `scripts/storage-failures.test.ts` for preserving both collections and importing older backups without assets.
-- Verification: source changes and regression assertions are covered by GitHub Actions run 371, which passed on 2026-10-16.
-- Status: fixed and CI-verified
+- Verification: original asset/case-goal normalisation and budget changes were covered by passing GitHub Actions run 371. Additional restore-sync and stale-record cleanup coverage was committed afterward and awaits its own CI run.
+- Status: normaliser fix verified; full restore workflow expanded, verification pending
 
 
 ### S-017 · Operational reset leaves some module collections behind
@@ -264,4 +264,13 @@ Suggestion format:
 - Evidence: `clearAllFirestoreCollections` maintained its own collection list and omitted contacts, employees/salary history, meetings, feeding logs, market prices, forecast settings, what-if scenarios, AI settings, intelligence suggestions and assets. The reset could report success while stale operational records remained in Firestore.
 - Change: introduced `firestoreResetPolicy.ts` as the explicit operational reset list, included the missing operational collections, corrected the administrator success message, and added policy regression tests to the storage CI step. Staff access/messaging, safeguarding cases and dedicated audit/report-history collections remain outside this reset.
 - Verification: awaiting GitHub Actions for the new policy and test.
+- Status: fix committed; verification pending
+
+
+### S-018 · Backup restore did not cover every AppDatabase cloud collection
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: bug
+- Evidence: `syncEntireDatabaseToFirestore` did not push meetings, feeding logs, market prices, forecast settings, what-if scenarios, intelligence suggestions or AI settings from a backup. Its stale-record cleanup also omitted employees and case goals. Restoring a backup could therefore leave stale or missing operational records despite the JSON normaliser retaining them.
+- Change: added bulk restore mappings for the omitted modules and standalone restricted import-source rows; moved stale-record cleanup to an explicit backup-replacement collection policy that excludes salary history because it is not represented by AppDatabase backups; added regression coverage.
+- Verification: awaiting GitHub Actions for the latest restore and policy tests.
 - Status: fix committed; verification pending
