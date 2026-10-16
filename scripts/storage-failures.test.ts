@@ -27,6 +27,7 @@ const {
   getDatabase,
   saveDatabase,
   addPayrollRecord,
+  updateEmployeeRecord,
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
   normalizeImportedDatabase,
@@ -133,6 +134,12 @@ assert.equal(savedScheduleUpdate.savedLocally, true, 'schedule update reports su
 assert.equal(savedScheduleUpdate.item?.status, 'In Progress');
 
 // --- Non-quota errors are reported but not mislabelled ---------------------
+const employeeDb = getDatabase();
+employeeDb.employees = [
+  ...(employeeDb.employees || []),
+  { id: 'EMP-LOCAL-SAVE-FAIL', fullName: 'Storage Failure Test', createdAt: '2026-01-01T00:00:00.000Z' } as never,
+];
+assert.equal(saveDatabase(employeeDb).ok, true, 'employee failure fixture is persisted before storage is disabled');
 fakeLocalStorage.setItem = () => { throw new Error('SecurityError'); };
 events.length = 0;
 const otherFailure = saveDatabase(db);
@@ -154,6 +161,11 @@ assert.throws(() => addPayrollRecord({
   paymentStatus: 'Pending',
   paymentMethod: 'Bank transfer',
 } as never), /Payroll record was not saved on this device/);
+await assert.rejects(
+  () => updateEmployeeRecord('EMP-LOCAL-SAVE-FAIL', { fullName: 'Unsaved Name' } as never, 'Test Admin'),
+  /Employee record was not saved on this device/,
+  'employee edits do not proceed to Firestore when local persistence fails',
+);
 
 // --- Backup restore reports local/cloud partial outcomes honestly ----------
 const validBackup = JSON.stringify({ girls: [{ id: 'SG-RESTORE-1' }], households: [] });
