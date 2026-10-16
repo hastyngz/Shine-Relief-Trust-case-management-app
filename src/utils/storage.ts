@@ -31,7 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
-import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, markDatabaseResetRecoveryRequired } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
