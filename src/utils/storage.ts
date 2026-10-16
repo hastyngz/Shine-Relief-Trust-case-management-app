@@ -31,6 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
+import { clearOfflineChangesAfterDatabaseReset } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
@@ -207,7 +208,15 @@ export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): St
 
 export async function clearAllDatabase(): Promise<AppDatabase> {
   await clearAllFirestoreCollections();
-  saveDatabase(INITIAL_DATABASE);
+  const localSave = saveDatabase(INITIAL_DATABASE);
+  if (!localSave.ok) {
+    throw new Error(
+      'Cloud operational records were cleared, but the local reset could not be saved. Existing offline changes were not cleared; fix device storage and retry the reset.'
+    );
+  }
+  // Prevent queued edits from recreating records after the successful reset.
+  // This runs only after both cloud deletion and local persistence have succeeded.
+  await clearOfflineChangesAfterDatabaseReset(INITIAL_DATABASE);
   return INITIAL_DATABASE;
 }
 
