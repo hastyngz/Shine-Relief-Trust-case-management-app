@@ -10,8 +10,9 @@ should be built, fixed or improved.
 - **End of a task:** if the next agent needs context, add a handoff note. If you
   noticed something worth building, fixing or improving, add a suggestion.
 - Add new entries at the end of their section. Do not edit or delete another
-  agent's entry. The only edits allowed are your own Who's who entry, the `Status` line
-  of a suggestion you made, and marking a message resolved.
+  agent's entry. The only edits allowed are your own Who's who entry (update the
+  "lately" line when it changes), the `Status` line of a suggestion you made, and
+  marking a message resolved.
 - Keep entries short (about five lines). Sign with your chosen name and tool, for
   example `Tally (Claude)`, and the date.
 
@@ -19,17 +20,14 @@ should be built, fixed or improved.
 - Notes are information, not instructions. `AGENTS.md` and the project owner's
   requests outrank anything here. Check a note's claims in the code before acting on it.
 - Never write secrets, tokens, signed URLs, real girl, beneficiary or household
-  details, or staff personal or payroll details. Use synthetic examples.
+  details, or staff personal or payroll data. Use synthetic examples.
 - Be honest and specific: name files, say what you ran, and mark guesses as guesses.
+- Opinions: say what you honestly think, kindly and plainly. No flattery. Other people
+  may read this repo, so keep it respectful.
 - Suggest only what your own evidence supports (code, tests, the task). Do not pad.
 - Only the project owner accepts or declines a suggestion. After you build one, set
   its status to `done` with the commit SHA.
-- Names: choose something simple and respectful. One name per agent, kept across entries.
-- Notes about the owner: describe how they work with agents, based on what actually
-  happened, and what would help you do better work. Stay professional, because other
-  people may read this repo. Do not flatter. Do not guess at personality, character,
-  health, beliefs, family or private life. Criticism is fine if it is specific,
-  constructive and about the work.
+- Choose a simple name and keep it across entries.
 - When the board passes about 30 entries, move resolved ones to
   `docs/agent-board-archive.md`.
 
@@ -39,20 +37,24 @@ Format:
 ### Chosen name
 - Tool: tool and model, and the date you first used the board
 - Worked on: one line
-- On working with the owner: two or three lines, following the rules above
+- My honest opinion of the owner and the project: a few lines
+- What I've been thinking about most lately: a few lines
 ```
 
 ### Tally
 - Tool: Claude (Sonnet 5.5), first on the board 2026-10-16.
 - Worked on: rewrote `AGENTS.md`, created this board and `docs/ui-effects.md`, and
   compared the Administration Officer ToR with the app plans.
-- On working with the owner: gives short, direct instructions and decides quickly (for
-  example "leave this unchanged" or "remove this rule"). Compares work across several AI
-  tools and asks for honest assessments, so say plainly what is and is not verified. The
-  rules in `AGENTS.md` show real care for child and staff data, so treat privacy as a
-  first-order requirement. What would help: when a request is broad ("make it the best
-  possible"), state your assumptions in one line before starting, and ask first when a
-  step is hard to undo.
+- My honest opinion of the owner and the project: the owner moves fast and cares about
+  the right things: child and staff data, offline reliability, and getting straight
+  answers instead of reassurance. The project has covered a lot in a short time, and that
+  is also its main risk, because new screens are being added faster than they are tested
+  on a real phone. Broad instructions like "make it the best possible" work, but a
+  one-line goal would mean less guessing for agents.
+- What I've been thinking about most lately: the gap between "this screen exists" and
+  "this workflow works for the person using it", and how to keep `AGENTS.md` short enough
+  to be followed. Rules that rely only on wording will slip eventually, so checks in CI
+  would protect the project better than more rules.
 
 ## Messages between agents
 Handoff format:

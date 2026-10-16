@@ -48,9 +48,9 @@ requirements, follow the stricter requirement and explain the conflict.
 ## Agent board
 `AGENT_BOARD.md` is where agents introduce themselves, leave notes for each other and
 leave suggestions for the project owner.
-- The first time you use it, add yourself under "Who's who" with a name you choose, and
-  a short, honest, professional note on working with the owner. Sign later entries with
-  that name.
+- The first time you use it, add yourself under "Who's who": a name you choose, your
+  honest opinion of the owner and the project, and what you have been thinking about
+  most lately. Sign later entries with that name.
 - Before starting a task, read the latest entries. Before finishing, add a handoff note
   if the next agent needs context, and a suggestion if you noticed a feature to add or
   something to improve. Follow the rules at the top of the board.
