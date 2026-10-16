@@ -32,3 +32,27 @@ test('staff can register and complete a compliance obligation', async ({ page })
   await record.getByText(/^History \(/).click();
   await expect(record.getByText(/Completed · E2E Test Staff/)).toBeVisible();
 });
+
+test('staff can collect a supplier quote when an item price is missing', async ({ page }) => {
+  logPageErrors(page);
+  await signIn(page);
+  await page.evaluate(() => { window.location.hash = '#/planning'; });
+
+  const procurementTab = page.getByRole('button', { name: /Procurement \(/ });
+  await expect(procurementTab).toBeVisible();
+  await procurementTab.click();
+
+  const list = page.locator('article').filter({
+    has: page.getByRole('heading', { name: 'E2E Procurement Missing Price', exact: true }),
+  });
+  await expect(list).toBeVisible();
+  await expect(list).toContainText('Collect supplier quotes to establish the price: 0/3');
+
+  await list.getByLabel('Quote supplier').fill('E2E Supplier A');
+  await list.getByLabel('Quote amount in MWK').fill('12000');
+  await list.getByRole('button', { name: 'Add' }).click();
+
+  await expect(list).toContainText('E2E Supplier A');
+  await expect(list).toContainText('12,000');
+  await expect(list).toContainText('Collect supplier quotes to establish the price: 1/3');
+});

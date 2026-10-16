@@ -104,6 +104,21 @@ async function seedStaffAccount(): Promise<void> {
     lastLoginAt: now,
   });
 
+  // Synthetic procurement fixture: unknown price must still permit supplier quote collection.
+  await db.collection('procurementLists').doc('PRC-E2E-MISSING-PRICE').set({
+    id: 'PRC-E2E-MISSING-PRICE',
+    title: 'E2E Procurement Missing Price',
+    purpose: 'Synthetic browser test record only',
+    items: [{ description: 'Office paper', quantity: 2, unit: 'reams', priceStatus: 'missing', itemNumber: '1' }],
+    totalMWK: 0,
+    status: 'draft',
+    quoteThresholdMWK: 500000,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: 'E2E Setup',
+    updatedBy: 'E2E Setup',
+  });
+
   // Synthetic records for the two-device conflict test — never real case data.
   // They are complete enough to render in the girl profile and edit form.
   await db.collection('households').doc('SH-E2E').set({

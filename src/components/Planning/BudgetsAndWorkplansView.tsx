@@ -1292,6 +1292,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           item.unitPriceMWK === undefined ? undefined : item.unitPriceMWK * item.quantity
                         );
                         const quoteRequired = itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? 500000);
+                        // Unknown/unclear prices need supplier quotes to establish a price even before the threshold can be evaluated.
+                        const quoteCollectionAvailable = quoteRequired || item.priceStatus !== 'quoted';
                         const draftKey = `${list.id}:${index}`;
                         const draft = quoteDrafts[draftKey] || { supplier: '', amount: '' };
                         return (
@@ -1308,6 +1310,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                 {item.priceStatus === 'quoted' ? formatMWK(itemTotal || 0) : item.priceStatus === 'unclear' ? 'Price unclear' : 'Missing price'}
                               </p>
                               {quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Three quotes required: {item.quotes?.length || 0}/3</p>}
+                              {item.priceStatus !== 'quoted' && !quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Collect supplier quotes to establish the price: {item.quotes?.length || 0}/3</p>}
+                              {item.priceStatus !== 'quoted' && (item.quotes?.length || 0) >= 3 && <p className="mt-1 text-[11px] text-stone-600">Three supplier prices captured; price selection and approval remain outstanding.</p>}
                             </div>
                             <label className="text-[11px] font-semibold text-stone-700">
                               Attach to budget line
@@ -1329,7 +1333,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                   {quote.supplier}: {formatMWK(quote.amountMWK)}
                                 </p>
                               ))}
-                              {canEdit && quoteRequired && (item.quotes?.length || 0) < 3 && (
+                              {canEdit && quoteCollectionAvailable && (item.quotes?.length || 0) < 3 && (
                                 <div className="flex gap-1">
                                   <input
                                     aria-label="Quote supplier"
