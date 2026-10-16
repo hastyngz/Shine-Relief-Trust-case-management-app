@@ -233,8 +233,12 @@ export function markDatabaseResetRecoveryRequired(): void {
  * interrupted session may have left persisted edits behind.
  */
 export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending' | 'unavailable'> {
-  if (typeof window === 'undefined' || isDatabaseResetRecoveryRequired()) return 'unavailable';
+  if (typeof window === 'undefined') return 'unavailable';
 
+  // A recovery lock blocks automatic queue replay, but it must not make an
+  // administrator unable to retry a backup restore after an interrupted
+  // restore/reset. Permit an explicit restore retry only when persisted queue
+  // inspection proves there are no pending per-record or legacy snapshot edits.
   const queueState = await inspectPersistedQueueState();
   if (queueState !== 'clear') return queueState;
 
