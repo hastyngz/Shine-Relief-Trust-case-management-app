@@ -703,66 +703,66 @@ function AppContent() {
       return false;
     }
     try {
-    let targetId = '';
-    if (editingGirl) {
-      targetId = editingGirl.id;
-      const schoolChanged = editingGirl.school !== girlData.school || editingGirl.classLevel !== girlData.classLevel;
-      if (schoolChanged) {
-        const changeDate = new Date().toISOString().slice(0, 10);
-        const currentEntries = (db.educationHistory || []).filter(
-          (entry) => entry.girlId === editingGirl.id && entry.status === 'Current'
-        );
-        if (currentEntries.length > 0) {
-          currentEntries.forEach((entry) => updateEducationHistoryRecord(entry.id, {
-            status: 'Transferred',
-            endDate: entry.endDate || changeDate,
-            reasonForChange: entry.reasonForChange || 'School or class updated in girl profile',
-          }, auditActor));
-        } else if (editingGirl.school || editingGirl.classLevel) {
+      let targetId = '';
+      if (editingGirl) {
+        targetId = editingGirl.id;
+        const schoolChanged = editingGirl.school !== girlData.school || editingGirl.classLevel !== girlData.classLevel;
+        if (schoolChanged) {
+          const changeDate = new Date().toISOString().slice(0, 10);
+          const currentEntries = (db.educationHistory || []).filter(
+            (entry) => entry.girlId === editingGirl.id && entry.status === 'Current'
+          );
+          if (currentEntries.length > 0) {
+            currentEntries.forEach((entry) => updateEducationHistoryRecord(entry.id, {
+              status: 'Transferred',
+              endDate: entry.endDate || changeDate,
+              reasonForChange: entry.reasonForChange || 'School or class updated in girl profile',
+            }, auditActor));
+          } else if (editingGirl.school || editingGirl.classLevel) {
+            addEducationHistoryRecord({
+              girlId: editingGirl.id,
+              academicYear: '',
+              school: editingGirl.school,
+              classLevel: editingGirl.classLevel,
+              endDate: changeDate,
+              status: 'Transferred',
+              reasonForChange: 'School or class updated in girl profile',
+              source: 'Girl profile before edit',
+            }, auditActor);
+          }
           addEducationHistoryRecord({
             girlId: editingGirl.id,
             academicYear: '',
-            school: editingGirl.school,
-            classLevel: editingGirl.classLevel,
-            endDate: changeDate,
-            status: 'Transferred',
-            reasonForChange: 'School or class updated in girl profile',
-            source: 'Girl profile before edit',
+            school: girlData.school,
+            classLevel: girlData.classLevel,
+            startDate: changeDate,
+            status: 'Current',
+            source: 'Girl profile update',
           }, auditActor);
         }
-        addEducationHistoryRecord({
-          girlId: editingGirl.id,
-          academicYear: '',
-          school: girlData.school,
-          classLevel: girlData.classLevel,
-          startDate: changeDate,
-          status: 'Current',
-          source: 'Girl profile update',
-        }, auditActor);
+        updateGirl(editingGirl.id, girlData, auditActor);
+        notifyDataChange({ type: 'record_updated', entityId: editingGirl.id, entityTitle: girlData.fullName, girlId: editingGirl.id, detail: 'girl profile' });
+        showToast(`Saved on this phone. Profile updated for ${girlData.fullName}`);
+        navigateTo('girl-profile', 'girls', editingGirl.id);
+      } else {
+        const newGirl = addGirl(girlData, auditActor);
+        targetId = newGirl.id;
+        showToast(`Saved on this phone. Successfully registered ${newGirl.fullName} (ID: ${newGirl.id})`);
+        navigateTo('girl-profile', 'girls', newGirl.id);
+
+        // Notify staff of new registration
+        notifyDataChange({ type: 'new_girl', entityId: newGirl.id, entityTitle: newGirl.fullName, girlId: newGirl.id });
       }
-      updateGirl(editingGirl.id, girlData, auditActor);
-      notifyDataChange({ type: 'record_updated', entityId: editingGirl.id, entityTitle: girlData.fullName, girlId: editingGirl.id, detail: 'girl profile' });
-      showToast(`Saved on this phone. Profile updated for ${girlData.fullName}`);
-      navigateTo('girl-profile', 'girls', editingGirl.id);
-    } else {
-      const newGirl = addGirl(girlData, auditActor);
-      targetId = newGirl.id;
-      showToast(`Saved on this phone. Successfully registered ${newGirl.fullName} (ID: ${newGirl.id})`);
-      navigateTo('girl-profile', 'girls', newGirl.id);
 
-      // Notify staff of new registration
-      notifyDataChange({ type: 'new_girl', entityId: newGirl.id, entityTitle: newGirl.fullName, girlId: newGirl.id });
-    }
-
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('girl', targetId, pendingPhotos, (url) => {
-        if (!girlData.photoUrl) {
-          updateGirl(targetId, { photoUrl: url }, auditActor);
-          setDb(getDatabase());
-        }
-      });
-    }
-    return true;
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('girl', targetId, pendingPhotos, (url) => {
+          if (!girlData.photoUrl) {
+            updateGirl(targetId, { photoUrl: url }, auditActor);
+            setDb(getDatabase());
+          }
+        });
+      }
+      return true;
     } catch (error) {
       showToast(`Girl profile save did not complete: ${error instanceof Error ? error.message : 'Check device storage and retry.'} If you changed school or class, review education history before retrying.`);
       return false;
@@ -778,33 +778,33 @@ function AppContent() {
       return;
     }
     try {
-    let targetId = '';
-    if (editingHouse) {
-      targetId = editingHouse.id;
-      updateHousehold(editingHouse.id, houseData, auditActor);
-      showToast(`House updated for ${houseData.name}`);
-      navigateTo('house-profile', 'houses', undefined, editingHouse.id);
-    } else {
-      const newHouse = addHousehold(houseData, auditActor);
-      targetId = newHouse.id;
-      showToast(`Added household ${newHouse.name}`);
-      navigateTo('house-profile', 'houses', undefined, newHouse.id);
-    }
-    notifyDataChange({ type: 'house_updated', entityId: targetId, entityTitle: houseData.name, houseId: targetId });
+      let targetId = '';
+      if (editingHouse) {
+        targetId = editingHouse.id;
+        updateHousehold(editingHouse.id, houseData, auditActor);
+        showToast(`House updated for ${houseData.name}`);
+        navigateTo('house-profile', 'houses', undefined, editingHouse.id);
+      } else {
+        const newHouse = addHousehold(houseData, auditActor);
+        targetId = newHouse.id;
+        showToast(`Added household ${newHouse.name}`);
+        navigateTo('house-profile', 'houses', undefined, newHouse.id);
+      }
+      notifyDataChange({ type: 'house_updated', entityId: targetId, entityTitle: houseData.name, houseId: targetId });
 
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('household', targetId, pendingPhotos, (url) => {
-        if (!houseData.photoUrl) {
-          updateHousehold(targetId, { photoUrl: url }, auditActor);
-          setDb(getDatabase());
-        }
-      });
-    }
-  };
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('household', targetId, pendingPhotos, (url) => {
+          if (!houseData.photoUrl) {
+            updateHousehold(targetId, { photoUrl: url }, auditActor);
+            setDb(getDatabase());
+          }
+        });
+      }
     } catch (error) {
       showToast(`Household changes were not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
       return;
     }
+  };
 
   const handleSaveEduFollowUp = (
     data: Omit<EducationalFollowUp, 'id' | 'createdAt'>,
@@ -812,24 +812,24 @@ function AppContent() {
   ): boolean => {
     if (isViewOnly) return false;
     try {
-    const created = addEducationalFollowUp(data, auditActor);
-    // Sync current school & class in girl profile if altered in follow up
-    const girl = db.girls.find((g) => g.id === data.girlId);
-    if (girl && (girl.school !== data.school || girl.classLevel !== data.classLevel)) {
-      updateGirl(data.girlId, {
-        school: data.school || girl.school,
-        classLevel: data.classLevel || girl.classLevel,
-      }, auditActor);
-    }
-    showToast('Saved on this phone. Educational follow-up recorded successfully.');
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('educationalFollowUp', created.id, pendingPhotos);
-    }
+      const created = addEducationalFollowUp(data, auditActor);
+      // Sync current school & class in girl profile if altered in follow up
+      const girl = db.girls.find((g) => g.id === data.girlId);
+      if (girl && (girl.school !== data.school || girl.classLevel !== data.classLevel)) {
+        updateGirl(data.girlId, {
+          school: data.school || girl.school,
+          classLevel: data.classLevel || girl.classLevel,
+        }, auditActor);
+      }
+      showToast('Saved on this phone. Educational follow-up recorded successfully.');
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('educationalFollowUp', created.id, pendingPhotos);
+      }
 
-    notifyDataChange({ type: 'edu_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
+      notifyDataChange({ type: 'edu_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
 
-    navigateTo('girl-profile', 'girls', data.girlId);
-    return true;
+      navigateTo('girl-profile', 'girls', data.girlId);
+      return true;
     } catch (error) {
       showToast(`Education follow-up save did not fully complete: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Review the follow-up and school history before retrying.`);
       return false;
@@ -845,21 +845,21 @@ function AppContent() {
       return;
     }
     try {
-    const created = addHealthFollowUp(data, auditActor);
-    const girl = db.girls.find((g) => g.id === data.girlId);
-    showToast('Health / medical visit recorded successfully.');
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('healthFollowUp', created.id, pendingPhotos);
-    }
+      const created = addHealthFollowUp(data, auditActor);
+      const girl = db.girls.find((g) => g.id === data.girlId);
+      showToast('Health / medical visit recorded successfully.');
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('healthFollowUp', created.id, pendingPhotos);
+      }
 
-    notifyDataChange({ type: 'health_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
+      notifyDataChange({ type: 'health_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
 
-    navigateTo('girl-profile', 'girls', data.girlId);
-  };
+      navigateTo('girl-profile', 'girls', data.girlId);
     } catch (error) {
       showToast(`Health record was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
       return;
     }
+  };
 
   const handleSaveFamilyFollowUp = (
     data: Omit<FamilyFollowUp, 'id' | 'createdAt'>,
@@ -867,19 +867,19 @@ function AppContent() {
   ) => {
     if (isViewOnly) return;
     try {
-    const created = addFamilyFollowUp(data, auditActor);
-    const girl = db.girls.find((item) => item.id === data.girlId);
-    showToast('Family / guardian follow-up recorded successfully.');
-    notifyDataChange({ type: 'family_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('familyFollowUp', created.id, pendingPhotos);
-    }
-    navigateTo('girl-profile', 'girls', data.girlId);
-  };
+      const created = addFamilyFollowUp(data, auditActor);
+      const girl = db.girls.find((item) => item.id === data.girlId);
+      showToast('Family / guardian follow-up recorded successfully.');
+      notifyDataChange({ type: 'family_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('familyFollowUp', created.id, pendingPhotos);
+      }
+      navigateTo('girl-profile', 'girls', data.girlId);
     } catch (error) {
       showToast(`Family follow-up was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
       return;
     }
+  };
 
   const handleSaveRentPayment = (
     data: Omit<HouseholdRentPayment, 'id' | 'createdAt'>,
@@ -887,19 +887,19 @@ function AppContent() {
   ) => {
     if (isViewOnly) return;
     try {
-    const created = addRentPayment(data, auditActor);
-    showToast('Rent payment record saved.');
-    const household = db.households.find((item) => item.id === data.householdId);
-    notifyDataChange({ type: 'rent_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('rentPayment', created.id, pendingPhotos);
-    }
-    navigateTo('house-profile', 'houses', undefined, data.householdId);
-  };
+      const created = addRentPayment(data, auditActor);
+      showToast('Rent payment record saved.');
+      const household = db.households.find((item) => item.id === data.householdId);
+      notifyDataChange({ type: 'rent_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('rentPayment', created.id, pendingPhotos);
+      }
+      navigateTo('house-profile', 'houses', undefined, data.householdId);
     } catch (error) {
       showToast(`Rent payment was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
       return;
     }
+  };
 
   const handleSaveExpense = (
     data: Omit<HouseholdExpense, 'id' | 'createdAt'>,
@@ -929,15 +929,15 @@ function AppContent() {
   ): boolean => {
     if (isViewOnly) return false;
     try {
-    const created = addHouseholdActivity(data, auditActor);
-    showToast('Saved on this phone. Household group activity recorded.');
-    const household = db.households.find((item) => item.id === data.householdId);
-    notifyDataChange({ type: 'activity_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('householdActivity', created.id, pendingPhotos);
-    }
-    navigateTo('house-profile', 'houses', undefined, data.householdId);
-    return true;
+      const created = addHouseholdActivity(data, auditActor);
+      showToast('Saved on this phone. Household group activity recorded.');
+      const household = db.households.find((item) => item.id === data.householdId);
+      notifyDataChange({ type: 'activity_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('householdActivity', created.id, pendingPhotos);
+      }
+      navigateTo('house-profile', 'houses', undefined, data.householdId);
+      return true;
     } catch (error) {
       showToast(`Household activity was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
       return false;
