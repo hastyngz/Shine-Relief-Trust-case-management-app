@@ -28,6 +28,7 @@ const {
   saveDatabase,
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
+  normalizeImportedDatabase,
   STORAGE_WARNING_EVENT,
   STORAGE_RECOVERED_EVENT,
 } = await import('../src/utils/storage');
@@ -39,6 +40,17 @@ assert.equal(ok.ok, true, 'a normal save reports success');
 assert.equal(ok.quotaExceeded, false);
 assert.ok(events.includes('shine_db_updated'), 'a successful save still dispatches the update event');
 assert.ok(events.includes(STORAGE_RECOVERED_EVENT), 'a successful save clears a previous warning');
+
+// --- Backup restore preserves every current database collection ------------
+const restoredShape = normalizeImportedDatabase({
+  girls: [],
+  households: [],
+  caseGoals: [{ id: 'goal-restore-test' } as never],
+  assets: [{ id: 'asset-restore-test' } as never],
+});
+assert.deepEqual(restoredShape.caseGoals, [{ id: 'goal-restore-test' }], 'case goals survive backup normalization');
+assert.deepEqual(restoredShape.assets, [{ id: 'asset-restore-test' }], 'asset records survive backup normalization');
+assert.deepEqual(normalizeImportedDatabase({ girls: [], households: [] }).assets, [], 'older backups without assets remain compatible');
 
 // --- Quota exceeded is detected and reported -------------------------------
 let failNext = true;
