@@ -194,11 +194,9 @@ assert.throws(
   /Schedule update was not saved on this device/,
   'the simple schedule update helper cannot hide a failed local save',
 );
-assert.throws(
-  () => deleteScheduleItem(recoveredSchedule.item.id),
-  /schedule deletion was not saved on this device/i,
-  'schedule deletion reports a failed local save',
-);
+assert.equal(deleteScheduleItem(recoveredSchedule.item.id), false,
+  'schedule deletion reports a failed local save without throwing');
+
 assert.deepEqual(getDatabase().schedules, schedulesBeforeFailedUpdate,
   'failed schedule deletion restores the prior in-memory record');
 failNext = false;
@@ -279,11 +277,9 @@ assert.throws(
   'expense update reports a failed local save',
 );
 assert.deepEqual(getDatabase().expenses, beforeFailedExpenseMutations.expenses, 'failed expense update leaves durable records unchanged');
-assert.throws(
-  () => deleteExpense('EXP-STORAGE-FAILURE-TEST'),
-  /not saved on this device/,
-  'expense deletion reports a failed local save',
-);
+assert.equal(deleteExpense('EXP-STORAGE-FAILURE-TEST'), false,
+  'expense deletion reports a failed local save without throwing');
+
 assert.deepEqual(getDatabase().expenses, beforeFailedExpenseMutations.expenses, 'failed expense deletion leaves durable records unchanged');
 
 // Budget and annual-plan mutations also roll back in-memory state when storage
@@ -399,11 +395,9 @@ assert.throws(
   'budget update reports a failed local save',
 );
 assert.deepEqual(getDatabase().budgets, beforeFailedBudgetMutations, 'failed budget update rolls back the original record');
-assert.throws(
-  () => deleteBudgetItem('BDG-STORAGE-FAILURE-TEST'),
-  /budget item deletion was not saved on this device/i,
-  'budget deletion reports a failed local save',
-);
+assert.equal(deleteBudgetItem('BDG-STORAGE-FAILURE-TEST'), false,
+  'budget deletion reports a failed local save without throwing');
+
 assert.deepEqual(getDatabase().budgets, beforeFailedBudgetMutations, 'failed budget deletion restores the original record');
 assert.throws(
   () => updateWorkplanItem('WKP-STORAGE-FAILURE-TEST', { completedCount: 1 } as never, 'Test Staff'),
@@ -411,11 +405,9 @@ assert.throws(
   'workplan update reports a failed local save',
 );
 assert.deepEqual(getDatabase().workplans, beforeFailedWorkplanMutations, 'failed workplan update restores the original record');
-assert.throws(
-  () => deleteWorkplanItem('WKP-STORAGE-FAILURE-TEST'),
-  /workplan item deletion was not saved on this device/i,
-  'workplan deletion reports a failed local save',
-);
+assert.equal(deleteWorkplanItem('WKP-STORAGE-FAILURE-TEST'), false,
+  'workplan deletion reports a failed local save without throwing');
+
 assert.deepEqual(getDatabase().workplans, beforeFailedWorkplanMutations, 'failed workplan deletion restores the original record');
 assert.throws(
   () => addAnnualBudgetPlan({
