@@ -18,7 +18,7 @@ Use for React components, hooks, context, view routing, TypeScript models, state
 
 ## SHINE constraints
 - Do not change the phone layout of `src/components/AIAssistant/AIAssistantView.tsx`.
-- Reuse shared effects and UI components documented in `AGENTS.md`; new motion must not hide errors or sync/offline warnings.
+- Reuse shared effects and UI components (rules in `AGENTS.md`, catalogue in `docs/ui-effects.md`); new motion must not hide errors or sync/offline warnings.
 - Preserve routing helpers and role checks; do not bypass permission boundaries to simplify component logic.
 - Keep sensitive beneficiary information out of debug output and test snapshots unless safely anonymised.
 - Avoid new dependencies unless clearly necessary and explicitly justified.

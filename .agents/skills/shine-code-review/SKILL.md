@@ -22,3 +22,4 @@ Use this skill before committing meaningful changes and after fixes that touch d
 - Check the complete diff, not only the intended lines.
 - Never silently discard user data or suppress an error to make a workflow appear successful.
 - If no issues are found, state what was inspected and which checks were actually run; do not imply exhaustive proof.
+- When run as an independent reviewer (for example as a sub-agent), you have not seen the work being built. Read the full diff and `AGENTS.md` yourself, do not take the author's summary as proof, report findings only, and do not edit files unless asked.

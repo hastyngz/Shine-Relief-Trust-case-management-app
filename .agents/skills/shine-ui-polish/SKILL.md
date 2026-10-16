@@ -9,6 +9,7 @@ Use for visual refinements, interaction states, loading feedback, cards, forms, 
 
 ## Read first
 - `AGENTS.md`
+- `docs/ui-effects.md` (catalogue of shared effects, helpers, and the four app views)
 - `src/styles/effects.css` and its import in `src/main.tsx`
 - `src/components/ui/SaveButton.tsx` and `src/components/ui/Skeleton.tsx`
 - The affected component, its parent/callers, and the relevant app-view CSS.

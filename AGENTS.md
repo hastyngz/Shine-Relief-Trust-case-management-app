@@ -1,111 +1,205 @@
 # AGENTS.md
 
-Repository memory for the SHINE Relief Trust case-management app.
+Rules and map for the SHINE Relief Trust case-management app. Read this first.
+- This file: rules that are always true, and where things live.
+- `.agents/skills/`: step-by-step procedures. Read the relevant `SKILL.md` before editing.
+- `docs/`: reference and status that changes often.
 
-## Stack
-- React 19 + TypeScript + Vite 8 + Tailwind 4, Firebase (Firestore/Auth).
-- Express API in `server.ts`; Cloudflare worker in `workers/r2-storage`.
-- Tests are `tsx` scripts in `scripts/`, registered in `package.json` and
-  `.github/workflows/shine-checks.yml`. Run `npm run lint` (tsc) plus the
-  relevant `test:*` scripts before every commit.
+If a skill, doc or request conflicts with this file, the architecture, or privacy
+requirements, follow the stricter requirement and explain the conflict.
 
-## Hard rules (do not relax)
-- Never loosen `firestore.rules` or weaken a permission check.
-- Never change the phone layout of `src/components/AIAssistant/AIAssistantView.tsx`.
-- Girl data is sensitive: no girl data may leave the device (no external
-  logging/analytics).
-- Offline correctness wins: local edits must never be silently lost or
-  overwritten by a stale snapshot.
+## Hard rules (never relax)
+1. Never loosen `firestore.rules`, Storage rules, authentication, role checks or any
+   permission check, even to make a test or workflow pass. Hiding a button is not
+   authorization: enforce at the rules/server boundary.
+2. Never change the phone layout of `src/components/AIAssistant/AIAssistantView.tsx`
+   (see also `src/styles/ai-assistant-viewport.css`).
+3. Girl, beneficiary, household, health and safeguarding data is sensitive. It must
+   never leave the device or the existing secured services: no external logging,
+   analytics, unrelated services or third-party AI.
+4. Offline correctness wins. Local edits must never be silently lost or overwritten
+   by a stale snapshot. Keep the per-record queue and the conflict flow.
+5. Never expose secrets, credentials, tokens, private records or signed storage URLs
+   in code, logs, tests, screenshots, commits or reports.
+6. Never claim a check passed unless you ran it. Report skipped or blocked checks.
 
-## Offline / storage architecture
-- `src/services/offlineSync.ts` keeps a per-record change queue (set/delete +
-  `baseUpdatedAt`). `src/services/firestoreSync.ts` flushes each entry in a
-  transaction and stores a conflict instead of overwriting a newer server
-  `updatedAt`. Conflicts surface in `src/components/Sync/SyncConflictsPanel.tsx`
-  via the Header badge.
-- The change queue lives in IndexedDB with a localStorage fallback
-  (`src/utils/storage.ts` reports `QuotaExceededError` and dispatches an event
-  the UI shows as a persistent banner; in-memory data is never discarded).
-- `src/components/Error/ErrorBoundary.tsx` wraps the root and each main view;
-  `src/views/AppViewSwitch.tsx` wraps the active view so a crash keeps the
-  header/navigation alive.
+## Data handling
+- Staff HR data (contracts, payroll, salary history, personnel documents,
+  recruitment and disciplinary records) is confidential. Do not make it visible to
+  every staff role or put it in shared collections such as the schedule/compliance
+  records, which all active staff can read.
+- Safeguarding records stay out of general search, exports, reports and AI features.
+- Tests, fixtures and screenshots use synthetic data only. Never seed the app with
+  example stock, assets, staff, deadlines or KPI results that could be mistaken for
+  real SHINE records.
 
-## Bundle / PWA
-- Heavy views are `React.lazy` in `src/App.tsx`; the dashboard and navigation
-  stay eager. Document libs (xlsx, docx, jspdf, mammoth, jszip) are dynamically
-  imported inside the service functions, with `manualChunks` vendor groups in
-  `vite.config.ts`.
-- `public/manifest.webmanifest` + the app-shell service worker precache the
-  built shell and logos. Never cache `/api/*`, Firebase/Firestore/Auth or
-  storage download URLs. Push uses the separate `firebase-messaging-sw.js`
-  scope. Registration happens only in production builds (`src/main.tsx`).
-  See `docs/offline-app-shell.md` for manual offline testing.
+## Workflow
+- Work on the `Replit` branch. Do not touch `main`, create another branch or open a
+  pull request unless the user asks. Commit only after lint and relevant tests pass.
+- Before editing: inspect the code, callers, types and tests. State the likely cause
+  and the smallest safe fix; reproduce a reported bug where practical.
+- Keep behaviour and public interfaces unless the task requires a change. No broad
+  rewrites and no new dependency without a clear reason.
+- Add or update focused regression tests for changed behaviour.
+- Finish with: files changed, user-visible effects, checks run with real results,
+  checks skipped or blocked, remaining risks, and the commit SHA.
 
-## Server
-- `src/server/rateLimit.ts` is a fixed-window in-memory limiter keyed by
-  Firebase uid, falling back to IP. Limits via `SHINE_AI_RATE_LIMIT`,
-  `SHINE_STORAGE_RATE_LIMIT`, `SHINE_SAFEGUARDING_RATE_LIMIT` (defaults
-  20/60/60 per minute). `/api/health` is unlimited; 429s include `Retry-After`.
+## Skills
+Load every skill that applies; a task can need several.
 
-## Structure notes
-- Hash routing helpers live in `src/routing/appRoutes.ts`
-  (`parseHash`/`buildHash`/`qualityTargetHash`); the view switch is
-  `src/views/AppViewSwitch.tsx`; modal state is `src/hooks/useAppModals.ts` +
-  `src/views/AppModals.tsx`.
-- Large views keep helpers/modals in sibling files
-  (`src/components/Import/importWizardHelpers.tsx`,
-  `src/components/Planning/PlanningModals.tsx`).
+| Situation | Skill |
+|---|---|
+| Before committing any meaningful change | `shine-code-review` |
+| Offline, queue, storage quota, conflicts, service workers, reconnect | `shine-offline-testing` |
+| Components, hooks, state, routing, TypeScript | `shine-react-typescript` |
+| Auth, roles, rules, server endpoints, uploads, logs, beneficiary data | `shine-security-review` |
+| Browser workflows, mobile viewport, offline browser tests | `shine-e2e-testing` |
+| Visual polish, motion, loading/saving feedback, accessibility, themes | `shine-ui-polish` |
+| Slow screens, re-renders, bundles, images, reads, requests | `shine-performance` |
 
+## Verification
+Run `npm run lint` and the `test:*` scripts for the area changed. Run `npm run build`
+before saying a change is verified.
 
-## Shared UI polish effects
-- Shared, dependency-free motion and depth tokens live in `src/styles/effects.css`, imported once from `src/main.tsx`.
-- Shared React components: `src/components/ui/SaveButton.tsx` exposes idle/saving/done/error visual states, and `src/components/ui/Skeleton.tsx` provides accessible loading placeholders. Parent forms own save timing and error handling; a save callback may return `false` to reject a save, and rejected/throwing saves must never show success. Successful local record saves use the accessible `Saved on this phone` toast.
-- Regression test: `npm run test:ui-effects` checks SaveButton states, visible failure feedback, Skeleton accessibility, and reduced-motion CSS; the Replit push workflow runs it.
-- Available primitives: `.fx-press` for tactile press feedback, `.fx-card` for soft card depth and optional pointer-hover lift, `.fx-rise` for opacity/transform entrance with a capped `--i` stagger index, `.fx-skeleton` for loading placeholders, `.fx-btn-main` for the primary orange gradient, `.fx-spinner`, `.fx-sheet-enter`, `.fx-backdrop-enter`, `.fx-toast-enter`, `.fx-success-pop`, and `.fx-tick`.
-- Keep motion to transform/opacity except the intentional skeleton shimmer and drawn success tick; respect `prefers-reduced-motion`, provide visible keyboard focus, keep touch targets accessible, and never let motion conceal an error or offline/sync warning.
-- New buttons, cards, sheets and loading states must use these shared pieces rather than creating duplicate primitives.
-- Preserve existing layouts, routes, colours, copy, data logic, auth, storage, offline sync, AI chat phone layout, and Firestore rules when applying visual polish.
+| Area | Run |
+|---|---|
+| Any change | `npm run lint` |
+| Offline, queue, storage | `test:offline`, `test:offline-queue`, `test:offline-perf`, `test:storage` |
+| Permissions, Firestore rules | `test:rules` (needs the emulator), `test:firestore-listener-permissions`, `audit:firestore-access` |
+| Inventory | `test:inventory` |
+| Assets | `test:asset-export`, `test:asset-verification` |
+| Compliance calendar | `test:compliance` (also part of `test:quality`) |
+| Routing | `test:routing` |
+| UI effects, save feedback | `test:ui-effects` |
+| Payroll, contracts | `test:payroll` |
+| Imports, AI boundaries | `test:phase2` |
+| Browser workflows | `test:e2e` (specs in `e2e/`) |
 
-## App views and the Sunrise view
-- There are four app views (`AppViewMode` in `src/contexts/VisualSettingsContext.tsx`: `classic`, `ios`, `foundation`, `sunrise`). The list shown in the picker is `appViews` in the same file, rendered by the app view picker in `src/components/Header.tsx`. An unknown saved view falls back to the default.
-- `sunrise` is the warm orange look: off-white page, slim white header, soft cards, and a bottom nav with four tabs (Home, Girls, Houses, Messages) plus a "More" sheet. Its styles live only in `src/styles/sunrise.css`, scoped under `#app-shell[data-mobile-view="sunrise"]`, and its nav markup is the Sunrise branch of `src/components/Navigation.tsx`.
-- Sunrise reads the active colour theme through the `--theme-*` variables, so all colour themes keep working. Do not hard-code a single orange there.
-- Effects from `src/styles/effects.css` apply in every view and colour theme. Anything new must work in all four views.
+- CI is `.github/workflows/shine-checks.yml` and runs on pushes to `Replit`. It does
+  not run `test:phase5`, `test:phase5-rules`, `test:phase5-e2e` or
+  `test:deployment-smoke`; run those yourself when touching those areas.
+- Automated tests do not replace a manual check on a real Android phone and on weak
+  or no signal. Report manual checks separately, and say plainly when they were not
+  done. `docs/release-checklist.md` covers the offline and update checks.
 
+## Where things live
+- **Offline:** `src/services/offlineSync.ts` is the per-record change queue
+  (set/delete with `baseUpdatedAt`). `src/services/offlineSyncDb.ts` persists it in
+  IndexedDB, with a localStorage fallback, one entry per `collection/recordId`. Never
+  key the queue by collection alone: that silently drops edits.
+  `src/services/firestoreSync.ts` flushes each entry in a transaction and records a
+  conflict instead of overwriting a newer server `updatedAt`. Conflicts show in
+  `src/components/Sync/SyncConflictsPanel.tsx` via the Header badge. Storage failures,
+  including `QuotaExceededError` (`src/utils/storage.ts`, `offlineSyncDb.ts`), raise a
+  persistent banner, and in-memory data is never discarded.
+- New writes go through the queue. Never add a parallel direct `setDoc`: it skips the
+  baseline and conflict checks. Actions that move stock or money must be safe to
+  retry and must never double-process.
+- **Crash handling:** `src/components/Error/ErrorBoundary.tsx` wraps the root and each
+  main view; `src/views/AppViewSwitch.tsx` keeps the header and navigation alive.
+- **PWA:** `src/pwa/` (`appShellPlugin.ts`, `sw-template.js`, `registerServiceWorker.ts`,
+  `killSwitch.ts`, `unsavedChanges.ts`), `public/sw-status.json` (kill switch) and
+  `public/push/firebase-messaging-sw.js` (separate push scope). Never cache `/api/*`,
+  Firebase/Firestore/Auth traffic or storage download URLs. The worker registers only
+  in production builds (`src/main.tsx`). Manual tests: `docs/offline-app-shell.md`.
+- **Bundle:** heavy views are `React.lazy` in `src/App.tsx`; the dashboard and
+  navigation stay eager. xlsx, docx, jspdf, mammoth and jszip are imported dynamically
+  inside service functions, with `manualChunks` in `vite.config.ts`.
+- **Server:** `server.ts` plus `src/server/` (`rateLimit.ts`, `aiService.ts`,
+  `aiTools.ts`, `firebaseAdmin.ts`, `r2Storage.ts`) and the Cloudflare worker in
+  `workers/r2-storage`. `rateLimit.ts` is a fixed-window in-memory limiter keyed by
+  Firebase uid, falling back to IP; limits come from `SHINE_AI_RATE_LIMIT`,
+  `SHINE_STORAGE_RATE_LIMIT`, `SHINE_SAFEGUARDING_RATE_LIMIT` (defaults 20/60/60 per
+  minute). `/api/health` is unlimited; 429s include `Retry-After`.
+- **Routing and modals:** `src/routing/appRoutes.ts` (`parseHash`, `buildHash`,
+  `qualityTargetHash`), `src/views/AppViewSwitch.tsx`, `src/hooks/useAppModals.ts`,
+  `src/views/AppModals.tsx`. Large views keep helpers in sibling files, for example
+  `src/components/Import/importWizardHelpers.tsx` and
+  `src/components/Planning/PlanningModals.tsx`.
+- **Types:** `src/types.ts` and `src/types/`.
 
-## Agent Skills
+## Administration & Operations modules
+Built for the Administration Officer role. Entry point: `src/components/AdministrationHub.tsx`.
+Modules: `InventoryView.tsx` (with `src/utils/inventory.ts`), `AssetRegisterView.tsx`
+(with `AssetMaintenanceDialog.tsx`, `AssetVerificationDialog.tsx`,
+`src/utils/assetExport.ts`, `src/utils/assetVerification.ts`), `DocumentsFilingView.tsx`,
+`ComplianceCalendarView.tsx` (with `src/utils/compliance.ts`).
 
-Before substantial work, inspect `.agents/skills/` and read the relevant `SKILL.md` files before editing. Skill files provide task-specific procedures; this file remains the source of project-wide rules. If a skill conflicts with this file, existing architecture, privacy requirements, or a user's explicit instruction, follow the higher-priority requirement and explain the conflict.
+- `docs/administration-officer-tor-gap-analysis.md` is the source of truth for what is
+  built, partial or missing. Read it before building here and update it when a
+  module's status changes. Do not copy status into this file.
+- Extend existing staff, payroll, procurement, schedule, meeting, notification and
+  attachment code. Do not build duplicate staff, task, document, meeting or
+  notification systems.
+- Mark unbuilt features as planned in the UI. A screen is not proof the workflow works.
+- Stock quantity changes only through receive, issue or stocktake, so every change
+  leaves a movement record. Never edit quantity directly.
+- A stock issue or transfer is not new expenditure. Receiving goods is not payment.
+- Keep requesting, approving, receiving and paying separate where practical. The
+  Administration Officer supports finance and HR and must not gain approval, payment,
+  recruitment, dismissal or disciplinary authority.
+- Reports and KPIs come from real records, show missing data, and never treat
+  incomplete records as complete. KPI denominators need management approval.
+- Search, export and AI features respect the same access limits as the records they
+  read. Safeguarding is excluded; health records stay permission-filtered.
+- Reminders and history in the UI are operational context, not an audit log, unless
+  the server enforces them.
 
-### Skill selection
-- Before committing any meaningful change, use `shine-code-review` to inspect the planned diff, affected call sites, risks, and unintended side effects.
-- For bugs, offline behaviour, queued writes, storage quota, conflicts, service workers, or reconnect flows, use `shine-offline-testing` and the relevant regression tests.
-- For React components, hooks, state, routing, or TypeScript changes, use `shine-react-typescript`.
-- For authentication, role checks, Firestore/Storage rules, server endpoints, uploads, logs, or beneficiary data, use `shine-security-review`.
-- For browser-level user workflows, mobile viewport checks, navigation, authentication flows, or offline/reconnect browser tests, use `shine-e2e-testing`.
-- For visual consistency, motion, loading/saving feedback, accessibility, touch targets, responsive layouts, or theme compatibility, use `shine-ui-polish`.
-- For slow screens, React re-renders, component state/context behaviour, bundles, images, database reads, or network requests, use `shine-performance`.
-- When a task spans several areas, load all relevant skills; do not treat the list as mutually exclusive.
+## UI rules
+Full catalogue of effects, helpers and the Sunrise view: `docs/ui-effects.md`.
+- All four app views (`classic`, `ios`, `foundation`, `sunrise`) and all colour themes
+  must keep working. Use theme variables; do not hard-code colours that bypass them.
+- Design for small Android phones and weak signal first. Staff often work away from a desk.
+- Use the shared primitives in `src/styles/effects.css` and `src/components/ui/`
+  (`SaveButton`, `Skeleton`, `CountUp`, `Collapse`, `SwipeRow`, `EmptySun`). Do not
+  create duplicates.
+- A save callback may return `false` to reject a save. A rejected or failed save must
+  never show success. A local save uses the `Saved on this phone` toast.
+- Keep motion to transform and opacity, respect `prefers-reduced-motion`, keep visible
+  keyboard focus and usable touch targets. Motion must never hide an error, safeguarding
+  notice, offline warning or sync conflict.
+- Preserve existing layouts, routes, copy, data logic, auth, storage and offline sync
+  when applying visual changes.
 
-### Required working method
-1. Inspect the current implementation, repository guidance, tests, and related call sites before proposing edits.
-2. State the likely cause and the smallest safe fix; reproduce a reported bug where practical before changing code.
-3. Preserve existing behaviour and public interfaces unless the task explicitly requires a change. Avoid broad rewrites and new dependencies without a clear need.
-4. Add or update focused regression tests for changed behaviour. For offline-sensitive work, test queued edits, stale snapshots/conflicts, reload/reopen, and reconnect behaviour where practical.
-5. Review the final diff for data loss, permission regressions, duplicate logic, accessibility, mobile layouts, and unintended side effects.
-6. Run `npm run lint` and relevant `test:*` scripts documented in `package.json`; run the production build when available and appropriate. Never claim a check passed unless it was actually run. Report blocked or skipped checks explicitly.
-7. Summarise files changed, user-visible effects, tests and results, remaining risks, and the commit SHA.
+## Launching sub-agents
+If your tool can launch sub-agents, use them as below. The main agent owns the plan,
+the final diff, verification and the commit.
 
-### SHINE-specific non-negotiables
-- Never weaken `firestore.rules`, Storage access controls, authentication, or role-based permissions to make a test pass.
-- Girl and beneficiary information is sensitive. Never send it to external logging, analytics, or unrelated services.
-- Offline correctness wins: never silently discard local edits or overwrite newer server data with stale snapshots. Preserve the existing per-record queue and conflict flow.
-- Preserve the phone layout of `src/components/AIAssistant/AIAssistantView.tsx`.
-- Follow existing dependency, styling, storage, routing, and testing conventions. Reuse shared UI primitives where applicable.
-- Do not expose secrets, credentials, tokens, private records, or signed storage URLs in logs, tests, screenshots, or reports.
+When to launch:
+1. **Explore first.** For a change spanning more than a few files or an unfamiliar
+   module, launch read-only sub-agents to map files, call sites, types and tests. For
+   wide searches, run several in parallel, one per area.
+2. **Review before every meaningful commit.** Launch a fresh reviewer that did not
+   build the change and give it the diff. Always use `shine-code-review`. Add
+   `shine-security-review` for auth, roles, rules, server endpoints, uploads, exports,
+   logging, or girl, beneficiary, staff or payroll data. Add `shine-offline-testing`
+   for the queue, storage, sync or conflicts. Fix real findings, or explain why not.
+3. **Parallel work.** Give independent parts of a task to separate sub-agents with
+   separate files. Never let two agents edit the same file.
+4. **Long checks.** Let a sub-agent run slow suites such as `test:rules` or `test:e2e`
+   while you continue, then read the real output.
 
-## Round 2 effects
-- Shared helpers in `src/components/ui/`: `CountUp` (counts up once, screen readers get the final number immediately), `Collapse` (smooth open/close, closed content is `inert`), `SwipeRow` (swipe reveals one action, never runs it by itself; keep the normal buttons as the keyboard route), `EmptySun` (the sun rises once on empty states). `SaveButton` shakes once on error.
-- `src/effects/EffectsRuntime.tsx` is mounted once in `src/main.tsx` (wrapped so a crash renders nothing): header shadow after scroll (`html[data-scrolled]`), pull down at the top of the page to nudge a sync, a "Draft saved on this phone" chip when an edit is queued offline, a "Report ready" card when a docx/xlsx/pdf download starts, and sparks via `celebrate()` from that file.
-- CSS-only effects in `src/styles/effects.css`: screen slide-in on `#app-shell main > *`, soft field focus ring, `.fx-pulse` (runs three times), `.fx-shake`, `.fx-progress-fill`.
-- Wired so far: dashboard totals (`CountUp`), Overdue badges (`.fx-pulse`), empty Girls and Households lists (`EmptySun`), Case Actions rows (`SwipeRow` revealing "Complete"). `Collapse`, `celebrate()` and `.fx-progress-fill` are available but not wired to a screen yet.
+How to brief one (it starts with no context):
+- the goal and the exact question or deliverable;
+- the files in scope, and whether it is read-only or may edit named files;
+- the hard rules above, restated, and the skills to read;
+- what to return: findings with file paths and lines, commands run with real
+  results, and anything it could not verify.
+
+Limits:
+- A sub-agent's report is a claim, not evidence. Re-run lint and the relevant tests
+  yourself before saying anything passed.
+- Give sub-agents no secrets and no real beneficiary or staff records.
+- Keep delegation one level deep unless the main agent allows more.
+- Skip sub-agents for small single-file changes.
+- Decisions that need the user (permissions, new dependencies, anything touching the
+  hard rules) are never delegated.
+- If your tool cannot launch sub-agents, do the same steps yourself, in the same
+  order, and say so in your summary.
+
+## Keeping this file useful
+- State each rule once. Link to a skill or doc instead of repeating it.
+- Keep what changes often (status, catalogues) in `docs/`, not here.
+- When you add a module, test script or architectural rule, update this file, register
+  new tests in `package.json` and the workflow, and check any path you mention exists.
+- Keep this file short enough to be read in full on every task.

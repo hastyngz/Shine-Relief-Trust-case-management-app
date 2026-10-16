@@ -35,5 +35,5 @@ Use when screens are slow, React components re-render excessively, mobile respon
 - Never compromise offline queue correctness, conflict detection, permission checks, or beneficiary privacy for speed.
 - Never send girls' or beneficiary information to external analytics/logging or include it in profiling output, screenshots, traces, or test reports.
 - Preserve the four app views, colour themes, mobile usability, and protected AI Assistant phone layout.
-- Follow shared UI effects and accessibility/reduced-motion rules in `AGENTS.md`.
+- Follow the UI rules in `AGENTS.md` and the effects catalogue in `docs/ui-effects.md` (shared effects, accessibility, reduced motion).
 - Run `npm run lint`, focused tests, performance tests where relevant, and a production build when appropriate. Report measurements, commands, actual results, and remaining limitations.
