@@ -9,6 +9,7 @@ import {
   filterPayrollRecords,
   FINANCIAL_MONTHS,
   outstandingExpenseSummary,
+  filterBudgetLines,
 } from '../src/services/financialCalculations';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../src/services/expenseAudit';
 
@@ -42,6 +43,10 @@ const line = (id: string, month: number, category: string, programme: string, qt
   createdAt: '2026-01-01T00:00:00.000Z',
 } as BudgetItem);
 const budgets = [line('b1', 1, 'Rent', 'Homes', 2, 1000), line('b2', 1, 'Food', 'Homes', 3, 500, 2), line('b3', 2, 'Education', 'School', 4, 200)];
+assert.deepEqual(filterBudgetLines(budgets, '2026-01', 'Rent').map((item) => item.id), ['b1']);
+assert.deepEqual(filterBudgetLines(budgets, '2026-01', 'ALL').map((item) => item.id), ['b1', 'b2']);
+assert.deepEqual(filterBudgetLines(budgets, 'ALL', 'Education').map((item) => item.id), ['b3']);
+assert.equal(filterBudgetLines(budgets, '2025-01', 'ALL').length, 0);
 const totals = aggregateBudgetLines(budgets);
 assert.equal(totals.annual, 5800);
 assert.equal(totals.monthly[1], 5000);
