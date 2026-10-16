@@ -93,3 +93,11 @@ A targeted code inspection found that the persistence architecture is not yet un
 - The backup import still synchronizes to Firestore before checking the local save result, and the import helper still returns a boolean that cannot distinguish “local saved, cloud failed” from “both succeeded”. The reset still performs destructive cloud work before checking whether local persistence succeeded.
 - Do not change operation order in isolation: define explicit outcomes, preserve a recoverable copy, handle partial cloud batches and snapshot listeners, and test cloud/local failure paths before reporting success.
 - Reset coverage and reset atomicity are separate issues. The new collection policy closes omissions in the operational list; it does not make multi-collection deletion atomic or make the overall reset rollback-safe.
+
+
+### Backup replacement completeness
+- A broader comparison of `AppDatabase` fields with `syncEntireDatabaseToFirestore` found additional gaps beyond the normaliser: bulk restore did not write meetings, feeding logs, market prices, forecast settings, what-if scenarios, intelligence suggestions or AI settings. The stale-record cleanup list also omitted employees and case goals, so a replacement restore could leave stale cloud rows or fail to restore those modules.
+- Added bulk-write mappings for those modules and standalone restricted import-source rows, and switched stale-record cleanup to a shared backup-replacement collection policy. Employee salary history is deliberately excluded because it is maintained separately and is not represented by the AppDatabase JSON backup.
+- Added `scripts/backup-restore-coverage.test.ts` to the storage CI step alongside the operational reset policy test.
+- This is not a transactional restore: Firestore writes are batched and stale deletion follows the writes, so a network/permission failure can still leave a partial restore. Backup import must still check local-save outcomes and surface partial cloud outcomes accurately.
+- Verification: the earlier run 371 passed before these additional changes; the new full restore-coverage tests await a fresh CI run.
