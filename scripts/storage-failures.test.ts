@@ -30,9 +30,20 @@ const {
   addGirl,
   updateGirl,
   deleteGirl,
+  deleteEducationalFollowUp,
+  deleteHealthFollowUp,
+  deleteFamilyFollowUp,
+  deleteRentPayment,
+  deleteHouseholdActivity,
   addHousehold,
   updateHousehold,
   deleteHousehold,
+  deleteMeetingRecord,
+  deleteFeedingProgramLog,
+  deleteMarketPrice,
+  deleteEarlyYearsRecord,
+  deleteHistoricalCaseRecord,
+  deletePerson,
   addWorkplanItem,
   updateWorkplanItem,
   deleteWorkplanItem,
@@ -560,6 +571,12 @@ baseline.payrollRecords = [{
   id: 'PAY-STORAGE-BASELINE', employeeId: 'EMP-STORAGE-BASELINE', employeeName: 'Synthetic Employee',
   payPeriod: '2026-09', payPeriodStartDate: '2026-09-01', paymentStatus: 'Pending', amountPaid: 0,
 } as never];
+baseline.meetings = [{ id: 'MEET-STORAGE-BASELINE', title: 'Synthetic meeting' } as never];
+baseline.feedingProgramLogs = [{ id: 'FEED-STORAGE-BASELINE', date: '2026-10-01' } as never];
+baseline.marketPrices = [{ id: 'MARKET-STORAGE-BASELINE', item: 'Synthetic item' } as never];
+baseline.earlyYearsRecords = [{ id: 'EYS-STORAGE-BASELINE', childId: 'SYNTHETIC-CHILD' } as never];
+baseline.historicalRecords = [{ id: 'HIST-STORAGE-BASELINE', girlId: 'SG-STORAGE-BASELINE' } as never];
+baseline.people = [{ id: 'PERSON-STORAGE-BASELINE', fullName: 'Synthetic Person' } as never];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
 const beforeFailedMutations = {
   girls: [...baseline.girls],
@@ -573,6 +590,12 @@ const beforeFailedMutations = {
   workplans: [...baseline.workplans],
   employees: [...baseline.employees],
   payrollRecords: [...baseline.payrollRecords],
+  meetings: [...baseline.meetings],
+  feedingProgramLogs: [...baseline.feedingProgramLogs],
+  marketPrices: [...baseline.marketPrices],
+  earlyYearsRecords: [...baseline.earlyYearsRecords],
+  historicalRecords: [...baseline.historicalRecords],
+  people: [...baseline.people],
 };
 
 fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
@@ -625,6 +648,17 @@ assert.throws(
   'employee update must not return success when local persistence fails',
 );
 assert.equal(deletePayrollRecord('PAY-STORAGE-BASELINE'), false, 'payroll deletion reports failure when local persistence fails');
+assert.equal(deleteEducationalFollowUp('EDU-STORAGE-BASELINE'), false, 'education follow-up deletion reports failure when local persistence fails');
+assert.equal(deleteHealthFollowUp('HLT-STORAGE-BASELINE'), false, 'health follow-up deletion reports failure when local persistence fails');
+assert.equal(deleteFamilyFollowUp('FAM-STORAGE-BASELINE'), false, 'family follow-up deletion reports failure when local persistence fails');
+assert.equal(deleteRentPayment('RENT-STORAGE-BASELINE'), false, 'rent deletion reports failure when local persistence fails');
+assert.equal(deleteHouseholdActivity('ACT-STORAGE-BASELINE'), false, 'household activity deletion reports failure when local persistence fails');
+assert.equal(deleteMeetingRecord('MEET-STORAGE-BASELINE'), false, 'meeting deletion reports failure when local persistence fails');
+assert.equal(deleteFeedingProgramLog('FEED-STORAGE-BASELINE'), false, 'feeding log deletion reports failure when local persistence fails');
+assert.equal(deleteMarketPrice('MARKET-STORAGE-BASELINE'), false, 'market price deletion reports failure when local persistence fails');
+assert.equal(deleteEarlyYearsRecord('EYS-STORAGE-BASELINE'), false, 'early-years deletion reports failure when local persistence fails');
+assert.equal(deleteHistoricalCaseRecord('HIST-STORAGE-BASELINE'), false, 'historical record deletion reports failure when local persistence fails');
+assert.equal(deletePerson('PERSON-STORAGE-BASELINE'), false, 'person deletion reports failure when local persistence fails');
 assert.equal(deleteGirl('SG-STORAGE-BASELINE'), false, 'girl deletion reports failure when local persistence fails');
 assert.equal(deleteHousehold('SH-STORAGE-BASELINE'), false, 'household deletion reports failure when local persistence fails');
 assert.equal(deleteWorkplanItem('WP-STORAGE-BASELINE'), false, 'workplan deletion reports failure when local persistence fails');
@@ -641,6 +675,12 @@ assert.deepEqual(afterFailedMutations.householdActivities, beforeFailedMutations
 assert.deepEqual(afterFailedMutations.workplans, beforeFailedMutations.workplans, 'failed planning mutations restore the original workplans');
 assert.deepEqual(afterFailedMutations.employees, beforeFailedMutations.employees, 'failed employee updates restore the original personnel record');
 assert.deepEqual(afterFailedMutations.payrollRecords, beforeFailedMutations.payrollRecords, 'failed payroll create/update/delete operations restore the original payroll rows');
+assert.deepEqual(afterFailedMutations.meetings, beforeFailedMutations.meetings, 'failed meeting deletion restores the meeting');
+assert.deepEqual(afterFailedMutations.feedingProgramLogs, beforeFailedMutations.feedingProgramLogs, 'failed feeding log deletion restores the record');
+assert.deepEqual(afterFailedMutations.marketPrices, beforeFailedMutations.marketPrices, 'failed market price deletion restores the record');
+assert.deepEqual(afterFailedMutations.earlyYearsRecords, beforeFailedMutations.earlyYearsRecords, 'failed early-years deletion restores the record');
+assert.deepEqual(afterFailedMutations.historicalRecords, beforeFailedMutations.historicalRecords, 'failed historical record deletion restores the timeline');
+assert.deepEqual(afterFailedMutations.people, beforeFailedMutations.people, 'failed person deletion restores the person');
 assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
 // Empty/corrupt storage fallback must return a fresh seed copy, not the shared
