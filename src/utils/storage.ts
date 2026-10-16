@@ -31,7 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
-import { clearOfflineChangesAfterDatabaseReset } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, loadQueue, readPendingOfflineSnapshots } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
@@ -279,6 +279,8 @@ export function normalizeImportedDatabase(parsed: Partial<AppDatabase>): AppData
 export type DatabaseRestoreResult =
   | { status: 'success' }
   | { status: 'invalid_backup'; message: string }
+  | { status: 'pending_offline_changes'; message: string }
+  | { status: 'offline_state_unavailable'; message: string }
   | { status: 'cloud_sync_failed'; message: string }
   | { status: 'cloud_updated_local_save_failed'; message: string }
   | { status: 'queue_cleanup_failed'; message: string };
@@ -296,6 +298,7 @@ export async function restoreDatabaseWithPersistence(
   persistCloud: (db: AppDatabase) => Promise<void>,
   persistLocal: (db: AppDatabase) => StorageSaveResult,
   finalizeLocalRestore: (db: AppDatabase) => Promise<void> = async () => {},
+  inspectPendingOfflineChanges: () => Promise<'clear' | 'pending' | 'unavailable'> = async () => 'clear',
 ): Promise<DatabaseRestoreResult> {
   let validatedDb: AppDatabase;
   try {
@@ -306,6 +309,25 @@ export async function restoreDatabaseWithPersistence(
     validatedDb = normalizeImportedDatabase(parsed);
   } catch {
     return { status: 'invalid_backup', message: 'The file is not valid JSON or is not a valid SHINE database backup.' };
+  }
+
+  let pendingState: 'clear' | 'pending' | 'unavailable';
+  try {
+    pendingState = await inspectPendingOfflineChanges();
+  } catch {
+    pendingState = 'unavailable';
+  }
+  if (pendingState === 'pending') {
+    return {
+      status: 'pending_offline_changes',
+      message: 'This device has unsynchronized offline changes. Sync them first, then retry the restore so older edits cannot overwrite restored records.',
+    };
+  }
+  if (pendingState === 'unavailable') {
+    return {
+      status: 'offline_state_unavailable',
+      message: 'SHINE could not verify the offline change queue, so the restore was not started. Check device storage and retry.',
+    };
   }
 
   try {
@@ -346,6 +368,11 @@ export async function restoreDatabaseJSON(rawJson: string): Promise<DatabaseRest
     (db) => syncEntireDatabaseToFirestore(db, true),
     (db) => saveDatabase(db),
     (db) => clearOfflineChangesAfterDatabaseReset(db),
+    async () => {
+      const queue = await loadQueue();
+      const legacySnapshots = readPendingOfflineSnapshots();
+      return queue.length > 0 || legacySnapshots.length > 0 ? 'pending' : 'clear';
+    },
   );
 }
 
