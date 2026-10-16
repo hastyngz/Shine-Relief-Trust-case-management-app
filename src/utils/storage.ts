@@ -1530,8 +1530,14 @@ export function updateProcurementList(
     updatedAt: new Date().toISOString(),
     updatedBy: actor,
   };
+  const previousLists = [...db.procurementLists];
   db.procurementLists[index] = updated;
-  saveDatabaseOrThrow(db, 'procurement list');
+  try {
+    saveDatabaseOrThrow(db, 'procurement list');
+  } catch (error) {
+    db.procurementLists = previousLists;
+    throw error;
+  }
   // Procurement updates use the shared per-record queue so stale local edits
   // cannot bypass the server baseline/conflict checks.
   return updated;
@@ -1657,8 +1663,14 @@ export function updateMeetingRecord(id: string, updates: Partial<MeetingRecord>)
   const index = db.meetings.findIndex((item) => item.id === id);
   if (index < 0) return null;
   const meeting = { ...db.meetings[index], ...updates, updatedAt: new Date().toISOString() };
+  const previousMeetings = [...db.meetings];
   db.meetings[index] = meeting;
-  saveDatabaseOrThrow(db, 'meeting record');
+  try {
+    saveDatabaseOrThrow(db, 'meeting record');
+  } catch (error) {
+    db.meetings = previousMeetings;
+    throw error;
+  }
   persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to update meeting:', err));
   return meeting;
 }
@@ -1945,13 +1957,19 @@ export function updatePerson(person: Person): Person {
     isLoginUser: false,
   };
 
+  const previousPeople = [...db.people];
   if (index !== -1) {
     db.people[index] = updated;
   } else {
     db.people.unshift(updated);
   }
 
-  saveDatabaseOrThrow(db, 'person record');
+  try {
+    saveDatabaseOrThrow(db, 'person record');
+  } catch (error) {
+    db.people = previousPeople;
+    throw error;
+  }
   persistPersonToFirestore(updated).catch((err) =>
     console.error('Failed to update person in Firestore:', err)
   );
