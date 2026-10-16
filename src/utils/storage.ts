@@ -775,8 +775,14 @@ export function addEducationalFollowUp(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
+  const previousEducationalFollowUps = [...(db.educationalFollowUps || [])];
   db.educationalFollowUps.unshift(newItem);
-  saveDatabaseOrThrow(db, 'education follow-up');
+  try {
+    saveDatabaseOrThrow(db, 'education follow-up');
+  } catch (error) {
+    db.educationalFollowUps = previousEducationalFollowUps;
+    throw error;
+  }
   persistEduFollowUpToFirestore(newItem).catch((err) =>
     console.error('Failed to persist educational follow-up to Firestore:', err)
   );
@@ -798,8 +804,14 @@ export function addHealthFollowUp(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
+  const previousHealthFollowUps = [...(db.healthFollowUps || [])];
   db.healthFollowUps.unshift(newItem);
-  saveDatabaseOrThrow(db, 'health follow-up');
+  try {
+    saveDatabaseOrThrow(db, 'health follow-up');
+  } catch (error) {
+    db.healthFollowUps = previousHealthFollowUps;
+    throw error;
+  }
   persistHealthFollowUpToFirestore(newItem).catch((err) =>
     console.error('Failed to persist health follow-up to Firestore:', err)
   );
@@ -821,8 +833,14 @@ export function addFamilyFollowUp(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
+  const previousFamilyFollowUps = [...(db.familyFollowUps || [])];
   db.familyFollowUps.unshift(newItem);
-  saveDatabaseOrThrow(db, 'family follow-up');
+  try {
+    saveDatabaseOrThrow(db, 'family follow-up');
+  } catch (error) {
+    db.familyFollowUps = previousFamilyFollowUps;
+    throw error;
+  }
   persistFamilyFollowUpToFirestore(newItem).catch((err) =>
     console.error('Failed to persist family follow-up to Firestore:', err)
   );
@@ -843,8 +861,14 @@ export function addRentPayment(
     createdBy: auditActor || item.createdBy || 'SHINE Staff',
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
+  const previousRentPayments = [...(db.rentPayments || [])];
   db.rentPayments.unshift(newItem);
-  saveDatabaseOrThrow(db, 'rent payment');
+  try {
+    saveDatabaseOrThrow(db, 'rent payment');
+  } catch (error) {
+    db.rentPayments = previousRentPayments;
+    throw error;
+  }
   persistRentPaymentToFirestore(newItem).catch((err) =>
     console.error('Failed to persist rent payment to Firestore:', err)
   );
@@ -920,8 +944,14 @@ export function addHouseholdActivity(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
+  const previousHouseholdActivities = [...(db.householdActivities || [])];
   db.householdActivities.unshift(newItem);
-  saveDatabaseOrThrow(db, 'household activity');
+  try {
+    saveDatabaseOrThrow(db, 'household activity');
+  } catch (error) {
+    db.householdActivities = previousHouseholdActivities;
+    throw error;
+  }
   persistHouseholdActivityToFirestore(newItem).catch((err) =>
     console.error('Failed to persist household activity to Firestore:', err)
   );
@@ -1609,8 +1639,14 @@ export function addMeetingRecord(item: Omit<MeetingRecord, 'id' | 'createdAt' | 
   if (!db.meetings) db.meetings = [];
   const now = new Date().toISOString();
   const meeting: MeetingRecord = { ...item, id: generateFollowUpId('MTG'), createdAt: now, updatedAt: now, createdBy: auditActor || item.createdBy };
+  const previousMeetings = [...(db.meetings || [])];
   db.meetings.unshift(meeting);
-  saveDatabaseOrThrow(db, 'meeting record');
+  try {
+    saveDatabaseOrThrow(db, 'meeting record');
+  } catch (error) {
+    db.meetings = previousMeetings;
+    throw error;
+  }
   persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to persist meeting:', err));
   return meeting;
 }
@@ -1646,8 +1682,14 @@ export function addFeedingProgramLog(item: Omit<FeedingProgramLog, 'id' | 'creat
   const db = getDatabase();
   if (!db.feedingProgramLogs) db.feedingProgramLogs = [];
   const log: FeedingProgramLog = { ...item, id: generateFollowUpId('FEED'), createdAt: new Date().toISOString() };
+  const previousFeedingProgramLogs = [...(db.feedingProgramLogs || [])];
   db.feedingProgramLogs.unshift(log);
-  saveDatabaseOrThrow(db, 'feeding programme log');
+  try {
+    saveDatabaseOrThrow(db, 'feeding programme log');
+  } catch (error) {
+    db.feedingProgramLogs = previousFeedingProgramLogs;
+    throw error;
+  }
   persistFeedingProgramLogToFirestore(log).catch((err) => console.error('Failed to persist feeding log:', err));
   return log;
 }
@@ -1671,8 +1713,14 @@ export function addMarketPrice(item: Omit<MarketPriceRecord, 'id' | 'createdAt'>
   const db = getDatabase();
   if (!db.marketPrices) db.marketPrices = [];
   const record: MarketPriceRecord = { ...item, id: generateFollowUpId('PRICE'), createdAt: new Date().toISOString() };
+  const previousMarketPrices = [...(db.marketPrices || [])];
   db.marketPrices.unshift(record);
-  saveDatabaseOrThrow(db, 'market price');
+  try {
+    saveDatabaseOrThrow(db, 'market price');
+  } catch (error) {
+    db.marketPrices = previousMarketPrices;
+    throw error;
+  }
   persistMarketPriceToFirestore(record).catch((err) => console.error('Failed to persist market price:', err));
   return record;
 }
@@ -1704,8 +1752,14 @@ export function addWhatIfScenario(item: Omit<WhatIfScenario, 'id' | 'createdAt'>
   const db = getDatabase();
   if (!db.whatIfScenarios) db.whatIfScenarios = [];
   const scenario: WhatIfScenario = { ...item, id: generateFollowUpId('SCN'), createdAt: new Date().toISOString() };
+  const previousWhatIfScenarios = [...(db.whatIfScenarios || [])];
   db.whatIfScenarios.unshift(scenario);
-  saveDatabaseOrThrow(db, 'what-if scenario');
+  try {
+    saveDatabaseOrThrow(db, 'what-if scenario');
+  } catch (error) {
+    db.whatIfScenarios = previousWhatIfScenarios;
+    throw error;
+  }
   persistWhatIfScenarioToFirestore(scenario).catch((err) => console.error('Failed to persist scenario:', err));
   return scenario;
 }
@@ -1733,8 +1787,14 @@ export function addEarlyYearsRecord(item: Omit<EarlyYearsRecord, 'id' | 'created
   const db = getDatabase();
   if (!db.earlyYearsRecords) db.earlyYearsRecords = [];
   const record: EarlyYearsRecord = { ...item, id: generateFollowUpId('ECD'), createdAt: new Date().toISOString() };
+  const previousEarlyYearsRecords = [...(db.earlyYearsRecords || [])];
   db.earlyYearsRecords.unshift(record);
-  saveDatabaseOrThrow(db, 'early-years record');
+  try {
+    saveDatabaseOrThrow(db, 'early-years record');
+  } catch (error) {
+    db.earlyYearsRecords = previousEarlyYearsRecords;
+    throw error;
+  }
   persistEarlyYearsRecordToFirestore(record).catch((err) => console.error('Failed to persist early-years record:', err));
   return record;
 }
@@ -1768,8 +1828,14 @@ export function addHistoricalCaseRecord(
     id: generateFollowUpId('HIST'),
     createdAt: now,
   };
+  const previousHistoricalRecords = [...(db.historicalRecords || [])];
   db.historicalRecords.unshift(newItem);
-  saveDatabaseOrThrow(db, 'historical case record');
+  try {
+    saveDatabaseOrThrow(db, 'historical case record');
+  } catch (error) {
+    db.historicalRecords = previousHistoricalRecords;
+    throw error;
+  }
   persistHistoricalCaseRecordToFirestore(newItem).catch((err) =>
     console.error('Failed to persist historical record to Firestore:', err)
   );
@@ -1805,8 +1871,14 @@ export function addImportAuditRecord(
     ...item,
     id: generateFollowUpId('AUD'),
   };
+  const previousImportAudits = [...(db.importAudits || [])];
   db.importAudits.unshift(newItem);
-  saveDatabaseOrThrow(db, 'import audit record');
+  try {
+    saveDatabaseOrThrow(db, 'import audit record');
+  } catch (error) {
+    db.importAudits = previousImportAudits;
+    throw error;
+  }
   persistImportAuditToFirestore(newItem).catch((err) =>
     console.error('Failed to persist import audit to Firestore:', err)
   );
@@ -1847,8 +1919,14 @@ export function addPerson(personData: Omit<Person, 'id'> & { id?: string }): Per
     isLoginUser: false,
   };
 
+  const previousPeople = [...(db.people || [])];
   db.people.unshift(newPerson);
-  saveDatabaseOrThrow(db, 'person record');
+  try {
+    saveDatabaseOrThrow(db, 'person record');
+  } catch (error) {
+    db.people = previousPeople;
+    throw error;
+  }
   persistPersonToFirestore(newPerson).catch((err) =>
     console.error('Failed to persist person to Firestore:', err)
   );
