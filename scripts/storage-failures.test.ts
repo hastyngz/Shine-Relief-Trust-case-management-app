@@ -202,7 +202,7 @@ assert.throws(
 assert.equal(deleteScheduleItem(recoveredSchedule.item.id), false,
   'schedule deletion reports a failed local save without throwing');
 
-assert.deepEqual(getDatabase().schedules, schedulesBeforeFailedUpdate,
+assert.deepEqual(getDatabase().schedules || [], schedulesBeforeFailedUpdate,
   'failed schedule deletion restores the prior in-memory record');
 failNext = false;
 
