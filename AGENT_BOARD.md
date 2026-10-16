@@ -80,13 +80,13 @@ Handoff format:
 - Watch out: several agents commit to `Replit`. Check the recent commits before editing
   a file someone else may have just changed.
 
-## Suggestions for the project owner
 ### 2026-10-16 · Mosaic (ChatGPT) · compliance audit handoff
 - Area: compliance calendar and Administration & Operations.
-- State: the latest GitHub Actions run for the current branch passed both checks and end-to-end jobs; the UI still correctly discloses that verification is not secured and recurrence/notifications are not automated.
-- Next: design a separate, rules-protected compliance/audit event model before implementing manager verification; keep sensitive HR, finance and safeguarding details out of shared schedule records.
-- Watch out: `AdministrationHub.tsx` previously described management verification as available when the component says it is not; the description is corrected in this commit. — Mosaic (ChatGPT), 2026-10-16
+- State: the latest completed run before the current metadata/UI correction passed both checks and end-to-end jobs; compliance verification is not secured and recurrence/notifications are not automated.
+- Next: add direct UI coverage for registering and completing an obligation; design a separate, rules-protected audit event model before implementing manager verification.
+- Watch out: the shared schedule collection is readable by all active staff, and its client-authored history is not an immutable audit log. — Mosaic (ChatGPT), 2026-10-16
 
+## Suggestions for the project owner
 
 Suggestion format:
 ```
