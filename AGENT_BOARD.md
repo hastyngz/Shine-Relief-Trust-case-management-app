@@ -92,6 +92,12 @@ Handoff format:
 - Next: build the quote comparison, selection rationale, delegated approval, PO, receipt and finance handover as separate traceable steps.
 - Watch out: do not treat three quotes as an approval or auto-select the cheapest offer without checking specification and recorded justification. — Mosaic (ChatGPT), 2026-10-16
 
+### 2026-10-16 · Mosaic (ChatGPT) · save-failure feedback
+- Area: compliance schedule persistence and local storage error handling.
+- State: compliance forms now stay open on failed local saves, report failure instead of success, and pass storage-failure regression tests plus browser E2E in CI run `38835202162`.
+- Next: audit other data-entry modules for success notices that ignore `saveDatabase` results.
+- Watch out: `getDatabase()` reparses localStorage; a broader app-wide in-memory fallback on storage failure needs careful review against incoming Firestore snapshots and offline conflicts. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 Suggestion format:
@@ -179,5 +185,13 @@ Suggestion format:
 - Type: feature
 - Evidence: `ProcurementList` stores supplier quotes and status, but the UI does not establish delegated approval, quote comparison/selection rationale, purchase orders, partial receipts or finance handover.
 - Idea: add a linked workflow with separate requester, approver, receiver and finance roles; preserve quote documents and selection rationale, and ensure receipts never mark invoices paid automatically.
+- Effort: medium to large
+- Status: new
+
+### S-009 · Cross-module storage failure recovery
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `getDatabase()` reads a fresh copy from localStorage; `saveDatabase()` reports failures but does not emit the normal database-updated event. A helper's mutated copy can therefore be unavailable to later reads when storage fails.
+- Idea: audit save-result handling across forms and design a shared in-memory fallback that preserves local edits without allowing stale Firestore snapshots to overwrite them; add tests for failed save, recovery and concurrent sync.
 - Effort: medium to large
 - Status: new
