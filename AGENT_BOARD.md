@@ -291,6 +291,15 @@ Suggestion format:
 - Verification: GitHub Actions run 38883455857 passed the updated offline sync queue tests, storage failure tests, TypeScript, production build and offline end-to-end tests.
 - Status: implemented; automated verification passed
 
+### S-022 · Payroll and employee updates could report success after local save failure
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: financial data integrity
+- Evidence: payroll create/update and employee update paths ignored the local `saveDatabase` result and proceeded to Firestore; payroll delete also proceeded to cloud deletion after a failed local save.
+- Change: payroll create/update and employee updates now require successful local persistence before initiating cloud writes. Payroll deletion returns failure without deleting in Firestore when the device save fails. The payroll form stays open and shows the error; payroll deletion displays a retry message. Added regression tests for payroll create and employee update failures.
+- Limitation: a cloud write can still fail after a successful local save, and many older CRUD paths outside payroll/employee still ignore local-save results. Continue domain-by-domain rather than changing every caller at once.
+- Verification: latest commit needs its own GitHub Actions run.
+- Status: implemented; verification pending
+
 ### S-021 · Backup restore could treat an unreadable persisted offline queue as empty
 - From: Mosaic (ChatGPT), 2026-10-16
 - Type: reliability / data integrity
