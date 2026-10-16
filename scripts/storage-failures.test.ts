@@ -99,7 +99,7 @@ const unsavedSchedule = addScheduleItemWithSaveResult({
   status: 'Scheduled',
 }, 'Test Staff');
 assert.equal(unsavedSchedule.savedLocally, false, 'schedule create reports a failed local save');
-assert.ok(getDatabase().schedules.some((item) => item.id === unsavedSchedule.item.id), 'in-memory record remains available after storage failure');
+assert.ok(getDatabase().schedules?.some((item) => item.id === unsavedSchedule.item.id), 'in-memory record remains available after storage failure');
 failNext = false;
 const savedScheduleUpdate = updateScheduleItemWithSaveResult(
   unsavedSchedule.item.id,
