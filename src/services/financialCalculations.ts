@@ -57,6 +57,19 @@ export interface BudgetLineTotals {
   category: Record<string, number>;
 }
 
+/** Apply the same period/category scope to every budget dashboard summary. */
+export function filterBudgetLines(
+  lines: BudgetItem[],
+  periodFilter: string = 'ALL',
+  categoryFilter: string = 'ALL',
+): BudgetItem[] {
+  return lines.filter((line) => {
+    if (periodFilter !== 'ALL' && line.period !== periodFilter) return false;
+    if (categoryFilter !== 'ALL' && line.category !== categoryFilter) return false;
+    return true;
+  });
+}
+
 export function outstandingExpenseSummary(expenses: HouseholdExpense[]): { count: number; amount: number } {
   const outstanding = expenses.filter((expense) => expense.paymentStatus === 'Payment Outstanding');
   return {
