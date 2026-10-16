@@ -119,7 +119,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: f
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, storage: undefined } });
 Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore } = await import('../src/services/firestoreSync');
@@ -366,5 +366,26 @@ assert.equal(procurementUpdate.length, 1, 'procurement quote updates should be q
 assert.equal(procurementUpdate[0].collection, 'procurementLists');
 assert.equal(procurementUpdate[0].recordId, 'PRC-E2E-001');
 assert.equal(procurementUpdate[0].data?.items?.[0]?.quotes?.[0]?.amountMWK, 12000);
+
+// --- 11. A successful database reset must not replay pre-reset edits --------
+await persistQueue(procurementCreate);
+values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-OLD', T1)] })]));
+const resetDb = db();
+await clearOfflineChangesAfterDatabaseReset(resetDb);
+assert.equal(getPendingOfflineSnapshotCount(), 0, 'a successful reset clears the in-memory queue');
+assert.deepEqual(await loadQueue(), [], 'a successful reset clears persisted per-record edits');
+assert.equal(values.has('shine_relief_trust_pending_sync_v1'), false, 'a successful reset removes legacy whole-database snapshots');
+assert.deepEqual(JSON.parse(values.get('shine_relief_trust_last_synced_v1') || 'null'), resetDb,
+  'the reset database becomes the new sync baseline');
+
+// A failed durable queue write must not publish the new queue in memory.
+await persistQueue(procurementCreate);
+const originalSetItem = fakeWindow.localStorage.setItem;
+fakeWindow.localStorage.setItem = () => { throw new Error('synthetic queue storage failure'); };
+await assert.rejects(() => persistQueue([]), /synthetic queue storage failure/);
+assert.equal(getPendingOfflineSnapshotCount(), 1, 'failed persistence retains the last known queue in memory');
+assert.equal((await loadQueue()).length, 1, 'failed persistence does not pretend the queue was cleared');
+fakeWindow.localStorage.setItem = originalSetItem;
+await clearOfflineChangesAfterDatabaseReset(resetDb);
 
 console.log('Offline per-record queue and conflict tests passed.');
