@@ -133,7 +133,7 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 ### Fail-closed offline queue inspection and baseline persistence
 - Restore now checks the persisted queue rather than trusting only a cached/in-memory count. The inspector checks IndexedDB plus its localStorage fallback and returns `unavailable` for malformed or inaccessible queue state; malformed legacy snapshot data also blocks restore. This avoids silently treating a damaged queue as empty.
-- A pre-existing reset-recovery marker also blocks restore until the administrator completes recovery. This avoids using a backup restore to accidentally unlock an incomplete destructive reset.
+- The reset-recovery marker blocks automatic queue replay. A backup restore may be retried when the persisted queue is readable; if queued edits remain, the admin UI requires explicit confirmation before discarding them during recovery. Corrupt or unreadable queue state still blocks restore.
 - Reset queue cleanup now requires the new last-synced baseline to be durably persisted before it removes the recovery marker. If baseline persistence fails, the marker stays active and the queue flush remains paused.
 - Regression tests cover pending/clear/unavailable queue inspection, corrupt JSON, IndexedDB failure, and retaining the reset lock when baseline persistence fails.
 - Remaining risk: Firestore changes are not atomic across batches. A global read-only/recovery mode is still needed to stop separate direct-write operations while the marker is active.
@@ -145,3 +145,14 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Added `scripts/backup-restore-coverage.test.ts` to the storage CI step alongside the operational reset policy test.
 - This is not a transactional restore: Firestore writes are batched and stale deletion follows the writes, so a network/permission failure can still leave a partial restore. The restore UI now distinguishes invalid backup, cloud failure, cloud-updated/local-save failure, pending offline edits, queue-cleanup failure and success.
 - Verification: GitHub Actions run 38883455857 passed the restore coverage, storage failure, offline queue, TypeScript, production build and offline end-to-end checks.
+
+### Targeted local-save rollback for case, finance and planning records
+- Added rollback around create/update operations for girls, households, expenses, budget lines, annual budget plans and workplans. If local storage rejects the write, the prior in-memory collection is restored and the cloud write is not started.
+- Delete paths for girls and households now restore all affected collections when local persistence fails, including girl follow-ups and household-linked rent, expense and activity records. Expense, budget, workplan and schedule deletes retain their boolean failure contract and restore the removed record before returning false.
+- Schedule create/update helpers now roll back failed in-memory edits; the simple helpers throw actionable errors instead of returning an item that looks saved. Planning forms catch persistence errors and remain open, and delete actions show failure rather than refreshing as if the operation succeeded.
+- Expense create/update/delete handlers now surface local storage errors and do not show success or start cloud writes after a failed save.
+- Recovery restore now sets the local recovery marker before the first destructive cloud write. If the marker is active after interruption, a readable empty queue permits a retry; if queued edits remain, the administrator must explicitly confirm that retrying the backup will discard them. Unreadable/corrupt queue state remains fail-closed.
+- Regression tests cover local storage failure and in-memory rollback across beneficiary/household cascade deletion, expense CRUD, budget/annual-budget CRUD, workplan CRUD, schedule CRUD, restore lock ordering and partial restore outcomes.
+- Verification: GitHub Actions run 38894050874 passed TypeScript, storage failure tests, production build and offline end-to-end tests for the code immediately before commit fcd2711; a final run for the latest head is required before calling the whole set green.
+- Remaining risk: these targeted fixes do not make localStorage and Firestore transactional. Other clients can still write independently during a multi-batch restore, and several older follow-up, meeting, programme, Early Years and inventory helpers still need the same domain-by-domain review.
+
