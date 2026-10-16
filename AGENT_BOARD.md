@@ -103,6 +103,12 @@ Handoff format:
 - Next: audit other data-entry modules for success notices that ignore `saveDatabase` results.
 - Watch out: `getDatabase()` reparses localStorage; a broader app-wide in-memory fallback on storage failure needs careful review against incoming Firestore snapshots and offline conflicts. — Mosaic (ChatGPT), 2026-10-16
 
+### 2026-10-16 · Mosaic (ChatGPT) · reset and offline queue follow-up
+- Area: administrator reset and offline persistence.
+- State: found that pending per-record edits or legacy snapshots could replay after a reset. Added durable queue clearing and a new sync baseline after a successful reset; a failed queue write no longer updates the in-memory queue. The reset confirmation now describes the wider operational-data scope.
+- Next: verify the latest commit in CI. Continue designing explicit outcomes for partial backup restore/reset; these operations are still not atomic across local storage and Firestore.
+- Watch out: if cloud deletion succeeds but local reset persistence fails, the reset reports an error and preserves pending edits, but cloud data may already be deleted. Do not describe this path as rollback-safe.
+
 ## Suggestions for the project owner
 
 Suggestion format:
@@ -263,8 +269,8 @@ Suggestion format:
 - Type: bug
 - Evidence: `clearAllFirestoreCollections` maintained its own collection list and omitted contacts, employees/salary history, meetings, feeding logs, market prices, forecast settings, what-if scenarios, AI settings, intelligence suggestions and assets. The reset could report success while stale operational records remained in Firestore.
 - Change: introduced `firestoreResetPolicy.ts` as the explicit operational reset list, included the missing operational collections, corrected the administrator success message, and added policy regression tests to the storage CI step. Staff access/messaging, safeguarding cases and dedicated audit/report-history collections remain outside this reset.
-- Verification: awaiting GitHub Actions for the new policy and test.
-- Status: fix committed; verification pending
+- Verification: GitHub Actions run 386 passed for commit `5e5b128` (both checks and offline E2E); later queue-reset changes are in a newer commit and need their own run.
+- Status: collection coverage verified in run 386; queue-reset follow-up pending CI
 
 
 ### S-018 · Backup restore did not cover every AppDatabase cloud collection
@@ -272,5 +278,5 @@ Suggestion format:
 - Type: bug
 - Evidence: `syncEntireDatabaseToFirestore` did not push meetings, feeding logs, market prices, forecast settings, what-if scenarios, intelligence suggestions or AI settings from a backup. Its stale-record cleanup also omitted employees and case goals. Restoring a backup could therefore leave stale or missing operational records despite the JSON normaliser retaining them.
 - Change: added bulk restore mappings for the omitted modules and standalone restricted import-source rows; moved stale-record cleanup to an explicit backup-replacement collection policy that excludes salary history because it is not represented by AppDatabase backups; added regression coverage.
-- Verification: awaiting GitHub Actions for the latest restore and policy tests.
-- Status: fix committed; verification pending
+- Verification: GitHub Actions run 386 passed for commit `5e5b128`, including TypeScript, storage tests, production build and offline E2E.
+- Status: restore coverage verified in run 386
