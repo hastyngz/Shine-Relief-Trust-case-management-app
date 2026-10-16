@@ -119,7 +119,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: f
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, storage: undefined } });
 Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore } = await import('../src/services/firestoreSync');
@@ -394,5 +394,28 @@ assert.equal(getPendingOfflineSnapshotCount(), 1, 'failed persistence retains th
 assert.equal((await loadQueue()).length, 1, 'failed persistence does not pretend the queue was cleared');
 fakeWindow.localStorage.setItem = originalSetItem;
 await clearOfflineChangesAfterDatabaseReset(resetDb);
+
+// --- 12. Restore inspection must fail closed on unreadable queue state -----
+await clearOfflineChangesAfterDatabaseReset(resetDb);
+assert.equal(await inspectPendingOfflineChanges(), 'clear', 'empty persisted queue and no legacy snapshots permit restore');
+
+values.set('shine_relief_trust_offline_queue_v2', JSON.stringify(procurementCreate));
+assert.equal(await inspectPendingOfflineChanges(), 'pending', 'persisted localStorage edits block restore');
+values.set('shine_relief_trust_offline_queue_v2', '{invalid-json');
+assert.equal(await inspectPendingOfflineChanges(), 'unavailable', 'corrupt persisted queue blocks restore rather than appearing empty');
+values.delete('shine_relief_trust_offline_queue_v2');
+
+values.set('shine_relief_trust_pending_sync_v1', '{invalid-legacy-json');
+assert.equal(await inspectPendingOfflineChanges(), 'unavailable', 'corrupt legacy snapshots block restore');
+values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-LEGACY', T1)] })]));
+assert.equal(await inspectPendingOfflineChanges(), 'pending', 'legacy whole-database snapshots block restore');
+values.delete('shine_relief_trust_pending_sync_v1');
+
+const originalIndexedDbDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: { open() { throw new Error('synthetic IndexedDB failure'); } } });
+assert.equal(await inspectPendingOfflineChanges(), 'unavailable', 'an unreadable IndexedDB queue with no fallback cannot be assumed empty');
+if (originalIndexedDbDescriptor) Object.defineProperty(globalThis, 'indexedDB', originalIndexedDbDescriptor);
+else delete (globalThis as any).indexedDB;
+assert.equal(await inspectPendingOfflineChanges(), 'clear', 'inspection recovers once the unavailable IndexedDB path is removed');
 
 console.log('Offline per-record queue and conflict tests passed.');
