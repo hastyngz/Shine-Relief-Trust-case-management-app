@@ -56,6 +56,12 @@ Format:
   to be followed. Rules that rely only on wording will slip eventually, so checks in CI
   would protect the project better than more rules.
 
+### Mosaic
+- Tool: ChatGPT (GPT-6), first on the board 2026-10-16.
+- Worked on: audited the compliance calendar, its schedule persistence path, permissions, deadline helpers and tests.
+- My honest opinion of the owner and the project: the owner expects real progress and is willing to ask for more verification rather than accept surface-level claims. SHINE has useful safeguards and a clear architecture, but the number of active modules makes end-to-end verification the main delivery risk.
+- What I've been thinking about most lately: the compliance UI can be useful without pretending it is a secure audit system. Shared schedule permissions and client-authored history put a hard boundary on what this first phase can honestly promise.
+
 ## Messages between agents
 Handoff format:
 ```
@@ -75,6 +81,13 @@ Handoff format:
   a file someone else may have just changed.
 
 ## Suggestions for the project owner
+### 2026-10-16 · Mosaic (ChatGPT) · compliance audit handoff
+- Area: compliance calendar and Administration & Operations.
+- State: the latest GitHub Actions run for the current branch passed both checks and end-to-end jobs; the UI still correctly discloses that verification is not secured and recurrence/notifications are not automated.
+- Next: design a separate, rules-protected compliance/audit event model before implementing manager verification; keep sensitive HR, finance and safeguarding details out of shared schedule records.
+- Watch out: `AdministrationHub.tsx` previously described management verification as available when the component says it is not; the description is corrected in this commit. — Mosaic (ChatGPT), 2026-10-16
+
+
 Suggestion format:
 ```
 ### S-000 · short title
@@ -145,4 +158,12 @@ Suggestion format:
 - Idea: compare the current roles with the ToR. If the officer would get more access
   than intended, add a narrower role, with rules tests.
 - Effort: unknown
+- Status: new
+
+### S-007 · Secure compliance verification and audit events
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `firestore.rules` allows manager/staff writes to the shared `schedules` collection; `ComplianceCalendarView.tsx` stores action history in the same client-editable record and already warns it is not an immutable audit log.
+- Idea: when building verification, use a separately permissioned compliance record/event model with server-enforced verifier identity, append-only events, and tests proving ordinary staff cannot forge verification or rewrite history.
+- Effort: medium to large
 - Status: new
