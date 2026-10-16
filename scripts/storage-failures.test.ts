@@ -175,6 +175,29 @@ const queueCleanupFailure = await restoreDatabaseWithPersistence(
 assert.equal(queueCleanupFailure.status, 'queue_cleanup_failed', 'stale offline queue cleanup failure is visible');
 assert.equal(cleanupAttempted, true);
 
+// A restore must stop before cloud or local writes when offline edits are pending.
+let pendingCloudCalls = 0;
+let pendingLocalCalls = 0;
+const pendingRestore = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { pendingCloudCalls += 1; },
+  () => { pendingLocalCalls += 1; return { ok: true, quotaExceeded: false }; },
+  async () => 'pending',
+);
+assert.equal(pendingRestore.status, 'pending_offline_changes');
+assert.equal(pendingCloudCalls, 0, 'pending offline edits block cloud restore');
+assert.equal(pendingLocalCalls, 0, 'pending offline edits block local replacement');
+
+const unavailableRestore = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { pendingCloudCalls += 1; },
+  () => { pendingLocalCalls += 1; return { ok: true, quotaExceeded: false }; },
+  async () => 'unavailable',
+);
+assert.equal(unavailableRestore.status, 'offline_state_unavailable');
+assert.equal(pendingCloudCalls, 0, 'an unreadable offline queue blocks cloud restore');
+assert.equal(pendingLocalCalls, 0, 'an unreadable offline queue blocks local replacement');
+
 const invalidRestore = await restoreDatabaseWithPersistence(
   JSON.stringify({ girls: 'not-an-array', households: [] }),
   async () => { cloudCalls += 1; },
