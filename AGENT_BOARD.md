@@ -140,6 +140,14 @@ Handoff format:
 - Next: continue the same audit through older follow-up, meeting, programme, Early Years and inventory CRUD; then consider a cross-client maintenance/read-only lock for multi-batch recovery.
 - Watch out: Firestore writes can still fail after local save succeeds, and school-history/profile changes span multiple separate writes. These workflows are not transactional. — Mosaic (ChatGPT), 2026-10-16
 
+
+
+### 2026-10-16 · Mosaic (ChatGPT) · failed local insert rollback
+- Area: local storage failure recovery across follow-up, household activity, meeting, feeding, market-price, early-years, historical, import-audit and people creation.
+- State: added rollback of in-memory array mutations when local persistence rejects the save; added synthetic regression cases in `scripts/storage-failures.test.ts`.
+- Next: check CI for commit `a33ecbcef03ea93d253cad49db731cf15fe2a90f`; continue audit of update paths and remaining direct Firestore writes.
+- Watch out: these changes protect failed local saves only; successful local writes followed by cloud failures still need visible retry/reconciliation. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
