@@ -317,6 +317,7 @@ export async function restoreDatabaseWithPersistence(
   persistLocal: (db: AppDatabase) => StorageSaveResult,
   finalizeLocalRestore: (db: AppDatabase) => Promise<void> = async () => {},
   inspectPendingOfflineChanges: () => Promise<'clear' | 'pending' | 'unavailable'> = async () => 'clear',
+  beginRestoreRecovery: () => void = () => {},
 ): Promise<DatabaseRestoreResult> {
   let validatedDb: AppDatabase;
   try {
@@ -345,6 +346,19 @@ export async function restoreDatabaseWithPersistence(
     return {
       status: 'offline_state_unavailable',
       message: 'SHINE could not verify the offline change queue, so the restore was not started. Check device storage and retry.',
+    };
+  }
+
+  // Persist a recovery lock before the first destructive cloud write. If a
+  // later batch fails, queued offline edits must not repopulate partially
+  // restored collections. The lock is cleared only by successful finalization.
+  try {
+    beginRestoreRecovery();
+  } catch (err) {
+    console.error('Could not establish database restore recovery lock:', err);
+    return {
+      status: 'offline_state_unavailable',
+      message: 'SHINE could not protect the offline queue before restoring. No cloud restore was started; check device storage and retry.',
     };
   }
 
@@ -387,6 +401,7 @@ export async function restoreDatabaseJSON(rawJson: string): Promise<DatabaseRest
     (db) => saveDatabase(db),
     (db) => clearOfflineChangesAfterDatabaseReset(db),
     inspectPendingOfflineChanges,
+    markDatabaseResetRecoveryRequired,
   );
 }
 
