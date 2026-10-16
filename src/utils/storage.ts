@@ -280,7 +280,8 @@ export type DatabaseRestoreResult =
   | { status: 'success' }
   | { status: 'invalid_backup'; message: string }
   | { status: 'cloud_sync_failed'; message: string }
-  | { status: 'cloud_updated_local_save_failed'; message: string };
+  | { status: 'cloud_updated_local_save_failed'; message: string }
+  | { status: 'queue_cleanup_failed'; message: string };
 
 /**
  * Restore orchestration is injectable so local/cloud partial-failure outcomes
@@ -294,6 +295,7 @@ export async function restoreDatabaseWithPersistence(
   rawJson: string,
   persistCloud: (db: AppDatabase) => Promise<void>,
   persistLocal: (db: AppDatabase) => StorageSaveResult,
+  finalizeLocalRestore: (db: AppDatabase) => Promise<void> = async () => {},
 ): Promise<DatabaseRestoreResult> {
   let validatedDb: AppDatabase;
   try {
@@ -324,6 +326,17 @@ export async function restoreDatabaseWithPersistence(
     };
   }
 
+  try {
+    // Old offline edits must not replay over the newly restored database.
+    await finalizeLocalRestore(validatedDb);
+  } catch (err) {
+    console.error('Database restored but offline queue cleanup failed:', err);
+    return {
+      status: 'queue_cleanup_failed',
+      message: 'The restored database was saved locally and in the cloud, but this device could not clear its pending offline changes. Do not edit records or reconnect repeatedly yet; free device storage, then retry recovery so old queued edits cannot overwrite restored records.',
+    };
+  }
+
   return { status: 'success' };
 }
 
@@ -332,6 +345,7 @@ export async function restoreDatabaseJSON(rawJson: string): Promise<DatabaseRest
     rawJson,
     (db) => syncEntireDatabaseToFirestore(db, true),
     (db) => saveDatabase(db),
+    (db) => clearOfflineChangesAfterDatabaseReset(db),
   );
 }
 
