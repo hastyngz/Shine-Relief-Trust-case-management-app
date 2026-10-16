@@ -1068,8 +1068,14 @@ export function addBudgetItem(
     createdBy: auditActor || item.createdBy || 'SHINE Staff',
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
+  const previousBudgets = [...db.budgets];
   db.budgets.unshift(newItem);
-  saveDatabaseOrThrow(db, 'budget item');
+  try {
+    saveDatabaseOrThrow(db, 'budget item');
+  } catch (error) {
+    db.budgets = previousBudgets;
+    throw error;
+  }
   persistBudgetItemToFirestore(newItem).catch((err) =>
     console.error('Failed to persist budget item to Firestore:', err)
   );
@@ -1091,8 +1097,14 @@ export function updateBudgetItem(
     updatedAt: new Date().toISOString(),
     updatedBy: auditActor || db.budgets[index].updatedBy || 'SHINE Staff',
   };
+  const previousBudgets = [...db.budgets];
   db.budgets[index] = updated;
-  saveDatabaseOrThrow(db, 'budget item');
+  try {
+    saveDatabaseOrThrow(db, 'budget item');
+  } catch (error) {
+    db.budgets = previousBudgets;
+    throw error;
+  }
   persistBudgetItemToFirestore(updated).catch((err) =>
     console.error('Failed to update budget item in Firestore:', err)
   );
@@ -1104,8 +1116,14 @@ export function deleteBudgetItem(id: string): boolean {
   if (!db.budgets) return false;
   const index = db.budgets.findIndex((b) => b.id === id);
   if (index === -1) return false;
+  const previousBudgets = [...db.budgets];
   db.budgets.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  try {
+    saveDatabaseOrThrow(db, 'budget item deletion');
+  } catch (error) {
+    db.budgets = previousBudgets;
+    throw error;
+  }
   deleteBudgetItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete budget item from Firestore:', err)
   );
@@ -1127,8 +1145,14 @@ export function addAnnualBudgetPlan(
     createdBy: auditActor || plan.createdBy || 'SHINE Staff',
     updatedBy: auditActor || plan.updatedBy || 'SHINE Staff',
   };
+  const previousAnnualBudgets = [...db.annualBudgets];
   db.annualBudgets.unshift(newPlan);
-  saveDatabaseOrThrow(db, 'annual budget plan');
+  try {
+    saveDatabaseOrThrow(db, 'annual budget plan');
+  } catch (error) {
+    db.annualBudgets = previousAnnualBudgets;
+    throw error;
+  }
   persistAnnualBudgetPlanToFirestore(newPlan).catch((err) =>
     console.error('Failed to persist annual budget plan to Firestore:', err)
   );
@@ -1150,8 +1174,14 @@ export function updateAnnualBudgetPlan(
     updatedAt: new Date().toISOString(),
     updatedBy: auditActor || db.annualBudgets[index].updatedBy || 'SHINE Staff',
   };
+  const previousAnnualBudgets = [...db.annualBudgets];
   db.annualBudgets[index] = updated;
-  saveDatabaseOrThrow(db, 'annual budget plan');
+  try {
+    saveDatabaseOrThrow(db, 'annual budget plan');
+  } catch (error) {
+    db.annualBudgets = previousAnnualBudgets;
+    throw error;
+  }
   persistAnnualBudgetPlanToFirestore(updated).catch((err) =>
     console.error('Failed to update annual budget plan in Firestore:', err)
   );
