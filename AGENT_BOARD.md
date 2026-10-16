@@ -239,7 +239,7 @@ Suggestion format:
 - Evidence: `src/components/Planning/BudgetsAndWorkplansView.tsx` computes `filteredBudgets` using the selected period and category filters for the headline totals, but `monthlyBudgetSummary` filters the unfiltered `budgets` array by month only. The monthly cards therefore can disagree with the selected headline totals. Monthly totals also combine records with the same month number across years because the grouping key is only `month`.
 - Idea: agree on the reporting-period model (calendar year vs Malawi financial year) and group by year/period plus month; apply active filters consistently or explicitly label the monthly view as all-period totals. Add tests with two financial years and category/period filters so the dashboard cannot imply incomparable figures are one period.
 - Effort: medium
-- Status: partial fix committed 2026-10-16; period/category filters now scope headline, monthly and grouped summaries consistently, with regression assertions added. CI for the latest test commit is queued behind an older E2E run. The financial-year issue remains unresolved: when period is ALL, month-number grouping can still combine different years. Do not mark closed until a reporting-year model is agreed and cross-year tests cover it.
+- Status: period/category filter fix and regression assertions committed; GitHub Actions run 371 passed on 2026-10-16. The financial-year issue remains unresolved: when period is ALL, month-number grouping can still combine different years. Do not mark closed until a reporting-year model is agreed and cross-year tests cover it.
 
 ### S-015 · Workplan/payroll/core helpers need consistent persistence outcome handling
 - From: Mosaic (ChatGPT), 2026-10-16
@@ -254,5 +254,14 @@ Suggestion format:
 - Type: bug
 - Evidence: the import normalizer's collection list did not include `assets` or `caseGoals`, although both are part of `AppDatabase` and the export/local-load paths. Restoring a JSON backup could therefore drop those collections from the restored local database and cloud sync payload.
 - Change: extracted `normalizeImportedDatabase` in `src/utils/storage.ts`, included both collections with backward-compatible empty-array defaults, and added regression assertions to `scripts/storage-failures.test.ts` for preserving both collections and importing older backups without assets.
-- Verification: source changes and tests committed; local execution and the resulting GitHub Actions run have not yet been verified in this session. Do not call the fix CI-verified until the run is checked.
-- Status: fixed in code; verification pending
+- Verification: source changes and regression assertions are covered by GitHub Actions run 371, which passed on 2026-10-16.
+- Status: fixed and CI-verified
+
+
+### S-017 · Operational reset leaves some module collections behind
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: bug
+- Evidence: `clearAllFirestoreCollections` maintained its own collection list and omitted contacts, employees/salary history, meetings, feeding logs, market prices, forecast settings, what-if scenarios, AI settings, intelligence suggestions and assets. The reset could report success while stale operational records remained in Firestore.
+- Change: introduced `firestoreResetPolicy.ts` as the explicit operational reset list, included the missing operational collections, corrected the administrator success message, and added policy regression tests to the storage CI step. Staff access/messaging, safeguarding cases and dedicated audit/report-history collections remain outside this reset.
+- Verification: awaiting GitHub Actions for the new policy and test.
+- Status: fix committed; verification pending
