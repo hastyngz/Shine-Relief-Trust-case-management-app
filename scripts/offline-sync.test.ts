@@ -385,6 +385,17 @@ assert.equal(values.has('shine_relief_trust_pending_sync_v1'), false, 'a success
 assert.deepEqual(JSON.parse(values.get('shine_relief_trust_last_synced_v1') || 'null'), resetDb,
   'the reset database becomes the new sync baseline');
 
+// An interrupted destructive operation remains retryable by an administrator
+// when both persisted queue formats are provably empty. A lock must never make
+// an unreadable or non-empty queue look safe.
+markDatabaseResetRecoveryRequired();
+assert.equal(await inspectPendingOfflineChanges(), 'clear',
+  'an admin can retry restore after interruption when all persisted queues are empty');
+await persistQueue(procurementCreate);
+assert.equal(await inspectPendingOfflineChanges(), 'pending',
+  'the recovery lock does not make queued edits safe to discard silently');
+await clearOfflineChangesAfterDatabaseReset(resetDb);
+
 // A failed durable queue write must not publish the new queue in memory.
 await persistQueue(procurementCreate);
 const originalSetItem = fakeWindow.localStorage.setItem;
