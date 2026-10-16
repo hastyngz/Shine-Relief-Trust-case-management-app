@@ -876,7 +876,13 @@ function AppContent() {
     pendingPhotos?: PendingPhoto[]
   ): boolean => {
     if (isViewOnly) return false;
-    const created = addExpense(data, auditActor);
+    let created: HouseholdExpense;
+    try {
+      created = addExpense(data, auditActor);
+    } catch (error) {
+      showToast(`Expense was not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return false;
+    }
     showToast('Saved on this phone. Household expense recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
     notifyDataChange({ type: 'expense_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
@@ -971,8 +977,15 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Delete this expense entry?')) return;
-    deleteExpense(id);
-    showToast('Expense entry deleted.');
+    try {
+      if (!deleteExpense(id)) {
+        showToast('This expense could not be found. Refresh and try again.');
+        return;
+      }
+      showToast('Expense entry deleted.');
+    } catch (error) {
+      showToast(`Expense was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+    }
   };
 
   const handleMarkExpensePaid = (
@@ -992,8 +1005,15 @@ function AppContent() {
       showToast('This expense is already marked as paid.');
       return;
     }
-    updateExpense(id, { ...payment, paymentStatus: 'Paid' }, auditActor);
-    showToast('Payment recorded. The original expense has been updated.');
+    try {
+      if (!updateExpense(id, { ...payment, paymentStatus: 'Paid' }, auditActor)) {
+        showToast('This expense could not be found. Refresh and try again.');
+        return;
+      }
+      showToast('Payment recorded. The original expense has been updated.');
+    } catch (error) {
+      showToast(`Payment was not recorded: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+    }
   };
 
   const handleUpdateExpense = (
@@ -1004,12 +1024,16 @@ function AppContent() {
       showToast('View-only accounts cannot edit expenses.');
       return;
     }
-    if (!updateExpense(id, changes, auditActor)) {
-      showToast('This expense could not be found. Refresh and try again.');
-      return;
+    try {
+      if (!updateExpense(id, changes, auditActor)) {
+        showToast('This expense could not be found. Refresh and try again.');
+        return;
+      }
+      reloadData();
+      showToast('Expense details updated and recorded in the audit history.');
+    } catch (error) {
+      showToast(`Expense was not updated: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
     }
-    reloadData();
-    showToast('Expense details updated and recorded in the audit history.');
   };
 
   const handleDeleteActivity = (id: string) => {
