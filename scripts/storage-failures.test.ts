@@ -37,6 +37,18 @@ const {
   deleteHouseholdActivity,
   addHousehold,
   updateHousehold,
+  addEducationalFollowUp,
+  addHealthFollowUp,
+  addFamilyFollowUp,
+  addRentPayment,
+  addHouseholdActivity,
+  addMeetingRecord,
+  addFeedingProgramLog,
+  addMarketPrice,
+  addEarlyYearsRecord,
+  addHistoricalCaseRecord,
+  addImportAuditRecord,
+  addPerson,
   deleteHousehold,
   deleteMeetingRecord,
   deleteFeedingProgramLog,
@@ -599,6 +611,46 @@ const beforeFailedMutations = {
 };
 
 fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
+
+// Add paths that previously mutated the shared database before a failed save
+// and left the unsaved record in memory for a later caller to accidentally reuse.
+const beforeFailedInsertions = getDatabase();
+const insertionCounts = {
+  educationalFollowUps: beforeFailedInsertions.educationalFollowUps.length,
+  healthFollowUps: beforeFailedInsertions.healthFollowUps.length,
+  familyFollowUps: beforeFailedInsertions.familyFollowUps.length,
+  rentPayments: beforeFailedInsertions.rentPayments.length,
+  householdActivities: beforeFailedInsertions.householdActivities.length,
+  meetings: beforeFailedInsertions.meetings.length,
+  feedingProgramLogs: beforeFailedInsertions.feedingProgramLogs.length,
+  marketPrices: beforeFailedInsertions.marketPrices.length,
+  earlyYearsRecords: beforeFailedInsertions.earlyYearsRecords.length,
+  historicalRecords: beforeFailedInsertions.historicalRecords.length,
+  importAudits: beforeFailedInsertions.importAudits.length,
+  people: beforeFailedInsertions.people.length,
+};
+const failedInsertions: Array<[string, () => unknown]> = [
+  ['education follow-up', () => addEducationalFollowUp({ girlId: 'SYNTHETIC-GIRL' } as never)],
+  ['health follow-up', () => addHealthFollowUp({ girlId: 'SYNTHETIC-GIRL' } as never)],
+  ['family follow-up', () => addFamilyFollowUp({ girlId: 'SYNTHETIC-GIRL' } as never)],
+  ['rent payment', () => addRentPayment({ householdId: 'SYNTHETIC-HOUSEHOLD' } as never)],
+  ['household activity', () => addHouseholdActivity({ householdId: 'SYNTHETIC-HOUSEHOLD' } as never)],
+  ['meeting', () => addMeetingRecord({ title: 'Synthetic failed meeting' } as never)],
+  ['feeding log', () => addFeedingProgramLog({ date: '2099-01-01' } as never)],
+  ['market price', () => addMarketPrice({ item: 'Synthetic item' } as never)],
+  ['early-years record', () => addEarlyYearsRecord({ childId: 'SYNTHETIC-CHILD' } as never)],
+  ['historical record', () => addHistoricalCaseRecord({ girlId: 'SYNTHETIC-GIRL' } as never)],
+  ['import audit', () => addImportAuditRecord({ source: 'synthetic test' } as never)],
+  ['person', () => addPerson({ fullName: 'Synthetic failed person' } as never)],
+];
+for (const [label, create] of failedInsertions) {
+  assert.throws(create, /not saved on this device/i, `${label} reports local persistence failure`);
+}
+const afterFailedInsertions = getDatabase();
+for (const [field, count] of Object.entries(insertionCounts)) {
+  assert.equal((afterFailedInsertions as any)[field].length, count, `failed insert restores ${field}`);
+}
+
 assert.throws(
   () => addGirl({ id: 'SG-STORAGE-FAIL', name: 'Synthetic unsaved beneficiary' } as never),
   /Device storage is unavailable/,
