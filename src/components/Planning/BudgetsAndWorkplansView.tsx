@@ -307,8 +307,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const completionDates = new Set(item.completionDates || []);
     if (currentlyCompleted) completionDates.delete(date);
     else completionDates.add(date);
-    updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, actorName);
-    onRefresh();
+    try {
+      const updated = updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, actorName);
+      if (!updated) {
+        window.alert('This workplan could not be found. Refresh the page and try again.');
+        return;
+      }
+      onRefresh();
+    } catch (error) {
+      window.alert(`Workplan completion was not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+    }
   };
 
   // Handle Budget Form Submit
@@ -475,57 +483,66 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const location = (fd.get('location') as string).trim();
     const notes = (fd.get('notes') as string).trim();
 
-    if (editingWorkplan) {
-      updateWorkplanItem(
-        editingWorkplan.id,
-        {
-          period,
-          periodType: 'quarterly',
-          programmeId,
-          recurrence,
-          activity,
-          objective,
-          description,
-          targetCount,
-          unit,
-          completedCount,
-          progress,
-          status: normalizedStatus,
-          responsibleStaffId,
-          responsibleStaffName,
-          startDate,
-          endDate,
-          dueDatePeriod: `date:${endDate}`,
-          location,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addWorkplanItem(
-        {
-          period,
-          periodType: 'quarterly',
-          programmeId,
-          recurrence,
-          activity,
-          objective,
-          description,
-          targetCount,
-          unit,
-          completedCount,
-          progress,
-          status: normalizedStatus,
-          responsibleStaffId,
-          responsibleStaffName,
-          startDate,
-          endDate,
-          dueDatePeriod: `date:${endDate}`,
-          location,
-          notes,
-        },
-        actorName
-      );
+    try {
+      if (editingWorkplan) {
+        const updated = updateWorkplanItem(
+          editingWorkplan.id,
+          {
+            period,
+            periodType: 'quarterly',
+            programmeId,
+            recurrence,
+            activity,
+            objective,
+            description,
+            targetCount,
+            unit,
+            completedCount,
+            progress,
+            status: normalizedStatus,
+            responsibleStaffId,
+            responsibleStaffName,
+            startDate,
+            endDate,
+            dueDatePeriod: `date:${endDate}`,
+            location,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('This workplan could not be found. Refresh the page and try again.');
+          return;
+        }
+      } else {
+        addWorkplanItem(
+          {
+            period,
+            periodType: 'quarterly',
+            programmeId,
+            recurrence,
+            activity,
+            objective,
+            description,
+            targetCount,
+            unit,
+            completedCount,
+            progress,
+            status: normalizedStatus,
+            responsibleStaffId,
+            responsibleStaffName,
+            startDate,
+            endDate,
+            dueDatePeriod: `date:${endDate}`,
+            location,
+            notes,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Workplan changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowWorkplanModal(false);
@@ -1227,9 +1244,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           {isAdmin && (
                             <button
                               onClick={() => {
-                                if (confirm(`Delete workplan "${w.activity}"?`)) {
-                                  deleteWorkplanItem(w.id);
+                                if (!confirm(`Delete workplan "${w.activity}"?`)) return;
+                                try {
+                                  if (!deleteWorkplanItem(w.id)) {
+                                    window.alert('This workplan could not be found. Refresh the page and try again.');
+                                    return;
+                                  }
                                   onRefresh();
+                                } catch (error) {
+                                  window.alert(`Workplan was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
                                 }
                               }}
                               className="text-rose-600 hover:underline font-semibold"
