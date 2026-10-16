@@ -642,7 +642,7 @@ assert.throws(
   /Device storage is unavailable/,
   'payroll update must not return success when local persistence fails',
 );
-assert.throws(
+await assert.rejects(
   () => updateEmployeeRecord('EMP-STORAGE-BASELINE', { fullName: 'Unsaved Employee Update' } as never),
   /Device storage is unavailable/,
   'employee update must not return success when local persistence fails',
