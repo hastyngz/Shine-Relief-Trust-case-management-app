@@ -79,3 +79,17 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Separate requester, approver, receiver and payer responsibilities where applicable.
 - Add focused regression tests; run `npm run lint`, relevant `test:*` scripts and `npm run build` before claiming verification. Report manual Android/browser checks separately.
 - Do not populate the app with illustrative example stock, assets, staff, deadlines or KPI results as if they were real SHINE records.
+
+
+## Additional reliability findings (2026-10-16, continued)
+
+### Operational reset coverage
+- The Firestore reset previously maintained a hand-written list that did not include several live operational modules, including contacts, employees and salary history, meetings, feeding logs, market prices, forecasting/scenario settings, AI settings/suggestions, and assets. A reset could finish without removing all operational records.
+- Added `src/services/firestoreResetPolicy.ts` as the explicit list used by the reset service, added the omitted operational collections, and added `scripts/firestore-reset-policy.test.ts` to the storage CI step.
+- The UI now describes the reset as an operational-data reset rather than claiming every Firestore collection is cleared. Staff access/messaging, safeguarding cases and dedicated audit/report-history collections are intentionally outside this operational reset. Some operational history and import records are still removed, so this must remain an explicit, admin-confirmed destructive operation.
+- Verification: the prior GitHub Actions run 371 passed before this reset-policy change. The new reset-policy test and updated workflow are awaiting a fresh run; do not treat the latest change as verified yet.
+
+### Remaining backup and reset failure semantics
+- The backup import still synchronizes to Firestore before checking the local save result, and the import helper still returns a boolean that cannot distinguish “local saved, cloud failed” from “both succeeded”. The reset still performs destructive cloud work before checking whether local persistence succeeded.
+- Do not change operation order in isolation: define explicit outcomes, preserve a recoverable copy, handle partial cloud batches and snapshot listeners, and test cloud/local failure paths before reporting success.
+- Reset coverage and reset atomicity are separate issues. The new collection policy closes omissions in the operational list; it does not make multi-collection deletion atomic or make the overall reset rollback-safe.
