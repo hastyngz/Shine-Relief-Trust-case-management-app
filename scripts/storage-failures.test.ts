@@ -51,6 +51,10 @@ const {
   deleteScheduleItem,
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
+  addPayrollRecord,
+  updatePayrollRecord,
+  deletePayrollRecord,
+  updateEmployeeRecord,
   normalizeImportedDatabase,
   restoreDatabaseWithPersistence,
   STORAGE_WARNING_EVENT,
@@ -553,6 +557,11 @@ baseline.rentPayments = [{ id: 'RENT-STORAGE-BASELINE', householdId: 'SH-STORAGE
 baseline.expenses = [{ id: 'EXP-STORAGE-BASELINE', householdId: 'SH-STORAGE-BASELINE' } as never];
 baseline.householdActivities = [{ id: 'ACT-STORAGE-BASELINE', householdId: 'SH-STORAGE-BASELINE' } as never];
 baseline.workplans = [{ id: 'WP-STORAGE-BASELINE', title: 'Synthetic test workplan item' } as never];
+baseline.employees = [{ id: 'EMP-STORAGE-BASELINE', fullName: 'Synthetic Employee', salaryMWK: 100000, employmentStatus: 'Active' } as never];
+baseline.payrollRecords = [{
+  id: 'PAY-STORAGE-BASELINE', employeeId: 'EMP-STORAGE-BASELINE', employeeName: 'Synthetic Employee',
+  payPeriod: '2026-09', payPeriodStartDate: '2026-09-01', paymentStatus: 'Pending', amountPaid: 0,
+} as never];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
 const beforeFailedMutations = {
   girls: [...baseline.girls],
@@ -564,6 +573,8 @@ const beforeFailedMutations = {
   expenses: [...baseline.expenses],
   householdActivities: [...baseline.householdActivities],
   workplans: [...baseline.workplans],
+  employees: [...baseline.employees],
+  payrollRecords: [...baseline.payrollRecords],
 };
 
 fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
@@ -597,6 +608,25 @@ assert.throws(
   /Device storage is unavailable/,
   'workplan creation must not return success when local persistence fails',
 );
+assert.throws(
+  () => addPayrollRecord({
+    employeeId: 'EMP-STORAGE-BASELINE', employeeName: 'Synthetic Employee', payPeriod: '2026-10',
+    payPeriodStartDate: '2026-10-01', paymentStatus: 'Pending', amountPaid: 0,
+  } as never),
+  /Device storage is unavailable/,
+  'payroll creation must not return success when local persistence fails',
+);
+assert.throws(
+  () => updatePayrollRecord('PAY-STORAGE-BASELINE', { paymentStatus: 'Paid' } as never),
+  /Device storage is unavailable/,
+  'payroll update must not return success when local persistence fails',
+);
+assert.throws(
+  () => updateEmployeeRecord('EMP-STORAGE-BASELINE', { fullName: 'Unsaved Employee Update' } as never),
+  /Device storage is unavailable/,
+  'employee update must not return success when local persistence fails',
+);
+assert.equal(deletePayrollRecord('PAY-STORAGE-BASELINE'), false, 'payroll deletion reports failure when local persistence fails');
 assert.equal(deleteGirl('SG-STORAGE-BASELINE'), false, 'girl deletion reports failure when local persistence fails');
 assert.equal(deleteHousehold('SH-STORAGE-BASELINE'), false, 'household deletion reports failure when local persistence fails');
 assert.equal(deleteWorkplanItem('WP-STORAGE-BASELINE'), false, 'workplan deletion reports failure when local persistence fails');
@@ -611,6 +641,8 @@ assert.deepEqual(afterFailedMutations.rentPayments, beforeFailedMutations.rentPa
 assert.deepEqual(afterFailedMutations.expenses, beforeFailedMutations.expenses, 'failed household deletion restores expenses');
 assert.deepEqual(afterFailedMutations.householdActivities, beforeFailedMutations.householdActivities, 'failed household deletion restores activities');
 assert.deepEqual(afterFailedMutations.workplans, beforeFailedMutations.workplans, 'failed planning mutations restore the original workplans');
+assert.deepEqual(afterFailedMutations.employees, beforeFailedMutations.employees, 'failed employee updates restore the original personnel record');
+assert.deepEqual(afterFailedMutations.payrollRecords, beforeFailedMutations.payrollRecords, 'failed payroll create/update/delete operations restore the original payroll rows');
 assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
 // Empty/corrupt storage fallback must return a fresh seed copy, not the shared
