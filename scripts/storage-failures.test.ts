@@ -119,6 +119,7 @@ assert.equal(db.girls.length, dbGirlsBefore, 'the in-memory database is preserve
 // A failed Firestore snapshot save must not advance the local sync baseline.
 const baselineBeforeSnapshot = values.get('shine_relief_trust_last_synced_v1') ?? null;
 const databaseBeforeSnapshot = getDatabase();
+const setItemBeforeSnapshotTest = fakeLocalStorage.setItem;
 fakeLocalStorage.setItem = () => { throw new Error('synthetic snapshot storage failure'); };
 const incomingSnapshot = { ...databaseBeforeSnapshot, girls: [{ id: 'SG-CLOUD-SNAPSHOT-UNSAVED' } as never] };
 assert.equal(saveIncomingCloudSnapshot(incomingSnapshot, true), false,
@@ -127,7 +128,7 @@ assert.deepEqual(getDatabase().girls, databaseBeforeSnapshot.girls,
   'failed snapshot persistence leaves the prior local database intact');
 assert.equal(values.get('shine_relief_trust_last_synced_v1') ?? null, baselineBeforeSnapshot,
   'failed snapshot persistence does not advance the sync baseline');
-fakeLocalStorage.setItem = originalSetItem;
+fakeLocalStorage.setItem = setItemBeforeSnapshotTest;
 
 // --- A later successful save clears the warning ----------------------------
 failNext = false;
