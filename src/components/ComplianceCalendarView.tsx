@@ -92,14 +92,14 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       evidenceReference: form.evidenceReference.trim() || undefined,
       complianceHistory: [{ id: makeId(), action: 'Created', actor, at: new Date().toISOString(), note: 'Compliance obligation registered.' }],
     }, actor);
-    setForm(blankForm(currentUser?.uid || ''));
-    setShowForm(false);
-    onRefresh();
     if (!saveResult.savedLocally) {
-      setError('SHINE could not save this obligation to device storage. It remains in memory only; resolve the storage warning before reloading or closing the app.');
+      setError('SHINE could not save this obligation to device storage. The form has been kept open so you can retry after resolving the storage warning.');
       return;
     }
+    setForm(blankForm(currentUser?.uid || ''));
+    setShowForm(false);
     setNotice('Compliance obligation saved on this device. Cloud sync follows SHINE’s normal sync process.');
+    onRefresh();
   };
 
   const updateStatus = (item: ScheduleItem, status: ScheduleItem['status']) => {
@@ -112,12 +112,12 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     };
     const result = updateScheduleItemWithSaveResult(item.id, updates, actor);
     if (!result.item) { setError('This compliance record could not be found. Refresh and try again.'); return; }
-    onRefresh();
     if (!result.savedLocally) {
-      setError('SHINE could not save this change to device storage. The change remains in memory only; resolve the storage warning before reloading or closing the app.');
+      setError('SHINE could not save this change to device storage. The change was not saved; resolve the storage warning and try again.');
       return;
     }
     setNotice(`“${item.title}” updated. The change is saved locally and will sync through SHINE.`);
+    onRefresh();
   };
 
   const complete = () => {
@@ -132,14 +132,14 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       complianceHistory: appendHistory(target, 'Completed', completionNote.trim()),
     }, actor);
     if (!result.item) { setError('This compliance record could not be found. Refresh and try again.'); return; }
-    setCompletionTarget(null); setCompletionNote(''); setCompletionEvidence('');
-    setError('');
-    onRefresh();
     if (!result.savedLocally) {
-      setError('SHINE could not save completion to device storage. The change remains in memory only; resolve the storage warning before reloading or closing the app.');
+      setError('SHINE could not save completion to device storage. Your completion note has been kept in the form so you can retry after resolving the storage warning.');
       return;
     }
+    setCompletionTarget(null); setCompletionNote(''); setCompletionEvidence('');
+    setError('');
     setNotice(`“${target.title}” marked complete. This records completion; it does not imply external approval.`);
+    onRefresh();
   };
 
 

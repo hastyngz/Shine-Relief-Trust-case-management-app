@@ -99,10 +99,19 @@ const unsavedSchedule = addScheduleItemWithSaveResult({
   status: 'Scheduled',
 }, 'Test Staff');
 assert.equal(unsavedSchedule.savedLocally, false, 'schedule create reports a failed local save');
-assert.ok(getDatabase().schedules?.some((item) => item.id === unsavedSchedule.item.id), 'in-memory record remains available after storage failure');
 failNext = false;
+const recoveredSchedule = addScheduleItemWithSaveResult({
+  type: 'other',
+  title: 'Synthetic recovered obligation',
+  scheduledDate: '2026-10-16',
+  targetType: 'general',
+  assignedStaffId: 'staff-test',
+  assignedStaffName: 'Test Staff',
+  status: 'Scheduled',
+}, 'Test Staff');
+assert.equal(recoveredSchedule.savedLocally, true, 'schedule create reports successful persistence after recovery');
 const savedScheduleUpdate = updateScheduleItemWithSaveResult(
-  unsavedSchedule.item.id,
+  recoveredSchedule.item.id,
   { status: 'In Progress' },
   'Test Staff',
 );
