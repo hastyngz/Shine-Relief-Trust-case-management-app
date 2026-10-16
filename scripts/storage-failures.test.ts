@@ -29,6 +29,7 @@ const {
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
   normalizeImportedDatabase,
+  restoreDatabaseWithPersistence,
   STORAGE_WARNING_EVENT,
   STORAGE_RECOVERED_EVENT,
 } = await import('../src/utils/storage');
@@ -137,5 +138,40 @@ const otherFailure = saveDatabase(db);
 assert.equal(otherFailure.ok, false);
 assert.equal(otherFailure.quotaExceeded, false, 'a non-quota error is not labelled as a quota error');
 assert.ok(events.includes(STORAGE_WARNING_EVENT), 'any save failure is surfaced to the UI');
+
+// --- Backup restore reports local/cloud partial outcomes honestly ----------
+const validBackup = JSON.stringify({ girls: [{ id: 'SG-RESTORE-1' }], households: [] });
+let cloudCalls = 0;
+let localCalls = 0;
+const cloudFailure = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { cloudCalls += 1; throw new Error('synthetic cloud failure'); },
+  () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
+);
+assert.equal(cloudFailure.status, 'cloud_sync_failed');
+assert.equal(localCalls, 0, 'local database is not replaced when cloud restore fails');
+assert.equal(cloudCalls, 1);
+
+const localFailure = await restoreDatabaseWithPersistence(
+  validBackup,
+  async (restored) => { cloudCalls += 1; assert.equal(restored.girls[0].id, 'SG-RESTORE-1'); },
+  () => { localCalls += 1; return { ok: false, quotaExceeded: true }; },
+);
+assert.equal(localFailure.status, 'cloud_updated_local_save_failed', 'partial cloud success is distinguished from total failure');
+
+const restoreSuccess = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { cloudCalls += 1; },
+  () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
+);
+assert.equal(restoreSuccess.status, 'success');
+const invalidRestore = await restoreDatabaseWithPersistence(
+  JSON.stringify({ girls: 'not-an-array', households: [] }),
+  async () => { cloudCalls += 1; },
+  () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
+);
+assert.equal(invalidRestore.status, 'invalid_backup');
+assert.equal(localCalls, 3, 'invalid backups do not invoke local persistence');
+assert.equal(cloudCalls, 3, 'invalid backups do not invoke cloud persistence');
 
 console.log('Local storage failure handling tests passed.');
