@@ -1313,8 +1313,14 @@ export function addWorkplanItem(
     createdBy: auditActor || item.createdBy || 'SHINE Staff',
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
+  const previousWorkplans = [...db.workplans];
   db.workplans.unshift(newItem);
-  saveDatabaseOrThrow(db, 'workplan item');
+  try {
+    saveDatabaseOrThrow(db, 'workplan item');
+  } catch (error) {
+    db.workplans = previousWorkplans;
+    throw error;
+  }
   persistWorkplanItemToFirestore(newItem).catch((err) =>
     console.error('Failed to persist workplan item to Firestore:', err)
   );
@@ -1336,8 +1342,14 @@ export function updateWorkplanItem(
     updatedAt: new Date().toISOString(),
     updatedBy: auditActor || db.workplans[index].updatedBy || 'SHINE Staff',
   };
+  const previousWorkplans = [...db.workplans];
   db.workplans[index] = updated;
-  saveDatabaseOrThrow(db, 'workplan item');
+  try {
+    saveDatabaseOrThrow(db, 'workplan item');
+  } catch (error) {
+    db.workplans = previousWorkplans;
+    throw error;
+  }
   persistWorkplanItemToFirestore(updated).catch((err) =>
     console.error('Failed to update workplan item in Firestore:', err)
   );
@@ -1349,8 +1361,14 @@ export function deleteWorkplanItem(id: string): boolean {
   if (!db.workplans) return false;
   const index = db.workplans.findIndex((w) => w.id === id);
   if (index === -1) return false;
+  const previousWorkplans = [...db.workplans];
   db.workplans.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  try {
+    saveDatabaseOrThrow(db, 'workplan item deletion');
+  } catch (error) {
+    db.workplans = previousWorkplans;
+    throw error;
+  }
   deleteWorkplanItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete workplan item from Firestore:', err)
   );
