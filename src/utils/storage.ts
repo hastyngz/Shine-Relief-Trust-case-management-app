@@ -699,9 +699,13 @@ function addPhase2Record<T extends Phase2TrackedRecord>(
   records.unshift(record);
   allData[dbField] = records;
   saveDatabase(db);
-  persistPhase2Record(collectionName, record).catch((err) =>
-    console.error(`Failed to persist ${collectionName}:`, err)
-  );
+  if (collectionName !== 'procurementLists') {
+    // Procurement lists participate in the per-record offline queue. A parallel
+    // direct setDoc would bypass baseUpdatedAt conflict checks.
+    persistPhase2Record(collectionName, record).catch((err) =>
+      console.error(`Failed to persist ${collectionName}:`, err)
+    );
+  }
   return record;
 }
 
@@ -1170,9 +1174,8 @@ export function updateProcurementList(
   };
   db.procurementLists[index] = updated;
   saveDatabase(db);
-  persistPhase2Record('procurementLists', { ...updated }).catch((err) =>
-    console.error('Failed to update procurement list:', err)
-  );
+  // Procurement updates use the shared per-record queue so stale local edits
+  // cannot bypass the server baseline/conflict checks.
   return updated;
 }
 

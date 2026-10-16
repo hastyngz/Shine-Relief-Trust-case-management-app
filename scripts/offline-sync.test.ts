@@ -329,4 +329,42 @@ assert.equal(changedScheduleEntry.length, 1, 'completion updates should be queue
 assert.equal(changedScheduleEntry[0].collection, 'schedules');
 assert.equal(changedScheduleEntry[0].data?.completionNote, 'Reviewed and signed');
 
+// --- 10. Procurement list writes use per-record offline queue semantics -----
+const procurementItem = {
+  id: 'PRC-E2E-001',
+  title: 'Synthetic office supplies',
+  purpose: 'Offline queue regression test',
+  items: [{ description: 'Paper', quantity: 1, unit: 'ream', priceStatus: 'missing' }],
+  totalMWK: 0,
+  status: 'draft',
+  quoteThresholdMWK: 500000,
+  createdAt: T1,
+  updatedAt: T2,
+  createdBy: 'Test Staff',
+  updatedBy: 'Test Staff',
+};
+const procurementCreate = computeChangeEntries(
+  db({ procurementLists: [procurementItem] }),
+  db({ procurementLists: [] }),
+);
+assert.equal(procurementCreate.length, 1, 'new procurement lists should be queued as individual records');
+assert.equal(procurementCreate[0].collection, 'procurementLists');
+assert.equal(procurementCreate[0].recordId, 'PRC-E2E-001');
+assert.equal(procurementCreate[0].operation, 'set');
+assert.equal(procurementCreate[0].data?.title, 'Synthetic office supplies');
+
+const procurementUpdated = {
+  ...procurementItem,
+  updatedAt: T3,
+  items: [{ ...procurementItem.items[0], quotes: [{ supplier: 'Synthetic Supplier', amountMWK: 12000 }] }],
+};
+const procurementUpdate = computeChangeEntries(
+  db({ procurementLists: [procurementUpdated] }),
+  db({ procurementLists: [procurementItem] }),
+);
+assert.equal(procurementUpdate.length, 1, 'procurement quote updates should be queued');
+assert.equal(procurementUpdate[0].collection, 'procurementLists');
+assert.equal(procurementUpdate[0].recordId, 'PRC-E2E-001');
+assert.equal(procurementUpdate[0].data?.items?.[0]?.quotes?.[0]?.amountMWK, 12000);
+
 console.log('Offline per-record queue and conflict tests passed.');
