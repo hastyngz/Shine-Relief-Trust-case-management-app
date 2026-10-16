@@ -542,11 +542,21 @@ export function deleteGirl(id: string): boolean {
   const linkedHealth = db.healthFollowUps.filter((h) => h.girlId === id).map((h) => h.id);
   const linkedFamily = db.familyFollowUps.filter((f) => f.girlId === id).map((f) => f.id);
 
+  const previousGirls = db.girls;
+  const previousEducationalFollowUps = db.educationalFollowUps;
+  const previousHealthFollowUps = db.healthFollowUps;
+  const previousFamilyFollowUps = db.familyFollowUps;
   db.girls = db.girls.filter((g) => g.id !== id);
   db.educationalFollowUps = db.educationalFollowUps.filter((e) => e.girlId !== id);
   db.healthFollowUps = db.healthFollowUps.filter((h) => h.girlId !== id);
   db.familyFollowUps = db.familyFollowUps.filter((f) => f.girlId !== id);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.girls = previousGirls;
+    db.educationalFollowUps = previousEducationalFollowUps;
+    db.healthFollowUps = previousHealthFollowUps;
+    db.familyFollowUps = previousFamilyFollowUps;
+    return false;
+  }
 
   // Delete from Cloud Firestore
   deleteGirlFromFirestore(id, { edu: linkedEdu, health: linkedHealth, family: linkedFamily }).catch(
@@ -615,18 +625,31 @@ export function updateHousehold(
 export function deleteHousehold(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.households.length;
+  if (!db.households.some((household) => household.id === id)) return false;
   // Collect affected girls and linked financial/activity logs
   const affectedGirlIds = db.girls.filter((g) => g.householdId === id).map((g) => g.id);
   const linkedRent = db.rentPayments.filter((r) => r.householdId === id).map((r) => r.id);
   const linkedExpense = db.expenses.filter((e) => e.householdId === id).map((e) => e.id);
   const linkedActivity = db.householdActivities.filter((a) => a.householdId === id).map((a) => a.id);
 
+  const previousHouseholds = db.households;
+  const previousGirls = db.girls;
+  const previousRentPayments = db.rentPayments;
+  const previousExpenses = db.expenses;
+  const previousHouseholdActivities = db.householdActivities;
   db.households = db.households.filter((h) => h.id !== id);
   db.girls = db.girls.map((g) => (g.householdId === id ? { ...g, householdId: '' } : g));
   db.rentPayments = db.rentPayments.filter((r) => r.householdId !== id);
   db.expenses = db.expenses.filter((e) => e.householdId !== id);
   db.householdActivities = db.householdActivities.filter((a) => a.householdId !== id);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.households = previousHouseholds;
+    db.girls = previousGirls;
+    db.rentPayments = previousRentPayments;
+    db.expenses = previousExpenses;
+    db.householdActivities = previousHouseholdActivities;
+    return false;
+  }
 
   // Delete from Cloud Firestore
   deleteHouseholdFromFirestore(id, affectedGirlIds, {
