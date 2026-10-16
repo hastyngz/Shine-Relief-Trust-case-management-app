@@ -972,9 +972,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                 {isAdmin && (
                                   <button
                                     onClick={() => {
-                                      if (confirm(`Delete budget item "${b.itemDescription}"?`)) {
-                                        deleteBudgetItem(b.id);
+                                      if (!confirm(`Delete budget item "${b.itemDescription}"?`)) return;
+                                      try {
+                                        if (!deleteBudgetItem(b.id)) {
+                                          window.alert('This budget line could not be found. Refresh the page and try again.');
+                                          return;
+                                        }
                                         onRefresh();
+                                      } catch (error) {
+                                        window.alert(`Budget line was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
                                       }
                                     }}
                                     className="p-1 hover:bg-rose-100 rounded-md text-rose-600 hover:text-rose-800"
