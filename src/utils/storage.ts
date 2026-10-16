@@ -394,13 +394,30 @@ export async function restoreDatabaseWithPersistence(
   return { status: 'success' };
 }
 
-export async function restoreDatabaseJSON(rawJson: string): Promise<DatabaseRestoreResult> {
+export async function restoreDatabaseJSON(
+  rawJson: string,
+  options: { allowDiscardPendingChangesDuringRecovery?: boolean } = {},
+): Promise<DatabaseRestoreResult> {
+  const inspectQueueForRestore = async (): Promise<'clear' | 'pending' | 'unavailable'> => {
+    const state = await inspectPendingOfflineChanges();
+    // A recovery-locked restore may only discard queued edits after the admin
+    // explicitly confirms in the UI. Unreadable/corrupt queue state still fails closed.
+    if (
+      state === 'pending' &&
+      options.allowDiscardPendingChangesDuringRecovery === true &&
+      isDatabaseResetRecoveryRequired()
+    ) {
+      return 'clear';
+    }
+    return state;
+  };
+
   return restoreDatabaseWithPersistence(
     rawJson,
     (db) => syncEntireDatabaseToFirestore(db, true),
     (db) => saveDatabase(db),
     (db) => clearOfflineChangesAfterDatabaseReset(db),
-    inspectPendingOfflineChanges,
+    inspectQueueForRestore,
     markDatabaseResetRecoveryRequired,
   );
 }
