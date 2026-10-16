@@ -330,45 +330,54 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const actualExpenditure = parseFloat(fd.get('actualExpenditure') as string) || 0;
     const notes = (fd.get('notes') as string).trim();
 
-    if (editingBudget) {
-      updateBudgetItem(
-        editingBudget.id,
-        {
-          period,
-          periodType: 'quarterly',
-          programme,
-          programmeId,
-          seasonalMonths,
-          category,
-          itemDescription,
-          quantity,
-          unit,
-          unitCost,
-          budgetAmount,
-          actualExpenditure,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addBudgetItem(
-        {
-          period,
-          periodType: 'quarterly',
-          programme,
-          programmeId,
-          seasonalMonths,
-          category,
-          itemDescription,
-          quantity,
-          unit,
-          unitCost,
-          budgetAmount,
-          actualExpenditure,
-          notes,
-        },
-        actorName
-      );
+    try {
+      if (editingBudget) {
+        const updated = updateBudgetItem(
+          editingBudget.id,
+          {
+            period,
+            periodType: 'quarterly',
+            programme,
+            programmeId,
+            seasonalMonths,
+            category,
+            itemDescription,
+            quantity,
+            unit,
+            unitCost,
+            budgetAmount,
+            actualExpenditure,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('This budget line could not be found. Refresh the page and try again.');
+          return;
+        }
+      } else {
+        addBudgetItem(
+          {
+            period,
+            periodType: 'quarterly',
+            programme,
+            programmeId,
+            seasonalMonths,
+            category,
+            itemDescription,
+            quantity,
+            unit,
+            unitCost,
+            budgetAmount,
+            actualExpenditure,
+            notes,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Budget changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowBudgetModal(false);
@@ -393,37 +402,46 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       return;
     }
 
-    if (editingAnnualBudget) {
-      updateAnnualBudgetPlan(
-        editingAnnualBudget.id,
-        {
-          financialYear,
-          title,
-          programme,
-          description,
-          status,
-          approvedAmount,
-          approvalDate,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addAnnualBudgetPlan(
-        {
-          financialYear,
-          title,
-          programme,
-          description,
-          status,
-          approvedAmount,
-          approvalDate,
-          notes,
-          createdBy: actorName,
-          updatedBy: actorName,
-        },
-        actorName
-      );
+    try {
+      if (editingAnnualBudget) {
+        const updated = updateAnnualBudgetPlan(
+          editingAnnualBudget.id,
+          {
+            financialYear,
+            title,
+            programme,
+            description,
+            status,
+            approvedAmount,
+            approvalDate,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('This annual budget plan could not be found. Refresh the page and try again.');
+          return;
+        }
+      } else {
+        addAnnualBudgetPlan(
+          {
+            financialYear,
+            title,
+            programme,
+            description,
+            status,
+            approvedAmount,
+            approvalDate,
+            notes,
+            createdBy: actorName,
+            updatedBy: actorName,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Annual budget changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowAnnualBudgetModal(false);
