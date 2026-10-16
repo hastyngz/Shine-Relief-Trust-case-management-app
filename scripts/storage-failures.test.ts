@@ -26,6 +26,8 @@ Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, value: Fa
 const {
   getDatabase,
   saveDatabase,
+  addScheduleItemWithSaveResult,
+  updateScheduleItemWithSaveResult,
   STORAGE_WARNING_EVENT,
   STORAGE_RECOVERED_EVENT,
 } = await import('../src/utils/storage');
@@ -84,6 +86,28 @@ events.length = 0;
 const recovered = saveDatabase(db);
 assert.equal(recovered.ok, true, 'the save succeeds once space is available');
 assert.ok(events.includes(STORAGE_RECOVERED_EVENT), 'recovery is announced');
+
+// --- Schedule operations report failed local persistence honestly -----------
+failNext = true;
+const unsavedSchedule = addScheduleItemWithSaveResult({
+  type: 'other',
+  title: 'Synthetic storage failure obligation',
+  scheduledDate: '2026-10-16',
+  targetType: 'general',
+  assignedStaffId: 'staff-test',
+  assignedStaffName: 'Test Staff',
+  status: 'Scheduled',
+}, 'Test Staff');
+assert.equal(unsavedSchedule.savedLocally, false, 'schedule create reports a failed local save');
+assert.ok(getDatabase().schedules.some((item) => item.id === unsavedSchedule.item.id), 'in-memory record remains available after storage failure');
+failNext = false;
+const savedScheduleUpdate = updateScheduleItemWithSaveResult(
+  unsavedSchedule.item.id,
+  { status: 'In Progress' },
+  'Test Staff',
+);
+assert.equal(savedScheduleUpdate.savedLocally, true, 'schedule update reports successful local persistence');
+assert.equal(savedScheduleUpdate.item?.status, 'In Progress');
 
 // --- Non-quota errors are reported but not mislabelled ---------------------
 fakeLocalStorage.setItem = () => { throw new Error('SecurityError'); };

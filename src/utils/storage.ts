@@ -1189,10 +1189,10 @@ export function addProjectProjection(
 // ----------------------------------------------------------------------
 // SCHEDULE HELPERS
 // ----------------------------------------------------------------------
-export function addScheduleItem(
+export function addScheduleItemWithSaveResult(
   item: Omit<ScheduleItem, 'id' | 'createdAt'>,
-  auditActor?: string
-): ScheduleItem {
+  auditActor?: string,
+): { item: ScheduleItem; savedLocally: boolean } {
   const db = getDatabase();
   if (!db.schedules) db.schedules = [];
   const now = new Date().toISOString();
@@ -1205,22 +1205,28 @@ export function addScheduleItem(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
   db.schedules.unshift(newItem);
-  saveDatabase(db);
-  // The app's database-updated listener records this change in the per-record
-  // offline queue. Do not also write directly with setDoc: that bypasses the
-  // queue's baseUpdatedAt conflict check and can overwrite a newer server edit.
-  return newItem;
+  const saveResult = saveDatabase(db);
+  // The app's database-updated listener records successful saves in the
+  // per-record offline queue. Never issue a parallel direct setDoc here.
+  return { item: newItem, savedLocally: saveResult.ok };
 }
 
-export function updateScheduleItem(
+export function addScheduleItem(
+  item: Omit<ScheduleItem, 'id' | 'createdAt'>,
+  auditActor?: string,
+): ScheduleItem {
+  return addScheduleItemWithSaveResult(item, auditActor).item;
+}
+
+export function updateScheduleItemWithSaveResult(
   id: string,
   updates: Partial<ScheduleItem>,
-  auditActor?: string
-): ScheduleItem | null {
+  auditActor?: string,
+): { item: ScheduleItem | null; savedLocally: boolean } {
   const db = getDatabase();
   if (!db.schedules) db.schedules = [];
   const index = db.schedules.findIndex((s) => s.id === id);
-  if (index === -1) return null;
+  if (index === -1) return { item: null, savedLocally: false };
   const updated: ScheduleItem = {
     ...db.schedules[index],
     ...updates,
@@ -1228,10 +1234,18 @@ export function updateScheduleItem(
     updatedBy: auditActor || db.schedules[index].updatedBy || 'SHINE Staff',
   };
   db.schedules[index] = updated;
-  saveDatabase(db);
-  // Schedule edits use the shared per-record offline queue so a stale local
-  // snapshot cannot overwrite a newer server version.
-  return updated;
+  const saveResult = saveDatabase(db);
+  // Schedule edits use the shared per-record offline queue after a successful
+  // local save, so stale local snapshots cannot bypass baseline/conflict checks.
+  return { item: updated, savedLocally: saveResult.ok };
+}
+
+export function updateScheduleItem(
+  id: string,
+  updates: Partial<ScheduleItem>,
+  auditActor?: string,
+): ScheduleItem | null {
+  return updateScheduleItemWithSaveResult(id, updates, auditActor).item;
 }
 
 export function deleteScheduleItem(id: string): boolean {

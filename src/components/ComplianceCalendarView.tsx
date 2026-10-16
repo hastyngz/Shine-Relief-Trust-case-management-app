@@ -2,7 +2,7 @@ import React, { FormEvent, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Clock3, Plus } from 'lucide-react';
 import type { ScheduleItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { addScheduleItem, updateScheduleItem } from '../utils/storage';
+import { addScheduleItemWithSaveResult, updateScheduleItemWithSaveResult } from '../utils/storage';
 import { getLocalDateInputValue } from '../utils/inventory';
 import { isComplianceDueSoon, isComplianceOverdue } from '../utils/compliance';
 
@@ -75,7 +75,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       setError('Choose an active staff member responsible for this obligation.');
       return;
     }
-    const created = addScheduleItem({
+    const saveResult = addScheduleItemWithSaveResult({
       type: 'other',
       title: form.title.trim(),
       description: form.description.trim() || undefined,
@@ -92,14 +92,14 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       evidenceReference: form.evidenceReference.trim() || undefined,
       complianceHistory: [{ id: makeId(), action: 'Created', actor, at: new Date().toISOString(), note: 'Compliance obligation registered.' }],
     }, actor);
-    if (!created.id) {
-      setError('SHINE could not create this compliance record.');
-      return;
-    }
     setForm(blankForm(currentUser?.uid || ''));
     setShowForm(false);
-    setNotice('Compliance obligation saved on this device. Cloud sync follows SHINE’s normal sync process.');
     onRefresh();
+    if (!saveResult.savedLocally) {
+      setError('SHINE could not save this obligation to device storage. It remains in memory only; resolve the storage warning before reloading or closing the app.');
+      return;
+    }
+    setNotice('Compliance obligation saved on this device. Cloud sync follows SHINE’s normal sync process.');
   };
 
   const updateStatus = (item: ScheduleItem, status: ScheduleItem['status']) => {
@@ -110,27 +110,36 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       completionNote: undefined,
       complianceHistory: appendHistory(item, status === 'Completed' ? 'Completed' : status === 'In Progress' ? 'Started' : 'Reopened'),
     };
-    const updated = updateScheduleItem(item.id, updates, actor);
-    if (!updated) { setError('This compliance record could not be found. Refresh and try again.'); return; }
-    setNotice(`“${item.title}” updated. The change is saved locally and will sync through SHINE.`);
+    const result = updateScheduleItemWithSaveResult(item.id, updates, actor);
+    if (!result.item) { setError('This compliance record could not be found. Refresh and try again.'); return; }
     onRefresh();
+    if (!result.savedLocally) {
+      setError('SHINE could not save this change to device storage. The change remains in memory only; resolve the storage warning before reloading or closing the app.');
+      return;
+    }
+    setNotice(`“${item.title}” updated. The change is saved locally and will sync through SHINE.`);
   };
 
   const complete = () => {
     if (!completionTarget) return;
     if (!completionNote.trim()) { setError('Add a short completion note before closing this obligation.'); return; }
     const target = completionTarget;
-    const updated = updateScheduleItem(target.id, {
+    const result = updateScheduleItemWithSaveResult(target.id, {
       status: 'Completed',
       completedAt: new Date().toISOString(),
       completionNote: completionNote.trim(),
       evidenceReference: completionEvidence.trim() || target.evidenceReference,
       complianceHistory: appendHistory(target, 'Completed', completionNote.trim()),
     }, actor);
-    if (!updated) { setError('This compliance record could not be found. Refresh and try again.'); return; }
+    if (!result.item) { setError('This compliance record could not be found. Refresh and try again.'); return; }
     setCompletionTarget(null); setCompletionNote(''); setCompletionEvidence('');
-    setError(''); setNotice(`“${target.title}” marked complete. This records completion; it does not imply external approval.`);
+    setError('');
     onRefresh();
+    if (!result.savedLocally) {
+      setError('SHINE could not save completion to device storage. The change remains in memory only; resolve the storage warning before reloading or closing the app.');
+      return;
+    }
+    setNotice(`“${target.title}” marked complete. This records completion; it does not imply external approval.`);
   };
 
 
