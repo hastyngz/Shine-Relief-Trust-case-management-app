@@ -45,4 +45,42 @@ for (const collection of [
 assert.equal(new Set(OPERATIONAL_COLLECTIONS_TO_CLEAR).size, OPERATIONAL_COLLECTIONS_TO_CLEAR.length,
   'reset collection names must be unique');
 
+
+import { readFileSync } from 'node:fs';
+
+const firestoreSyncSource = readFileSync(new URL('../src/services/firestoreSync.ts', import.meta.url), 'utf8');
+const collectionBlock = firestoreSyncSource.match(/export const COLLECTIONS = \{([\s\S]*?)\} as const;/);
+assert.ok(collectionBlock, 'Firestore collection registry must remain discoverable for reset coverage checks');
+const registeredCollections = Array.from(collectionBlock[1].matchAll(/^\s*[A-Z_]+:\s*'([^']+)'\s*,?\s*$/gm), (match) => match[1]);
+assert.ok(registeredCollections.length > 0, 'Firestore collection registry must not be empty');
+
+// Every registered Firestore collection must be deliberately classified as
+// operational data cleared by reset or as data intentionally retained.
+// This makes adding a new collection fail closed until its reset policy is reviewed.
+const intentionallyRetained = new Set([
+  'staffUsers',
+  'staffConversations',
+  'staffMessages',
+  'staffNotifications',
+  'staffAnnouncements',
+  'userNotificationPreferences',
+  'caseActionAuditLogs',
+  'safeguardingCases',
+  'safeguardingAuditLogs',
+  'employeeAuditLogs',
+  'reportHistory',
+  'reportExports',
+]);
+const classifiedCollections = new Set([...operational, ...intentionallyRetained]);
+for (const collection of registeredCollections) {
+  assert.ok(classifiedCollections.has(collection),
+    `Firestore collection ${collection} has no explicit reset/retention policy`);
+}
+for (const collection of classifiedCollections) {
+  assert.ok(registeredCollections.includes(collection),
+    `reset policy references unknown Firestore collection ${collection}`);
+}
+assert.equal(new Set(registeredCollections).size, registeredCollections.length,
+  'Firestore collection registry must not contain duplicate collection names');
+
 console.log('Firestore operational reset policy tests passed.');
