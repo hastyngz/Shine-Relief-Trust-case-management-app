@@ -100,6 +100,11 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression coverage for restore orchestration uses injected cloud/local persistence functions, and offline-sync tests exercise queue blocking while reset recovery is required. GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
 
 
+### Incoming Firestore snapshot local-save guard
+- The listener callback now applies a cloud snapshot to the React state and advances the confirmed baseline only after `saveDatabase(cloudDb, false)` succeeds. Previously it ignored the save result and replaced the in-memory state regardless, so a quota/storage failure could make the UI move on as if the snapshot had been persisted.
+- Regression coverage forces the local snapshot write to fail and checks that the local database and sync baseline remain unchanged.
+- Remaining limitation: the local database and baseline are separate storage keys; baseline-write failure after a successful database save still deserves a two-phase recovery design.
+
 ### Case-entry failure feedback
 - Core girl, household, education/health/family follow-up, rent and household-activity handlers now catch local persistence errors and show operation-specific feedback. They do not proceed to success navigation/toasts when a synchronous save fails.
 - Girl profile school/class changes may write education-history entries before the profile itself is saved. If a later save fails, the UI warns staff to review the related history and profile before retrying; this remains a multi-record, non-transactional workflow.

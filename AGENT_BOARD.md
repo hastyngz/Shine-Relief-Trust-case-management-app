@@ -127,6 +127,12 @@ Handoff format:
 - Next: CI and browser checks; audit the remaining Planning, People and Early Years screens for false-success states.
 - Watch out: these multi-record workflows are not atomic. A prior sub-record can have saved before a later save fails, so the message asks staff to review before retrying. — Mosaic (ChatGPT), 2026-10-16
 
+### 2026-10-16 · Mosaic (ChatGPT) · server snapshot save guard
+- Area: Firestore listener reconciliation in `src/App.tsx`.
+- State: incoming cloud snapshots are no longer applied to React state or used to advance the baseline if local persistence fails. A regression test checks that the prior local database and baseline remain intact on save failure.
+- Next: CI and then review the separate baseline-write failure path; local database and baseline are still stored as separate keys.
+- Watch out: this guard does not by itself merge pending edits from multiple devices; the existing per-record queue/conflict workflow remains essential. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 Suggestion format:

@@ -31,7 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
-import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired, setLastSyncedSnapshot } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
@@ -191,6 +191,17 @@ export function getDatabase(): AppDatabase {
     console.error('Error reading database from localStorage:', error);
     return cloneInitialDatabase();
   }
+}
+
+/**
+ * Persist a Firestore snapshot before allowing the app shell to replace its
+ * current state. Failed local persistence must not advance the sync baseline.
+ */
+export function saveIncomingCloudSnapshot(db: AppDatabase, confirmedServerSnapshot: boolean): boolean {
+  const result = saveDatabase(db, false);
+  if (!result.ok) return false;
+  if (confirmedServerSnapshot) setLastSyncedSnapshot(db);
+  return true;
 }
 
 export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): StorageSaveResult {

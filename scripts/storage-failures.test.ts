@@ -26,6 +26,7 @@ Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, value: Fa
 const {
   getDatabase,
   saveDatabase,
+  saveIncomingCloudSnapshot,
   addGirl,
   deleteGirl,
   addWorkplanItem,
@@ -110,6 +111,19 @@ assert.ok(events.includes(STORAGE_RECOVERED_EVENT), 'recovery is dispatched even
 const db = getDatabase();
 const dbGirlsBefore = db.girls.length;
 assert.equal(db.girls.length, dbGirlsBefore, 'the in-memory database is preserved after a failure');
+
+// A failed Firestore snapshot save must not advance the local sync baseline.
+const baselineBeforeSnapshot = values.get('shine_relief_trust_last_synced_v1') ?? null;
+const databaseBeforeSnapshot = getDatabase();
+fakeLocalStorage.setItem = () => { throw new Error('synthetic snapshot storage failure'); };
+const incomingSnapshot = { ...databaseBeforeSnapshot, girls: [{ id: 'SG-CLOUD-SNAPSHOT-UNSAVED' } as never] };
+assert.equal(saveIncomingCloudSnapshot(incomingSnapshot, true), false,
+  'a Firestore snapshot is not accepted when local persistence fails');
+assert.deepEqual(getDatabase().girls, databaseBeforeSnapshot.girls,
+  'failed snapshot persistence leaves the prior local database intact');
+assert.equal(values.get('shine_relief_trust_last_synced_v1') ?? null, baselineBeforeSnapshot,
+  'failed snapshot persistence does not advance the sync baseline');
+fakeLocalStorage.setItem = originalSetItem;
 
 // --- A later successful save clears the warning ----------------------------
 failNext = false;

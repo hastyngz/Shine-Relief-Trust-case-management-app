@@ -13,6 +13,7 @@ import {
 import {
   getDatabase,
   saveDatabase,
+  saveIncomingCloudSnapshot,
   addGirl,
   updateGirl,
   deleteGirl,
@@ -62,7 +63,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { flushPendingOfflineSnapshots, recordOfflineChanges, setLastSyncedSnapshot, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
+import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -279,12 +280,10 @@ function AppContent() {
       return;
     }
     const unsub = initFirestoreListeners((cloudDb, meta) => {
-      saveDatabase(cloudDb, false);
-      // Only a server-confirmed copy may become the sync baseline. A snapshot
-      // that came from the cache, or that still has pending local writes, is an
-      // optimistic echo of this device's own edit; treating it as confirmed
-      // would advance the baseline past an unsynced edit and lose it.
-      if (isConfirmedServerSnapshot(meta)) setLastSyncedSnapshot(cloudDb);
+      // Do not replace the live UI state or advance the baseline unless the
+      // snapshot was durably saved on this device. saveIncomingCloudSnapshot
+      // emits the persistent storage warning when local persistence fails.
+      if (!saveIncomingCloudSnapshot(cloudDb, isConfirmedServerSnapshot(meta))) return;
       setDb(cloudDb);
     }, {
       uid: currentUser.uid,
