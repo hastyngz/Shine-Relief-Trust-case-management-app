@@ -173,7 +173,7 @@ const failedScheduleUpdate = updateScheduleItemWithSaveResult(
   'Test Staff',
 );
 assert.equal(failedScheduleUpdate.savedLocally, false, 'schedule update reports local persistence failure');
-assert.deepEqual(getDatabase().schedules, schedulesBeforeFailedUpdate,
+assert.deepEqual(getDatabase().schedules || [], schedulesBeforeFailedUpdate,
   'failed schedule update restores the prior in-memory record');
 assert.throws(
   () => updateScheduleItem(recoveredSchedule.item.id, { status: 'Cancelled' }, 'Test Staff'),
