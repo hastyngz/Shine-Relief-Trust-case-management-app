@@ -92,9 +92,11 @@ A targeted code inspection found that the persistence architecture is not yet un
 - GitHub Actions run 386 passed for commit `5e5b128` before this additional queue-reset change. The queue reset regression test and latest code require a fresh CI run; do not treat the current commit as verified yet.
 
 ### Remaining backup and reset failure semantics
-- The backup import still synchronizes to Firestore before checking the local save result, and the import helper still returns a boolean that cannot distinguish “local saved, cloud failed” from “both succeeded”. The reset still performs destructive cloud work before checking whether local persistence succeeded.
-- Do not change operation order in isolation: define explicit outcomes, preserve a recoverable copy, handle partial cloud batches and snapshot listeners, and test cloud/local failure paths before reporting success.
-- Reset coverage and reset atomicity are separate issues. The new collection policy closes omissions in the operational list; it does not make multi-collection deletion atomic or make the overall reset rollback-safe.
+- Backup restoration now exposes explicit outcomes for invalid backups, cloud synchronization failure, cloud success/local-save failure, offline-queue cleanup failure, and full success. The administrator UI shows the actual failure category rather than labelling every failure an invalid file.
+- Restore writes to Firestore before replacing local storage so a cloud permission/network error does not first destroy the device's existing local copy. Firestore uses multiple batches, however, so a reported cloud failure can still follow earlier successful batches; inspect cloud records before retrying.
+- A restore only reports full success after local persistence and cleanup of per-record offline edits and legacy snapshots. This prevents old queued edits from replaying over the restored database. If queue cleanup fails after local/cloud writes, the UI explicitly warns that the restored database exists but pending edits may still be present.
+- Reset still performs destructive cloud work before checking whether local persistence succeeded. Reset coverage and reset atomicity are separate issues: collection omissions are addressed, but multi-collection deletion is not atomic and cannot be rolled back by the current helper.
+- Regression coverage for restore orchestration uses injected cloud/local persistence functions so cloud failure, local failure, invalid input, queue-cleanup failure, and success can be exercised without a live Firebase project. Latest commit must still pass CI before this change is considered verified.
 
 
 ### Backup replacement completeness
