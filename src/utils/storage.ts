@@ -206,6 +206,21 @@ export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): St
   }
 }
 
+/**
+ * Financial/staff mutations must not start a cloud write when the device
+ * rejected the local save. This prevents a UI success from masking a split
+ * local/cloud record state.
+ */
+function saveDatabaseOrThrow(db: AppDatabase, recordType: string): void {
+  const result = saveDatabase(db);
+  if (!result.ok) {
+    const reason = result.quotaExceeded
+      ? 'Device storage is full.'
+      : 'Device storage is unavailable.';
+    throw new Error(`${recordType} was not saved on this device, so the cloud write was not started. ${reason} Free storage and retry.`);
+  }
+}
+
 export async function clearAllDatabase(): Promise<AppDatabase> {
   // Lock offline replay before the first destructive cloud operation. If any
   // later step fails, queued edits stay paused instead of recreating deleted data.
@@ -1121,7 +1136,7 @@ export function addPayrollRecord(
     updatedByUid: record.updatedByUid || auditActorUid || 'system',
   };
   db.payrollRecords.unshift(newRecord);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'Payroll record');
   persistPayrollRecordToFirestore(newRecord).catch((err) =>
     console.error('Failed to persist payroll record to Firestore:', err)
   );
@@ -1146,7 +1161,7 @@ export function updatePayrollRecord(
     updatedByUid: updates.updatedByUid || auditActorUid || db.payrollRecords[index].updatedByUid || 'system',
   };
   db.payrollRecords[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'Payroll update');
   persistPayrollRecordToFirestore(updated).catch((err) =>
     console.error('Failed to update payroll record in Firestore:', err)
   );
@@ -1159,7 +1174,8 @@ export function deletePayrollRecord(id: string): boolean {
   const index = db.payrollRecords.findIndex((record) => record.id === id);
   if (index === -1) return false;
   db.payrollRecords.splice(index, 1);
-  saveDatabase(db);
+  const saveResult = saveDatabase(db);
+  if (!saveResult.ok) return false;
   deletePayrollRecordFromFirestore(id).catch((err) =>
     console.error('Failed to delete payroll record from Firestore:', err)
   );
@@ -1186,7 +1202,7 @@ export async function updateEmployeeRecord(
     updatedBy: auditActor || existing.updatedBy,
   };
   db.employees[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'Employee record');
   await persistEmployeeRecordToFirestore(updated);
   return updated;
 }
