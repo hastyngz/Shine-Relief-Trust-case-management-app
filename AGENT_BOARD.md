@@ -248,3 +248,11 @@ Suggestion format:
 - Idea: map each write path, its UI success handling and sync method; migrate one domain at a time toward explicit outcomes and a single conflict-aware write path where appropriate. Test failed local save, cloud failure, offline queue replay, repeated payroll actions and permission boundaries before changing behaviour.
 - Effort: large
 - Status: new
+
+### S-016 · Backup restore omitted assets and case goals — FIXED, CI pending
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: bug
+- Evidence: the import normalizer's collection list did not include `assets` or `caseGoals`, although both are part of `AppDatabase` and the export/local-load paths. Restoring a JSON backup could therefore drop those collections from the restored local database and cloud sync payload.
+- Change: extracted `normalizeImportedDatabase` in `src/utils/storage.ts`, included both collections with backward-compatible empty-array defaults, and added regression assertions to `scripts/storage-failures.test.ts` for preserving both collections and importing older backups without assets.
+- Verification: source changes and tests committed; local execution and the resulting GitHub Actions run have not yet been verified in this session. Do not call the fix CI-verified until the run is checked.
+- Status: fixed in code; verification pending
