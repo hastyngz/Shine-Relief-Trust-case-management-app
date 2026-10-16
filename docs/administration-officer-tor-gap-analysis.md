@@ -100,6 +100,14 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression coverage for restore orchestration uses injected cloud/local persistence functions, and offline-sync tests exercise queue blocking while reset recovery is required. GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
 
 
+### Fail-closed offline queue inspection and baseline persistence
+- Restore now checks the persisted queue rather than trusting only a cached/in-memory count. The inspector checks IndexedDB plus its localStorage fallback and returns `unavailable` for malformed or inaccessible queue state; malformed legacy snapshot data also blocks restore. This avoids silently treating a damaged queue as empty.
+- A pre-existing reset-recovery marker also blocks restore until the administrator completes recovery. This avoids using a backup restore to accidentally unlock an incomplete destructive reset.
+- Reset queue cleanup now requires the new last-synced baseline to be durably persisted before it removes the recovery marker. If baseline persistence fails, the marker stays active and the queue flush remains paused.
+- Regression tests cover pending/clear/unavailable queue inspection, corrupt JSON, IndexedDB failure, and retaining the reset lock when baseline persistence fails.
+- Remaining risk: Firestore changes are not atomic across batches. A global read-only/recovery mode is still needed to stop separate direct-write operations while the marker is active.
+- Verification: latest code needs its own GitHub Actions run.
+
 ### Backup replacement completeness
 - A broader comparison of `AppDatabase` fields with `syncEntireDatabaseToFirestore` found additional gaps beyond the normaliser: bulk restore did not write meetings, feeding logs, market prices, forecast settings, what-if scenarios, intelligence suggestions or AI settings. The stale-record cleanup list also omitted employees and case goals, so a replacement restore could leave stale cloud rows or fail to restore those modules.
 - Added bulk-write mappings for those modules and standalone restricted import-source rows, and switched stale-record cleanup to a shared backup-replacement collection policy. Employee salary history is deliberately excluded because it is maintained separately and is not represented by the AppDatabase JSON backup.
