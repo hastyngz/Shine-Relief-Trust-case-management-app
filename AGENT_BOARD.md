@@ -356,16 +356,23 @@ Suggestion format:
 - Type: reliability / data integrity
 - Evidence: several create/update helpers threw after a failed local save but left the mutated in-memory arrays in place; delete helpers returned failure without restoring removed records. Expenses, budget/annual-budget items, workplans, schedules, girls and households were among the affected paths.
 - Change: added rollback of in-memory mutations and cascades when local persistence fails; retained existing boolean contracts for delete helpers; added UI error handling so budget/workplan/schedule forms remain open and deletions do not show success. The offline queue remains the sync path for schedules.
-- Verification: GitHub Actions run 38894050874 passed TypeScript, storage failure tests, production build and offline end-to-end tests for commit fcd2711. The subsequent reset-seed-isolation fix in ba0947 and final documentation commit require a fresh run.
-- Limitation: older follow-up, meeting, programme, Early Years and inventory operations still need domain-by-domain audit; a successful local save does not guarantee every direct Firestore write succeeds.
-- Status: implemented; final verification pending
+- Verification: GitHub Actions run 38910331290 passed TypeScript, storage failure tests, production build and offline end-to-end tests for commit `08161ec`.
+- Limitation: a successful local save does not guarantee every direct Firestore write succeeds; create/update rollback coverage is still incomplete in older programme and inventory helpers.
+- Status: targeted fixes implemented and verified; broader domain audit remains open
 
 ### S-024 · Interrupted restore needed a safe retry path
 - From: Mosaic (ChatGPT), 2026-10-16
 - Type: reliability / data integrity
 - Evidence: the reset-recovery marker correctly paused queue replay after a partial failure, but treating any active marker as an unreadable queue made backup restore retry impossible.
 - Change: an admin can retry restore when the persisted queue is readable; if queued edits remain, the restore UI explicitly asks permission to discard them. Unreadable/corrupt queue state still fails closed. Restore sets the recovery marker before the first cloud write and only clears it after local save, queue cleanup and baseline persistence succeed.
-- Verification: GitHub Actions run 38894050874 passed TypeScript, storage failure tests, production build and offline end-to-end tests for commit fcd2711. The subsequent reset-seed-isolation fix in ba0947 and final documentation commit require a fresh run.
+- Verification: GitHub Actions run 38910331290 passed TypeScript, storage failure tests, production build and offline end-to-end tests for commit `08161ec`.
 - Limitation: Firestore restore spans batches and is not atomic; other clients' independent direct writes are not globally blocked by this device-local recovery marker.
-- Status: implemented; final verification pending
+- Status: implemented and verified; non-atomic restore remains an explicit limitation
+
+### 2026-10-16 · Mosaic (ChatGPT) · payroll and remaining delete rollback
+- Area: local persistence failure handling in `storage.ts`.
+- State: added rollback for payroll create/update/delete and employee update when local save fails; corrected payroll duplicate detection when optional period-start dates are absent. Added rollback for deletion of follow-ups, rent, household activities, meetings, feeding logs, market prices, Early Years records, historical records and people. Regression tests cover the affected deletion paths and payroll/personnel local-save failures.
+- Verification: GitHub Actions run 38910331290 passed both `checks` and `e2e` for commit `08161ec`.
+- Next: continue the domain-by-domain audit of add/update rollback in older follow-up, meeting, programme, Early Years and inventory helpers. A successful local save can still be followed by a failed direct Firestore write.
+- Watch out: do not treat local/cloud persistence as transactional; these changes prevent false local success on local-storage failure, not every network or permission failure. — Mosaic (ChatGPT), 2026-10-16
 
