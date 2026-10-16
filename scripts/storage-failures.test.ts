@@ -28,7 +28,11 @@ const {
   saveDatabase,
   saveIncomingCloudSnapshot,
   addGirl,
+  updateGirl,
   deleteGirl,
+  addHousehold,
+  updateHousehold,
+  deleteHousehold,
   addWorkplanItem,
   updateWorkplanItem,
   deleteWorkplanItem,
@@ -539,17 +543,48 @@ assert.equal(cloudCalls, 4, 'invalid backups do not invoke cloud persistence');
 // --- Core case and workplan mutations fail closed when local storage rejects ----
 fakeLocalStorage.setItem = originalSetItem;
 const baseline = getDatabase();
-baseline.girls = [{ id: 'SG-STORAGE-BASELINE', name: 'Synthetic test beneficiary' } as never];
-baseline.households = [];
+baseline.girls = [{ id: 'SG-STORAGE-BASELINE', name: 'Synthetic test beneficiary', householdId: 'SH-STORAGE-BASELINE' } as never];
+baseline.households = [{ id: 'SH-STORAGE-BASELINE', name: 'Synthetic test household' } as never];
+baseline.educationalFollowUps = [{ id: 'EDU-STORAGE-BASELINE', girlId: 'SG-STORAGE-BASELINE' } as never];
+baseline.healthFollowUps = [{ id: 'HLT-STORAGE-BASELINE', girlId: 'SG-STORAGE-BASELINE' } as never];
+baseline.familyFollowUps = [{ id: 'FAM-STORAGE-BASELINE', girlId: 'SG-STORAGE-BASELINE' } as never];
+baseline.rentPayments = [{ id: 'RENT-STORAGE-BASELINE', householdId: 'SH-STORAGE-BASELINE' } as never];
+baseline.expenses = [{ id: 'EXP-STORAGE-BASELINE', householdId: 'SH-STORAGE-BASELINE' } as never];
+baseline.householdActivities = [{ id: 'ACT-STORAGE-BASELINE', householdId: 'SH-STORAGE-BASELINE' } as never];
 baseline.workplans = [{ id: 'WP-STORAGE-BASELINE', title: 'Synthetic test workplan item' } as never];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
-const beforeFailedMutations = getDatabase();
+const beforeFailedMutations = {
+  girls: [...baseline.girls],
+  households: [...baseline.households],
+  educationalFollowUps: [...baseline.educationalFollowUps],
+  healthFollowUps: [...baseline.healthFollowUps],
+  familyFollowUps: [...baseline.familyFollowUps],
+  rentPayments: [...baseline.rentPayments],
+  expenses: [...baseline.expenses],
+  householdActivities: [...baseline.householdActivities],
+  workplans: [...baseline.workplans],
+};
 
 fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
 assert.throws(
   () => addGirl({ id: 'SG-STORAGE-FAIL', name: 'Synthetic unsaved beneficiary' } as never),
   /Device storage is unavailable/,
   'girl creation must not return success when local persistence fails',
+);
+assert.throws(
+  () => updateGirl('SG-STORAGE-BASELINE', { name: 'Unsaved beneficiary update' } as never),
+  /Device storage is unavailable/,
+  'beneficiary update must not return success when local persistence fails',
+);
+assert.throws(
+  () => addHousehold({ id: 'SH-STORAGE-FAIL', name: 'Unsaved household' } as never),
+  /Device storage is unavailable/,
+  'household creation must not return success when local persistence fails',
+);
+assert.throws(
+  () => updateHousehold('SH-STORAGE-BASELINE', { name: 'Unsaved household update' } as never),
+  /Device storage is unavailable/,
+  'household update must not return success when local persistence fails',
 );
 assert.throws(
   () => updateWorkplanItem('WP-STORAGE-BASELINE', { title: 'Unsaved update' } as never),
@@ -562,11 +597,19 @@ assert.throws(
   'workplan creation must not return success when local persistence fails',
 );
 assert.equal(deleteGirl('SG-STORAGE-BASELINE'), false, 'girl deletion reports failure when local persistence fails');
+assert.equal(deleteHousehold('SH-STORAGE-BASELINE'), false, 'household deletion reports failure when local persistence fails');
 assert.equal(deleteWorkplanItem('WP-STORAGE-BASELINE'), false, 'workplan deletion reports failure when local persistence fails');
 fakeLocalStorage.setItem = originalSetItem;
 const afterFailedMutations = getDatabase();
-assert.deepEqual(afterFailedMutations.girls, beforeFailedMutations.girls, 'failed case mutations leave durable girl records unchanged');
-assert.deepEqual(afterFailedMutations.workplans, beforeFailedMutations.workplans, 'failed planning mutations leave durable workplans unchanged');
+assert.deepEqual(afterFailedMutations.girls, beforeFailedMutations.girls, 'failed beneficiary mutations restore the original girls');
+assert.deepEqual(afterFailedMutations.households, beforeFailedMutations.households, 'failed household mutations restore the original households');
+assert.deepEqual(afterFailedMutations.educationalFollowUps, beforeFailedMutations.educationalFollowUps, 'failed girl deletion restores educational follow-ups');
+assert.deepEqual(afterFailedMutations.healthFollowUps, beforeFailedMutations.healthFollowUps, 'failed girl deletion restores health follow-ups');
+assert.deepEqual(afterFailedMutations.familyFollowUps, beforeFailedMutations.familyFollowUps, 'failed girl deletion restores family follow-ups');
+assert.deepEqual(afterFailedMutations.rentPayments, beforeFailedMutations.rentPayments, 'failed household deletion restores rent records');
+assert.deepEqual(afterFailedMutations.expenses, beforeFailedMutations.expenses, 'failed household deletion restores expenses');
+assert.deepEqual(afterFailedMutations.householdActivities, beforeFailedMutations.householdActivities, 'failed household deletion restores activities');
+assert.deepEqual(afterFailedMutations.workplans, beforeFailedMutations.workplans, 'failed planning mutations restore the original workplans');
 assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
 // Empty/corrupt storage fallback must return a fresh seed copy, not the shared
