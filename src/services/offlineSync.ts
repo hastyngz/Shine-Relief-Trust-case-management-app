@@ -1,6 +1,6 @@
 import { AppDatabase, OfflineChangeEntry, SyncConflict, SyncConflictResolution } from '../types';
 import { appendSyncConflictAudit, syncChangeEntriesToFirestore, SyncChangeResult } from './firestoreSync';
-import { loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
+import { inspectPersistedQueueState, loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
 
 const LEGACY_SNAPSHOT_KEY = 'shine_relief_trust_pending_sync_v1';
 const RESET_RECOVERY_REQUIRED_KEY = 'shine_relief_trust_reset_recovery_required_v1';
@@ -225,6 +225,28 @@ export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void>
 export function markDatabaseResetRecoveryRequired(): void {
   if (typeof window === 'undefined') throw new Error('Cannot mark reset recovery outside the browser.');
   window.localStorage.setItem(RESET_RECOVERY_REQUIRED_KEY, '1');
+}
+
+/**
+ * Authoritative, fail-closed inspection used before destructive restore.
+ * Cached queue state alone is insufficient because another tab or a prior
+ * interrupted session may have left persisted edits behind.
+ */
+export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending' | 'unavailable'> {
+  if (typeof window === 'undefined' || isDatabaseResetRecoveryRequired()) return 'unavailable';
+
+  const queueState = await inspectPersistedQueueState();
+  if (queueState !== 'clear') return queueState;
+
+  try {
+    const raw = window.localStorage.getItem(LEGACY_SNAPSHOT_KEY);
+    if (!raw) return 'clear';
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return 'unavailable';
+    return parsed.length ? 'pending' : 'clear';
+  } catch {
+    return 'unavailable';
+  }
 }
 
 export function isDatabaseResetRecoveryRequired(): boolean {
