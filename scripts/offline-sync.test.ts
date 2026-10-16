@@ -119,7 +119,7 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: f
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, storage: undefined } });
 Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore } = await import('../src/services/firestoreSync');
@@ -370,8 +370,15 @@ assert.equal(procurementUpdate[0].data?.items?.[0]?.quotes?.[0]?.amountMWK, 1200
 // --- 11. A successful database reset must not replay pre-reset edits --------
 await persistQueue(procurementCreate);
 values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-OLD', T1)] })]));
+markDatabaseResetRecoveryRequired();
+assert.equal(isDatabaseResetRecoveryRequired(), true, 'a destructive reset sets a local recovery lock');
+const pausedFlush = await flushPendingOfflineSnapshots();
+assert.equal(pausedFlush.flushed, false, 'pending changes are not replayed while reset recovery is required');
+assert.equal((await loadQueue()).length, 1, 'paused sync preserves queued edits for recovery');
+assert.equal(values.has('shine_relief_trust_pending_sync_v1'), true, 'paused sync does not migrate/delete the legacy snapshot');
 const resetDb = db();
 await clearOfflineChangesAfterDatabaseReset(resetDb);
+assert.equal(isDatabaseResetRecoveryRequired(), false, 'successful reset cleanup removes the recovery lock');
 assert.equal(getPendingOfflineSnapshotCount(), 0, 'a successful reset clears the in-memory queue');
 assert.deepEqual(await loadQueue(), [], 'a successful reset clears persisted per-record edits');
 assert.equal(values.has('shine_relief_trust_pending_sync_v1'), false, 'a successful reset removes legacy whole-database snapshots');
