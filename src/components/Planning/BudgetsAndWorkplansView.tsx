@@ -52,6 +52,7 @@ import {
 import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
 import { expandWorkplanOccurrences, findOverloadedStaff, MAX_WORKPLANS_PER_STAFF_PER_WEEK } from '../../services/workplanRecurrence';
 import { calculateBudgetForecast } from '../../services/intelligenceService';
+import { filterBudgetLines } from '../../services/financialCalculations';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
@@ -150,11 +151,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   };
 
   // Filtered Budgets
-  const filteredBudgets = budgets.filter((b) => {
-    if (budgetPeriodFilter !== 'ALL' && b.period !== budgetPeriodFilter) return false;
-    if (budgetCategoryFilter !== 'ALL' && b.category !== budgetCategoryFilter) return false;
-    return true;
-  });
+  const filteredBudgets = filterBudgetLines(budgets, budgetPeriodFilter, budgetCategoryFilter);
 
   const approvedAnnualBudgetTotal = annualBudgets.reduce((sum, plan) => sum + (plan.approvedAmount || 0), 0);
 
@@ -278,9 +275,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const uniquePeriods = Array.from(new Set(budgets.map((b) => b.period).filter(Boolean)));
   const uniqueCategories = Array.from(new Set(budgets.map((b) => b.category).filter(Boolean)));
 
+  const summaryPeriods = Array.from(new Set(filteredBudgets.map((line) => line.period).filter(Boolean)));
+  const summaryCategories = Array.from(new Set(filteredBudgets.map((line) => line.category).filter(Boolean)));
+
   const monthlyBudgetSummary = Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
-    const monthLines = budgets.filter((b) => b.month === month);
+    const monthLines = filteredBudgets.filter((line) => line.month === month);
     const budgeted = monthLines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
     const actual = monthLines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
     const variance = budgeted - actual;
@@ -293,12 +293,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     return { key, budgeted, actual, variance: budgeted - actual };
   };
   const groupedBudgetSummary = budgetSummaryGroup === 'category'
-    ? uniqueCategories.map((key) => budgetSummary(key, budgets.filter((line) => line.category === key)))
+    ? summaryCategories.map((key) => budgetSummary(key, filteredBudgets.filter((line) => line.category === key)))
     : budgetSummaryGroup === 'period'
-    ? uniquePeriods.map((key) => budgetSummary(key, budgets.filter((line) => line.period === key)))
+    ? summaryPeriods.map((key) => budgetSummary(key, filteredBudgets.filter((line) => line.period === key)))
     : [...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => budgetSummary(
       item.name,
-      budgets.filter((line) => line.programmeId === item.id)
+      filteredBudgets.filter((line) => line.programmeId === item.id)
     )).filter((row) => row.budgeted || row.actual);
 
   const toggleWorkplanOccurrence = (workplanId: string, date: string, currentlyCompleted: boolean) => {
