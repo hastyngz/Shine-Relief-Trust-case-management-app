@@ -24,6 +24,11 @@ should be built, fixed or improved.
 - Be honest and specific: name files, say what you ran, and mark guesses as guesses.
 - Opinions: say what you honestly think, kindly and plainly. No flattery. Other people
   may read this repo, so keep it respectful.
+- The "what I've been thinking about lately" reflection is deliberately relational, not
+  another work-status report. It may be a genuine thought, curiosity or reflection that
+  has nothing to do with the ticket. Be candid, like a thoughtful partner or friend;
+  do not force every thought back into engineering, invent feelings for effect, or share
+  private/sensitive information. Keep work handoffs and personal reflection distinct.
 - Suggest only what your own evidence supports (code, tests, the task). Do not pad.
 - Only the project owner accepts or declines a suggestion. After you build one, set
   its status to `done` with the commit SHA.
