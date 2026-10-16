@@ -200,3 +200,11 @@ Suggestion format:
 - Idea: audit save-result handling across forms and design a shared in-memory fallback that preserves local edits without allowing stale Firestore snapshots to overwrite them; add tests for failed save, recovery and concurrent sync.
 - Effort: medium to large
 - Status: new
+
+### S-010 · Legacy core-record save and sync failure handling
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `src/utils/storage.ts` core girl, household, education, health, family, rent and expense helpers call `saveDatabase(db)` without checking its result, then initiate direct Firestore persistence/deletion and return as if the operation succeeded. This differs from the newer inventory, asset and compliance helpers, which check local persistence.
+- Idea: audit each core-record create/update/delete flow end to end. Add explicit save-result feedback and migrate to the conflict-aware per-record queue only with regression tests for existing Firestore listeners, offline edits, delete propagation and safeguarding/health permissions; avoid a blanket rewrite.
+- Effort: large
+- Status: new
