@@ -182,6 +182,7 @@ const pendingRestore = await restoreDatabaseWithPersistence(
   validBackup,
   async () => { pendingCloudCalls += 1; },
   () => { pendingLocalCalls += 1; return { ok: true, quotaExceeded: false }; },
+  async () => {},
   async () => 'pending',
 );
 assert.equal(pendingRestore.status, 'pending_offline_changes');
@@ -192,6 +193,7 @@ const unavailableRestore = await restoreDatabaseWithPersistence(
   validBackup,
   async () => { pendingCloudCalls += 1; },
   () => { pendingLocalCalls += 1; return { ok: true, quotaExceeded: false }; },
+  async () => {},
   async () => 'unavailable',
 );
 assert.equal(unavailableRestore.status, 'offline_state_unavailable');
