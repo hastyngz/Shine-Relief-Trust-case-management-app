@@ -26,6 +26,7 @@ Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, value: Fa
 const {
   getDatabase,
   saveDatabase,
+  addPayrollRecord,
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
   normalizeImportedDatabase,
@@ -138,6 +139,21 @@ const otherFailure = saveDatabase(db);
 assert.equal(otherFailure.ok, false);
 assert.equal(otherFailure.quotaExceeded, false, 'a non-quota error is not labelled as a quota error');
 assert.ok(events.includes(STORAGE_WARNING_EVENT), 'any save failure is surfaced to the UI');
+
+// Financial records must not start cloud writes after local persistence fails.
+assert.throws(() => addPayrollRecord({
+  employeeId: 'TEST-LOCAL-SAVE-FAIL',
+  employeeName: 'Storage Failure Test',
+  departmentOrProgramme: 'Test',
+  payPeriod: '2099-11',
+  payPeriodStartDate: '2099-11-01',
+  payPeriodEndDate: '2099-11-30',
+  applicableSalary: 100,
+  expectedAmount: 100,
+  amountPaid: 0,
+  paymentStatus: 'Pending',
+  paymentMethod: 'Bank transfer',
+} as never), /Payroll record was not saved on this device/);
 
 // --- Backup restore reports local/cloud partial outcomes honestly ----------
 const validBackup = JSON.stringify({ girls: [{ id: 'SG-RESTORE-1' }], households: [] });
