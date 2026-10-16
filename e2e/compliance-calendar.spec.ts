@@ -29,5 +29,6 @@ test('staff can register and complete a compliance obligation', async ({ page })
 
   await expect(record).toContainText('Completed');
   await expect(record).toContainText('E2E test confirms completion workflow.');
+  await record.getByText(/^History \(/).click();
   await expect(record.getByText(/Completed · E2E Test Staff/)).toBeVisible();
 });
