@@ -310,7 +310,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     try {
       const updated = updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, actorName);
       if (!updated) {
-        window.alert('This workplan could not be found. Refresh the page and try again.');
+        window.alert('Workplan was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
         return;
       }
       onRefresh();
@@ -360,7 +360,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           actorName
         );
         if (!updated) {
-          window.alert('This budget line could not be found. Refresh the page and try again.');
+          window.alert('Budget line was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
           return;
         }
       } else {
@@ -589,7 +589,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           actorName
         );
         if (!updated) {
-          window.alert('This schedule item could not be found. Refresh the page and try again.');
+          window.alert('Schedule item was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
           return;
         }
       } else {
