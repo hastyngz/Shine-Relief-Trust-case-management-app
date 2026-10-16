@@ -18,7 +18,7 @@ import {
 import { firestore } from '../firebase';
 import { deleteStoredFile } from './r2StorageClient';
 import { shouldSubscribeToCollection } from './firestoreListenerPermissions';
-import { OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
+import { BACKUP_RESTORE_COLLECTIONS, OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
 import {
   AppDatabase,
   Girl,
@@ -1072,6 +1072,24 @@ export async function syncEntireDatabaseToFirestore(
       });
     }
 
+    // Keep every cloud-backed AppDatabase module included in a backup restore.
+    const additionalBackupCollections: Array<[keyof AppDatabase, string]> = [
+      ['meetings', COLLECTIONS.MEETINGS],
+      ['feedingProgramLogs', COLLECTIONS.FEEDING_LOGS],
+      ['marketPrices', COLLECTIONS.MARKET_PRICES],
+      ['forecastSettings', COLLECTIONS.FORECAST_SETTINGS],
+      ['whatIfScenarios', COLLECTIONS.WHAT_IF_SCENARIOS],
+      ['intelligenceSuggestions', COLLECTIONS.INTELLIGENCE_SUGGESTIONS],
+      ['aiSettings', COLLECTIONS.AI_SETTINGS],
+    ];
+    for (const [field, collectionName] of additionalBackupCollections) {
+      const records = db[field] as Array<{ id: string }> | undefined;
+      records?.forEach((record) => operations.push({
+        ref: doc(firestore, collectionName, record.id),
+        data: sanitizeForFirestore(record),
+      }));
+    }
+
     if (db.historicalRecords) {
       db.historicalRecords.forEach((hr) => {
         operations.push({
@@ -1103,6 +1121,19 @@ export async function syncEntireDatabaseToFirestore(
         }
       });
     }
+
+    // Backups may contain restricted source rows independently of import-audit
+    // metadata. Restore those rows too, without writing the same document twice
+    // when the audit record already carried its sourceData payload.
+    const sourceIdsIncludedWithAudits = new Set(
+      (db.importAudits || []).filter((audit) => Boolean(audit.sourceData)).map((audit) => audit.id)
+    );
+    (db.restrictedImportSources || [])
+      .filter((source) => !sourceIdsIncludedWithAudits.has(source.id))
+      .forEach((source) => operations.push({
+        ref: doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, source.id),
+        data: sanitizeForFirestore(source),
+      }));
 
     if (db.earlyYearsRecords) {
       db.earlyYearsRecords.forEach((ey) => {
@@ -1164,40 +1195,7 @@ export async function syncEntireDatabaseToFirestore(
     await commitInBatches(operations);
 
     if (replaceExisting) {
-      const collectionNames = [
-        COLLECTIONS.GIRLS,
-        COLLECTIONS.HOUSEHOLDS,
-        COLLECTIONS.EDU_FOLLOW_UPS,
-        COLLECTIONS.HEALTH_FOLLOW_UPS,
-        COLLECTIONS.FAMILY_FOLLOW_UPS,
-        COLLECTIONS.RENT_PAYMENTS,
-        COLLECTIONS.EXPENSES,
-        COLLECTIONS.ACTIVITIES,
-        COLLECTIONS.BUDGETS,
-        COLLECTIONS.ANNUAL_BUDGETS,
-        COLLECTIONS.PAYROLL_RECORDS,
-        COLLECTIONS.WORKPLANS,
-        COLLECTIONS.SCHEDULES,
-        COLLECTIONS.HISTORICAL_RECORDS,
-        COLLECTIONS.IMPORT_AUDITS,
-        COLLECTIONS.RESTRICTED_IMPORT_SOURCES,
-        COLLECTIONS.EARLY_YEARS,
-        COLLECTIONS.PEOPLE,
-        COLLECTIONS.CONTACTS,
-        COLLECTIONS.ATTACHMENTS,
-        COLLECTIONS.CASE_ACTIONS,
-        COLLECTIONS.EDUCATION_HISTORY,
-        COLLECTIONS.ACADEMIC_SUPPORTS,
-        COLLECTIONS.EXAMINATION_RECORDS,
-        COLLECTIONS.ATTENDANCE_RECORDS,
-        COLLECTIONS.GIRL_LEAVES,
-        COLLECTIONS.PROGRAMME_LOGS,
-        COLLECTIONS.CASE_REVIEWS,
-        COLLECTIONS.PROCUREMENT_LISTS,
-        COLLECTIONS.PROJECT_PROJECTIONS,
-        COLLECTIONS.INVENTORY_ITEMS,
-        COLLECTIONS.ASSETS,
-      ];
+      const collectionNames: readonly string[] = BACKUP_RESTORE_COLLECTIONS;
       const restoredIds = new Map<string, Set<string>>();
       operations.forEach(({ ref }) => {
         const ids = restoredIds.get(ref.parent.id) || new Set<string>();
