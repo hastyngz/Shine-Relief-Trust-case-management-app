@@ -356,7 +356,7 @@ Suggestion format:
 - Type: reliability / data integrity
 - Evidence: several create/update helpers threw after a failed local save but left the mutated in-memory arrays in place; delete helpers returned failure without restoring removed records. Expenses, budget/annual-budget items, workplans, schedules, girls and households were among the affected paths.
 - Change: added rollback of in-memory mutations and cascades when local persistence fails; retained existing boolean contracts for delete helpers; added UI error handling so budget/workplan/schedule forms remain open and deletions do not show success. The offline queue remains the sync path for schedules.
-- Verification: GitHub Actions run 38894050874 passed TypeScript, storage failure tests, production build and offline end-to-end tests for the preceding code; the subsequent small test-only commit fcd2711 still needs its own run.
+- Verification: GitHub Actions run 38894050874 passed TypeScript, storage failure tests, production build and offline end-to-end tests for commit fcd2711. The subsequent reset-seed-isolation fix in ba0947 and final documentation commit require a fresh run.
 - Limitation: older follow-up, meeting, programme, Early Years and inventory operations still need domain-by-domain audit; a successful local save does not guarantee every direct Firestore write succeeds.
 - Status: implemented; final verification pending
 
@@ -365,7 +365,7 @@ Suggestion format:
 - Type: reliability / data integrity
 - Evidence: the reset-recovery marker correctly paused queue replay after a partial failure, but treating any active marker as an unreadable queue made backup restore retry impossible.
 - Change: an admin can retry restore when the persisted queue is readable; if queued edits remain, the restore UI explicitly asks permission to discard them. Unreadable/corrupt queue state still fails closed. Restore sets the recovery marker before the first cloud write and only clears it after local save, queue cleanup and baseline persistence succeed.
-- Verification: TypeScript and storage failure tests passed on run 38894050874 before the latest test-only commit; full latest-head verification pending.
+- Verification: GitHub Actions run 38894050874 passed TypeScript, storage failure tests, production build and offline end-to-end tests for commit fcd2711. The subsequent reset-seed-isolation fix in ba0947 and final documentation commit require a fresh run.
 - Limitation: Firestore restore spans batches and is not atomic; other clients' independent direct writes are not globally blocked by this device-local recovery marker.
 - Status: implemented; final verification pending
 
