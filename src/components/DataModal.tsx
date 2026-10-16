@@ -242,7 +242,7 @@ export const DataModal: React.FC<DataModalProps> = ({
                 {confirmReset ? (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2">
                     <p className="text-xs text-red-800 font-semibold">
-                      Are you sure? This will delete all girl profiles, households, follow-ups, and financial logs from both Cloud Firestore and local storage.
+                      Are you sure? This deletes operational records across case management, finance, staff/payroll, inventory/assets, programmes and planning from Cloud Firestore and this device. Staff sign-in, messaging, safeguarding cases and designated audit/report history are preserved.
                     </p>
                     <div className="flex gap-2">
                       <button
