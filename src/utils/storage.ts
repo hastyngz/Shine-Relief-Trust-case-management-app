@@ -276,20 +276,68 @@ export function normalizeImportedDatabase(parsed: Partial<AppDatabase>): AppData
   };
 }
 
-export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
+export type DatabaseRestoreResult =
+  | { status: 'success' }
+  | { status: 'invalid_backup'; message: string }
+  | { status: 'cloud_sync_failed'; message: string }
+  | { status: 'cloud_updated_local_save_failed'; message: string };
+
+/**
+ * Restore orchestration is injectable so local/cloud partial-failure outcomes
+ * can be regression-tested without a live Firebase project.
+ *
+ * Cloud sync runs first to avoid replacing the only local copy when Firestore
+ * rejects the restore. Firestore batches are not transactional across the full
+ * database, so a cloud error may still mean some earlier batches were applied.
+ */
+export async function restoreDatabaseWithPersistence(
+  rawJson: string,
+  persistCloud: (db: AppDatabase) => Promise<void>,
+  persistLocal: (db: AppDatabase) => StorageSaveResult,
+): Promise<DatabaseRestoreResult> {
+  let validatedDb: AppDatabase;
   try {
     const parsed = JSON.parse(rawJson) as Partial<AppDatabase>;
     if (!Array.isArray(parsed.girls) || !Array.isArray(parsed.households)) {
-      return false;
+      return { status: 'invalid_backup', message: 'The file is not a valid SHINE database backup.' };
     }
-    const validatedDb = normalizeImportedDatabase(parsed);
-    await syncEntireDatabaseToFirestore(validatedDb, true);
-    saveDatabase(validatedDb);
-    return true;
-  } catch (err) {
-    console.error('Failed to parse database backup:', err);
-    return false;
+    validatedDb = normalizeImportedDatabase(parsed);
+  } catch {
+    return { status: 'invalid_backup', message: 'The file is not valid JSON or is not a valid SHINE database backup.' };
   }
+
+  try {
+    await persistCloud(validatedDb);
+  } catch (err) {
+    console.error('Database restore cloud synchronization failed:', err);
+    return {
+      status: 'cloud_sync_failed',
+      message: 'Cloud restore failed. Some Firestore batches may already have been applied; the local database was not replaced. Check cloud records before retrying.',
+    };
+  }
+
+  const localResult = persistLocal(validatedDb);
+  if (!localResult.ok) {
+    return {
+      status: 'cloud_updated_local_save_failed',
+      message: 'Cloud restore completed, but this device could not save the restored database. Existing local data remains in place. Free device storage and retry local recovery before editing records.',
+    };
+  }
+
+  return { status: 'success' };
+}
+
+export async function restoreDatabaseJSON(rawJson: string): Promise<DatabaseRestoreResult> {
+  return restoreDatabaseWithPersistence(
+    rawJson,
+    (db) => syncEntireDatabaseToFirestore(db, true),
+    (db) => saveDatabase(db),
+  );
+}
+
+/** Backwards-compatible helper for existing callers that only need a success flag. */
+export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
+  return (await restoreDatabaseJSON(rawJson)).status === 'success';
 }
 
 // ID Generators
