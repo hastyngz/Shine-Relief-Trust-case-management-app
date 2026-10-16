@@ -3,6 +3,7 @@ import { AppDatabase } from '../types';
 import { resetDatabaseToSeed, exportDatabaseJSON, restoreDatabaseJSON } from '../utils/storage';
 import { syncEntireDatabaseToFirestore, getSyncStatus, subscribeSyncStatus, SyncStatus } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
+import { inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired } from '../services/offlineSync';
 import { Database, Download, Upload, RotateCcw, X, Check, AlertCircle, CloudCheck, RefreshCw, ShieldAlert } from 'lucide-react';
 
 interface DataModalProps {
@@ -61,7 +62,18 @@ export const DataModal: React.FC<DataModalProps> = ({
     reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
-        const result = await restoreDatabaseJSON(content);
+        let allowDiscardPendingChangesDuringRecovery = false;
+        if (isDatabaseResetRecoveryRequired()) {
+          const pendingState = await inspectPendingOfflineChanges();
+          if (pendingState === 'pending') {
+            const confirmed = window.confirm(
+              'A previous reset or backup restore was interrupted. This device still has queued offline edits that could recreate or overwrite records. Retrying this backup restore will permanently discard those queued edits. Only continue if this backup is the intended source of truth.'
+            );
+            if (!confirmed) return;
+            allowDiscardPendingChangesDuringRecovery = true;
+          }
+        }
+        const result = await restoreDatabaseJSON(content, { allowDiscardPendingChangesDuringRecovery });
         if (result.status === 'success') {
           setMessage({ text: 'Database restored and synchronized to Cloud Firestore successfully!', type: 'success' });
           onDataChanged();
