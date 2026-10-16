@@ -31,7 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
-import { clearOfflineChangesAfterDatabaseReset, loadQueue, readPendingOfflineSnapshots, markDatabaseResetRecoveryRequired } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, markDatabaseResetRecoveryRequired } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
@@ -371,11 +371,7 @@ export async function restoreDatabaseJSON(rawJson: string): Promise<DatabaseRest
     (db) => syncEntireDatabaseToFirestore(db, true),
     (db) => saveDatabase(db),
     (db) => clearOfflineChangesAfterDatabaseReset(db),
-    async () => {
-      const queue = await loadQueue();
-      const legacySnapshots = readPendingOfflineSnapshots();
-      return queue.length > 0 || legacySnapshots.length > 0 ? 'pending' : 'clear';
-    },
+    inspectPendingOfflineChanges,
   );
 }
 
