@@ -490,8 +490,14 @@ export function addGirl(
     createdBy: auditActor || girl.createdBy || 'SHINE Staff',
     updatedBy: auditActor || girl.updatedBy || 'SHINE Staff',
   };
+  const previousGirls = [...db.girls];
   db.girls.unshift(newGirl);
-  saveDatabaseOrThrow(db, 'girl record');
+  try {
+    saveDatabaseOrThrow(db, 'girl record');
+  } catch (error) {
+    db.girls = previousGirls;
+    throw error;
+  }
   // Persist directly to Cloud Firestore
   persistGirlToFirestore(newGirl).catch((err) =>
     console.error('Failed to persist girl to Firestore:', err)
@@ -513,8 +519,14 @@ export function updateGirl(
     updatedAt: new Date().toISOString(),
     updatedBy: auditActor || updates.updatedBy || db.girls[index].updatedBy || 'SHINE Staff',
   };
+  const previousGirls = [...db.girls];
   db.girls[index] = updated;
-  saveDatabaseOrThrow(db, 'girl record');
+  try {
+    saveDatabaseOrThrow(db, 'girl record');
+  } catch (error) {
+    db.girls = previousGirls;
+    throw error;
+  }
   // Persist update to Cloud Firestore
   persistGirlToFirestore(updated).catch((err) =>
     console.error('Failed to update girl in Firestore:', err)
@@ -556,8 +568,14 @@ export function addHousehold(
     createdBy: auditActor || household.createdBy || 'SHINE Staff',
     updatedBy: auditActor || household.updatedBy || 'SHINE Staff',
   };
+  const previousHouseholds = [...db.households];
   db.households.unshift(newHouse);
-  saveDatabaseOrThrow(db, 'household record');
+  try {
+    saveDatabaseOrThrow(db, 'household record');
+  } catch (error) {
+    db.households = previousHouseholds;
+    throw error;
+  }
   // Persist directly to Cloud Firestore
   persistHouseholdToFirestore(newHouse).catch((err) =>
     console.error('Failed to persist household to Firestore:', err)
@@ -579,8 +597,14 @@ export function updateHousehold(
     updatedAt: new Date().toISOString(),
     updatedBy: auditActor || updates.updatedBy || db.households[index].updatedBy || 'SHINE Staff',
   };
+  const previousHouseholds = [...db.households];
   db.households[index] = updated;
-  saveDatabaseOrThrow(db, 'household record');
+  try {
+    saveDatabaseOrThrow(db, 'household record');
+  } catch (error) {
+    db.households = previousHouseholds;
+    throw error;
+  }
   // Persist update to Cloud Firestore
   persistHouseholdToFirestore(updated).catch((err) =>
     console.error('Failed to update household in Firestore:', err)
