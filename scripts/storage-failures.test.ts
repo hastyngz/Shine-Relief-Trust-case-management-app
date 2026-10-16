@@ -130,7 +130,8 @@ const unsavedSchedule = addScheduleItemWithSaveResult({
   status: 'Scheduled',
 }, 'Test Staff');
 assert.equal(unsavedSchedule.savedLocally, false, 'schedule create reports a failed local save');
-assert.ok(!getDatabase().schedules.some((item) => item.id === unsavedSchedule.item.id),
+const unsavedScheduleId = unsavedSchedule.item?.id;
+assert.ok(unsavedScheduleId && !getDatabase().schedules.some((item) => item.id === unsavedScheduleId),
   'failed schedule creation rolls back the in-memory record');
 assert.throws(
   () => addScheduleItem({
@@ -165,7 +166,7 @@ assert.equal(savedScheduleUpdate.savedLocally, true, 'schedule update reports su
 assert.equal(savedScheduleUpdate.item?.status, 'In Progress');
 
 failNext = true;
-const schedulesBeforeFailedUpdate = [...getDatabase().schedules];
+const schedulesBeforeFailedUpdate = [...(getDatabase().schedules || [])];
 const failedScheduleUpdate = updateScheduleItemWithSaveResult(
   recoveredSchedule.item.id,
   { status: 'Completed' },
