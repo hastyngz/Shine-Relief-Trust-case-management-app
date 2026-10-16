@@ -1044,7 +1044,7 @@ function AppContent() {
     if (!window.confirm('Delete this expense entry?')) return;
     try {
       if (!deleteExpense(id)) {
-        showToast('This expense could not be found. Refresh and try again.');
+        showToast('Expense was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
         return;
       }
       showToast('Expense entry deleted.');
