@@ -570,39 +570,48 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         ? status
         : 'Upcoming';
 
-    if (editingSchedule) {
-      updateScheduleItem(
-        editingSchedule.id,
-        {
-          scheduledDate,
-          scheduledTime,
-          type,
-          title,
-          targetName,
-          location,
-          assignedStaffId,
-          assignedStaffName,
-          status: normalizedScheduleStatus,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addScheduleItem(
-        {
-          scheduledDate,
-          scheduledTime,
-          type,
-          title,
-          targetName,
-          location,
-          assignedStaffId,
-          assignedStaffName,
-          status: normalizedScheduleStatus,
-          notes,
-        },
-        actorName
-      );
+    try {
+      if (editingSchedule) {
+        const updated = updateScheduleItem(
+          editingSchedule.id,
+          {
+            scheduledDate,
+            scheduledTime,
+            type,
+            title,
+            targetName,
+            location,
+            assignedStaffId,
+            assignedStaffName,
+            status: normalizedScheduleStatus,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('This schedule item could not be found. Refresh the page and try again.');
+          return;
+        }
+      } else {
+        addScheduleItem(
+          {
+            scheduledDate,
+            scheduledTime,
+            type,
+            title,
+            targetName,
+            location,
+            assignedStaffId,
+            assignedStaffName,
+            status: normalizedScheduleStatus,
+            notes,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Schedule changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowScheduleModal(false);
@@ -1479,9 +1488,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Delete schedule "${s.title}"?`)) {
-                              deleteScheduleItem(s.id);
+                            if (!confirm(`Delete schedule "${s.title}"?`)) return;
+                            try {
+                              if (!deleteScheduleItem(s.id)) {
+                                window.alert('This schedule item could not be found. Refresh the page and try again.');
+                                return;
+                              }
                               onRefresh();
+                            } catch (error) {
+                              window.alert(`Schedule item was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
                             }
                           }}
                           className="p-1 hover:bg-rose-100 rounded-md text-rose-600"
