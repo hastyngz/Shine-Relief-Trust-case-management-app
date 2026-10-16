@@ -1372,20 +1372,22 @@ export type { SyncConflict };
 export async function clearAllFirestoreCollections(): Promise<void> {
   try {
     updateSyncStatus('saving');
+
+    // Capture attachment paths before changing anything. Keep attachment metadata
+    // until every file deletion succeeds, so a failed cleanup can be retried:
+    // already-deleted objects are treated as not-found on the next attempt.
     const attachmentSnapshot = await getDocs(collection(firestore, COLLECTIONS.ATTACHMENTS));
-    for (const attachmentDoc of attachmentSnapshot.docs) {
-      const storagePath = attachmentDoc.data().storagePath;
-      if (typeof storagePath === 'string' && storagePath) {
-        try {
-          await deleteStoredFile(storagePath);
-        } catch (err: any) {
-          if (err?.code !== 'storage/object-not-found') throw err;
-        }
-      }
-    }
+    const storagePaths = Array.from(new Set(
+      attachmentSnapshot.docs
+        .map((attachmentDoc) => attachmentDoc.data().storagePath)
+        .filter((storagePath): storagePath is string => typeof storagePath === 'string' && Boolean(storagePath)),
+    ));
 
-    const collectionNames: readonly string[] = OPERATIONAL_COLLECTIONS_TO_CLEAR;
-
+    // Clear ordinary operational records first. Do not delete attachment metadata
+    // in this pass: it is the recovery list if R2 cleanup fails part-way through.
+    const collectionNames: readonly string[] = OPERATIONAL_COLLECTIONS_TO_CLEAR.filter(
+      (name) => name !== COLLECTIONS.ATTACHMENTS,
+    );
     for (const colName of collectionNames) {
       const snap = await getDocs(collection(firestore, colName));
       for (let i = 0; i < snap.docs.length; i += 400) {
@@ -1394,6 +1396,24 @@ export async function clearAllFirestoreCollections(): Promise<void> {
         await batch.commit();
       }
     }
+
+    // Only remove metadata after all referenced files are deleted (or already
+    // absent). If a deletion fails, metadata remains so an administrator can retry.
+    for (const storagePath of storagePaths) {
+      try {
+        await deleteStoredFile(storagePath);
+      } catch (err: any) {
+        if (err?.code !== 'storage/object-not-found') throw err;
+      }
+    }
+
+    const attachmentDocs = await getDocs(collection(firestore, COLLECTIONS.ATTACHMENTS));
+    for (let i = 0; i < attachmentDocs.docs.length; i += 400) {
+      const batch = writeBatch(firestore);
+      attachmentDocs.docs.slice(i, i + 400).forEach((attachmentDoc) => batch.delete(attachmentDoc.ref));
+      await batch.commit();
+    }
+
     updateSyncStatus('synced');
   } catch (err) {
     console.error('clearAllFirestoreCollections error:', err);
