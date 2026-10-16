@@ -208,3 +208,19 @@ Suggestion format:
 - Idea: audit each core-record create/update/delete flow end to end. Add explicit save-result feedback and migrate to the conflict-aware per-record queue only with regression tests for existing Firestore listeners, offline edits, delete propagation and safeguarding/health permissions; avoid a blanket rewrite.
 - Effort: large
 - Status: new
+
+### S-011 · Backup import, reset and local-storage failure semantics
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `src/utils/storage.ts`: `importDatabaseJSON` calls `syncEntireDatabaseToFirestore(validatedDb, true)` before checking the result of `saveDatabase(validatedDb)`, then returns `true`; `clearAllDatabase` likewise ignores the local save result after clearing Firestore. A local quota/security failure can therefore leave the device's stored database inconsistent with the reported operation, and an import can modify cloud data before local persistence is known to have succeeded.
+- Idea: define explicit import/reset transaction semantics before changing ordering. Validate and stage the backup, report local and cloud outcomes separately, preserve a recoverable backup, and add failure tests for local quota, cloud failure and partial sync. Avoid a simplistic reorder that reports success when only one side changed.
+- Effort: medium-large
+- Status: new
+
+### S-012 · Core records mix local writes and direct Firestore writes
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `src/utils/storage.ts` core girl/household/follow-up operations call `saveDatabase` without checking `{ ok }`, then call direct `persist*ToFirestore` / delete functions. Phase-2 record helpers also call `saveDatabase` and direct `persistPhase2Record` for many record types, while App-level diffing and newer inventory/assets/compliance use the conflict-aware offline queue. This creates multiple persistence patterns with different failure and conflict semantics.
+- Idea: build a per-entity migration matrix and migrate one domain at a time. Specify create/update/delete, cloud snapshot, offline replay, conflict, audit and role rules; add tests before removing any direct-write path. Do not bulk-replace calls without verifying the listener/queue architecture.
+- Effort: large
+- Status: new
