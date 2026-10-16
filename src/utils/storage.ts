@@ -1429,8 +1429,10 @@ export function addScheduleItemWithSaveResult(
     createdBy: auditActor || item.createdBy || 'SHINE Staff',
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
+  const previousSchedules = [...db.schedules];
   db.schedules.unshift(newItem);
   const saveResult = saveDatabase(db);
+  if (!saveResult.ok) db.schedules = previousSchedules;
   // The app's database-updated listener records successful saves in the
   // per-record offline queue. Never issue a parallel direct setDoc here.
   return { item: newItem, savedLocally: saveResult.ok };
@@ -1440,7 +1442,11 @@ export function addScheduleItem(
   item: Omit<ScheduleItem, 'id' | 'createdAt'>,
   auditActor?: string,
 ): ScheduleItem {
-  return addScheduleItemWithSaveResult(item, auditActor).item;
+  const result = addScheduleItemWithSaveResult(item, auditActor);
+  if (!result.savedLocally) {
+    throw new Error('Schedule item was not saved on this device, so it was not queued for cloud sync. Free device storage and retry.');
+  }
+  return result.item;
 }
 
 export function updateScheduleItemWithSaveResult(
@@ -1458,8 +1464,10 @@ export function updateScheduleItemWithSaveResult(
     updatedAt: new Date().toISOString(),
     updatedBy: auditActor || db.schedules[index].updatedBy || 'SHINE Staff',
   };
+  const previousSchedules = [...db.schedules];
   db.schedules[index] = updated;
   const saveResult = saveDatabase(db);
+  if (!saveResult.ok) db.schedules = previousSchedules;
   // Schedule edits use the shared per-record offline queue after a successful
   // local save, so stale local snapshots cannot bypass baseline/conflict checks.
   return { item: updated, savedLocally: saveResult.ok };
@@ -1470,7 +1478,11 @@ export function updateScheduleItem(
   updates: Partial<ScheduleItem>,
   auditActor?: string,
 ): ScheduleItem | null {
-  return updateScheduleItemWithSaveResult(id, updates, auditActor).item;
+  const result = updateScheduleItemWithSaveResult(id, updates, auditActor);
+  if (!result.savedLocally && result.item) {
+    throw new Error('Schedule update was not saved on this device, so it was not queued for cloud sync. Free device storage and retry.');
+  }
+  return result.item;
 }
 
 export function deleteScheduleItem(id: string): boolean {
@@ -1478,8 +1490,14 @@ export function deleteScheduleItem(id: string): boolean {
   if (!db.schedules) return false;
   const index = db.schedules.findIndex((s) => s.id === id);
   if (index === -1) return false;
+  const previousSchedules = [...db.schedules];
   db.schedules.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  try {
+    saveDatabaseOrThrow(db, 'schedule deletion');
+  } catch (error) {
+    db.schedules = previousSchedules;
+    throw error;
+  }
   // Deletions are detected by the shared per-record queue against its confirmed
   // baseline and are transactionally flushed with conflict protection.
   return true;
