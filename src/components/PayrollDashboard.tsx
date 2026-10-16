@@ -231,15 +231,20 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
       updatedByUid: currentUser?.uid || 'system',
     };
 
-    if (editingPayroll && paymentEmployee) {
-      updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
-    } else if (editingPayroll) {
-      updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
-    } else {
-      addPayrollRecord({
-        ...payload,
-        id: paymentEmployee ? `PAY-${encodeURIComponent(employeeId)}-${payPeriod}` : undefined,
-      }, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+    try {
+      if (editingPayroll && paymentEmployee) {
+        updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+      } else if (editingPayroll) {
+        updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+      } else {
+        addPayrollRecord({
+          ...payload,
+          id: paymentEmployee ? `PAY-${encodeURIComponent(employeeId)}-${payPeriod}` : undefined,
+        }, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+      }
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Payroll could not be saved. Check device storage and try again.');
+      return;
     }
 
     setShowPayrollModal(false);
@@ -486,7 +491,11 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                             type="button"
                             onClick={() => {
                               if (confirm(`Delete payroll record for ${record.employeeName}?`)) {
-                                deletePayrollRecord(record.id);
+                                const deleted = deletePayrollRecord(record.id);
+                                if (!deleted) {
+                                  window.alert('Payroll record was not deleted because the device could not save the change. Check available storage and retry.');
+                                  return;
+                                }
                                 onRefresh();
                               }
                             }}
