@@ -165,13 +165,23 @@ const restoreSuccess = await restoreDatabaseWithPersistence(
   () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
 );
 assert.equal(restoreSuccess.status, 'success');
+let cleanupAttempted = false;
+const queueCleanupFailure = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { cloudCalls += 1; },
+  () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
+  async () => { cleanupAttempted = true; throw new Error('synthetic queue cleanup failure'); },
+);
+assert.equal(queueCleanupFailure.status, 'queue_cleanup_failed', 'stale offline queue cleanup failure is visible');
+assert.equal(cleanupAttempted, true);
+
 const invalidRestore = await restoreDatabaseWithPersistence(
   JSON.stringify({ girls: 'not-an-array', households: [] }),
   async () => { cloudCalls += 1; },
   () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
 );
 assert.equal(invalidRestore.status, 'invalid_backup');
-assert.equal(localCalls, 2, 'invalid backups do not invoke local persistence');
-assert.equal(cloudCalls, 3, 'invalid backups do not invoke cloud persistence');
+assert.equal(localCalls, 3, 'invalid backups do not invoke local persistence');
+assert.equal(cloudCalls, 4, 'invalid backups do not invoke cloud persistence');
 
 console.log('Local storage failure handling tests passed.');
