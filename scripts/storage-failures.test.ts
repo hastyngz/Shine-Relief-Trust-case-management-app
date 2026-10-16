@@ -41,6 +41,9 @@ const {
   deleteBudgetItem,
   addAnnualBudgetPlan,
   updateAnnualBudgetPlan,
+  addScheduleItem,
+  updateScheduleItem,
+  deleteScheduleItem,
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
   normalizeImportedDatabase,
@@ -127,6 +130,21 @@ const unsavedSchedule = addScheduleItemWithSaveResult({
   status: 'Scheduled',
 }, 'Test Staff');
 assert.equal(unsavedSchedule.savedLocally, false, 'schedule create reports a failed local save');
+assert.ok(!getDatabase().schedules.some((item) => item.id === unsavedSchedule.item.id),
+  'failed schedule creation rolls back the in-memory record');
+assert.throws(
+  () => addScheduleItem({
+    type: 'other',
+    title: 'Synthetic wrapper storage failure',
+    scheduledDate: '2026-10-16',
+    targetType: 'general',
+    assignedStaffId: 'staff-test',
+    assignedStaffName: 'Test Staff',
+    status: 'Scheduled',
+  }, 'Test Staff'),
+  /Schedule item was not saved on this device/,
+  'the simple schedule helper cannot hide a failed local save',
+);
 failNext = false;
 const recoveredSchedule = addScheduleItemWithSaveResult({
   type: 'other',
@@ -145,6 +163,30 @@ const savedScheduleUpdate = updateScheduleItemWithSaveResult(
 );
 assert.equal(savedScheduleUpdate.savedLocally, true, 'schedule update reports successful local persistence');
 assert.equal(savedScheduleUpdate.item?.status, 'In Progress');
+
+failNext = true;
+const schedulesBeforeFailedUpdate = [...getDatabase().schedules];
+const failedScheduleUpdate = updateScheduleItemWithSaveResult(
+  recoveredSchedule.item.id,
+  { status: 'Completed' },
+  'Test Staff',
+);
+assert.equal(failedScheduleUpdate.savedLocally, false, 'schedule update reports local persistence failure');
+assert.deepEqual(getDatabase().schedules, schedulesBeforeFailedUpdate,
+  'failed schedule update restores the prior in-memory record');
+assert.throws(
+  () => updateScheduleItem(recoveredSchedule.item.id, { status: 'Cancelled' }, 'Test Staff'),
+  /Schedule update was not saved on this device/,
+  'the simple schedule update helper cannot hide a failed local save',
+);
+assert.throws(
+  () => deleteScheduleItem(recoveredSchedule.item.id),
+  /schedule deletion was not saved on this device/i,
+  'schedule deletion reports a failed local save',
+);
+assert.deepEqual(getDatabase().schedules, schedulesBeforeFailedUpdate,
+  'failed schedule deletion restores the prior in-memory record');
+failNext = false;
 
 // --- Non-quota errors are reported but not mislabelled ---------------------
 const employeeDb = getDatabase();
