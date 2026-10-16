@@ -625,13 +625,20 @@ export function deleteRentPayment(id: string): boolean {
 
 export function deleteExpense(id: string): boolean {
   const db = getDatabase();
-  const initialLength = db.expenses.length;
-  db.expenses = db.expenses.filter((e) => e.id !== id);
-  saveDatabase(db);
+  const previousExpenses = db.expenses;
+  const initialLength = previousExpenses.length;
+  db.expenses = previousExpenses.filter((e) => e.id !== id);
+  if (db.expenses.length === initialLength) return false;
+  try {
+    saveDatabaseOrThrow(db, 'Expense deletion');
+  } catch (error) {
+    db.expenses = previousExpenses;
+    throw error;
+  }
   deleteExpenseFromFirestore(id).catch((err) =>
     console.error('Failed to delete expense from Firestore:', err)
   );
-  return db.expenses.length < initialLength;
+  return true;
 }
 
 export function deleteHouseholdActivity(id: string): boolean {
@@ -751,8 +758,14 @@ export function addExpense(
     createdBy: actor,
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   }, actor, now);
+  const previousExpenses = [...db.expenses];
   db.expenses.unshift(newItem);
-  saveDatabase(db);
+  try {
+    saveDatabaseOrThrow(db, 'Household expense');
+  } catch (error) {
+    db.expenses = previousExpenses;
+    throw error;
+  }
   persistExpenseToFirestore(newItem).catch((err) =>
     console.error('Failed to persist expense to Firestore:', err)
   );
@@ -770,8 +783,14 @@ export function updateExpense(
   const now = new Date().toISOString();
   const actor = auditActor || 'SHINE Staff';
   const updatedItem = updateExpenseWithAudit(existing, changes, actor, now);
+  const previousExpenses = db.expenses;
   db.expenses = db.expenses.map((expense) => expense.id === id ? updatedItem : expense);
-  saveDatabase(db);
+  try {
+    saveDatabaseOrThrow(db, 'Expense update');
+  } catch (error) {
+    db.expenses = previousExpenses;
+    throw error;
+  }
   persistExpenseToFirestore(updatedItem).catch((err) =>
     console.error('Failed to persist expense update to Firestore:', err)
   );
