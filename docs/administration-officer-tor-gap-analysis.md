@@ -20,6 +20,19 @@
 | Safeguarding administration | Existing safeguarding APIs/rules and per-staff permissions | **Sensitive existing foundation.** New administration search, AI, reports and exports must not bypass the existing authorization boundary. Add policy/training acknowledgement tracking and a restricted referral/reporting route without giving general administration staff investigation powers. |
 | Organisational performance | Existing management/quality/reporting views | **Partial.** ToR indicators require explicit, agreed denominators, reporting periods, exclusions and source records. Asset coverage must compare verified physical assets with registered assets, not simply count database rows. |
 
+## Additional cross-cutting reliability findings (2026-10-16)
+
+### Local persistence and offline/cloud consistency — high priority
+
+A targeted code inspection found that the persistence architecture is not yet uniform across the application:
+
+- `src/utils/storage.ts` core girl/household/follow-up create, update and delete helpers call `saveDatabase(db)` without checking its `{ ok }` result, then start separate direct Firestore operations. Many Phase-2 record helpers follow a similar pattern through `addPhase2Record` and update helpers.
+- Inventory and asset helpers check local-save results; compliance schedule helpers return an explicit `savedLocally` result and avoid a parallel direct write. These are better patterns, but must not be copied mechanically without respecting each domain's existing semantics.
+- The Firestore snapshot listener in `src/App.tsx` attempts `saveDatabase(cloudDb, false)` and then updates React state with the cloud snapshot regardless of whether local persistence succeeded. Storage warnings are surfaced, but the implications for subsequent reloads and offline changes need explicit tests.
+- `importDatabaseJSON` synchronizes the validated backup to Firestore before checking local save success, then returns `true` even if `saveDatabase` fails. `clearAllDatabase` also ignores the local save result after cloud deletion. These operations need defined partial-failure semantics before they are changed, because a naive ordering change could produce a different kind of inconsistency.
+
+**Required approach:** do not introduce a global in-memory fallback or bulk rewrite without testing snapshot reconciliation, queue baselines, offline creates/updates/deletes, conflict handling, health/safeguarding permissions, backup recovery and retry behaviour. Build a domain-by-domain migration matrix and explicit outcome states first. For import/reset, distinguish local persistence from cloud completion and protect recoverability. Treat this as a reliability risk, not as proof that every operation currently loses data.
+
 ## Implementation sequence
 
 ### Workstream 1 — Documents & Filing (Phase 1 index delivered; continue)
