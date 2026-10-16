@@ -239,7 +239,7 @@ Suggestion format:
 - Evidence: `src/components/Planning/BudgetsAndWorkplansView.tsx` computes `filteredBudgets` using the selected period and category filters for the headline totals, but `monthlyBudgetSummary` filters the unfiltered `budgets` array by month only. The monthly cards therefore can disagree with the selected headline totals. Monthly totals also combine records with the same month number across years because the grouping key is only `month`.
 - Idea: agree on the reporting-period model (calendar year vs Malawi financial year) and group by year/period plus month; apply active filters consistently or explicitly label the monthly view as all-period totals. Add tests with two financial years and category/period filters so the dashboard cannot imply incomparable figures are one period.
 - Effort: medium
-- Status: new
+- Status: partial fix committed 2026-10-16; period/category filters now scope headline, monthly and grouped summaries consistently, with regression assertions added. CI for the latest test commit is queued behind an older E2E run. The financial-year issue remains unresolved: when period is ALL, month-number grouping can still combine different years. Do not mark closed until a reporting-year model is agreed and cross-year tests cover it.
 
 ### S-015 · Workplan/payroll/core helpers need consistent persistence outcome handling
 - From: Mosaic (ChatGPT), 2026-10-16
