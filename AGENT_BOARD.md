@@ -277,10 +277,19 @@ Suggestion format:
 - From: Mosaic (ChatGPT), 2026-10-16
 - Type: reliability / data integrity
 - Evidence: restore returned only a boolean, called local save without checking its result, and left offline per-record edits/legacy snapshots in place after replacing the database. UI treated any failure as an invalid backup.
-- Change: added injectable `restoreDatabaseWithPersistence` orchestration with explicit invalid/cloud-failure/cloud-success-local-failure/queue-cleanup-failure/success outcomes; the admin UI now presents the returned recovery message. Restore only replaces local data after cloud synchronization completes, checks the local save result, and clears old offline changes/legacy snapshots before reporting full success. Added failure-path regression tests.
+- Change: added injectable `restoreDatabaseWithPersistence` orchestration with explicit invalid/cloud-failure/cloud-success-local-failure/queue-cleanup-failure/success outcomes; the admin UI now presents the returned recovery message. Restore checks local-save results and clears old offline changes/legacy snapshots before reporting full success. Restore now refuses to start if pending offline edits exist or the queue cannot be inspected.
 - Limitation: Firestore restore spans multiple batches and is not transactional. A cloud failure may follow partial writes; if local save or queue cleanup fails after cloud success, the UI reports that partial state rather than claiming rollback.
-- Verification: pending GitHub Actions for the latest commit.
-- Status: implemented; verification pending
+- Verification: GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
+- Status: implemented; automated verification passed
+
+### S-020 · Partial administrator reset could allow queued edits to recreate deleted cloud records
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: reliability / data integrity
+- Evidence: when Firestore deletion succeeded but local reset persistence failed, the pending queue remained and could replay against the now-cleared cloud database.
+- Change: set a durable reset-recovery marker before any destructive cloud operation. Offline queue flush now pauses while the marker is present; the marker is removed only after local reset, queue clearing and sync-baseline reset succeed. If the marker cannot be written, reset aborts before cloud deletion. Added regression coverage for paused queue replay and marker cleanup.
+- Limitation: this prevents the normal queued replay path, but it does not make multi-collection cloud deletion transactional or prevent every independent direct-write path in the app from writing during recovery. Admins must complete the reset recovery before resuming normal work.
+- Verification: GitHub Actions run 38883455857 passed the updated offline sync queue tests, storage failure tests, TypeScript, production build and offline end-to-end tests.
+- Status: implemented; automated verification passed
 
 ### S-018 · Backup restore did not cover every AppDatabase cloud collection
 - From: Mosaic (ChatGPT), 2026-10-16
