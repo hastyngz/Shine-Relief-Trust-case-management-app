@@ -664,11 +664,9 @@ export function deleteExpense(id: string): boolean {
   const initialLength = previousExpenses.length;
   db.expenses = previousExpenses.filter((e) => e.id !== id);
   if (db.expenses.length === initialLength) return false;
-  try {
-    saveDatabaseOrThrow(db, 'Expense deletion');
-  } catch (error) {
+  if (!saveDatabase(db).ok) {
     db.expenses = previousExpenses;
-    throw error;
+    return false;
   }
   deleteExpenseFromFirestore(id).catch((err) =>
     console.error('Failed to delete expense from Firestore:', err)
@@ -1136,11 +1134,9 @@ export function deleteBudgetItem(id: string): boolean {
   if (index === -1) return false;
   const previousBudgets = [...db.budgets];
   db.budgets.splice(index, 1);
-  try {
-    saveDatabaseOrThrow(db, 'budget item deletion');
-  } catch (error) {
+  if (!saveDatabase(db).ok) {
     db.budgets = previousBudgets;
-    throw error;
+    return false;
   }
   deleteBudgetItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete budget item from Firestore:', err)
@@ -1374,11 +1370,9 @@ export function deleteWorkplanItem(id: string): boolean {
   if (index === -1) return false;
   const previousWorkplans = [...db.workplans];
   db.workplans.splice(index, 1);
-  try {
-    saveDatabaseOrThrow(db, 'workplan item deletion');
-  } catch (error) {
+  if (!saveDatabase(db).ok) {
     db.workplans = previousWorkplans;
-    throw error;
+    return false;
   }
   deleteWorkplanItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete workplan item from Firestore:', err)
@@ -1503,11 +1497,9 @@ export function deleteScheduleItem(id: string): boolean {
   if (index === -1) return false;
   const previousSchedules = [...db.schedules];
   db.schedules.splice(index, 1);
-  try {
-    saveDatabaseOrThrow(db, 'schedule deletion');
-  } catch (error) {
+  if (!saveDatabase(db).ok) {
     db.schedules = previousSchedules;
-    throw error;
+    return false;
   }
   // Deletions are detected by the shared per-record queue against its confirmed
   // baseline and are transactionally flushed with conflict protection.
