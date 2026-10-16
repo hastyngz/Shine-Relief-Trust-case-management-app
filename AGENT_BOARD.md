@@ -291,6 +291,16 @@ Suggestion format:
 - Verification: GitHub Actions run 38883455857 passed the updated offline sync queue tests, storage failure tests, TypeScript, production build and offline end-to-end tests.
 - Status: implemented; automated verification passed
 
+### S-021 · Backup restore could treat an unreadable persisted offline queue as empty
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: reliability / data integrity
+- Evidence: restore's pending-edit check used helpers that intentionally converted malformed or inaccessible queue storage into an empty list. That could allow restore to start without proving there were no pending edits.
+- Change: added a fail-closed persisted queue inspection that checks IndexedDB and the localStorage fallback; malformed queue JSON, inaccessible storage, unreadable IndexedDB without a trustworthy fallback, malformed legacy snapshots, or an active reset-recovery lock now block restore. Reset cleanup also uses a throwing baseline-persistence operation so it cannot remove the recovery lock when the new sync baseline was not durably saved.
+- Tests: offline regression coverage checks clear/pending/unavailable states, corrupt queue and legacy JSON, IndexedDB read failure, and recovery-lock retention when baseline persistence fails.
+- Limitation: a partial cloud restore/reset remains non-transactional. The lock prevents normal queue replay, but the app still needs a global read-only/recovery state to stop independent direct-write paths during recovery.
+- Verification: latest code needs its own GitHub Actions run.
+- Status: implemented; verification pending
+
 ### S-018 · Backup restore did not cover every AppDatabase cloud collection
 - From: Mosaic (ChatGPT), 2026-10-16
 - Type: bug
