@@ -115,6 +115,12 @@ Handoff format:
 - Next: verify CI, then audit callers for user-facing retry feedback and migrate remaining direct Firestore writes to the per-record queue in controlled slices.
 - Watch out: this does not make cloud operations transactional or solve concurrent edits. Local-save failure tests cover representative girl/workplan create, update and delete paths. — Mosaic (ChatGPT), 2026-10-16
 
+### 2026-10-16 · Mosaic (ChatGPT) · isolate seed fallback
+- Area: local database bootstrap and failed-storage recovery.
+- State: `getDatabase()` now returns a fresh seed copy when no stored database exists or storage parsing fails. This prevents failed mutations from changing the shared `INITIAL_DATABASE` singleton.
+- Next: verify CI and continue auditing the UI feedback around failed creates/updates; core deletes now avoid false success.
+- Watch out: fallback still intentionally supplies seed data if stored JSON cannot be read; recovery/export behaviour for malformed stored data deserves separate review. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 Suggestion format:

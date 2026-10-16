@@ -122,8 +122,14 @@ function dispatchStorageEvent(name: string, detail?: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
+function cloneInitialDatabase(): AppDatabase {
+  // Never hand callers the shared seed object: a failed local save must not
+  // mutate the in-memory seed and make unsaved changes appear to survive.
+  return JSON.parse(JSON.stringify(INITIAL_DATABASE)) as AppDatabase;
+}
+
 export function getDatabase(): AppDatabase {
-  if (typeof window === 'undefined') return INITIAL_DATABASE;
+  if (typeof window === 'undefined') return cloneInitialDatabase();
   try {
     // Purge any old demo key from previous test sessions
     if (localStorage.getItem(LEGACY_STORAGE_KEY)) {
@@ -132,8 +138,9 @@ export function getDatabase(): AppDatabase {
 
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      saveDatabase(INITIAL_DATABASE, false);
-      return INITIAL_DATABASE;
+      const initial = cloneInitialDatabase();
+      saveDatabase(initial, false);
+      return initial;
     }
     const parsed = JSON.parse(raw);
     return {
@@ -182,7 +189,7 @@ export function getDatabase(): AppDatabase {
     };
   } catch (error) {
     console.error('Error reading database from localStorage:', error);
-    return INITIAL_DATABASE;
+    return cloneInitialDatabase();
   }
 }
 

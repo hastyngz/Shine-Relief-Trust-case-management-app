@@ -459,4 +459,16 @@ assert.deepEqual(afterFailedMutations.girls, beforeFailedMutations.girls, 'faile
 assert.deepEqual(afterFailedMutations.workplans, beforeFailedMutations.workplans, 'failed planning mutations leave durable workplans unchanged');
 assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
+// Empty/corrupt storage fallback must return a fresh seed copy, not the shared
+// INITIAL_DATABASE singleton, or failed writes can leak into later reads.
+values.delete('shine_relief_trust_prod_v1');
+fakeLocalStorage.setItem = () => { throw new Error('synthetic storage unavailable'); };
+const fallbackOne = getDatabase();
+fallbackOne.girls.push({ id: 'SG-SEED-FALLBACK-LEAK' } as never);
+const fallbackTwo = getDatabase();
+assert.ok(!fallbackTwo.girls.some((girl) => girl.id === 'SG-SEED-FALLBACK-LEAK'),
+  'a failed save from an empty store must not mutate the shared seed object');
+fakeLocalStorage.setItem = originalSetItem;
+assert.equal(saveDatabase(fallbackTwo).ok, true, 'the isolated fallback can be persisted after storage recovers');
+
 console.log('Local storage failure handling tests passed.');

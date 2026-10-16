@@ -100,6 +100,11 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression coverage for restore orchestration uses injected cloud/local persistence functions, and offline-sync tests exercise queue blocking while reset recovery is required. GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
 
 
+### Seed fallback isolation
+- `getDatabase()` now returns a JSON-cloned seed database when no local record exists, when called outside a browser, or when reading stored JSON fails. This avoids handing mutation helpers the shared `INITIAL_DATABASE` object when storage is unavailable; a failed save can no longer alter that singleton and make a later read appear to contain unsaved changes.
+- Regression coverage removes the stored database, forces local persistence to fail, mutates the returned fallback, and confirms a subsequent fallback read does not contain that mutation.
+- Remaining risk: malformed/unreadable local JSON still falls back to seed data instead of offering a recovery/export flow for the damaged stored payload.
+
 ### Core CRUD local-save failure handling
 - A targeted sweep of legacy CRUD helpers now checks the local persistence result before starting their direct Firestore writes. It covers girl and household records, follow-ups, rent/expenses/activities, budgets, workplans, procurement list updates, case-management history, people, meetings, feeding and market-price records, AI settings and early-years records. Delete helpers that return booleans report `false` and skip cloud deletion if the local save fails.
 - Regression tests simulate local-storage failures for girl create/delete and workplan create/update/delete. A persistent storage warning is still the primary user-facing signal for these legacy callers; caller-specific retry messaging needs a follow-up audit.
