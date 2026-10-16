@@ -104,7 +104,7 @@ export const DataModal: React.FC<DataModalProps> = ({
     try {
       await resetDatabaseToSeed();
       setConfirmReset(false);
-      setMessage({ text: 'All data cleared from both Cloud Firestore and local storage.', type: 'success' });
+      setMessage({ text: 'Operational records cleared from Cloud Firestore and local storage. Staff access, messaging and designated audit records are preserved.', type: 'success' });
       onDataChanged();
     } catch (err) {
       setMessage({ text: 'Could not clear all records: ' + String(err), type: 'error' });
