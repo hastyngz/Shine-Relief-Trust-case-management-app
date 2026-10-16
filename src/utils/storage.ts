@@ -986,9 +986,15 @@ function addPhase2Record<T extends Phase2TrackedRecord>(
   } as T;
   const allData = db as unknown as Record<string, unknown>;
   const records = (allData[dbField] as T[] | undefined) || [];
+  const previousRecords = [...records];
   records.unshift(record);
   allData[dbField] = records;
-  saveDatabaseOrThrow(db, 'case-management record');
+  try {
+    saveDatabaseOrThrow(db, 'case-management record');
+  } catch (error) {
+    allData[dbField] = previousRecords;
+    throw error;
+  }
   if (collectionName !== 'procurementLists') {
     // Procurement lists participate in the per-record offline queue. A parallel
     // direct setDoc would bypass baseUpdatedAt conflict checks.
@@ -1044,9 +1050,15 @@ export function updateCaseAction(
       ? { completedAt: now }
       : {}),
   };
+  const previousRecords = [...records];
   records[index] = updated;
   db.caseActions = records;
-  saveDatabaseOrThrow(db, 'case action');
+  try {
+    saveDatabaseOrThrow(db, 'case action');
+  } catch (error) {
+    db.caseActions = previousRecords;
+    throw error;
+  }
   persistPhase2Record('caseActions', updated).catch((err) =>
     console.error('Failed to update case action:', err)
   );
@@ -1077,9 +1089,15 @@ export function updateEducationHistoryRecord(
   const index = records.findIndex((item) => item.id === id);
   if (index < 0) return null;
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  const previousRecords = [...records];
   records[index] = updated;
   db.educationHistory = records;
-  saveDatabaseOrThrow(db, 'education history');
+  try {
+    saveDatabaseOrThrow(db, 'education history');
+  } catch (error) {
+    db.educationHistory = previousRecords;
+    throw error;
+  }
   persistPhase2Record('educationHistory', updated).catch((err) => console.error('Failed to update education history:', err));
   return updated;
 }
@@ -1112,9 +1130,15 @@ export function updateAttendanceRecord(
   const index = records.findIndex((item) => item.id === id);
   if (index < 0) return null;
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  const previousRecords = [...records];
   records[index] = updated;
   db.attendanceRecords = records;
-  saveDatabaseOrThrow(db, 'attendance record');
+  try {
+    saveDatabaseOrThrow(db, 'attendance record');
+  } catch (error) {
+    db.attendanceRecords = previousRecords;
+    throw error;
+  }
   persistPhase2Record('attendanceRecords', updated).catch((err) => console.error('Failed to update attendance record:', err));
   return updated;
 }
@@ -1135,9 +1159,15 @@ export function updateGirlLeaveRecord(
   const index = records.findIndex((item) => item.id === id);
   if (index < 0) return null;
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  const previousRecords = [...records];
   records[index] = updated;
   db.girlLeaves = records;
-  saveDatabaseOrThrow(db, 'girl leave record');
+  try {
+    saveDatabaseOrThrow(db, 'girl leave record');
+  } catch (error) {
+    db.girlLeaves = previousRecords;
+    throw error;
+  }
   persistPhase2Record('girlLeaves', updated).catch((err) => console.error('Failed to update leave record:', err));
   return updated;
 }
@@ -1158,9 +1188,15 @@ export function updateProgrammeLog(
   const index = records.findIndex((item) => item.id === id);
   if (index < 0) return null;
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
+  const previousRecords = [...records];
   records[index] = updated;
   db.programmeLogs = records;
-  saveDatabaseOrThrow(db, 'programme log');
+  try {
+    saveDatabaseOrThrow(db, 'programme log');
+  } catch (error) {
+    db.programmeLogs = previousRecords;
+    throw error;
+  }
   persistPhase2Record('programmeLogs', updated).catch((err) => console.error('Failed to update programme log:', err));
   return updated;
 }
