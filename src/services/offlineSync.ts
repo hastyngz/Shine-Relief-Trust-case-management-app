@@ -3,6 +3,7 @@ import { appendSyncConflictAudit, syncChangeEntriesToFirestore, SyncChangeResult
 import { loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
 
 const LEGACY_SNAPSHOT_KEY = 'shine_relief_trust_pending_sync_v1';
+const RESET_RECOVERY_REQUIRED_KEY = 'shine_relief_trust_reset_recovery_required_v1';
 const LAST_SYNCED_KEY = 'shine_relief_trust_last_synced_v1';
 let cachedBaselineRaw: string | null = null;
 let cachedBaselineDb: AppDatabase | null = null;
@@ -219,10 +220,28 @@ export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void>
  * that the reset just removed. Persist the empty queue before removing the
  * legacy snapshot so a storage failure does not silently discard pending work.
  */
+/** Persist a safety lock before a destructive reset starts. If the reset only
+ * partially succeeds, the old queue must not repopulate cloud records. */
+export function markDatabaseResetRecoveryRequired(): void {
+  if (typeof window === 'undefined') throw new Error('Cannot mark reset recovery outside the browser.');
+  window.localStorage.setItem(RESET_RECOVERY_REQUIRED_KEY, '1');
+}
+
+export function isDatabaseResetRecoveryRequired(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(RESET_RECOVERY_REQUIRED_KEY) === '1';
+  } catch {
+    // Fail closed: if the recovery marker cannot be read, do not replay queued edits.
+    return true;
+  }
+}
+
 export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Promise<void> {
   await persistQueue([]);
   clearPendingOfflineSnapshots();
   setLastSyncedSnapshot(db);
+  if (typeof window !== 'undefined') window.localStorage.removeItem(RESET_RECOVERY_REQUIRED_KEY);
 }
 
 export function getPendingOfflineSnapshotCount(): number {
@@ -419,6 +438,11 @@ export async function flushPendingOfflineSnapshots(
   options: { actor?: { uid: string; name: string } } = {},
 ): Promise<FlushResult> {
   if (typeof window === 'undefined') return { flushed: false, applied: 0, conflicts: [] };
+  // A reset that failed after cloud deletion leaves the local queue dangerous:
+  // replaying it could recreate records. An administrator must complete recovery.
+  if (isDatabaseResetRecoveryRequired()) {
+    return { flushed: false, applied: 0, conflicts: [] };
+  }
   await migrateLegacySnapshots();
   const entries = await loadQueue();
   if (!entries.length) return { flushed: false, applied: 0, conflicts: [] };
