@@ -1,0 +1,52 @@
+/**
+ * Firestore collections removed by the administrator's operational-data reset.
+ *
+ * Staff accounts, conversations, messages, notifications, user preferences,
+ * safeguarding case records, and durable audit/history collections are not in
+ * this list. Keep this list aligned with operational data persisted by
+ * firestoreSync.ts; omissions leave stale operational data in the cloud.
+ */
+export const OPERATIONAL_COLLECTIONS_TO_CLEAR = [
+  'girls',
+  'households',
+  'educationalFollowUps',
+  'healthFollowUps',
+  'familyFollowUps',
+  'rentPayments',
+  'expenses',
+  'householdActivities',
+  'contacts',
+  'budgets',
+  'annualBudgets',
+  'payrollRecords',
+  'employees',
+  'employeeSalaryHistory',
+  'workplans',
+  'schedules',
+  'meetings',
+  'feedingProgramLogs',
+  'marketPrices',
+  'forecastSettings',
+  'whatIfScenarios',
+  'intelligenceSuggestions',
+  'aiSettings',
+  'historicalCaseRecords',
+  'importAudits',
+  'restrictedImportSources',
+  'earlyYearsRecords',
+  'people',
+  'attachments',
+  'caseActions',
+  'educationHistory',
+  'academicSupports',
+  'examinationRecords',
+  'attendanceRecords',
+  'girlLeaves',
+  'programmeLogs',
+  'caseReviews',
+  'caseGoals',
+  'procurementLists',
+  'projectProjections',
+  'inventoryItems',
+  'assets',
+] as const;
