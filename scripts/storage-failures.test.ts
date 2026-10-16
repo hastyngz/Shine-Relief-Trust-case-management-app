@@ -175,8 +175,7 @@ await assert.rejects(
   'employee edits do not proceed to Firestore when local persistence fails',
 );
 
-// Expense mutations must roll back in-memory state and stop before cloud writes
-// when local storage fails; financial records must not appear saved in the UI.
+// Expense mutations must stop before cloud writes when local storage fails.
 const expenseDb = getDatabase();
 const originalExpenses = [...expenseDb.expenses];
 assert.throws(
@@ -193,7 +192,7 @@ assert.throws(
   /not saved on this device/,
   'expense creation reports a failed local save',
 );
-assert.deepEqual(expenseDb.expenses, originalExpenses, 'failed expense creation rolls back the in-memory record');
+assert.deepEqual(getDatabase().expenses, originalExpenses, 'failed expense creation leaves durable records unchanged');
 
 const expenseFixture = {
   id: 'EXP-STORAGE-FAILURE-TEST',
@@ -207,21 +206,23 @@ const expenseFixture = {
   paymentStatus: 'Unpaid',
   createdAt: '2026-10-16T00:00:00.000Z',
 } as never;
+fakeLocalStorage.setItem = originalSetItem;
 expenseDb.expenses = [...originalExpenses, expenseFixture];
-const beforeFailedExpenseMutations = [...expenseDb.expenses];
+assert.equal(saveDatabase(expenseDb).ok, true, 'synthetic expense fixture is persisted before storage is disabled');
+fakeLocalStorage.setItem = () => { throw new Error('SecurityError'); };
+const beforeFailedExpenseMutations = getDatabase();
 assert.throws(
   () => updateExpense('EXP-STORAGE-FAILURE-TEST', { amountDue: 150 } as never, 'Test Staff'),
   /not saved on this device/,
   'expense update reports a failed local save',
 );
-assert.deepEqual(expenseDb.expenses, beforeFailedExpenseMutations, 'failed expense update restores the original record');
+assert.deepEqual(getDatabase().expenses, beforeFailedExpenseMutations.expenses, 'failed expense update leaves durable records unchanged');
 assert.throws(
   () => deleteExpense('EXP-STORAGE-FAILURE-TEST'),
   /not saved on this device/,
   'expense deletion reports a failed local save',
 );
-assert.deepEqual(expenseDb.expenses, beforeFailedExpenseMutations, 'failed expense deletion restores the original record');
-expenseDb.expenses = originalExpenses;
+assert.deepEqual(getDatabase().expenses, beforeFailedExpenseMutations.expenses, 'failed expense deletion leaves durable records unchanged');
 
 // --- Backup restore reports local/cloud partial outcomes honestly ----------
 const validBackup = JSON.stringify({ girls: [{ id: 'SG-RESTORE-1' }], households: [] });

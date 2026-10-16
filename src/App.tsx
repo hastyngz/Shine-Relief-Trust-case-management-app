@@ -920,9 +920,16 @@ function AppContent() {
       `Are you sure you want to delete profile for ${girl?.fullName || 'this girl'}?\nAll linked educational, health, and family follow-up records will also be deleted.`
     );
     if (confirmed) {
-      deleteGirl(girlId);
-      showToast('Girl profile and follow-ups deleted.');
-      navigateTo('girls', 'girls');
+      try {
+        if (!deleteGirl(girlId)) {
+          showToast('Girl profile was not deleted on this device. Check the storage warning, then retry.');
+          return;
+        }
+        showToast('Girl profile and follow-ups deleted.');
+        navigateTo('girls', 'girls');
+      } catch (error) {
+        showToast(`Girl profile was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+      }
     }
   };
 
@@ -936,9 +943,16 @@ function AppContent() {
       `Are you sure you want to delete household "${house?.name || 'this house'}"?\nResident girls will be preserved and marked unassigned.`
     );
     if (confirmed) {
-      deleteHousehold(houseId);
-      showToast('Household deleted.');
-      navigateTo('houses', 'houses');
+      try {
+        if (!deleteHousehold(houseId)) {
+          showToast('Household was not deleted on this device. Check the storage warning, then retry.');
+          return;
+        }
+        showToast('Household deleted.');
+        navigateTo('houses', 'houses');
+      } catch (error) {
+        showToast(`Household was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+      }
     }
   };
 
@@ -955,10 +969,20 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Are you sure you want to delete this follow-up record?')) return;
-    if (type === 'educational') deleteEducationalFollowUp(id);
-    else if (type === 'health') deleteHealthFollowUp(id);
-    else if (type === 'family') deleteFamilyFollowUp(id);
-    showToast('Follow-up record removed.');
+    try {
+      const deleted = type === 'educational'
+        ? deleteEducationalFollowUp(id)
+        : type === 'health'
+          ? deleteHealthFollowUp(id)
+          : deleteFamilyFollowUp(id);
+      if (!deleted) {
+        showToast('Follow-up was not deleted. Refresh the record and check the storage warning before retrying.');
+        return;
+      }
+      showToast('Follow-up record removed.');
+    } catch (error) {
+      showToast(`Follow-up was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+    }
   };
 
   const handleDeleteRentPayment = (id: string) => {
@@ -967,8 +991,15 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Delete this rent payment entry?')) return;
-    deleteRentPayment(id);
-    showToast('Rent payment record deleted.');
+    try {
+      if (!deleteRentPayment(id)) {
+        showToast('Rent payment was not deleted. Refresh the record and check the storage warning before retrying.');
+        return;
+      }
+      showToast('Rent payment record deleted.');
+    } catch (error) {
+      showToast(`Rent payment was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+    }
   };
 
   const handleDeleteExpense = (id: string) => {
@@ -1042,8 +1073,15 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Delete this activity entry?')) return;
-    deleteHouseholdActivity(id);
-    showToast('Activity record deleted.');
+    try {
+      if (!deleteHouseholdActivity(id)) {
+        showToast('Activity was not deleted. Refresh the record and check the storage warning before retrying.');
+        return;
+      }
+      showToast('Activity record deleted.');
+    } catch (error) {
+      showToast(`Activity was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+    }
   };
 
   // Lookup helpers for active profiles
