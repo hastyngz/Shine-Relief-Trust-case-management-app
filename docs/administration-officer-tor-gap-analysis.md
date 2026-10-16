@@ -100,6 +100,12 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression coverage for restore orchestration uses injected cloud/local persistence functions, and offline-sync tests exercise queue blocking while reset recovery is required. GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
 
 
+### Payroll and employee local-save integrity
+- Payroll create/update and employee updates now check the device save result before starting their Firestore write. If local storage rejects the save, the operation throws a clear actionable error and the payroll form remains open; the employee contract/profile caller can surface the update failure. Payroll delete returns `false` and skips cloud deletion when local persistence fails, and the UI shows a retry message.
+- Regression tests simulate local storage failures for payroll creation and employee updates to verify they stop before the cloud-write step.
+- Remaining issue: this is a targeted domain fix, not a global persistence guarantee. Older girl, household, follow-up, budget, workplan, meeting and other CRUD helpers still contain unchecked saves. Continue migrating one domain at a time with caller-level error handling and offline/conflict regression tests.
+- Verification: latest commit needs its own GitHub Actions run.
+
 ### Fail-closed offline queue inspection and baseline persistence
 - Restore now checks the persisted queue rather than trusting only a cached/in-memory count. The inspector checks IndexedDB plus its localStorage fallback and returns `unavailable` for malformed or inaccessible queue state; malformed legacy snapshot data also blocks restore. This avoids silently treating a damaged queue as empty.
 - A pre-existing reset-recovery marker also blocks restore until the administrator completes recovery. This avoids using a backup restore to accidentally unlock an incomplete destructive reset.
