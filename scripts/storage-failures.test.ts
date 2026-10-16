@@ -234,6 +234,31 @@ assert.deepEqual(getDatabase().expenses, beforeFailedExpenseMutations.expenses, 
 const budgetDb = getDatabase();
 const originalBudgets = [...(budgetDb.budgets || [])];
 const originalAnnualBudgets = [...(budgetDb.annualBudgets || [])];
+const originalWorkplans = [...(budgetDb.workplans || [])];
+assert.throws(
+  () => addWorkplanItem({
+    period: '2099-Q1',
+    periodType: 'quarterly',
+    activity: 'Synthetic workplan',
+    objective: 'Test local persistence failure',
+    description: 'Test local persistence failure',
+    targetCount: 1,
+    unit: 'session',
+    completedCount: 0,
+    progress: 0,
+    status: 'In Progress',
+    responsibleStaffId: 'TEST-STAFF',
+    responsibleStaffName: 'Test Staff',
+    startDate: '2099-01-01',
+    endDate: '2099-01-02',
+    dueDatePeriod: 'date:2099-01-02',
+    location: 'Test location',
+    notes: '',
+  } as never, 'Test Staff'),
+  /workplan item was not saved on this device/i,
+  'workplan creation reports a failed local save',
+);
+assert.deepEqual(getDatabase().workplans, originalWorkplans, 'failed workplan creation rolls back its in-memory record');
 assert.throws(
   () => addBudgetItem({
     period: '2099-Q1',
@@ -269,6 +294,27 @@ const budgetFixture = {
   notes: '',
   createdAt: '2026-10-16T00:00:00.000Z',
 } as never;
+const workplanFixture = {
+  id: 'WKP-STORAGE-FAILURE-TEST',
+  period: '2099-Q1',
+  periodType: 'quarterly',
+  activity: 'Synthetic existing workplan',
+  objective: 'Test local persistence failure',
+  description: 'Test local persistence failure',
+  targetCount: 1,
+  unit: 'session',
+  completedCount: 0,
+  progress: 0,
+  status: 'In Progress',
+  responsibleStaffId: 'TEST-STAFF',
+  responsibleStaffName: 'Test Staff',
+  startDate: '2099-01-01',
+  endDate: '2099-01-02',
+  dueDatePeriod: 'date:2099-01-02',
+  location: 'Test location',
+  notes: '',
+  createdAt: '2026-10-16T00:00:00.000Z',
+} as never;
 const annualBudgetFixture = {
   id: 'ABG-STORAGE-FAILURE-TEST',
   financialYear: '2099-2100',
@@ -284,10 +330,12 @@ const annualBudgetFixture = {
 } as never;
 budgetDb.budgets = [...originalBudgets, budgetFixture];
 budgetDb.annualBudgets = [...originalAnnualBudgets, annualBudgetFixture];
-assert.equal(saveDatabase(budgetDb).ok, true, 'synthetic budget fixtures are persisted before storage is disabled');
+budgetDb.workplans = [...originalWorkplans, workplanFixture];
+assert.equal(saveDatabase(budgetDb).ok, true, 'synthetic budget/workplan fixtures are persisted before storage is disabled');
 fakeLocalStorage.setItem = () => { throw new Error('SecurityError'); };
 const beforeFailedBudgetMutations = [...budgetDb.budgets];
 const beforeFailedAnnualBudgetMutations = [...budgetDb.annualBudgets];
+const beforeFailedWorkplanMutations = [...budgetDb.workplans];
 assert.throws(
   () => updateBudgetItem('BDG-STORAGE-FAILURE-TEST', { budgetAmount: 150 } as never, 'Test Staff'),
   /budget item was not saved on this device/i,
@@ -300,6 +348,18 @@ assert.throws(
   'budget deletion reports a failed local save',
 );
 assert.deepEqual(getDatabase().budgets, beforeFailedBudgetMutations, 'failed budget deletion restores the original record');
+assert.throws(
+  () => updateWorkplanItem('WKP-STORAGE-FAILURE-TEST', { completedCount: 1 } as never, 'Test Staff'),
+  /workplan item was not saved on this device/i,
+  'workplan update reports a failed local save',
+);
+assert.deepEqual(getDatabase().workplans, beforeFailedWorkplanMutations, 'failed workplan update restores the original record');
+assert.throws(
+  () => deleteWorkplanItem('WKP-STORAGE-FAILURE-TEST'),
+  /workplan item deletion was not saved on this device/i,
+  'workplan deletion reports a failed local save',
+);
+assert.deepEqual(getDatabase().workplans, beforeFailedWorkplanMutations, 'failed workplan deletion restores the original record');
 assert.throws(
   () => addAnnualBudgetPlan({
     financialYear: '2099-2100',
@@ -326,7 +386,8 @@ assert.deepEqual(getDatabase().annualBudgets, beforeFailedAnnualBudgetMutations,
 fakeLocalStorage.setItem = originalSetItem;
 budgetDb.budgets = originalBudgets;
 budgetDb.annualBudgets = originalAnnualBudgets;
-assert.equal(saveDatabase(budgetDb).ok, true, 'synthetic financial fixtures are removed from local test storage');
+budgetDb.workplans = originalWorkplans;
+assert.equal(saveDatabase(budgetDb).ok, true, 'synthetic financial/workplan fixtures are removed from local test storage');
 
 // --- Backup restore reports local/cloud partial outcomes honestly ----------
 const validBackup = JSON.stringify({ girls: [{ id: 'SG-RESTORE-1' }], households: [] });
