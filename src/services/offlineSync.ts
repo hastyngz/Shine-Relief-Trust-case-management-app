@@ -205,9 +205,24 @@ export async function loadQueue(): Promise<OfflineChangeEntry[]> {
 }
 
 export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void> {
-  cachedQueue = entries;
+  // Only update the in-memory view after durable persistence succeeds. Otherwise
+  // a failed IndexedDB/localStorage write could make the UI report an empty queue
+  // while the old persisted entries remain and replay later.
   await saveQueueEntries(entries);
+  cachedQueue = entries;
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
+}
+
+/**
+ * Called only after an administrator's database reset has succeeded in both
+ * Firestore and local storage. Old queued edits must not recreate the records
+ * that the reset just removed. Persist the empty queue before removing the
+ * legacy snapshot so a storage failure does not silently discard pending work.
+ */
+export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Promise<void> {
+  await persistQueue([]);
+  clearPendingOfflineSnapshots();
+  setLastSyncedSnapshot(db);
 }
 
 export function getPendingOfflineSnapshotCount(): number {
