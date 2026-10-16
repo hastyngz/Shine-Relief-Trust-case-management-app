@@ -666,9 +666,14 @@ export function deleteHousehold(id: string): boolean {
 
 export function deleteEducationalFollowUp(id: string): boolean {
   const db = getDatabase();
-  const initialLength = db.educationalFollowUps.length;
-  db.educationalFollowUps = db.educationalFollowUps.filter((e) => e.id !== id);
-  if (!saveDatabase(db).ok) return false;
+  const previous = db.educationalFollowUps;
+  const initialLength = previous.length;
+  if (!previous.some((record) => record.id === id)) return false;
+  db.educationalFollowUps = previous.filter((e) => e.id !== id);
+  if (!saveDatabase(db).ok) {
+    db.educationalFollowUps = previous;
+    return false;
+  }
   deleteEduFollowUpFromFirestore(id).catch((err) =>
     console.error('Failed to delete educational follow-up from Firestore:', err)
   );
@@ -677,9 +682,14 @@ export function deleteEducationalFollowUp(id: string): boolean {
 
 export function deleteHealthFollowUp(id: string): boolean {
   const db = getDatabase();
-  const initialLength = db.healthFollowUps.length;
-  db.healthFollowUps = db.healthFollowUps.filter((h) => h.id !== id);
-  if (!saveDatabase(db).ok) return false;
+  const previous = db.healthFollowUps;
+  const initialLength = previous.length;
+  if (!previous.some((record) => record.id === id)) return false;
+  db.healthFollowUps = previous.filter((h) => h.id !== id);
+  if (!saveDatabase(db).ok) {
+    db.healthFollowUps = previous;
+    return false;
+  }
   deleteHealthFollowUpFromFirestore(id).catch((err) =>
     console.error('Failed to delete health follow-up from Firestore:', err)
   );
@@ -688,9 +698,14 @@ export function deleteHealthFollowUp(id: string): boolean {
 
 export function deleteFamilyFollowUp(id: string): boolean {
   const db = getDatabase();
-  const initialLength = db.familyFollowUps.length;
-  db.familyFollowUps = db.familyFollowUps.filter((f) => f.id !== id);
-  if (!saveDatabase(db).ok) return false;
+  const previous = db.familyFollowUps;
+  const initialLength = previous.length;
+  if (!previous.some((record) => record.id === id)) return false;
+  db.familyFollowUps = previous.filter((f) => f.id !== id);
+  if (!saveDatabase(db).ok) {
+    db.familyFollowUps = previous;
+    return false;
+  }
   deleteFamilyFollowUpFromFirestore(id).catch((err) =>
     console.error('Failed to delete family follow-up from Firestore:', err)
   );
@@ -699,9 +714,14 @@ export function deleteFamilyFollowUp(id: string): boolean {
 
 export function deleteRentPayment(id: string): boolean {
   const db = getDatabase();
-  const initialLength = db.rentPayments.length;
-  db.rentPayments = db.rentPayments.filter((r) => r.id !== id);
-  if (!saveDatabase(db).ok) return false;
+  const previous = db.rentPayments;
+  const initialLength = previous.length;
+  if (!previous.some((record) => record.id === id)) return false;
+  db.rentPayments = previous.filter((r) => r.id !== id);
+  if (!saveDatabase(db).ok) {
+    db.rentPayments = previous;
+    return false;
+  }
   deleteRentPaymentFromFirestore(id).catch((err) =>
     console.error('Failed to delete rent payment from Firestore:', err)
   );
@@ -726,9 +746,14 @@ export function deleteExpense(id: string): boolean {
 
 export function deleteHouseholdActivity(id: string): boolean {
   const db = getDatabase();
-  const initialLength = db.householdActivities.length;
-  db.householdActivities = db.householdActivities.filter((a) => a.id !== id);
-  if (!saveDatabase(db).ok) return false;
+  const previous = db.householdActivities;
+  const initialLength = previous.length;
+  if (!previous.some((record) => record.id === id)) return false;
+  db.householdActivities = previous.filter((a) => a.id !== id);
+  if (!saveDatabase(db).ok) {
+    db.householdActivities = previous;
+    return false;
+ }
   deleteHouseholdActivityFromFirestore(id).catch((err) =>
     console.error('Failed to delete household activity from Firestore:', err)
   );
@@ -1607,8 +1632,12 @@ export function deleteMeetingRecord(id: string): boolean {
   if (!db.meetings) return false;
   const index = db.meetings.findIndex((item) => item.id === id);
   if (index < 0) return false;
+  const previousMeetings = [...db.meetings];
   db.meetings.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.meetings = previousMeetings;
+    return false;
+  }
   deleteMeetingFromFirestore(id).catch((err) => console.error('Failed to delete meeting:', err));
   return true;
 }
@@ -1628,8 +1657,12 @@ export function deleteFeedingProgramLog(id: string): boolean {
   if (!db.feedingProgramLogs) return false;
   const index = db.feedingProgramLogs.findIndex((item) => item.id === id);
   if (index < 0) return false;
+  const previousLogs = [...db.feedingProgramLogs];
   db.feedingProgramLogs.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.feedingProgramLogs = previousLogs;
+    return false;
+  }
   deleteFeedingProgramLogFromFirestore(id).catch((err) => console.error('Failed to delete feeding log:', err));
   return true;
 }
@@ -1649,8 +1682,12 @@ export function deleteMarketPrice(id: string): boolean {
   if (!db.marketPrices) return false;
   const index = db.marketPrices.findIndex((item) => item.id === id);
   if (index < 0) return false;
+  const previousPrices = [...db.marketPrices];
   db.marketPrices.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.marketPrices = previousPrices;
+    return false;
+  }
   deleteMarketPriceFromFirestore(id).catch((err) => console.error('Failed to delete market price:', err));
   return true;
 }
@@ -1707,8 +1744,12 @@ export function deleteEarlyYearsRecord(id: string): boolean {
   if (!db.earlyYearsRecords) return false;
   const index = db.earlyYearsRecords.findIndex((item) => item.id === id);
   if (index < 0) return false;
+  const previousRecords = [...db.earlyYearsRecords];
   db.earlyYearsRecords.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.earlyYearsRecords = previousRecords;
+    return false;
+  }
   deleteEarlyYearsRecordFromFirestore(id).catch((err) => console.error('Failed to delete early-years record:', err));
   return true;
 }
@@ -1740,8 +1781,12 @@ export function deleteHistoricalCaseRecord(id: string): boolean {
   if (!db.historicalRecords) return false;
   const index = db.historicalRecords.findIndex((h) => h.id === id);
   if (index === -1) return false;
+  const previousRecords = [...db.historicalRecords];
   db.historicalRecords.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.historicalRecords = previousRecords;
+    return false;
+  }
   deleteHistoricalCaseRecordFromFirestore(id).catch((err) =>
     console.error('Failed to delete historical record from Firestore:', err)
   );
@@ -1843,8 +1888,12 @@ export function deletePerson(id: string): boolean {
   const index = db.people.findIndex((p) => p.id === id);
   if (index === -1) return false;
 
+  const previousPeople = [...db.people];
   db.people.splice(index, 1);
-  if (!saveDatabase(db).ok) return false;
+  if (!saveDatabase(db).ok) {
+    db.people = previousPeople;
+    return false;
+ }
   deletePersonFromFirestore(id).catch((err) =>
     console.error('Failed to delete person from Firestore:', err)
   );
