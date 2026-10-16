@@ -36,6 +36,11 @@ const {
   addExpense,
   updateExpense,
   deleteExpense,
+  addBudgetItem,
+  updateBudgetItem,
+  deleteBudgetItem,
+  addAnnualBudgetPlan,
+  updateAnnualBudgetPlan,
   addScheduleItemWithSaveResult,
   updateScheduleItemWithSaveResult,
   normalizeImportedDatabase,
@@ -223,6 +228,105 @@ assert.throws(
   'expense deletion reports a failed local save',
 );
 assert.deepEqual(getDatabase().expenses, beforeFailedExpenseMutations.expenses, 'failed expense deletion leaves durable records unchanged');
+
+// Budget and annual-plan mutations also roll back in-memory state when storage
+// rejects the save; they must not close the form or proceed to cloud writes.
+const budgetDb = getDatabase();
+const originalBudgets = [...(budgetDb.budgets || [])];
+const originalAnnualBudgets = [...(budgetDb.annualBudgets || [])];
+assert.throws(
+  () => addBudgetItem({
+    period: '2099-Q1',
+    periodType: 'quarterly',
+    programme: 'Synthetic test programme',
+    category: 'Education',
+    itemDescription: 'Synthetic budget item',
+    quantity: 1,
+    unit: 'item',
+    unitCost: 100,
+    budgetAmount: 100,
+    actualExpenditure: 0,
+    notes: '',
+  } as never, 'Test Staff'),
+  /budget item was not saved on this device/i,
+  'budget creation reports a failed local save',
+);
+assert.deepEqual(getDatabase().budgets, originalBudgets, 'failed budget creation rolls back its in-memory record');
+
+fakeLocalStorage.setItem = originalSetItem;
+const budgetFixture = {
+  id: 'BDG-STORAGE-FAILURE-TEST',
+  period: '2099-Q1',
+  periodType: 'quarterly',
+  programme: 'Synthetic test programme',
+  category: 'Education',
+  itemDescription: 'Synthetic existing budget',
+  quantity: 1,
+  unit: 'item',
+  unitCost: 100,
+  budgetAmount: 100,
+  actualExpenditure: 0,
+  notes: '',
+  createdAt: '2026-10-16T00:00:00.000Z',
+} as never;
+const annualBudgetFixture = {
+  id: 'ABG-STORAGE-FAILURE-TEST',
+  financialYear: '2099-2100',
+  title: 'Synthetic annual budget',
+  programme: 'Synthetic test programme',
+  description: '',
+  status: 'Draft',
+  approvedAmount: 1000,
+  approvalDate: '',
+  notes: '',
+  createdAt: '2026-10-16T00:00:00.000Z',
+  updatedAt: '2026-10-16T00:00:00.000Z',
+} as never;
+budgetDb.budgets = [...originalBudgets, budgetFixture];
+budgetDb.annualBudgets = [...originalAnnualBudgets, annualBudgetFixture];
+assert.equal(saveDatabase(budgetDb).ok, true, 'synthetic budget fixtures are persisted before storage is disabled');
+fakeLocalStorage.setItem = () => { throw new Error('SecurityError'); };
+const beforeFailedBudgetMutations = [...budgetDb.budgets];
+const beforeFailedAnnualBudgetMutations = [...budgetDb.annualBudgets];
+assert.throws(
+  () => updateBudgetItem('BDG-STORAGE-FAILURE-TEST', { budgetAmount: 150 } as never, 'Test Staff'),
+  /budget item was not saved on this device/i,
+  'budget update reports a failed local save',
+);
+assert.deepEqual(getDatabase().budgets, beforeFailedBudgetMutations, 'failed budget update rolls back the original record');
+assert.throws(
+  () => deleteBudgetItem('BDG-STORAGE-FAILURE-TEST'),
+  /budget item deletion was not saved on this device/i,
+  'budget deletion reports a failed local save',
+);
+assert.deepEqual(getDatabase().budgets, beforeFailedBudgetMutations, 'failed budget deletion restores the original record');
+assert.throws(
+  () => addAnnualBudgetPlan({
+    financialYear: '2099-2100',
+    title: 'Synthetic failed annual plan',
+    programme: 'Synthetic test programme',
+    description: '',
+    status: 'Draft',
+    approvedAmount: 2000,
+    approvalDate: '',
+    notes: '',
+    createdBy: 'Test Staff',
+    updatedBy: 'Test Staff',
+  } as never, 'Test Staff'),
+  /annual budget plan was not saved on this device/i,
+  'annual budget creation reports a failed local save',
+);
+assert.deepEqual(getDatabase().annualBudgets, beforeFailedAnnualBudgetMutations, 'failed annual budget creation rolls back');
+assert.throws(
+  () => updateAnnualBudgetPlan('ABG-STORAGE-FAILURE-TEST', { approvedAmount: 1500 } as never, 'Test Staff'),
+  /annual budget plan was not saved on this device/i,
+  'annual budget update reports a failed local save',
+);
+assert.deepEqual(getDatabase().annualBudgets, beforeFailedAnnualBudgetMutations, 'failed annual budget update rolls back');
+fakeLocalStorage.setItem = originalSetItem;
+budgetDb.budgets = originalBudgets;
+budgetDb.annualBudgets = originalAnnualBudgets;
+assert.equal(saveDatabase(budgetDb).ok, true, 'synthetic financial fixtures are removed from local test storage');
 
 // --- Backup restore reports local/cloud partial outcomes honestly ----------
 const validBackup = JSON.stringify({ girls: [{ id: 'SG-RESTORE-1' }], households: [] });
