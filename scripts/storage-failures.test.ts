@@ -193,6 +193,34 @@ const restoreSuccess = await restoreDatabaseWithPersistence(
   () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
 );
 assert.equal(restoreSuccess.status, 'success');
+
+// Restore establishes the recovery lock before any destructive cloud work,
+// and removes it only through successful finalization.
+const restoreOrder: string[] = [];
+const orderedRestore = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { restoreOrder.push('cloud'); },
+  () => { restoreOrder.push('local'); return { ok: true, quotaExceeded: false }; },
+  async () => { restoreOrder.push('finalize'); },
+  async () => 'clear',
+  () => { restoreOrder.push('lock'); },
+);
+assert.equal(orderedRestore.status, 'success');
+assert.deepEqual(restoreOrder, ['lock', 'cloud', 'local', 'finalize'],
+  'restore lock is durable before cloud changes and queue finalization is last');
+
+let cloudAfterLockFailure = false;
+const failedLockRestore = await restoreDatabaseWithPersistence(
+  validBackup,
+  async () => { cloudAfterLockFailure = true; },
+  () => ({ ok: true, quotaExceeded: false }),
+  async () => {},
+  async () => 'clear',
+  () => { throw new Error('synthetic recovery-lock write failure'); },
+);
+assert.equal(failedLockRestore.status, 'offline_state_unavailable');
+assert.equal(cloudAfterLockFailure, false, 'a failed recovery lock prevents destructive cloud writes');
+
 let cleanupAttempted = false;
 const queueCleanupFailure = await restoreDatabaseWithPersistence(
   validBackup,
