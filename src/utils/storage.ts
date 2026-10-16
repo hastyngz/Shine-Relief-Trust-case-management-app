@@ -220,54 +220,60 @@ export async function exportDatabaseJSON(): Promise<string> {
   return JSON.stringify(db, null, 2);
 }
 
+export function normalizeImportedDatabase(parsed: Partial<AppDatabase>): AppDatabase {
+  return {
+    girls: Array.isArray(parsed.girls) ? parsed.girls : [],
+    households: Array.isArray(parsed.households) ? parsed.households : [],
+    educationalFollowUps: Array.isArray(parsed.educationalFollowUps) ? parsed.educationalFollowUps : [],
+    healthFollowUps: Array.isArray(parsed.healthFollowUps) ? parsed.healthFollowUps : [],
+    familyFollowUps: Array.isArray(parsed.familyFollowUps) ? parsed.familyFollowUps : [],
+    rentPayments: Array.isArray(parsed.rentPayments) ? parsed.rentPayments : [],
+    expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+    householdActivities: Array.isArray(parsed.householdActivities) ? parsed.householdActivities : [],
+    contacts: Array.isArray(parsed.contacts) ? parsed.contacts : [],
+    attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
+    budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
+    annualBudgets: Array.isArray(parsed.annualBudgets) ? parsed.annualBudgets : [],
+    payrollRecords: Array.isArray(parsed.payrollRecords) ? parsed.payrollRecords : [],
+    employees: Array.isArray(parsed.employees) ? parsed.employees : [],
+    workplans: Array.isArray(parsed.workplans) ? parsed.workplans : [],
+    schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+    meetings: Array.isArray(parsed.meetings) ? parsed.meetings : [],
+    feedingProgramLogs: Array.isArray(parsed.feedingProgramLogs) ? parsed.feedingProgramLogs : [],
+    marketPrices: Array.isArray(parsed.marketPrices) ? parsed.marketPrices : [],
+    forecastSettings: Array.isArray(parsed.forecastSettings) ? parsed.forecastSettings : [],
+    whatIfScenarios: Array.isArray(parsed.whatIfScenarios) ? parsed.whatIfScenarios : [],
+    intelligenceSuggestions: Array.isArray(parsed.intelligenceSuggestions) ? parsed.intelligenceSuggestions : [],
+    aiSettings: Array.isArray(parsed.aiSettings) ? parsed.aiSettings : [],
+    historicalRecords: Array.isArray(parsed.historicalRecords) ? parsed.historicalRecords : [],
+    importAudits: Array.isArray(parsed.importAudits) ? parsed.importAudits : [],
+    restrictedImportSources: Array.isArray(parsed.restrictedImportSources) ? parsed.restrictedImportSources : [],
+    earlyYearsRecords: Array.isArray(parsed.earlyYearsRecords) ? parsed.earlyYearsRecords : [],
+    people: Array.isArray(parsed.people) ? parsed.people : [],
+    customPersonTypes: Array.isArray(parsed.customPersonTypes) ? parsed.customPersonTypes : [],
+    caseActions: Array.isArray(parsed.caseActions) ? parsed.caseActions : [],
+    educationHistory: Array.isArray(parsed.educationHistory) ? parsed.educationHistory : [],
+    academicSupports: Array.isArray(parsed.academicSupports) ? parsed.academicSupports : [],
+    examinationRecords: Array.isArray(parsed.examinationRecords) ? parsed.examinationRecords : [],
+    attendanceRecords: Array.isArray(parsed.attendanceRecords) ? parsed.attendanceRecords : [],
+    girlLeaves: Array.isArray(parsed.girlLeaves) ? parsed.girlLeaves : [],
+    programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
+    caseReviews: Array.isArray(parsed.caseReviews) ? parsed.caseReviews : [],
+    caseGoals: Array.isArray(parsed.caseGoals) ? parsed.caseGoals : [],
+    procurementLists: Array.isArray(parsed.procurementLists) ? parsed.procurementLists : [],
+    projectProjections: Array.isArray(parsed.projectProjections) ? parsed.projectProjections : [],
+    inventoryItems: Array.isArray(parsed.inventoryItems) ? parsed.inventoryItems : [],
+    assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+  };
+}
+
 export async function importDatabaseJSON(rawJson: string): Promise<boolean> {
   try {
-    const parsed = JSON.parse(rawJson);
+    const parsed = JSON.parse(rawJson) as Partial<AppDatabase>;
     if (!Array.isArray(parsed.girls) || !Array.isArray(parsed.households)) {
       return false;
     }
-    const validatedDb: AppDatabase = {
-      girls: parsed.girls,
-      households: parsed.households,
-      educationalFollowUps: Array.isArray(parsed.educationalFollowUps) ? parsed.educationalFollowUps : [],
-      healthFollowUps: Array.isArray(parsed.healthFollowUps) ? parsed.healthFollowUps : [],
-      familyFollowUps: Array.isArray(parsed.familyFollowUps) ? parsed.familyFollowUps : [],
-      rentPayments: Array.isArray(parsed.rentPayments) ? parsed.rentPayments : [],
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-      householdActivities: Array.isArray(parsed.householdActivities) ? parsed.householdActivities : [],
-      contacts: Array.isArray(parsed.contacts) ? parsed.contacts : [],
-      attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
-      budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
-      annualBudgets: Array.isArray(parsed.annualBudgets) ? parsed.annualBudgets : [],
-      payrollRecords: Array.isArray(parsed.payrollRecords) ? parsed.payrollRecords : [],
-      employees: Array.isArray(parsed.employees) ? parsed.employees : [],
-      workplans: Array.isArray(parsed.workplans) ? parsed.workplans : [],
-      schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
-      meetings: Array.isArray(parsed.meetings) ? parsed.meetings : [],
-      feedingProgramLogs: Array.isArray(parsed.feedingProgramLogs) ? parsed.feedingProgramLogs : [],
-      marketPrices: Array.isArray(parsed.marketPrices) ? parsed.marketPrices : [],
-      forecastSettings: Array.isArray(parsed.forecastSettings) ? parsed.forecastSettings : [],
-      whatIfScenarios: Array.isArray(parsed.whatIfScenarios) ? parsed.whatIfScenarios : [],
-      intelligenceSuggestions: Array.isArray(parsed.intelligenceSuggestions) ? parsed.intelligenceSuggestions : [],
-      aiSettings: Array.isArray(parsed.aiSettings) ? parsed.aiSettings : [],
-      historicalRecords: Array.isArray(parsed.historicalRecords) ? parsed.historicalRecords : [],
-      importAudits: Array.isArray(parsed.importAudits) ? parsed.importAudits : [],
-      restrictedImportSources: Array.isArray(parsed.restrictedImportSources) ? parsed.restrictedImportSources : [],
-      earlyYearsRecords: Array.isArray(parsed.earlyYearsRecords) ? parsed.earlyYearsRecords : [],
-      people: Array.isArray(parsed.people) ? parsed.people : [],
-      customPersonTypes: Array.isArray(parsed.customPersonTypes) ? parsed.customPersonTypes : [],
-      caseActions: Array.isArray(parsed.caseActions) ? parsed.caseActions : [],
-      educationHistory: Array.isArray(parsed.educationHistory) ? parsed.educationHistory : [],
-      academicSupports: Array.isArray(parsed.academicSupports) ? parsed.academicSupports : [],
-      examinationRecords: Array.isArray(parsed.examinationRecords) ? parsed.examinationRecords : [],
-      attendanceRecords: Array.isArray(parsed.attendanceRecords) ? parsed.attendanceRecords : [],
-      girlLeaves: Array.isArray(parsed.girlLeaves) ? parsed.girlLeaves : [],
-      programmeLogs: Array.isArray(parsed.programmeLogs) ? parsed.programmeLogs : [],
-      caseReviews: Array.isArray(parsed.caseReviews) ? parsed.caseReviews : [],
-      procurementLists: Array.isArray(parsed.procurementLists) ? parsed.procurementLists : [],
-      projectProjections: Array.isArray(parsed.projectProjections) ? parsed.projectProjections : [],
-      inventoryItems: Array.isArray(parsed.inventoryItems) ? parsed.inventoryItems : [],
-    };
+    const validatedDb = normalizeImportedDatabase(parsed);
     await syncEntireDatabaseToFirestore(validatedDb, true);
     saveDatabase(validatedDb);
     return true;
