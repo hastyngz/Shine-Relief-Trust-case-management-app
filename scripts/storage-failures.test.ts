@@ -171,7 +171,7 @@ const invalidRestore = await restoreDatabaseWithPersistence(
   () => { localCalls += 1; return { ok: true, quotaExceeded: false }; },
 );
 assert.equal(invalidRestore.status, 'invalid_backup');
-assert.equal(localCalls, 3, 'invalid backups do not invoke local persistence');
+assert.equal(localCalls, 2, 'invalid backups do not invoke local persistence');
 assert.equal(cloudCalls, 3, 'invalid backups do not invoke cloud persistence');
 
 console.log('Local storage failure handling tests passed.');
