@@ -23,6 +23,7 @@ requirements, follow the stricter requirement and explain the conflict.
 5. Never expose secrets, credentials, tokens, private records or signed storage URLs
    in code, logs, tests, screenshots, commits or reports.
 6. Never claim a check passed unless you ran it. Report skipped or blocked checks.
+7. Never knowingly leave a feature half-finished or present a partial workflow as complete. Finish the user-facing flow end to end, including persistence, permissions, error/retry states, integration, and regression tests. If a genuine blocker prevents completion, leave the safest coherent state possible, make the unfinished part explicit in the UI or documentation where appropriate, record the exact blocker and next step, and report it plainly. Never fake success, leave dead controls, or hide unfinished work.
 
 ## Data handling
 - Staff HR data (contracts, payroll, salary history, personnel documents,
@@ -42,6 +43,8 @@ requirements, follow the stricter requirement and explain the conflict.
 - Keep behaviour and public interfaces unless the task requires a change. No broad
   rewrites and no new dependency without a clear reason.
 - Add or update focused regression tests for changed behaviour.
+- Own the work through completion: trace the user's whole journey, not just the screen or component being edited. Check connected modules, data persistence, permission boundaries, retries, mobile states and relevant tests. Do not stop after scaffolding, a mock-up, a type-check, or the first passing test if important workflow steps remain.
+- If the task cannot be completed because of a real external blocker (for example, unavailable credentials, an inaccessible environment, or a decision only the owner can make), do not quietly abandon it or imply it is done. Preserve a safe usable state, write down what remains and why, and give the owner a concrete next action.
 - Finish with: files changed, user-visible effects, checks run with real results,
   checks skipped or blocked, remaining risks, and the commit SHA.
 
