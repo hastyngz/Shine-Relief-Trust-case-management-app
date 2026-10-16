@@ -144,6 +144,44 @@ export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
   }
 }
 
+/**
+ * Inspect persisted queue state without converting read/parse failures into an
+ * empty queue. Destructive restore operations must fail closed when they cannot
+ * prove that no offline edits remain.
+ */
+export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' | 'unavailable'> {
+  let localRaw: string | null;
+  try {
+    if (!hasLocalStorage()) return 'unavailable';
+    localRaw = window.localStorage.getItem(QUEUE_KEY);
+  } catch {
+    return 'unavailable';
+  }
+
+  let localEntries: OfflineChangeEntry[] = [];
+  if (localRaw) {
+    try {
+      const parsed: unknown = JSON.parse(localRaw);
+      if (!Array.isArray(parsed)) return 'unavailable';
+      localEntries = parsed as OfflineChangeEntry[];
+    } catch {
+      return 'unavailable';
+    }
+  }
+
+  if (!hasIndexedDb()) return localEntries.length ? 'pending' : 'clear';
+
+  try {
+    const indexedEntries = await readIdbEntries();
+    if (indexedEntries.length || localEntries.length) return 'pending';
+    return 'clear';
+  } catch {
+    // A valid localStorage copy can prove there are pending edits, but an empty
+    // fallback cannot prove IndexedDB has no entries when IndexedDB is unreadable.
+    return localEntries.length ? 'pending' : 'unavailable';
+  }
+}
+
 export async function saveQueueEntries(entries: OfflineChangeEntry[]): Promise<void> {
   if (!hasIndexedDb()) {
     writeLocalEntries(entries);
