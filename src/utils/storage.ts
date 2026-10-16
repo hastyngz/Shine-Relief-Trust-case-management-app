@@ -240,11 +240,14 @@ function saveDatabaseOrThrow(db: AppDatabase, recordType: string): void {
 }
 
 export async function clearAllDatabase(): Promise<AppDatabase> {
+  // Use a private seed copy so the app never exposes the shared seed singleton
+  // as mutable state after a reset.
+  const initial = cloneInitialDatabase();
   // Lock offline replay before the first destructive cloud operation. If any
   // later step fails, queued edits stay paused instead of recreating deleted data.
   markDatabaseResetRecoveryRequired();
   await clearAllFirestoreCollections();
-  const localSave = saveDatabase(INITIAL_DATABASE);
+  const localSave = saveDatabase(initial);
   if (!localSave.ok) {
     throw new Error(
       'Cloud operational records may already have been cleared, but this device could not save the reset. Offline synchronization is paused to prevent old edits from recreating records. Fix device storage, then retry the administrator reset.'
@@ -252,8 +255,8 @@ export async function clearAllDatabase(): Promise<AppDatabase> {
   }
   // Clears pending edits and removes the recovery lock only after cloud and local
   // reset succeeded. If queue cleanup fails, the lock remains in place.
-  await clearOfflineChangesAfterDatabaseReset(INITIAL_DATABASE);
-  return INITIAL_DATABASE;
+  await clearOfflineChangesAfterDatabaseReset(initial);
+  return initial;
 }
 
 export const resetDatabaseToDefault = clearAllDatabase;

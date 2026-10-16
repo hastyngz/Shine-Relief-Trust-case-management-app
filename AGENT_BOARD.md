@@ -135,6 +135,9 @@ Handoff format:
 
 ## Suggestions for the project owner
 
+- **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
+
+
 Suggestion format:
 ```
 ### S-000 · short title

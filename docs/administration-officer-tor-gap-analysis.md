@@ -110,6 +110,10 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Girl profile school/class changes may write education-history entries before the profile itself is saved. If a later save fails, the UI warns staff to review the related history and profile before retrying; this remains a multi-record, non-transactional workflow.
 - Verification status: pending the current GitHub Actions run. Real-device quota/storage failures and the form's exact recovery experience still need manual Android verification.
 
+### Reset seed isolation
+- The administrator reset now returns a private cloned seed database instead of the shared `INITIAL_DATABASE` singleton. This aligns reset behaviour with the earlier fallback isolation fix and prevents post-reset UI mutations from contaminating the shared seed object.
+- Verification: included in the next GitHub Actions run; do not treat this small follow-up as verified until checks complete.
+
 ### Seed fallback isolation
 - `getDatabase()` now returns a JSON-cloned seed database when no local record exists, when called outside a browser, or when reading stored JSON fails. This avoids handing mutation helpers the shared `INITIAL_DATABASE` object when storage is unavailable; a failed save can no longer alter that singleton and make a later read appear to contain unsaved changes.
 - Regression coverage removes the stored database, forces local persistence to fail, mutates the returned fallback, and confirms a subsequent fallback read does not contain that mutation.
