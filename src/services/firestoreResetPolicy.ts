@@ -2,9 +2,11 @@
  * Firestore collections removed by the administrator's operational-data reset.
  *
  * Staff accounts, conversations, messages, notifications, user preferences,
- * safeguarding case records, and durable audit/history collections are not in
- * this list. Keep this list aligned with operational data persisted by
- * firestoreSync.ts; omissions leave stale operational data in the cloud.
+ * safeguarding case records, and dedicated audit-log/report-history collections
+ * are intentionally retained. Some operational history (such as case actions
+ * and import audit records) is cleared with the programme data. Keep this list
+ * aligned with operational data persisted by firestoreSync.ts; omissions leave
+ * stale operational data in the cloud.
  */
 export const OPERATIONAL_COLLECTIONS_TO_CLEAR = [
   'girls',
