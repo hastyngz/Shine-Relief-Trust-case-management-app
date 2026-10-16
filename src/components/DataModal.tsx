@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { AppDatabase } from '../types';
-import { resetDatabaseToSeed, exportDatabaseJSON, importDatabaseJSON } from '../utils/storage';
+import { resetDatabaseToSeed, exportDatabaseJSON, restoreDatabaseJSON } from '../utils/storage';
 import { syncEntireDatabaseToFirestore, getSyncStatus, subscribeSyncStatus, SyncStatus } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
 import { Database, Download, Upload, RotateCcw, X, Check, AlertCircle, CloudCheck, RefreshCw, ShieldAlert } from 'lucide-react';
@@ -61,12 +61,12 @@ export const DataModal: React.FC<DataModalProps> = ({
     reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
-        const success = await importDatabaseJSON(content);
-        if (success) {
+        const result = await restoreDatabaseJSON(content);
+        if (result.status === 'success') {
           setMessage({ text: 'Database restored and synchronized to Cloud Firestore successfully!', type: 'success' });
           onDataChanged();
         } else {
-          setMessage({ text: 'Failed to restore: Invalid backup file format.', type: 'error' });
+          setMessage({ text: result.message, type: 'error' });
         }
       } catch (err) {
         setMessage({ text: 'Error reading file: ' + String(err), type: 'error' });
