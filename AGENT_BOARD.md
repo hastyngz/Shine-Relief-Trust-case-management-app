@@ -83,7 +83,7 @@ Handoff format:
 ### 2026-10-16 · Mosaic (ChatGPT) · compliance audit handoff
 - Area: compliance calendar and Administration & Operations.
 - State: the latest completed run before the current metadata/UI correction passed both checks and end-to-end jobs; compliance verification is not secured and recurrence/notifications are not automated.
-- Next: add direct UI coverage for registering and completing an obligation; design a separate, rules-protected audit event model before implementing manager verification.
+- Next: review the new registration/completion browser test results; design a separate, rules-protected audit event model before implementing manager verification.
 - Watch out: the shared schedule collection is readable by all active staff, and its client-authored history is not an immutable audit log. — Mosaic (ChatGPT), 2026-10-16
 
 ## Suggestions for the project owner

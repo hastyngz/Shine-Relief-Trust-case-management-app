@@ -15,7 +15,7 @@ test('staff can register and complete a compliance obligation', async ({ page })
   await form.getByLabel('Obligation title').fill('E2E compliance obligation');
   await form.getByLabel('Category').selectOption({ label: 'Staff training & policies' });
   await form.getByLabel('Details').fill('Synthetic end-to-end test record.');
-  await form.getByLabel('Responsible person').selectOption({ label: 'E2E Test Staff · Field Staff' });
+  await form.getByLabel('Responsible person').selectOption({ label: 'E2E Test Staff · Staff' });
   await form.getByRole('button', { name: 'Save obligation' }).click();
 
   const record = page.locator('article').filter({ has: page.getByRole('heading', { name: 'E2E compliance obligation', exact: true }) });
