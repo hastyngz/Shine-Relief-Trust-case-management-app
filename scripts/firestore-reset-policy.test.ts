@@ -84,3 +84,20 @@ assert.equal(new Set(registeredCollections).size, registeredCollections.length,
   'Firestore collection registry must not contain duplicate collection names');
 
 console.log('Firestore operational reset policy tests passed.');
+
+const resetFunction = firestoreSyncSource.match(
+  /export async function clearAllFirestoreCollections\(\): Promise<void> \{([\s\S]*?)\n\}\n\n\/\/ Global active unsubscribers/,
+);
+assert.ok(resetFunction, 'operational reset implementation must remain discoverable');
+const resetBody = resetFunction[1];
+const operationalDeleteLoop = resetBody.indexOf('for (const colName of collectionNames)');
+const mediaCleanupLoop = resetBody.indexOf('for (const storagePath of storagePaths)');
+const attachmentMetadataCleanup = resetBody.indexOf('const attachmentDocs = await getDocs(collection(firestore, COLLECTIONS.ATTACHMENTS))');
+assert.ok(operationalDeleteLoop >= 0 && mediaCleanupLoop >= 0 && attachmentMetadataCleanup >= 0,
+  'reset must explicitly clear operational records, clean media, and then remove attachment metadata');
+assert.ok(operationalDeleteLoop < mediaCleanupLoop && mediaCleanupLoop < attachmentMetadataCleanup,
+  'reset must preserve attachment metadata until media cleanup succeeds');
+assert.match(resetBody, /OPERATIONAL_COLLECTIONS_TO_CLEAR\.filter\(\s*\(name\) => name !== COLLECTIONS\.ATTACHMENTS/,
+  'attachment metadata must be excluded from the first destructive collection pass');
+assert.match(resetBody, /new Set\(\s*attachmentSnapshot\.docs/,
+  'duplicate attachment storage paths must be deleted only once per reset attempt');
