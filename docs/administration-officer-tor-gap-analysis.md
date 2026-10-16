@@ -100,6 +100,11 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression coverage for restore orchestration uses injected cloud/local persistence functions, and offline-sync tests exercise queue blocking while reset recovery is required. GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
 
 
+### Case-entry failure feedback
+- Core girl, household, education/health/family follow-up, rent and household-activity handlers now catch local persistence errors and show operation-specific feedback. They do not proceed to success navigation/toasts when a synchronous save fails.
+- Girl profile school/class changes may write education-history entries before the profile itself is saved. If a later save fails, the UI warns staff to review the related history and profile before retrying; this remains a multi-record, non-transactional workflow.
+- Verification status: pending the current GitHub Actions run. Real-device quota/storage failures and the form's exact recovery experience still need manual Android verification.
+
 ### Seed fallback isolation
 - `getDatabase()` now returns a JSON-cloned seed database when no local record exists, when called outside a browser, or when reading stored JSON fails. This avoids handing mutation helpers the shared `INITIAL_DATABASE` object when storage is unavailable; a failed save can no longer alter that singleton and make a later read appear to contain unsaved changes.
 - Regression coverage removes the stored database, forces local persistence to fail, mutates the returned fallback, and confirms a subsequent fallback read does not contain that mutation.

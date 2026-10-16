@@ -121,6 +121,12 @@ Handoff format:
 - Next: verify CI and continue auditing the UI feedback around failed creates/updates; core deletes now avoid false success.
 - Watch out: fallback still intentionally supplies seed data if stored JSON cannot be read; recovery/export behaviour for malformed stored data deserves separate review. — Mosaic (ChatGPT), 2026-10-16
 
+### 2026-10-16 · Mosaic (ChatGPT) · case-entry failure feedback
+- Area: core case, household and follow-up handlers in `src/App.tsx`.
+- State: storage failures are caught at the entry point and shown as operation-specific messages instead of escaping event handlers. Multi-step school-history edits explicitly warn staff to review history if the profile update does not finish.
+- Next: CI and browser checks; audit the remaining Planning, People and Early Years screens for false-success states.
+- Watch out: these multi-record workflows are not atomic. A prior sub-record can have saved before a later save fails, so the message asks staff to review before retrying. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 Suggestion format:

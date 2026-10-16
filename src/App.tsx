@@ -702,6 +702,7 @@ function AppContent() {
       showToast('View-only accounts cannot save changes.');
       return false;
     }
+    try {
     let targetId = '';
     if (editingGirl) {
       targetId = editingGirl.id;
@@ -762,6 +763,10 @@ function AppContent() {
       });
     }
     return true;
+    } catch (error) {
+      showToast(`Girl profile save did not complete: ${error instanceof Error ? error.message : 'Check device storage and retry.'} If you changed school or class, review education history before retrying.`);
+      return false;
+    }
   };
 
   const handleSaveHouse = (
@@ -772,6 +777,7 @@ function AppContent() {
       showToast('View-only accounts cannot save changes.');
       return;
     }
+    try {
     let targetId = '';
     if (editingHouse) {
       targetId = editingHouse.id;
@@ -795,12 +801,17 @@ function AppContent() {
       });
     }
   };
+    } catch (error) {
+      showToast(`Household changes were not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+      return;
+    }
 
   const handleSaveEduFollowUp = (
     data: Omit<EducationalFollowUp, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
   ): boolean => {
     if (isViewOnly) return false;
+    try {
     const created = addEducationalFollowUp(data, auditActor);
     // Sync current school & class in girl profile if altered in follow up
     const girl = db.girls.find((g) => g.id === data.girlId);
@@ -819,6 +830,10 @@ function AppContent() {
 
     navigateTo('girl-profile', 'girls', data.girlId);
     return true;
+    } catch (error) {
+      showToast(`Education follow-up save did not fully complete: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Review the follow-up and school history before retrying.`);
+      return false;
+    }
   };
 
   const handleSaveHealthFollowUp = (
@@ -829,6 +844,7 @@ function AppContent() {
       showToast('Your account does not have permission to save health records.');
       return;
     }
+    try {
     const created = addHealthFollowUp(data, auditActor);
     const girl = db.girls.find((g) => g.id === data.girlId);
     showToast('Health / medical visit recorded successfully.');
@@ -840,12 +856,17 @@ function AppContent() {
 
     navigateTo('girl-profile', 'girls', data.girlId);
   };
+    } catch (error) {
+      showToast(`Health record was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return;
+    }
 
   const handleSaveFamilyFollowUp = (
     data: Omit<FamilyFollowUp, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
   ) => {
     if (isViewOnly) return;
+    try {
     const created = addFamilyFollowUp(data, auditActor);
     const girl = db.girls.find((item) => item.id === data.girlId);
     showToast('Family / guardian follow-up recorded successfully.');
@@ -855,12 +876,17 @@ function AppContent() {
     }
     navigateTo('girl-profile', 'girls', data.girlId);
   };
+    } catch (error) {
+      showToast(`Family follow-up was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return;
+    }
 
   const handleSaveRentPayment = (
     data: Omit<HouseholdRentPayment, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
   ) => {
     if (isViewOnly) return;
+    try {
     const created = addRentPayment(data, auditActor);
     showToast('Rent payment record saved.');
     const household = db.households.find((item) => item.id === data.householdId);
@@ -870,6 +896,10 @@ function AppContent() {
     }
     navigateTo('house-profile', 'houses', undefined, data.householdId);
   };
+    } catch (error) {
+      showToast(`Rent payment was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return;
+    }
 
   const handleSaveExpense = (
     data: Omit<HouseholdExpense, 'id' | 'createdAt'>,
@@ -898,6 +928,7 @@ function AppContent() {
     pendingPhotos?: PendingPhoto[]
   ): boolean => {
     if (isViewOnly) return false;
+    try {
     const created = addHouseholdActivity(data, auditActor);
     showToast('Saved on this phone. Household group activity recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
@@ -907,6 +938,10 @@ function AppContent() {
     }
     navigateTo('house-profile', 'houses', undefined, data.householdId);
     return true;
+    } catch (error) {
+      showToast(`Household activity was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return false;
+    }
   };
 
   // Deletion Handlers
