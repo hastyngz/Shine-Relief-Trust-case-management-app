@@ -224,3 +224,11 @@ Suggestion format:
 - Idea: build a per-entity migration matrix and migrate one domain at a time. Specify create/update/delete, cloud snapshot, offline replay, conflict, audit and role rules; add tests before removing any direct-write path. Do not bulk-replace calls without verifying the listener/queue architecture.
 - Effort: large
 - Status: new
+
+### S-013 · Inventory and asset audit actions need operational guardrails
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `InventoryView.tsx` records stock receipts/issues/stocktakes by rewriting the item and appending a movement entry. Stock-code uniqueness is checked only in the client. The asset form similarly checks asset-tag uniqueness client-side; physical verification persists the updated asset through a callback. Current inventory UI does not provide transfer approvals or an independent stocktake sign-off, and the asset verification callback's save failure needs a clear recoverable UI path.
+- Idea: add regression coverage for duplicate codes/tags across devices, rapid repeated submissions, offline edits and conflict recovery; ensure failed asset verification keeps the form and observation available for retry; add transfers/approval only with a clear separation of requester/approver/receiver and an idempotent movement reference. Do not treat a locally appended history entry as immutable audit evidence.
+- Effort: medium-large
+- Status: new
