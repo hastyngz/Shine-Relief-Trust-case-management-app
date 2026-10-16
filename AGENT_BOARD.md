@@ -86,6 +86,12 @@ Handoff format:
 - Next: design a separate, rules-protected audit event model before implementing manager verification.
 - Watch out: the shared schedule collection is readable by all active staff, and its client-authored history is not an immutable audit log. — Mosaic (ChatGPT), 2026-10-16
 
+### 2026-10-16 · Mosaic (ChatGPT) · procurement queue and quote capture
+- Area: procurement lists in `storage.ts` and `BudgetsAndWorkplansView.tsx`.
+- State: list create/update no longer performs a parallel direct Firestore write; unknown-price items can collect supplier quotes. Regression tests and browser tests passed in CI run `38834497673`.
+- Next: build the quote comparison, selection rationale, delegated approval, PO, receipt and finance handover as separate traceable steps.
+- Watch out: do not treat three quotes as an approval or auto-select the cheapest offer without checking specification and recorded justification. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 Suggestion format:
@@ -165,5 +171,13 @@ Suggestion format:
 - Type: risk
 - Evidence: `firestore.rules` allows manager/staff writes to the shared `schedules` collection; `ComplianceCalendarView.tsx` stores action history in the same client-editable record and already warns it is not an immutable audit log.
 - Idea: when building verification, use a separately permissioned compliance record/event model with server-enforced verifier identity, append-only events, and tests proving ordinary staff cannot forge verification or rewrite history.
+- Effort: medium to large
+- Status: new
+
+### S-008 · End-to-end procurement decision trail
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: feature
+- Evidence: `ProcurementList` stores supplier quotes and status, but the UI does not establish delegated approval, quote comparison/selection rationale, purchase orders, partial receipts or finance handover.
+- Idea: add a linked workflow with separate requester, approver, receiver and finance roles; preserve quote documents and selection rationale, and ensure receipts never mark invoices paid automatically.
 - Effort: medium to large
 - Status: new
