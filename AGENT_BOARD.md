@@ -273,6 +273,15 @@ Suggestion format:
 - Status: collection coverage verified in run 386; queue-reset follow-up pending CI
 
 
+### S-019 · Backup restore concealed partial success and could replay stale offline edits
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: reliability / data integrity
+- Evidence: restore returned only a boolean, called local save without checking its result, and left offline per-record edits/legacy snapshots in place after replacing the database. UI treated any failure as an invalid backup.
+- Change: added injectable `restoreDatabaseWithPersistence` orchestration with explicit invalid/cloud-failure/cloud-success-local-failure/queue-cleanup-failure/success outcomes; the admin UI now presents the returned recovery message. Restore only replaces local data after cloud synchronization completes, checks the local save result, and clears old offline changes/legacy snapshots before reporting full success. Added failure-path regression tests.
+- Limitation: Firestore restore spans multiple batches and is not transactional. A cloud failure may follow partial writes; if local save or queue cleanup fails after cloud success, the UI reports that partial state rather than claiming rollback.
+- Verification: pending GitHub Actions for the latest commit.
+- Status: implemented; verification pending
+
 ### S-018 · Backup restore did not cover every AppDatabase cloud collection
 - From: Mosaic (ChatGPT), 2026-10-16
 - Type: bug
