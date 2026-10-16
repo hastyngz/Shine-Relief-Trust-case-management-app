@@ -31,7 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
-import { clearOfflineChangesAfterDatabaseReset, loadQueue, readPendingOfflineSnapshots } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, loadQueue, readPendingOfflineSnapshots, markDatabaseResetRecoveryRequired } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
@@ -207,15 +207,18 @@ export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): St
 }
 
 export async function clearAllDatabase(): Promise<AppDatabase> {
+  // Lock offline replay before the first destructive cloud operation. If any
+  // later step fails, queued edits stay paused instead of recreating deleted data.
+  markDatabaseResetRecoveryRequired();
   await clearAllFirestoreCollections();
   const localSave = saveDatabase(INITIAL_DATABASE);
   if (!localSave.ok) {
     throw new Error(
-      'Cloud operational records were cleared, but the local reset could not be saved. Existing offline changes were not cleared; fix device storage and retry the reset.'
+      'Cloud operational records may already have been cleared, but this device could not save the reset. Offline synchronization is paused to prevent old edits from recreating records. Fix device storage, then retry the administrator reset.'
     );
   }
-  // Prevent queued edits from recreating records after the successful reset.
-  // This runs only after both cloud deletion and local persistence have succeeded.
+  // Clears pending edits and removes the recovery lock only after cloud and local
+  // reset succeeded. If queue cleanup fails, the lock remains in place.
   await clearOfflineChangesAfterDatabaseReset(INITIAL_DATABASE);
   return INITIAL_DATABASE;
 }
