@@ -232,3 +232,19 @@ Suggestion format:
 - Idea: add regression coverage for duplicate codes/tags across devices, rapid repeated submissions, offline edits and conflict recovery; ensure failed asset verification keeps the form and observation available for retry; add transfers/approval only with a clear separation of requester/approver/receiver and an idempotent movement reference. Do not treat a locally appended history entry as immutable audit evidence.
 - Effort: medium-large
 - Status: new
+
+### S-014 · Budget dashboard monthly summary ignores active filters and financial year
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: bug risk
+- Evidence: `src/components/Planning/BudgetsAndWorkplansView.tsx` computes `filteredBudgets` using the selected period and category filters for the headline totals, but `monthlyBudgetSummary` filters the unfiltered `budgets` array by month only. The monthly cards therefore can disagree with the selected headline totals. Monthly totals also combine records with the same month number across years because the grouping key is only `month`.
+- Idea: agree on the reporting-period model (calendar year vs Malawi financial year) and group by year/period plus month; apply active filters consistently or explicitly label the monthly view as all-period totals. Add tests with two financial years and category/period filters so the dashboard cannot imply incomparable figures are one period.
+- Effort: medium
+- Status: new
+
+### S-015 · Workplan/payroll/core helpers need consistent persistence outcome handling
+- From: Mosaic (ChatGPT), 2026-10-16
+- Type: risk
+- Evidence: `src/utils/storage.ts` `addWorkplanItem`, `updateWorkplanItem`, payroll create/update/delete and `updateEmployeeRecord` call `saveDatabase` without checking its result and then start direct Firestore writes. This extends the persistence concern beyond girl/household records into HR and work planning. Payroll/employee data has operational and confidentiality implications, so this must be audited with role rules and conflict tests.
+- Idea: map each write path, its UI success handling and sync method; migrate one domain at a time toward explicit outcomes and a single conflict-aware write path where appropriate. Test failed local save, cloud failure, offline queue replay, repeated payroll actions and permission boundaries before changing behaviour.
+- Effort: large
+- Status: new
