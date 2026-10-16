@@ -26,6 +26,11 @@ Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, value: Fa
 const {
   getDatabase,
   saveDatabase,
+  addGirl,
+  deleteGirl,
+  addWorkplanItem,
+  updateWorkplanItem,
+  deleteWorkplanItem,
   addPayrollRecord,
   updateEmployeeRecord,
   addExpense,
@@ -315,5 +320,38 @@ const invalidRestore = await restoreDatabaseWithPersistence(
 assert.equal(invalidRestore.status, 'invalid_backup');
 assert.equal(localCalls, 3, 'invalid backups do not invoke local persistence');
 assert.equal(cloudCalls, 4, 'invalid backups do not invoke cloud persistence');
+
+// --- Core case and workplan mutations fail closed when local storage rejects ----
+fakeLocalStorage.setItem = originalSetItem;
+const baseline = getDatabase();
+baseline.girls = [{ id: 'SG-STORAGE-BASELINE', name: 'Synthetic test beneficiary' } as never];
+baseline.households = [];
+baseline.workplans = [{ id: 'WP-STORAGE-BASELINE', title: 'Synthetic test workplan item' } as never];
+assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
+const beforeFailedMutations = getDatabase();
+
+fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
+assert.throws(
+  () => addGirl({ id: 'SG-STORAGE-FAIL', name: 'Synthetic unsaved beneficiary' } as never),
+  /Device storage is unavailable/,
+  'girl creation must not return success when local persistence fails',
+);
+assert.throws(
+  () => updateWorkplanItem('WP-STORAGE-BASELINE', { title: 'Unsaved update' } as never),
+  /Device storage is unavailable/,
+  'workplan update must not return success when local persistence fails',
+);
+assert.throws(
+  () => addWorkplanItem({ title: 'Unsaved workplan item' } as never),
+  /Device storage is unavailable/,
+  'workplan creation must not return success when local persistence fails',
+);
+assert.equal(deleteGirl('SG-STORAGE-BASELINE'), false, 'girl deletion reports failure when local persistence fails');
+assert.equal(deleteWorkplanItem('WP-STORAGE-BASELINE'), false, 'workplan deletion reports failure when local persistence fails');
+fakeLocalStorage.setItem = originalSetItem;
+const afterFailedMutations = getDatabase();
+assert.deepEqual(afterFailedMutations.girls, beforeFailedMutations.girls, 'failed case mutations leave durable girl records unchanged');
+assert.deepEqual(afterFailedMutations.workplans, beforeFailedMutations.workplans, 'failed planning mutations leave durable workplans unchanged');
+assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
 console.log('Local storage failure handling tests passed.');

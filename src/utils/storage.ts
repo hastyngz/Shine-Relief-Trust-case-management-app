@@ -456,7 +456,7 @@ export function addGirl(
     updatedBy: auditActor || girl.updatedBy || 'SHINE Staff',
   };
   db.girls.unshift(newGirl);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'girl record');
   // Persist directly to Cloud Firestore
   persistGirlToFirestore(newGirl).catch((err) =>
     console.error('Failed to persist girl to Firestore:', err)
@@ -479,7 +479,7 @@ export function updateGirl(
     updatedBy: auditActor || updates.updatedBy || db.girls[index].updatedBy || 'SHINE Staff',
   };
   db.girls[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'girl record');
   // Persist update to Cloud Firestore
   persistGirlToFirestore(updated).catch((err) =>
     console.error('Failed to update girl in Firestore:', err)
@@ -499,7 +499,7 @@ export function deleteGirl(id: string): boolean {
   db.educationalFollowUps = db.educationalFollowUps.filter((e) => e.girlId !== id);
   db.healthFollowUps = db.healthFollowUps.filter((h) => h.girlId !== id);
   db.familyFollowUps = db.familyFollowUps.filter((f) => f.girlId !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
 
   // Delete from Cloud Firestore
   deleteGirlFromFirestore(id, { edu: linkedEdu, health: linkedHealth, family: linkedFamily }).catch(
@@ -522,7 +522,7 @@ export function addHousehold(
     updatedBy: auditActor || household.updatedBy || 'SHINE Staff',
   };
   db.households.unshift(newHouse);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'household record');
   // Persist directly to Cloud Firestore
   persistHouseholdToFirestore(newHouse).catch((err) =>
     console.error('Failed to persist household to Firestore:', err)
@@ -545,7 +545,7 @@ export function updateHousehold(
     updatedBy: auditActor || updates.updatedBy || db.households[index].updatedBy || 'SHINE Staff',
   };
   db.households[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'household record');
   // Persist update to Cloud Firestore
   persistHouseholdToFirestore(updated).catch((err) =>
     console.error('Failed to update household in Firestore:', err)
@@ -567,7 +567,7 @@ export function deleteHousehold(id: string): boolean {
   db.rentPayments = db.rentPayments.filter((r) => r.householdId !== id);
   db.expenses = db.expenses.filter((e) => e.householdId !== id);
   db.householdActivities = db.householdActivities.filter((a) => a.householdId !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
 
   // Delete from Cloud Firestore
   deleteHouseholdFromFirestore(id, affectedGirlIds, {
@@ -583,7 +583,7 @@ export function deleteEducationalFollowUp(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.educationalFollowUps.length;
   db.educationalFollowUps = db.educationalFollowUps.filter((e) => e.id !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteEduFollowUpFromFirestore(id).catch((err) =>
     console.error('Failed to delete educational follow-up from Firestore:', err)
   );
@@ -594,7 +594,7 @@ export function deleteHealthFollowUp(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.healthFollowUps.length;
   db.healthFollowUps = db.healthFollowUps.filter((h) => h.id !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteHealthFollowUpFromFirestore(id).catch((err) =>
     console.error('Failed to delete health follow-up from Firestore:', err)
   );
@@ -605,7 +605,7 @@ export function deleteFamilyFollowUp(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.familyFollowUps.length;
   db.familyFollowUps = db.familyFollowUps.filter((f) => f.id !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteFamilyFollowUpFromFirestore(id).catch((err) =>
     console.error('Failed to delete family follow-up from Firestore:', err)
   );
@@ -616,7 +616,7 @@ export function deleteRentPayment(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.rentPayments.length;
   db.rentPayments = db.rentPayments.filter((r) => r.id !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteRentPaymentFromFirestore(id).catch((err) =>
     console.error('Failed to delete rent payment from Firestore:', err)
   );
@@ -645,7 +645,7 @@ export function deleteHouseholdActivity(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.householdActivities.length;
   db.householdActivities = db.householdActivities.filter((a) => a.id !== id);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteHouseholdActivityFromFirestore(id).catch((err) =>
     console.error('Failed to delete household activity from Firestore:', err)
   );
@@ -668,7 +668,7 @@ export function addEducationalFollowUp(
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
   db.educationalFollowUps.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'education follow-up');
   persistEduFollowUpToFirestore(newItem).catch((err) =>
     console.error('Failed to persist educational follow-up to Firestore:', err)
   );
@@ -691,7 +691,7 @@ export function addHealthFollowUp(
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
   db.healthFollowUps.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'health follow-up');
   persistHealthFollowUpToFirestore(newItem).catch((err) =>
     console.error('Failed to persist health follow-up to Firestore:', err)
   );
@@ -714,7 +714,7 @@ export function addFamilyFollowUp(
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
   db.familyFollowUps.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'family follow-up');
   persistFamilyFollowUpToFirestore(newItem).catch((err) =>
     console.error('Failed to persist family follow-up to Firestore:', err)
   );
@@ -736,7 +736,7 @@ export function addRentPayment(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
   db.rentPayments.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'rent payment');
   persistRentPaymentToFirestore(newItem).catch((err) =>
     console.error('Failed to persist rent payment to Firestore:', err)
   );
@@ -813,7 +813,7 @@ export function addHouseholdActivity(
     recordedBy: item.recordedBy || auditActor || 'SHINE Staff',
   };
   db.householdActivities.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'household activity');
   persistHouseholdActivityToFirestore(newItem).catch((err) =>
     console.error('Failed to persist household activity to Firestore:', err)
   );
@@ -850,7 +850,7 @@ function addPhase2Record<T extends Phase2TrackedRecord>(
   const records = (allData[dbField] as T[] | undefined) || [];
   records.unshift(record);
   allData[dbField] = records;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'case-management record');
   if (collectionName !== 'procurementLists') {
     // Procurement lists participate in the per-record offline queue. A parallel
     // direct setDoc would bypass baseUpdatedAt conflict checks.
@@ -908,7 +908,7 @@ export function updateCaseAction(
   };
   records[index] = updated;
   db.caseActions = records;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'case action');
   persistPhase2Record('caseActions', updated).catch((err) =>
     console.error('Failed to update case action:', err)
   );
@@ -941,7 +941,7 @@ export function updateEducationHistoryRecord(
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
   records[index] = updated;
   db.educationHistory = records;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'education history');
   persistPhase2Record('educationHistory', updated).catch((err) => console.error('Failed to update education history:', err));
   return updated;
 }
@@ -976,7 +976,7 @@ export function updateAttendanceRecord(
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
   records[index] = updated;
   db.attendanceRecords = records;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'attendance record');
   persistPhase2Record('attendanceRecords', updated).catch((err) => console.error('Failed to update attendance record:', err));
   return updated;
 }
@@ -999,7 +999,7 @@ export function updateGirlLeaveRecord(
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
   records[index] = updated;
   db.girlLeaves = records;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'girl leave record');
   persistPhase2Record('girlLeaves', updated).catch((err) => console.error('Failed to update leave record:', err));
   return updated;
 }
@@ -1022,7 +1022,7 @@ export function updateProgrammeLog(
   const updated = { ...records[index], ...updates, updatedBy: actorName, updatedAt: new Date().toISOString() };
   records[index] = updated;
   db.programmeLogs = records;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'programme log');
   persistPhase2Record('programmeLogs', updated).catch((err) => console.error('Failed to update programme log:', err));
   return updated;
 }
@@ -1052,7 +1052,7 @@ export function addBudgetItem(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
   db.budgets.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'budget item');
   persistBudgetItemToFirestore(newItem).catch((err) =>
     console.error('Failed to persist budget item to Firestore:', err)
   );
@@ -1075,7 +1075,7 @@ export function updateBudgetItem(
     updatedBy: auditActor || db.budgets[index].updatedBy || 'SHINE Staff',
   };
   db.budgets[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'budget item');
   persistBudgetItemToFirestore(updated).catch((err) =>
     console.error('Failed to update budget item in Firestore:', err)
   );
@@ -1088,7 +1088,7 @@ export function deleteBudgetItem(id: string): boolean {
   const index = db.budgets.findIndex((b) => b.id === id);
   if (index === -1) return false;
   db.budgets.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteBudgetItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete budget item from Firestore:', err)
   );
@@ -1111,7 +1111,7 @@ export function addAnnualBudgetPlan(
     updatedBy: auditActor || plan.updatedBy || 'SHINE Staff',
   };
   db.annualBudgets.unshift(newPlan);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'annual budget plan');
   persistAnnualBudgetPlanToFirestore(newPlan).catch((err) =>
     console.error('Failed to persist annual budget plan to Firestore:', err)
   );
@@ -1134,7 +1134,7 @@ export function updateAnnualBudgetPlan(
     updatedBy: auditActor || db.annualBudgets[index].updatedBy || 'SHINE Staff',
   };
   db.annualBudgets[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'annual budget plan');
   persistAnnualBudgetPlanToFirestore(updated).catch((err) =>
     console.error('Failed to update annual budget plan in Firestore:', err)
   );
@@ -1260,7 +1260,7 @@ export function addWorkplanItem(
     updatedBy: auditActor || item.updatedBy || 'SHINE Staff',
   };
   db.workplans.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'workplan item');
   persistWorkplanItemToFirestore(newItem).catch((err) =>
     console.error('Failed to persist workplan item to Firestore:', err)
   );
@@ -1283,7 +1283,7 @@ export function updateWorkplanItem(
     updatedBy: auditActor || db.workplans[index].updatedBy || 'SHINE Staff',
   };
   db.workplans[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'workplan item');
   persistWorkplanItemToFirestore(updated).catch((err) =>
     console.error('Failed to update workplan item in Firestore:', err)
   );
@@ -1296,7 +1296,7 @@ export function deleteWorkplanItem(id: string): boolean {
   const index = db.workplans.findIndex((w) => w.id === id);
   if (index === -1) return false;
   db.workplans.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteWorkplanItemFromFirestore(id).catch((err) =>
     console.error('Failed to delete workplan item from Firestore:', err)
   );
@@ -1326,7 +1326,7 @@ export function updateProcurementList(
     updatedBy: actor,
   };
   db.procurementLists[index] = updated;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'procurement list');
   // Procurement updates use the shared per-record queue so stale local edits
   // cannot bypass the server baseline/conflict checks.
   return updated;
@@ -1407,7 +1407,7 @@ export function deleteScheduleItem(id: string): boolean {
   const index = db.schedules.findIndex((s) => s.id === id);
   if (index === -1) return false;
   db.schedules.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   // Deletions are detected by the shared per-record queue against its confirmed
   // baseline and are transactionally flushed with conflict protection.
   return true;
@@ -1419,7 +1419,7 @@ export function addMeetingRecord(item: Omit<MeetingRecord, 'id' | 'createdAt' | 
   const now = new Date().toISOString();
   const meeting: MeetingRecord = { ...item, id: generateFollowUpId('MTG'), createdAt: now, updatedAt: now, createdBy: auditActor || item.createdBy };
   db.meetings.unshift(meeting);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'meeting record');
   persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to persist meeting:', err));
   return meeting;
 }
@@ -1431,7 +1431,7 @@ export function updateMeetingRecord(id: string, updates: Partial<MeetingRecord>)
   if (index < 0) return null;
   const meeting = { ...db.meetings[index], ...updates, updatedAt: new Date().toISOString() };
   db.meetings[index] = meeting;
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'meeting record');
   persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to update meeting:', err));
   return meeting;
 }
@@ -1442,7 +1442,7 @@ export function deleteMeetingRecord(id: string): boolean {
   const index = db.meetings.findIndex((item) => item.id === id);
   if (index < 0) return false;
   db.meetings.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteMeetingFromFirestore(id).catch((err) => console.error('Failed to delete meeting:', err));
   return true;
 }
@@ -1452,7 +1452,7 @@ export function addFeedingProgramLog(item: Omit<FeedingProgramLog, 'id' | 'creat
   if (!db.feedingProgramLogs) db.feedingProgramLogs = [];
   const log: FeedingProgramLog = { ...item, id: generateFollowUpId('FEED'), createdAt: new Date().toISOString() };
   db.feedingProgramLogs.unshift(log);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'feeding programme log');
   persistFeedingProgramLogToFirestore(log).catch((err) => console.error('Failed to persist feeding log:', err));
   return log;
 }
@@ -1463,7 +1463,7 @@ export function deleteFeedingProgramLog(id: string): boolean {
   const index = db.feedingProgramLogs.findIndex((item) => item.id === id);
   if (index < 0) return false;
   db.feedingProgramLogs.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteFeedingProgramLogFromFirestore(id).catch((err) => console.error('Failed to delete feeding log:', err));
   return true;
 }
@@ -1473,7 +1473,7 @@ export function addMarketPrice(item: Omit<MarketPriceRecord, 'id' | 'createdAt'>
   if (!db.marketPrices) db.marketPrices = [];
   const record: MarketPriceRecord = { ...item, id: generateFollowUpId('PRICE'), createdAt: new Date().toISOString() };
   db.marketPrices.unshift(record);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'market price');
   persistMarketPriceToFirestore(record).catch((err) => console.error('Failed to persist market price:', err));
   return record;
 }
@@ -1484,7 +1484,7 @@ export function deleteMarketPrice(id: string): boolean {
   const index = db.marketPrices.findIndex((item) => item.id === id);
   if (index < 0) return false;
   db.marketPrices.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteMarketPriceFromFirestore(id).catch((err) => console.error('Failed to delete market price:', err));
   return true;
 }
@@ -1492,7 +1492,7 @@ export function deleteMarketPrice(id: string): boolean {
 export function saveForecastSettings(item: ForecastSettings): ForecastSettings {
   const db = getDatabase();
   db.forecastSettings = [item];
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'forecast settings');
   persistForecastSettingsToFirestore(item).catch((err) => console.error('Failed to persist forecast settings:', err));
   return item;
 }
@@ -1502,7 +1502,7 @@ export function addWhatIfScenario(item: Omit<WhatIfScenario, 'id' | 'createdAt'>
   if (!db.whatIfScenarios) db.whatIfScenarios = [];
   const scenario: WhatIfScenario = { ...item, id: generateFollowUpId('SCN'), createdAt: new Date().toISOString() };
   db.whatIfScenarios.unshift(scenario);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'what-if scenario');
   persistWhatIfScenarioToFirestore(scenario).catch((err) => console.error('Failed to persist scenario:', err));
   return scenario;
 }
@@ -1513,7 +1513,7 @@ export function saveIntelligenceSuggestion(item: IntelligenceSuggestion): Intell
   const existingIndex = db.intelligenceSuggestions.findIndex((suggestion) => suggestion.id === item.id);
   if (existingIndex >= 0) db.intelligenceSuggestions[existingIndex] = item;
   else db.intelligenceSuggestions.unshift(item);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'intelligence suggestion');
   persistIntelligenceSuggestionToFirestore(item).catch((err) => console.error('Failed to persist intelligence suggestion:', err));
   return item;
 }
@@ -1521,7 +1521,7 @@ export function saveIntelligenceSuggestion(item: IntelligenceSuggestion): Intell
 export function saveAISettings(item: AISettings): AISettings {
   const db = getDatabase();
   db.aiSettings = [item];
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'AI settings');
   persistAISettingsToFirestore(item).catch((err) => console.error('Failed to persist AI settings:', err));
   return item;
 }
@@ -1531,7 +1531,7 @@ export function addEarlyYearsRecord(item: Omit<EarlyYearsRecord, 'id' | 'created
   if (!db.earlyYearsRecords) db.earlyYearsRecords = [];
   const record: EarlyYearsRecord = { ...item, id: generateFollowUpId('ECD'), createdAt: new Date().toISOString() };
   db.earlyYearsRecords.unshift(record);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'early-years record');
   persistEarlyYearsRecordToFirestore(record).catch((err) => console.error('Failed to persist early-years record:', err));
   return record;
 }
@@ -1542,7 +1542,7 @@ export function deleteEarlyYearsRecord(id: string): boolean {
   const index = db.earlyYearsRecords.findIndex((item) => item.id === id);
   if (index < 0) return false;
   db.earlyYearsRecords.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteEarlyYearsRecordFromFirestore(id).catch((err) => console.error('Failed to delete early-years record:', err));
   return true;
 }
@@ -1562,7 +1562,7 @@ export function addHistoricalCaseRecord(
     createdAt: now,
   };
   db.historicalRecords.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'historical case record');
   persistHistoricalCaseRecordToFirestore(newItem).catch((err) =>
     console.error('Failed to persist historical record to Firestore:', err)
   );
@@ -1575,7 +1575,7 @@ export function deleteHistoricalCaseRecord(id: string): boolean {
   const index = db.historicalRecords.findIndex((h) => h.id === id);
   if (index === -1) return false;
   db.historicalRecords.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deleteHistoricalCaseRecordFromFirestore(id).catch((err) =>
     console.error('Failed to delete historical record from Firestore:', err)
   );
@@ -1595,7 +1595,7 @@ export function addImportAuditRecord(
     id: generateFollowUpId('AUD'),
   };
   db.importAudits.unshift(newItem);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'import audit record');
   persistImportAuditToFirestore(newItem).catch((err) =>
     console.error('Failed to persist import audit to Firestore:', err)
   );
@@ -1637,7 +1637,7 @@ export function addPerson(personData: Omit<Person, 'id'> & { id?: string }): Per
   };
 
   db.people.unshift(newPerson);
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'person record');
   persistPersonToFirestore(newPerson).catch((err) =>
     console.error('Failed to persist person to Firestore:', err)
   );
@@ -1662,7 +1662,7 @@ export function updatePerson(person: Person): Person {
     db.people.unshift(updated);
   }
 
-  saveDatabase(db);
+  saveDatabaseOrThrow(db, 'person record');
   persistPersonToFirestore(updated).catch((err) =>
     console.error('Failed to update person in Firestore:', err)
   );
@@ -1678,7 +1678,7 @@ export function deletePerson(id: string): boolean {
   if (index === -1) return false;
 
   db.people.splice(index, 1);
-  saveDatabase(db);
+  if (!saveDatabase(db).ok) return false;
   deletePersonFromFirestore(id).catch((err) =>
     console.error('Failed to delete person from Firestore:', err)
   );
@@ -1722,7 +1722,7 @@ export function addCustomPersonType(type: string): string[] {
   const clean = type.trim();
   if (clean && !db.customPersonTypes.includes(clean)) {
     db.customPersonTypes.push(clean);
-    saveDatabase(db);
+    saveDatabaseOrThrow(db, 'custom person type');
   }
   return db.customPersonTypes;
 }

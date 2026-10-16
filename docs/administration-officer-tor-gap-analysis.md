@@ -100,6 +100,12 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression coverage for restore orchestration uses injected cloud/local persistence functions, and offline-sync tests exercise queue blocking while reset recovery is required. GitHub Actions run 38883455857 passed TypeScript, storage/offline queue tests, security/quality checks, production build and offline end-to-end tests.
 
 
+### Core CRUD local-save failure handling
+- A targeted sweep of legacy CRUD helpers now checks the local persistence result before starting their direct Firestore writes. It covers girl and household records, follow-ups, rent/expenses/activities, budgets, workplans, procurement list updates, case-management history, people, meetings, feeding and market-price records, AI settings and early-years records. Delete helpers that return booleans report `false` and skip cloud deletion if the local save fails.
+- Regression tests simulate local-storage failures for girl create/delete and workplan create/update/delete. A persistent storage warning is still the primary user-facing signal for these legacy callers; caller-specific retry messaging needs a follow-up audit.
+- This does not convert all legacy direct writes to the per-record queue, nor does it make cloud writes atomic. Offline/conflict behaviour and cloud failure recovery still need a per-domain migration and tests.
+- Verification status: this commit's GitHub Actions run is pending; do not treat these changes as verified until the run completes.
+
 ### Payroll and employee local-save integrity
 - Payroll create/update and employee updates now check the device save result before starting their Firestore write. If local storage rejects the save, the operation throws a clear actionable error and the payroll form remains open; the employee contract/profile caller can surface the update failure. Payroll delete returns `false` and skips cloud deletion when local persistence fails, and the UI shows a retry message.
 - Regression tests simulate local storage failures for payroll creation and employee updates to verify they stop before the cloud-write step.

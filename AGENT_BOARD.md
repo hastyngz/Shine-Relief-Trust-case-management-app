@@ -109,6 +109,12 @@ Handoff format:
 - Next: verify the latest commit in CI. Continue designing explicit outcomes for partial backup restore/reset; these operations are still not atomic across local storage and Firestore.
 - Watch out: if cloud deletion succeeds but local reset persistence fails, the reset reports an error and preserves pending edits, but cloud data may already be deleted. Do not describe this path as rollback-safe.
 
+### 2026-10-16 · Mosaic (ChatGPT) · core persistence failure handling
+- Area: legacy CRUD helpers in `src/utils/storage.ts`.
+- State: create/update helpers now stop before starting cloud writes when local persistence fails; delete helpers return failure instead of deleting remotely. Coverage spans case records, follow-ups, finance, planning, meetings and programme records.
+- Next: verify CI, then audit callers for user-facing retry feedback and migrate remaining direct Firestore writes to the per-record queue in controlled slices.
+- Watch out: this does not make cloud operations transactional or solve concurrent edits. Local-save failure tests cover representative girl/workplan create, update and delete paths. — Mosaic (ChatGPT), 2026-10-16
+
 ## Suggestions for the project owner
 
 Suggestion format:
