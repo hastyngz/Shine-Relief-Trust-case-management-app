@@ -262,7 +262,7 @@ export function isDatabaseResetRecoveryRequired(): boolean {
 export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Promise<void> {
   await persistQueue([]);
   clearPendingOfflineSnapshots();
-  setLastSyncedSnapshot(db);
+  setLastSyncedSnapshotOrThrow(db);
   if (typeof window !== 'undefined') window.localStorage.removeItem(RESET_RECOVERY_REQUIRED_KEY);
 }
 
@@ -295,18 +295,24 @@ export function getLastSyncedSnapshot(): AppDatabase | null {
   }
 }
 
+/** Persist the sync baseline and throw when it cannot be made durable. */
+export function setLastSyncedSnapshotOrThrow(db: AppDatabase): void {
+  if (typeof window === 'undefined') throw new Error('Cannot persist the sync baseline outside the browser.');
+  const raw = JSON.stringify(db);
+  window.localStorage.setItem(LAST_SYNCED_KEY, raw);
+  cachedBaselineRaw = raw;
+  cachedBaselineDb = db;
+}
+
 export function setLastSyncedSnapshot(db: AppDatabase): void {
-  if (typeof window === 'undefined') return;
   try {
-    const raw = JSON.stringify(db);
-    window.localStorage.setItem(LAST_SYNCED_KEY, raw);
-    cachedBaselineRaw = raw;
-    cachedBaselineDb = db;
+    setLastSyncedSnapshotOrThrow(db);
   } catch (error) {
-    // A missing baseline can make later diffs unsafe, so surface the failure.
+    // Ordinary snapshot updates remain best-effort, but destructive recovery
+    // uses setLastSyncedSnapshotOrThrow so it cannot unlock on a missing baseline.
     console.warn('Could not record the last synced database copy.');
     try {
-      window.dispatchEvent(new CustomEvent('shine_storage_warning', {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('shine_storage_warning', {
         detail: { quotaExceeded: !!error && typeof error === 'object' && 'name' in error && (error as { name?: unknown }).name === 'QuotaExceededError' },
       }));
     } catch { /* best effort only; do not log record contents */ }
