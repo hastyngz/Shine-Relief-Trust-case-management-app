@@ -35,9 +35,6 @@ import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, is
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
-  persistBudgetItemToFirestore,
-  deleteBudgetItemFromFirestore,
-  persistAnnualBudgetPlanToFirestore,
   deleteAnnualBudgetPlanFromFirestore,
   persistPayrollRecordToFirestore,
   deletePayrollRecordFromFirestore,
@@ -1141,9 +1138,6 @@ export function addBudgetItem(
     db.budgets = previousBudgets;
     throw error;
   }
-  persistBudgetItemToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist budget item to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -1170,9 +1164,6 @@ export function updateBudgetItem(
     db.budgets = previousBudgets;
     throw error;
   }
-  persistBudgetItemToFirestore(updated).catch((err) =>
-    console.error('Failed to update budget item in Firestore:', err)
-  );
   return updated;
 }
 
@@ -1187,9 +1178,6 @@ export function deleteBudgetItem(id: string): boolean {
     db.budgets = previousBudgets;
     return false;
   }
-  deleteBudgetItemFromFirestore(id).catch((err) =>
-    console.error('Failed to delete budget item from Firestore:', err)
-  );
   return true;
 }
 
@@ -1216,9 +1204,6 @@ export function addAnnualBudgetPlan(
     db.annualBudgets = previousAnnualBudgets;
     throw error;
   }
-  persistAnnualBudgetPlanToFirestore(newPlan).catch((err) =>
-    console.error('Failed to persist annual budget plan to Firestore:', err)
-  );
   return newPlan;
 }
 
@@ -1245,9 +1230,6 @@ export function updateAnnualBudgetPlan(
     db.annualBudgets = previousAnnualBudgets;
     throw error;
   }
-  persistAnnualBudgetPlanToFirestore(updated).catch((err) =>
-    console.error('Failed to update annual budget plan in Firestore:', err)
-  );
   return updated;
 }
 

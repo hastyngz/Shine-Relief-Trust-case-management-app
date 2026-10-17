@@ -480,6 +480,10 @@ const {
   deleteHealthFollowUp,
   addRentPayment,
   deleteExpense,
+  addBudgetItem,
+  updateBudgetItem,
+  deleteBudgetItem,
+  addAnnualBudgetPlan,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -591,5 +595,43 @@ const rentCreateFlush = await flushPendingOfflineSnapshots();
 assert.equal(rentCreateFlush.conflicts.length, 0, 'new rent payment queues without a conflict');
 assert.equal(server.get('rentPayments', addedRent.id).id, addedRent.id,
   'queued rent payment creation reaches Firestore');
+
+
+ // --- 16. Budget and annual-plan writes use conflict-aware queue -------------
+const budgetBaseline = normalizeImportedDatabase({
+  budgets: [{ id: 'BDG-QUEUE-STALE', testValue: 'baseline', createdAt: T1, updatedAt: T1 } as any],
+});
+await resetCaseSyncState(budgetBaseline);
+server.seed('budgets', 'BDG-QUEUE-STALE', { ...budgetBaseline.budgets[0], testValue: 'server-newer', updatedAt: T3 });
+assert.equal(updateBudgetItem('BDG-QUEUE-STALE', { testValue: 'local-edit' } as any)?.testValue, 'local-edit',
+  'local budget update is saved before queued synchronization');
+assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
+  'budget update must not directly overwrite a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const budgetUpdateFlush = await flushPendingOfflineSnapshots();
+assert.equal(budgetUpdateFlush.conflicts.length, 1, 'stale budget update is surfaced as a conflict');
+assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
+  'budget conflict handling preserves the newer server record');
+
+await resetCaseSyncState(budgetBaseline);
+server.seed('budgets', 'BDG-QUEUE-STALE', { ...budgetBaseline.budgets[0], testValue: 'server-newer', updatedAt: T3 });
+assert.equal(deleteBudgetItem('BDG-QUEUE-STALE'), true, 'local budget deletion succeeds after local persistence');
+assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
+  'budget deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const budgetDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(budgetDeleteFlush.conflicts.length, 1, 'stale budget deletion is surfaced as a conflict');
+assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
+  'budget delete conflict preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ annualBudgets: [] }));
+const addedAnnualBudget = addAnnualBudgetPlan({ title: 'Synthetic annual budget plan' } as any);
+assert.equal(server.get('annualBudgets', addedAnnualBudget.id), undefined,
+  'annual budget plan creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const annualBudgetFlush = await flushPendingOfflineSnapshots();
+assert.equal(annualBudgetFlush.conflicts.length, 0, 'new annual budget plan queues without a conflict');
+assert.equal(server.get('annualBudgets', addedAnnualBudget.id).id, addedAnnualBudget.id,
+  'queued annual budget plan creation reaches Firestore');
 
 console.log('Offline per-record queue and conflict tests passed.');
