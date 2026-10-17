@@ -274,6 +274,21 @@ function isExternalAIProcessingApproved(): boolean {
       if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
       const aiSettings = await getAISettings();
       if (aiSettings.enabled === false || aiSettings.speechToText === false) return res.status(403).json({ error: 'Speech-to-text is disabled by an Administrator.' });
+      if (!isExternalAIProcessingApproved()) {
+        await writeAIAudit({
+          userId: staff.uid,
+          userEmail: staff.email,
+          userRole: staff.role,
+          timestamp: new Date().toISOString(),
+          aiFunction: 'privacy boundary blocked audio transcription',
+          status: 'failure',
+          recordIdsAccessed: [],
+          errorMessage: 'AI processing paused by SHINE privacy policy.',
+        });
+        return res.status(503).json({
+          error: 'Audio transcription is paused to protect SHINE data. No audio was sent to an external AI provider. Use an approved device-local transcription option or enter the notes manually.',
+        });
+      }
       if (typeof req.body?.audioBase64 !== 'string' || typeof req.body?.mimeType !== 'string') {
         return res.status(400).json({ error: 'Audio data and MIME type are required.' });
       }
