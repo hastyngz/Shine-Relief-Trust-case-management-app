@@ -150,7 +150,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   );
 
   // Total expenditure
-  const totalExpenditure = db.expenses.reduce((sum, exp) => sum + exp.totalCost, 0);
+  const totalExpenditure = db.expenses.reduce((sum, exp) => sum + (Number.isFinite(exp.totalCost) ? exp.totalCost : 0), 0);
   const outstandingExpenses = outstandingExpenseSummary(db.expenses);
 
   const programmeOutstandingSales = (db.programmeLogs || []).filter(
