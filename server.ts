@@ -3,7 +3,7 @@ import express from 'express';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument, isExternalAIProcessingApproved } from './src/server/aiService';
+import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
 import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, resolveAuthenticatedUid, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
 import { createRateLimiter, getRateLimitConfig } from './src/server/rateLimit';
@@ -191,26 +191,6 @@ async function startServer() {
         });
       }
 
-      if (!isExternalAIProcessingApproved()) {
-        const timestamp = new Date().toISOString();
-        await writeAIAudit({
-          userId: staffUser.uid,
-          userEmail: staffUser.email,
-          userRole: staffUser.role,
-          timestamp,
-          aiFunction: 'privacy boundary blocked external AI',
-          status: 'failure',
-          recordIdsAccessed: [],
-          errorMessage: 'AI processing paused by SHINE privacy policy.',
-        });
-        return res.status(503).json({
-          success: false,
-          reply: 'SHINE AI chat is temporarily paused to protect confidential records. The current AI route can send prompts and retrieved records to a third-party provider, which is not permitted for SHINE data. No record lookup or AI request was made. Continue using the normal SHINE modules. Chat can be re-enabled after a privacy-approved, no-cost private processing route is implemented and tested.',
-          isUnavailable: true,
-          errorMessage: 'AI processing paused by SHINE privacy policy.',
-        });
-      }
-
       let databasePromise: ReturnType<typeof loadAIRecords> | undefined;
       const chatPayload: AIChatRequest = {
         message: req.body.message.trim(),
@@ -267,21 +247,6 @@ async function startServer() {
       if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
       const aiSettings = await getAISettings();
       if (aiSettings.enabled === false || aiSettings.speechToText === false) return res.status(403).json({ error: 'Speech-to-text is disabled by an Administrator.' });
-      if (!isExternalAIProcessingApproved()) {
-        await writeAIAudit({
-          userId: staff.uid,
-          userEmail: staff.email,
-          userRole: staff.role,
-          timestamp: new Date().toISOString(),
-          aiFunction: 'privacy boundary blocked audio transcription',
-          status: 'failure',
-          recordIdsAccessed: [],
-          errorMessage: 'AI processing paused by SHINE privacy policy.',
-        });
-        return res.status(503).json({
-          error: 'Audio transcription is paused to protect SHINE data. No audio was sent to an external AI provider. Use an approved device-local transcription option or enter the notes manually.',
-        });
-      }
       if (typeof req.body?.audioBase64 !== 'string' || typeof req.body?.mimeType !== 'string') {
         return res.status(400).json({ error: 'Audio data and MIME type are required.' });
       }
@@ -308,7 +273,6 @@ async function startServer() {
       if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
       const aiSettings = await getAISettings();
       if (aiSettings.enabled === false || aiSettings.documentAnalysis === false) return res.status(403).json({ error: 'Document analysis is disabled by an Administrator.' });
-      if (!isExternalAIProcessingApproved()) return res.status(503).json({ error: 'AI document analysis is paused to protect SHINE data. No document was sent to an external AI provider. File the document and enter details manually.' });
       if (typeof req.body?.documentBase64 !== 'string' || typeof req.body?.mimeType !== 'string') return res.status(400).json({ error: 'Document data and MIME type are required.' });
       const result = await analyzeDocument(req.body.documentBase64, req.body.mimeType);
       await writeAIAudit({ userId: staff.uid, userEmail: staff.email, userRole: staff.role, timestamp: new Date().toISOString(), aiFunction: 'document_analysis', status: 'success', recordIdsAccessed: [], reviewStatus: 'review_required' });
