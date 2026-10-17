@@ -52,7 +52,7 @@ import {
 import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
 import { expandWorkplanOccurrences, findOverloadedStaff, MAX_WORKPLANS_PER_STAFF_PER_WEEK } from '../../services/workplanRecurrence';
 import { calculateBudgetForecast } from '../../services/intelligenceService';
-import { filterBudgetLines } from '../../services/financialCalculations';
+import { filterBudgetLines, filterBudgetLinesByYear } from '../../services/financialCalculations';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
@@ -81,6 +81,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
 
   // Filters
   const [budgetPeriodFilter, setBudgetPeriodFilter] = useState<string>('ALL');
+  const [budgetSummaryYear, setBudgetSummaryYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCategoryFilter, setBudgetCategoryFilter] = useState<string>('ALL');
   const [budgetSummaryGroup, setBudgetSummaryGroup] = useState<'category' | 'period' | 'programme'>('category');
   const [workplanStatusFilter, setWorkplanStatusFilter] = useState<string>('ALL');
@@ -152,6 +153,17 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
 
   // Filtered Budgets
   const filteredBudgets = filterBudgetLines(budgets, budgetPeriodFilter, budgetCategoryFilter);
+  const budgetSummaryYears = Array.from(new Set(budgets
+    .map((line) => typeof line.period === 'string' ? line.period.slice(0, 4) : '')
+    .filter((year) => /^\\d{4}$/.test(year)))).sort((a, b) => b.localeCompare(a));
+  const effectiveBudgetSummaryYear = budgetPeriodFilter !== 'ALL'
+    ? budgetPeriodFilter.slice(0, 4)
+    : budgetSummaryYears.includes(budgetSummaryYear)
+      ? budgetSummaryYear
+      : budgetSummaryYears.includes(String(new Date().getFullYear()))
+        ? String(new Date().getFullYear())
+        : budgetSummaryYears[0] || String(new Date().getFullYear());
+  const summaryBudgets = filterBudgetLinesByYear(filteredBudgets, effectiveBudgetSummaryYear);
 
   const approvedAnnualBudgetTotal = annualBudgets.reduce((sum, plan) => sum + (plan.approvedAmount || 0), 0);
 
@@ -174,7 +186,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     [workplans, upcomingRangeEnd]
   );
   const forecastByMonth = calculateBudgetForecast(
-    filteredBudgets,
+    summaryBudgets,
     1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100)
   ).monthlyForecast || [];
 
@@ -275,12 +287,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const uniquePeriods = Array.from(new Set(budgets.map((b) => b.period).filter(Boolean)));
   const uniqueCategories = Array.from(new Set(budgets.map((b) => b.category).filter(Boolean)));
 
-  const summaryPeriods = Array.from(new Set(filteredBudgets.map((line) => line.period).filter(Boolean)));
-  const summaryCategories = Array.from(new Set(filteredBudgets.map((line) => line.category).filter(Boolean)));
+  const summaryPeriods = Array.from(new Set(summaryBudgets.map((line) => line.period).filter(Boolean)));
+  const summaryCategories = Array.from(new Set(summaryBudgets.map((line) => line.category).filter(Boolean)));
 
   const monthlyBudgetSummary = Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
-    const monthLines = filteredBudgets.filter((line) => line.month === month);
+    const monthLines = summaryBudgets.filter((line) => line.month === month);
     const budgeted = monthLines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
     const actual = monthLines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
     const variance = budgeted - actual;
@@ -293,12 +305,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     return { key, budgeted, actual, variance: budgeted - actual };
   };
   const groupedBudgetSummary = budgetSummaryGroup === 'category'
-    ? summaryCategories.map((key) => budgetSummary(key, filteredBudgets.filter((line) => line.category === key)))
+    ? summaryCategories.map((key) => budgetSummary(key, summaryBudgets.filter((line) => line.category === key)))
     : budgetSummaryGroup === 'period'
-    ? summaryPeriods.map((key) => budgetSummary(key, filteredBudgets.filter((line) => line.period === key)))
+    ? summaryPeriods.map((key) => budgetSummary(key, summaryBudgets.filter((line) => line.period === key)))
     : [...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => budgetSummary(
       item.name,
-      filteredBudgets.filter((line) => line.programmeId === item.id)
+      summaryBudgets.filter((line) => line.programmeId === item.id)
     )).filter((row) => row.budgeted || row.actual);
 
   const toggleWorkplanOccurrence = (workplanId: string, date: string, currentlyCompleted: boolean) => {
@@ -801,17 +813,29 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
-            <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Monthly budget monitoring</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Monthly budget monitoring · {effectiveBudgetSummaryYear}</p>
                 <h3 className="text-base font-black text-stone-900">Budget vs Actual by month</h3>
               </div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
+                Summary year
+                <select
+                  aria-label="Budget summary year"
+                  value={effectiveBudgetSummaryYear}
+                  disabled={budgetPeriodFilter !== 'ALL' || budgetSummaryYears.length === 0}
+                  onChange={(event) => setBudgetSummaryYear(event.target.value)}
+                  className="rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5"
+                >
+                  {budgetSummaryYears.map((year) => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
             </div>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {monthlyBudgetSummary.map(({ month, budgeted, actual, variance }) => (
                 <div key={month} className="border border-stone-200 rounded-xl p-3 bg-stone-50">
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-stone-500">
-                    <span>{new Date(2026, month - 1, 1).toLocaleString('en-US', { month: 'short' })}</span>
+                    <span>{new Date(Number(effectiveBudgetSummaryYear), month - 1, 1).toLocaleString('en-US', { month: 'short' })}</span>
                     <span className={variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>{variance >= 0 ? 'Surplus' : 'Shortfall'}</span>
                   </div>
                   <div className="mt-2 text-sm font-black text-stone-900">MWK {budgeted.toLocaleString()}</div>
