@@ -10,6 +10,7 @@ import {
   FINANCIAL_MONTHS,
   outstandingExpenseSummary,
   filterBudgetLines,
+  filterBudgetLinesByYear,
 } from '../src/services/financialCalculations';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../src/services/expenseAudit';
 
@@ -46,6 +47,13 @@ const budgets = [line('b1', 1, 'Rent', 'Homes', 2, 1000), line('b2', 1, 'Food', 
 assert.deepEqual(filterBudgetLines(budgets, '2026-01', 'Rent').map((item) => item.id), ['b1']);
 assert.deepEqual(filterBudgetLines(budgets, '2026-01', 'ALL').map((item) => item.id), ['b1', 'b2']);
 assert.deepEqual(filterBudgetLines(budgets, 'ALL', 'Education').map((item) => item.id), ['b3']);
+
+// Monthly summaries must not mix the same month across different years.
+const priorYearBudget = { ...line('prior-year-january', 1, 'Rent', 'Homes', 9, 1000), period: '2025-01', financialYear: '2025' } as BudgetItem;
+const multiYearBudgets = [...budgets, priorYearBudget];
+assert.deepEqual(filterBudgetLinesByYear(multiYearBudgets, '2026').map((item) => item.id), ['b1', 'b2', 'b3']);
+assert.deepEqual(filterBudgetLinesByYear(multiYearBudgets, '2025').map((item) => item.id), ['prior-year-january']);
+assert.deepEqual(filterBudgetLinesByYear(multiYearBudgets, 'not-a-year'), []);
 assert.equal(filterBudgetLines(budgets, '2025-01', 'ALL').length, 0);
 const totals = aggregateBudgetLines(budgets);
 assert.equal(totals.annual, 5800);
