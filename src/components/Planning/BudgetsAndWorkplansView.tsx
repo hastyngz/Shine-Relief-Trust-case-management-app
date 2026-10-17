@@ -52,8 +52,10 @@ import {
 import { buildActivityOverview, buildWorkloadSummary, normalizeWorkplanStatus, summarizeWorkplanHealth } from '../../services/workload';
 import { expandWorkplanOccurrences, findOverloadedStaff, MAX_WORKPLANS_PER_STAFF_PER_WEEK } from '../../services/workplanRecurrence';
 import { calculateBudgetForecast } from '../../services/intelligenceService';
+import { filterBudgetLines, filterBudgetLinesByYear } from '../../services/financialCalculations';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
+import { PlanningModals } from './PlanningModals';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
@@ -79,6 +81,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
 
   // Filters
   const [budgetPeriodFilter, setBudgetPeriodFilter] = useState<string>('ALL');
+  const [budgetSummaryYear, setBudgetSummaryYear] = useState<string>(String(new Date().getFullYear()));
   const [budgetCategoryFilter, setBudgetCategoryFilter] = useState<string>('ALL');
   const [budgetSummaryGroup, setBudgetSummaryGroup] = useState<'category' | 'period' | 'programme'>('category');
   const [workplanStatusFilter, setWorkplanStatusFilter] = useState<string>('ALL');
@@ -149,11 +152,18 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   };
 
   // Filtered Budgets
-  const filteredBudgets = budgets.filter((b) => {
-    if (budgetPeriodFilter !== 'ALL' && b.period !== budgetPeriodFilter) return false;
-    if (budgetCategoryFilter !== 'ALL' && b.category !== budgetCategoryFilter) return false;
-    return true;
-  });
+  const filteredBudgets = filterBudgetLines(budgets, budgetPeriodFilter, budgetCategoryFilter);
+  const budgetSummaryYears = Array.from(new Set(budgets
+    .map((line) => typeof line.period === 'string' ? line.period.slice(0, 4) : '')
+    .filter((year) => /^\d{4}$/.test(year)))).sort((a, b) => b.localeCompare(a));
+  const effectiveBudgetSummaryYear = budgetPeriodFilter !== 'ALL'
+    ? budgetPeriodFilter.slice(0, 4)
+    : budgetSummaryYears.includes(budgetSummaryYear)
+      ? budgetSummaryYear
+      : budgetSummaryYears.includes(String(new Date().getFullYear()))
+        ? String(new Date().getFullYear())
+        : budgetSummaryYears[0] || String(new Date().getFullYear());
+  const summaryBudgets = filterBudgetLinesByYear(filteredBudgets, effectiveBudgetSummaryYear);
 
   const approvedAnnualBudgetTotal = annualBudgets.reduce((sum, plan) => sum + (plan.approvedAmount || 0), 0);
 
@@ -176,7 +186,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     [workplans, upcomingRangeEnd]
   );
   const forecastByMonth = calculateBudgetForecast(
-    filteredBudgets,
+    summaryBudgets,
     1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100)
   ).monthlyForecast || [];
 
@@ -277,9 +287,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const uniquePeriods = Array.from(new Set(budgets.map((b) => b.period).filter(Boolean)));
   const uniqueCategories = Array.from(new Set(budgets.map((b) => b.category).filter(Boolean)));
 
+  const summaryPeriods = Array.from(new Set(summaryBudgets.map((line) => line.period).filter(Boolean)));
+  const summaryCategories = Array.from(new Set(summaryBudgets.map((line) => line.category).filter(Boolean)));
+
   const monthlyBudgetSummary = Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
-    const monthLines = budgets.filter((b) => b.month === month);
+    const monthLines = summaryBudgets.filter((line) => line.month === month);
     const budgeted = monthLines.reduce((sum, line) => sum + (line.budgetAmount || 0), 0);
     const actual = monthLines.reduce((sum, line) => sum + (line.actualExpenditure || 0), 0);
     const variance = budgeted - actual;
@@ -292,12 +305,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     return { key, budgeted, actual, variance: budgeted - actual };
   };
   const groupedBudgetSummary = budgetSummaryGroup === 'category'
-    ? uniqueCategories.map((key) => budgetSummary(key, budgets.filter((line) => line.category === key)))
+    ? summaryCategories.map((key) => budgetSummary(key, summaryBudgets.filter((line) => line.category === key)))
     : budgetSummaryGroup === 'period'
-    ? uniquePeriods.map((key) => budgetSummary(key, budgets.filter((line) => line.period === key)))
+    ? summaryPeriods.map((key) => budgetSummary(key, summaryBudgets.filter((line) => line.period === key)))
     : [...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => budgetSummary(
       item.name,
-      budgets.filter((line) => line.programmeId === item.id)
+      summaryBudgets.filter((line) => line.programmeId === item.id)
     )).filter((row) => row.budgeted || row.actual);
 
   const toggleWorkplanOccurrence = (workplanId: string, date: string, currentlyCompleted: boolean) => {
@@ -306,8 +319,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const completionDates = new Set(item.completionDates || []);
     if (currentlyCompleted) completionDates.delete(date);
     else completionDates.add(date);
-    updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, actorName);
-    onRefresh();
+    try {
+      const updated = updateWorkplanItem(workplanId, { completionDates: Array.from(completionDates).sort() }, actorName);
+      if (!updated) {
+        window.alert('Workplan was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
+        return;
+      }
+      onRefresh();
+    } catch (error) {
+      window.alert(`Workplan completion was not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+    }
   };
 
   // Handle Budget Form Submit
@@ -329,45 +350,54 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const actualExpenditure = parseFloat(fd.get('actualExpenditure') as string) || 0;
     const notes = (fd.get('notes') as string).trim();
 
-    if (editingBudget) {
-      updateBudgetItem(
-        editingBudget.id,
-        {
-          period,
-          periodType: 'quarterly',
-          programme,
-          programmeId,
-          seasonalMonths,
-          category,
-          itemDescription,
-          quantity,
-          unit,
-          unitCost,
-          budgetAmount,
-          actualExpenditure,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addBudgetItem(
-        {
-          period,
-          periodType: 'quarterly',
-          programme,
-          programmeId,
-          seasonalMonths,
-          category,
-          itemDescription,
-          quantity,
-          unit,
-          unitCost,
-          budgetAmount,
-          actualExpenditure,
-          notes,
-        },
-        actorName
-      );
+    try {
+      if (editingBudget) {
+        const updated = updateBudgetItem(
+          editingBudget.id,
+          {
+            period,
+            periodType: 'quarterly',
+            programme,
+            programmeId,
+            seasonalMonths,
+            category,
+            itemDescription,
+            quantity,
+            unit,
+            unitCost,
+            budgetAmount,
+            actualExpenditure,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('Budget line was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
+          return;
+        }
+      } else {
+        addBudgetItem(
+          {
+            period,
+            periodType: 'quarterly',
+            programme,
+            programmeId,
+            seasonalMonths,
+            category,
+            itemDescription,
+            quantity,
+            unit,
+            unitCost,
+            budgetAmount,
+            actualExpenditure,
+            notes,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Budget changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowBudgetModal(false);
@@ -392,37 +422,46 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       return;
     }
 
-    if (editingAnnualBudget) {
-      updateAnnualBudgetPlan(
-        editingAnnualBudget.id,
-        {
-          financialYear,
-          title,
-          programme,
-          description,
-          status,
-          approvedAmount,
-          approvalDate,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addAnnualBudgetPlan(
-        {
-          financialYear,
-          title,
-          programme,
-          description,
-          status,
-          approvedAmount,
-          approvalDate,
-          notes,
-          createdBy: actorName,
-          updatedBy: actorName,
-        },
-        actorName
-      );
+    try {
+      if (editingAnnualBudget) {
+        const updated = updateAnnualBudgetPlan(
+          editingAnnualBudget.id,
+          {
+            financialYear,
+            title,
+            programme,
+            description,
+            status,
+            approvedAmount,
+            approvalDate,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('This annual budget plan could not be found. Refresh the page and try again.');
+          return;
+        }
+      } else {
+        addAnnualBudgetPlan(
+          {
+            financialYear,
+            title,
+            programme,
+            description,
+            status,
+            approvedAmount,
+            approvalDate,
+            notes,
+            createdBy: actorName,
+            updatedBy: actorName,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Annual budget changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowAnnualBudgetModal(false);
@@ -456,57 +495,66 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     const location = (fd.get('location') as string).trim();
     const notes = (fd.get('notes') as string).trim();
 
-    if (editingWorkplan) {
-      updateWorkplanItem(
-        editingWorkplan.id,
-        {
-          period,
-          periodType: 'quarterly',
-          programmeId,
-          recurrence,
-          activity,
-          objective,
-          description,
-          targetCount,
-          unit,
-          completedCount,
-          progress,
-          status: normalizedStatus,
-          responsibleStaffId,
-          responsibleStaffName,
-          startDate,
-          endDate,
-          dueDatePeriod: `date:${endDate}`,
-          location,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addWorkplanItem(
-        {
-          period,
-          periodType: 'quarterly',
-          programmeId,
-          recurrence,
-          activity,
-          objective,
-          description,
-          targetCount,
-          unit,
-          completedCount,
-          progress,
-          status: normalizedStatus,
-          responsibleStaffId,
-          responsibleStaffName,
-          startDate,
-          endDate,
-          dueDatePeriod: `date:${endDate}`,
-          location,
-          notes,
-        },
-        actorName
-      );
+    try {
+      if (editingWorkplan) {
+        const updated = updateWorkplanItem(
+          editingWorkplan.id,
+          {
+            period,
+            periodType: 'quarterly',
+            programmeId,
+            recurrence,
+            activity,
+            objective,
+            description,
+            targetCount,
+            unit,
+            completedCount,
+            progress,
+            status: normalizedStatus,
+            responsibleStaffId,
+            responsibleStaffName,
+            startDate,
+            endDate,
+            dueDatePeriod: `date:${endDate}`,
+            location,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('This workplan could not be found. Refresh the page and try again.');
+          return;
+        }
+      } else {
+        addWorkplanItem(
+          {
+            period,
+            periodType: 'quarterly',
+            programmeId,
+            recurrence,
+            activity,
+            objective,
+            description,
+            targetCount,
+            unit,
+            completedCount,
+            progress,
+            status: normalizedStatus,
+            responsibleStaffId,
+            responsibleStaffName,
+            startDate,
+            endDate,
+            dueDatePeriod: `date:${endDate}`,
+            location,
+            notes,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Workplan changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowWorkplanModal(false);
@@ -534,39 +582,48 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         ? status
         : 'Upcoming';
 
-    if (editingSchedule) {
-      updateScheduleItem(
-        editingSchedule.id,
-        {
-          scheduledDate,
-          scheduledTime,
-          type,
-          title,
-          targetName,
-          location,
-          assignedStaffId,
-          assignedStaffName,
-          status: normalizedScheduleStatus,
-          notes,
-        },
-        actorName
-      );
-    } else {
-      addScheduleItem(
-        {
-          scheduledDate,
-          scheduledTime,
-          type,
-          title,
-          targetName,
-          location,
-          assignedStaffId,
-          assignedStaffName,
-          status: normalizedScheduleStatus,
-          notes,
-        },
-        actorName
-      );
+    try {
+      if (editingSchedule) {
+        const updated = updateScheduleItem(
+          editingSchedule.id,
+          {
+            scheduledDate,
+            scheduledTime,
+            type,
+            title,
+            targetName,
+            location,
+            assignedStaffId,
+            assignedStaffName,
+            status: normalizedScheduleStatus,
+            notes,
+          },
+          actorName
+        );
+        if (!updated) {
+          window.alert('Schedule item was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
+          return;
+        }
+      } else {
+        addScheduleItem(
+          {
+            scheduledDate,
+            scheduledTime,
+            type,
+            title,
+            targetName,
+            location,
+            assignedStaffId,
+            assignedStaffName,
+            status: normalizedScheduleStatus,
+            notes,
+          },
+          actorName
+        );
+      }
+    } catch (error) {
+      window.alert(`Schedule changes were not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return;
     }
 
     setShowScheduleModal(false);
@@ -756,17 +813,29 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
-            <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Monthly budget monitoring</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Monthly budget monitoring · {effectiveBudgetSummaryYear}</p>
                 <h3 className="text-base font-black text-stone-900">Budget vs Actual by month</h3>
               </div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
+                Summary year
+                <select
+                  aria-label="Budget summary year"
+                  value={effectiveBudgetSummaryYear}
+                  disabled={budgetPeriodFilter !== 'ALL' || budgetSummaryYears.length === 0}
+                  onChange={(event) => setBudgetSummaryYear(event.target.value)}
+                  className="rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5"
+                >
+                  {budgetSummaryYears.map((year) => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
             </div>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {monthlyBudgetSummary.map(({ month, budgeted, actual, variance }) => (
                 <div key={month} className="border border-stone-200 rounded-xl p-3 bg-stone-50">
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-stone-500">
-                    <span>{new Date(2026, month - 1, 1).toLocaleString('en-US', { month: 'short' })}</span>
+                    <span>{new Date(Number(effectiveBudgetSummaryYear), month - 1, 1).toLocaleString('en-US', { month: 'short' })}</span>
                     <span className={variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>{variance >= 0 ? 'Surplus' : 'Shortfall'}</span>
                   </div>
                   <div className="mt-2 text-sm font-black text-stone-900">MWK {budgeted.toLocaleString()}</div>
@@ -953,9 +1022,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                 {isAdmin && (
                                   <button
                                     onClick={() => {
-                                      if (confirm(`Delete budget item "${b.itemDescription}"?`)) {
-                                        deleteBudgetItem(b.id);
+                                      if (!confirm(`Delete budget item "${b.itemDescription}"?`)) return;
+                                      try {
+                                        if (!deleteBudgetItem(b.id)) {
+                                          window.alert('This budget line could not be found. Refresh the page and try again.');
+                                          return;
+                                        }
                                         onRefresh();
+                                      } catch (error) {
+                                        window.alert(`Budget line was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
                                       }
                                     }}
                                     className="p-1 hover:bg-rose-100 rounded-md text-rose-600 hover:text-rose-800"
@@ -1202,9 +1277,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           {isAdmin && (
                             <button
                               onClick={() => {
-                                if (confirm(`Delete workplan "${w.activity}"?`)) {
-                                  deleteWorkplanItem(w.id);
+                                if (!confirm(`Delete workplan "${w.activity}"?`)) return;
+                                try {
+                                  if (!deleteWorkplanItem(w.id)) {
+                                    window.alert('This workplan could not be found. Refresh the page and try again.');
+                                    return;
+                                  }
                                   onRefresh();
+                                } catch (error) {
+                                  window.alert(`Workplan was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
                                 }
                               }}
                               className="text-rose-600 hover:underline font-semibold"
@@ -1291,6 +1372,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           item.unitPriceMWK === undefined ? undefined : item.unitPriceMWK * item.quantity
                         );
                         const quoteRequired = itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? 500000);
+                        // Unknown/unclear prices need supplier quotes to establish a price even before the threshold can be evaluated.
+                        const quoteCollectionAvailable = quoteRequired || item.priceStatus !== 'quoted';
                         const draftKey = `${list.id}:${index}`;
                         const draft = quoteDrafts[draftKey] || { supplier: '', amount: '' };
                         return (
@@ -1307,6 +1390,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                 {item.priceStatus === 'quoted' ? formatMWK(itemTotal || 0) : item.priceStatus === 'unclear' ? 'Price unclear' : 'Missing price'}
                               </p>
                               {quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Three quotes required: {item.quotes?.length || 0}/3</p>}
+                              {item.priceStatus !== 'quoted' && !quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Collect supplier quotes to establish the price: {item.quotes?.length || 0}/3</p>}
+                              {item.priceStatus !== 'quoted' && (item.quotes?.length || 0) >= 3 && <p className="mt-1 text-[11px] text-stone-600">Three supplier prices captured; price selection and approval remain outstanding.</p>}
                             </div>
                             <label className="text-[11px] font-semibold text-stone-700">
                               Attach to budget line
@@ -1328,7 +1413,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                   {quote.supplier}: {formatMWK(quote.amountMWK)}
                                 </p>
                               ))}
-                              {canEdit && quoteRequired && (item.quotes?.length || 0) < 3 && (
+                              {canEdit && quoteCollectionAvailable && (item.quotes?.length || 0) < 3 && (
                                 <div className="flex gap-1">
                                   <input
                                     aria-label="Quote supplier"
@@ -1427,9 +1512,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Delete schedule "${s.title}"?`)) {
-                              deleteScheduleItem(s.id);
+                            if (!confirm(`Delete schedule "${s.title}"?`)) return;
+                            try {
+                              if (!deleteScheduleItem(s.id)) {
+                                window.alert('This schedule item could not be found. Refresh the page and try again.');
+                                return;
+                              }
                               onRefresh();
+                            } catch (error) {
+                              window.alert(`Schedule item was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
                             }
                           }}
                           className="p-1 hover:bg-rose-100 rounded-md text-rose-600"
@@ -1447,626 +1538,31 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         </div>
       )}
 
-      {/* ------------------------------------------------------------- */}
-      {/* ANNUAL BUDGET MODAL */}
-      {/* ------------------------------------------------------------- */}
-      {showAnnualBudgetModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
-            <h3 className="text-lg font-bold text-stone-900 mb-4">
-              {editingAnnualBudget ? 'Edit Annual Budget Plan' : 'New Annual Budget Plan'}
-            </h3>
-            <form onSubmit={handleSaveAnnualBudget} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Financial year</label>
-                  <input
-                    name="financialYear"
-                    required
-                    defaultValue={editingAnnualBudget?.financialYear || '2026'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Status</label>
-                  <select
-                    name="status"
-                    defaultValue={editingAnnualBudget?.status || 'Draft'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  >
-                    <option value="Draft">Draft</option>
-                    <option value="Submitted">Submitted</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Active">Active</option>
-                    <option value="Closed">Closed</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Plan title</label>
-                <input
-                  name="title"
-                  required
-                  defaultValue={editingAnnualBudget?.title || ''}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Budget area</label>
-                  <input
-                    name="programme"
-                    defaultValue={editingAnnualBudget?.programme || 'General programme'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Approved amount (MWK)</label>
-                  <input
-                    name="approvedAmount"
-                    type="number"
-                    step="any"
-                    defaultValue={editingAnnualBudget?.approvedAmount || 0}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Approval date</label>
-                <input
-                  name="approvalDate"
-                  type="date"
-                  defaultValue={editingAnnualBudget?.approvalDate || ''}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Description</label>
-                <textarea
-                  name="description"
-                  rows={2}
-                  defaultValue={editingAnnualBudget?.description || ''}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Notes</label>
-                <textarea
-                  name="notes"
-                  rows={2}
-                  defaultValue={editingAnnualBudget?.notes || ''}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAnnualBudgetModal(false)}
-                  className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900"
-                >
-                  {editingAnnualBudget ? 'Save plan' : 'Add plan'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* BUDGET MODAL */}
-      {/* ------------------------------------------------------------- */}
-      {showBudgetModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
-            <h3 className="text-lg font-bold text-stone-900 mb-4">
-              {editingBudget ? 'Edit Budget Item' : 'New Budget Line Allocation'}
-            </h3>
-            <form onSubmit={handleSaveBudget} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Period / Quarter</label>
-                  <input
-                    name="period"
-                    required
-                    defaultValue={editingBudget?.period || 'Term 1 2026'}
-                    placeholder="e.g. Term 1 2026, Q2 2026"
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Programme</label>
-                  <select
-                    name="programme"
-                    defaultValue={editingBudget?.programme || 'Education'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  >
-                    <option value="Education">Education & School Fees</option>
-                    <option value="Households">Households & Sustenance</option>
-                    <option value="Healthcare">Healthcare & Emergency</option>
-                    <option value="Operations">Operations & Fieldwork</option>
-                    <option value="General Support">General Support</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">SHINE programme</label>
-                <select
-                  name="programmeId"
-                  value={budgetProgrammeId}
-                  onChange={(event) => setBudgetProgrammeId(event.target.value as ProgrammeId | '')}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                >
-                  <option value="">Unassigned</option>
-                  {[...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
-              </div>
-
-              {['fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(budgetProgrammeId) && (
-                <fieldset className="rounded-lg border border-stone-200 p-3">
-                  <legend className="px-1 text-xs font-semibold text-stone-700">Seasonal forecast months</legend>
-                  <p className="mb-2 text-[11px] text-stone-500">Select the months when this line is expected. You can change these selections whenever needed.</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
-                      <label key={month} className="flex min-h-10 items-center gap-1.5 text-xs text-stone-700">
-                        <input
-                          type="checkbox"
-                          name="seasonalMonths"
-                          value={month}
-                          checked={seasonalMonthsDraft.includes(month)}
-                          onChange={(event) => setSeasonalMonthsDraft((current) =>
-                            event.target.checked ? [...current, month].sort((a, b) => a - b) : current.filter((value) => value !== month)
-                          )}
-                        />
-                        {new Date(2026, month - 1, 1).toLocaleString('en-US', { month: 'short' })}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Category</label>
-                  <input
-                    name="category"
-                    required
-                    defaultValue={editingBudget?.category || 'School Fees'}
-                    placeholder="e.g. Groceries, School Fees"
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Unit of Measure</label>
-                  <input
-                    name="unit"
-                    defaultValue={editingBudget?.unit || 'Terms'}
-                    placeholder="e.g. Months, Terms, Bags"
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Item Description</label>
-                <input
-                  name="itemDescription"
-                  required
-                  defaultValue={editingBudget?.itemDescription || ''}
-                  placeholder="e.g. Secondary School Tuition fees for Form 4 girls"
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Quantity</label>
-                  <input
-                    name="quantity"
-                    type="number"
-                    step="any"
-                    required
-                    defaultValue={editingBudget?.quantity || 1}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Unit Cost (MWK)</label>
-                  <input
-                    name="unitCost"
-                    type="number"
-                    step="any"
-                    required
-                    defaultValue={editingBudget?.unitCost || 0}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Actual Spent (MWK)</label>
-                  <input
-                    name="actualExpenditure"
-                    type="number"
-                    step="any"
-                    defaultValue={editingBudget?.actualExpenditure || 0}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Notes / Budget Justification</label>
-                <textarea
-                  name="notes"
-                  rows={2}
-                  defaultValue={editingBudget?.notes || ''}
-                  placeholder="Optional supplier notes, terms or remarks"
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
-                <button
-                  type="button"
-                  onClick={() => setShowBudgetModal(false)}
-                  className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900"
-                >
-                  {editingBudget ? 'Save Changes' : 'Add Line Item'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* WORKPLAN MODAL */}
-      {/* ------------------------------------------------------------- */}
-      {showWorkplanModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
-            <h3 className="text-lg font-bold text-stone-900 mb-4">
-              {editingWorkplan ? 'Edit Workplan Target' : 'New Strategic Workplan Objective'}
-            </h3>
-            <form onSubmit={handleSaveWorkplan} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Period</label>
-                  <input
-                    name="period"
-                    required
-                    defaultValue={editingWorkplan?.period || 'Q1 2026'}
-                    placeholder="e.g. Q1 2026, Annual 2026"
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Status</label>
-                  <select
-                    name="status"
-                    defaultValue={normalizeWorkplanStatus(editingWorkplan?.status || 'In Progress')}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  >
-                    <option value="Planned">Planned</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Delayed">Delayed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Programme</label>
-                <select
-                  name="programmeId"
-                  value={workplanProgrammeId}
-                  onChange={(event) => setWorkplanProgrammeId(event.target.value as ProgrammeId | '')}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                >
-                  <option value="">Unassigned</option>
-                  {[...PROGRAMMES, ...LEGACY_PROGRAMMES].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Activity Title</label>
-                <input
-                  name="activity"
-                  required
-                  defaultValue={editingWorkplan?.activity || ''}
-                  placeholder="e.g. Secondary School Term Monitoring & Fee Payments"
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Strategic Objective</label>
-                <textarea
-                  name="objective"
-                  rows={2}
-                  required
-                  defaultValue={editingWorkplan?.objective || ''}
-                  placeholder="e.g. Ensure 100% of sponsored girls attend all terms and have required learning materials"
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Target Count</label>
-                  <input
-                    name="targetCount"
-                    type="number"
-                    required
-                    defaultValue={editingWorkplan?.targetCount || 10}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Unit</label>
-                  <input
-                    name="unit"
-                    defaultValue={editingWorkplan?.unit || 'Visits'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Completed Count</label>
-                  <input
-                    name="completedCount"
-                    type="number"
-                    defaultValue={editingWorkplan?.completedCount || 0}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Responsible Staff</label>
-                  <input
-                    name="responsibleStaffName"
-                    required
-                    defaultValue={editingWorkplan?.responsibleStaffName || actorName}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Location / Target</label>
-                  <input
-                    name="location"
-                    defaultValue={editingWorkplan?.location || 'Zomba District'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Start Date (optional)</label>
-                  <input
-                    type="date"
-                    name="startDate"
-                    defaultValue={editingWorkplan?.startDate || ''}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Due Date</label>
-                  <input
-                    type="date"
-                    name="endDate"
-                    required
-                    defaultValue={editingWorkplan?.endDate || ''}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Repeat</label>
-                  <select
-                    name="recurrenceEvery"
-                    defaultValue={editingWorkplan?.recurrence?.every || ''}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  >
-                    <option value="">Does not repeat</option>
-                    <option value="week">Every week</option>
-                    <option value="month">Every month</option>
-                    <option value="term">Every term (3 months)</option>
-                    <option value="year">Every year</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Repeat until (optional)</label>
-                  <input
-                    type="date"
-                    name="recurrenceUntil"
-                    min={editingWorkplan?.endDate || undefined}
-                    defaultValue={editingWorkplan?.recurrence?.until || ''}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-              <p className="text-[11px] text-stone-500">The due date is the first occurrence. Future occurrences are generated for the agenda and calendar without adding extra workplan records.</p>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
-                <button
-                  type="button"
-                  onClick={() => setShowWorkplanModal(false)}
-                  className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900"
-                >
-                  {editingWorkplan ? 'Save Changes' : 'Create Objective'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* SCHEDULE MODAL */}
-      {/* ------------------------------------------------------------- */}
-      {showScheduleModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
-            <h3 className="text-lg font-bold text-stone-900 mb-4">
-              {editingSchedule ? 'Edit Scheduled Activity' : 'Schedule Field Activity'}
-            </h3>
-            <form onSubmit={handleSaveSchedule} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Scheduled Date</label>
-                  <input
-                    type="date"
-                    name="scheduledDate"
-                    required
-                    defaultValue={editingSchedule?.scheduledDate || new Date().toISOString().slice(0, 10)}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Time (Optional)</label>
-                  <input
-                    type="time"
-                    name="scheduledTime"
-                    defaultValue={editingSchedule?.scheduledTime || '09:00'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Activity Type</label>
-                  <select
-                    name="type"
-                    defaultValue={editingSchedule?.type || 'Home visit'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  >
-                    <option value="Home visit">Home visit</option>
-                    <option value="School visit">School visit</option>
-                    <option value="Medical check-up">Medical check-up</option>
-                    <option value="Family meeting">Family meeting</option>
-                    <option value="Group activity">Group activity</option>
-                    <option value="Review">Review</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Status</label>
-                  <select
-                    name="status"
-                    defaultValue={editingSchedule?.status || 'Upcoming'}
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  >
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Scheduled">Scheduled</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Rescheduled">Rescheduled</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Activity Title</label>
-                <input
-                  name="title"
-                  required
-                  defaultValue={editingSchedule?.title || ''}
-                  placeholder="e.g. Standard 8 Mock Exam Review with Headteacher"
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Target Person / Entity</label>
-                  <input
-                    name="targetName"
-                    defaultValue={editingSchedule?.targetName || ''}
-                    placeholder="e.g. Grace Banda / House 1"
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">Location</label>
-                  <input
-                    name="location"
-                    defaultValue={editingSchedule?.location || 'Zomba'}
-                    placeholder="e.g. Likangala CDSS"
-                    className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Assigned Staff</label>
-                <input
-                  name="assignedStaffName"
-                  required
-                  defaultValue={editingSchedule?.assignedStaffName || actorName}
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Field Agenda & Notes</label>
-                <textarea
-                  name="notes"
-                  rows={2}
-                  defaultValue={editingSchedule?.notes || ''}
-                  placeholder="Transport details, items to bring, specific discussion topics"
-                  className="w-full text-xs border border-stone-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
-                <button
-                  type="button"
-                  onClick={() => setShowScheduleModal(false)}
-                  className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900"
-                >
-                  {editingSchedule ? 'Save Changes' : 'Schedule Activity'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <PlanningModals
+        actorName={actorName}
+        showAnnualBudgetModal={showAnnualBudgetModal}
+        setShowAnnualBudgetModal={setShowAnnualBudgetModal}
+        editingAnnualBudget={editingAnnualBudget}
+        handleSaveAnnualBudget={handleSaveAnnualBudget}
+        showBudgetModal={showBudgetModal}
+        setShowBudgetModal={setShowBudgetModal}
+        editingBudget={editingBudget}
+        handleSaveBudget={handleSaveBudget}
+        budgetProgrammeId={budgetProgrammeId}
+        setBudgetProgrammeId={setBudgetProgrammeId}
+        seasonalMonthsDraft={seasonalMonthsDraft}
+        setSeasonalMonthsDraft={setSeasonalMonthsDraft}
+        showWorkplanModal={showWorkplanModal}
+        setShowWorkplanModal={setShowWorkplanModal}
+        editingWorkplan={editingWorkplan}
+        handleSaveWorkplan={handleSaveWorkplan}
+        workplanProgrammeId={workplanProgrammeId}
+        setWorkplanProgrammeId={setWorkplanProgrammeId}
+        showScheduleModal={showScheduleModal}
+        setShowScheduleModal={setShowScheduleModal}
+        editingSchedule={editingSchedule}
+        handleSaveSchedule={handleSaveSchedule}
+      />
     </div>
   );
 };

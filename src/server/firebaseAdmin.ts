@@ -1,7 +1,6 @@
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AppDatabase, StaffRole } from '../types';
 
@@ -16,7 +15,6 @@ const adminApp = getApps().find((app) => app.name === '[DEFAULT]') || initialize
 });
 
 export const adminFirestore = getFirestore(adminApp);
-export const adminStorageBucket = getStorage(adminApp).bucket(firebaseConfig.storageBucket);
 
 export class AIRequestAuthError extends Error {
   constructor(message: string, public statusCode: 401 | 403) {
@@ -201,4 +199,16 @@ export async function notifyCaseAction(
     relatedRecordTitle: task.title,
   });
   return true;
+}
+
+/**
+ * Resolve the caller's Firebase uid for rate limiting. Returns undefined when
+ * the request is not authenticated so the limiter can fall back to the IP.
+ */
+export async function resolveAuthenticatedUid(authorization?: string): Promise<string | undefined> {
+  try {
+    return (await authenticateAIRequest(authorization)).uid;
+  } catch {
+    return undefined;
+  }
 }

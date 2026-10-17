@@ -8,6 +8,7 @@ import { outstandingExpenseSummary } from '../services/financialCalculations';
 import { PROGRAMMES, ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from '../services/programmeSummary';
 import { PROGRAMME_ICONS } from './Programmes/programmeIcons';
+import { CountUp } from './ui/CountUp';
 import {
   Users,
   Home,
@@ -149,7 +150,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   );
 
   // Total expenditure
-  const totalExpenditure = db.expenses.reduce((sum, exp) => sum + exp.totalCost, 0);
+  const totalExpenditure = db.expenses.reduce((sum, exp) => sum + (Number.isFinite(exp.totalCost) ? exp.totalCost : 0), 0);
   const outstandingExpenses = outstandingExpenseSummary(db.expenses);
 
   const programmeOutstandingSales = (db.programmeLogs || []).filter(
@@ -265,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <>
                 <button
                   onClick={onOpenQuickAdd}
-                  className="hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform active:scale-95"
+                  className="fx-press fx-btn-main hero-primary-action px-4 py-2.5 text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 transition-transform min-h-11"
                 >
                   <PlusCircle className="w-4 h-4" />
                   <span>Record New Entry</span>
@@ -287,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Girls Card */}
         <div
           onClick={() => onNavigateToGirlsList()}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -298,7 +299,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
-            {totalGirls}
+            <CountUp value={totalGirls} />
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-emerald-700 font-bold">{activeGirls} Active</span>
@@ -310,7 +311,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Girls Outcomes Card */}
         <div
           onClick={() => onNavigateToGirlsList('Completed')}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -321,7 +322,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-blue-900 mt-2">
-            {completedGirls}
+            <CountUp value={completedGirls} />
           </div>
           <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-blue-700 font-semibold">Completed SHINE</span>
@@ -332,7 +333,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* SHINE Houses Card */}
         <div
           onClick={onNavigateToHousesList}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -343,7 +344,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
           <div className="dashboard-stat-number text-2xl sm:text-3xl font-black text-stone-900 mt-2">
-            {totalHouses}
+            <CountUp value={totalHouses} />
           </div>
           <div className="flex flex-col items-start text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
             <span className="text-emerald-700 font-bold">{activeHouses} Active Homes</span>
@@ -354,7 +355,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Total Expenditure Card */}
         <div
           onClick={onNavigateToReports}
-          className="shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-white p-4 rounded-xl border border-stone-200 cursor-pointer transition-transform group"
         >
           <div className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-stone-500 uppercase tracking-wider">
@@ -388,7 +389,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             }
             onNavigateToHousesList();
           }}
-          className="shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-all group"
+          className="fx-press fx-card shine-card dashboard-kpi-card bg-amber-50 p-4 rounded-xl border border-amber-200 text-left transition-transform group"
         >
           <span className="flex items-center justify-between">
             <span className="dashboard-stat-label text-xs font-bold text-amber-900 uppercase tracking-wider">Payments &amp; Sales Outstanding</span>
@@ -435,7 +436,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <button
                 key={programme.id}
                 onClick={() => onNavigateToProgramme(programme.id)}
-                className="shine-card dashboard-programme-card bg-white p-4 rounded-xl border border-stone-200 text-left transition-colors"
+                className="fx-press fx-card shine-card dashboard-programme-card bg-white p-4 rounded-xl border border-stone-200 text-left transition-colors"
               >
                 <span className="flex items-start justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-bold text-stone-900">
@@ -602,13 +603,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               </div>
             ) : (
-              db.households.map((house) => {
+              db.households.map((house, index) => {
               const girlsInHouse = db.girls.filter((g) => g.householdId === house.id);
               return (
                 <div
                   key={house.id}
+                  style={{ "--i": index } as React.CSSProperties}
                   onClick={() => onNavigateToHouse(house.id)}
-                  className="p-3.5 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/30 cursor-pointer transition-all flex items-center justify-between gap-3"
+                  className="fx-rise fx-press fx-card p-3.5 rounded-xl border border-stone-200 hover:border-teal-700 hover:bg-teal-50/30 cursor-pointer transition-transform flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-900 flex items-center justify-center font-bold text-xs shrink-0">
@@ -667,11 +669,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           ) : (
             <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
-              {upcomingFollowUps.slice(0, 5).map((item) => (
+              {upcomingFollowUps.slice(0, 5).map((item, index) => (
                 <div
                   key={item.id}
+                  style={{ "--i": index } as React.CSSProperties}
                   onClick={() => onNavigateToGirl(item.targetId)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                  className={`fx-rise fx-press fx-card p-3 rounded-lg border cursor-pointer transition-transform flex items-center justify-between gap-3 ${
                     item.isOverdue
                       ? 'bg-rose-50/50 border-rose-200 hover:border-rose-400'
                       : 'bg-stone-50 border-stone-200 hover:border-teal-700'
@@ -709,7 +712,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <span>{formatDate(item.date)}</span>
                     </div>
                     {item.isOverdue && (
-                      <span className="text-[10px] font-extrabold text-rose-600 block uppercase">
+                      <span className="fx-pulse text-[10px] font-extrabold text-rose-600 block uppercase">
                         Overdue
                       </span>
                     )}
@@ -755,9 +758,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         ) : (
           <div className="divide-y divide-stone-100">
-            {recentActivities.map((act) => (
+            {recentActivities.map((act, index) => (
               <div
                 key={act.id}
+                style={{ "--i": index } as React.CSSProperties}
                 onClick={() => {
                   if (act.type === 'act') {
                     onNavigateToHouse(act.targetId);
@@ -765,7 +769,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     onNavigateToGirl(act.targetId);
                   }
                 }}
-                className="py-3 flex items-start gap-3 hover:bg-stone-50/70 p-2 rounded-lg cursor-pointer transition-colors"
+                className="fx-rise fx-press py-3 flex items-start gap-3 hover:bg-stone-50/70 p-2 rounded-lg cursor-pointer transition-transform"
               >
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 mt-0.5 ${

@@ -291,6 +291,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /caseGoals/{goalId} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.status in ['Not started', 'In progress', 'Achieved', 'Not achieved', 'On hold'] &&
+        request.resource.data.title is string && request.resource.data.title.size() > 0 &&
+        request.resource.data.targetOutcome is string &&
+        request.resource.data.measureOfSuccess is string &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true);
+      allow update: if isManagerOrStaff() &&
+        request.resource.data.girlId == resource.data.girlId &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'baseline', 'targetOutcome', 'measureOfSuccess', 'targetDate', 'status',
+          'progressNotes', 'outcome', 'outcomeRecordedAt', 'updatedByUid', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isManagerOrAdmin();
+    }
+
     // Salary and gratuity inputs are restricted to Administrators and Managers.
     // Salary history is append-only so historical remuneration cannot be silently overwritten.
     match /employeeSalaryHistory/{recordId} {
@@ -344,22 +372,6 @@ service cloud.firestore {
           'generatedAt', 'draft', 'finalLocked'
         ]);
       allow update, delete: if false;
-    }
-
-    // Contact details are private staff data. Edits remain attributable and contacts are archived, never deleted.
-    match /contacts/{contactId} {
-      allow read: if isStaffActive();
-      allow create: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == contactId &&
-        request.resource.data.type in ['person', 'organisation'] &&
-        request.resource.data.name is string &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow update: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == resource.data.id &&
-        request.resource.data.createdByUid == resource.data.createdByUid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow delete: if false;
     }
 
     // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
@@ -420,6 +432,18 @@ service cloud.firestore {
     }
 
     match /procurementLists/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /inventoryItems/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /assets/{id} {
       allow read: if isStaffActive();
       allow create, update: if isManagerOrStaff();
       allow delete: if isAdmin();
@@ -520,9 +544,21 @@ service cloud.firestore {
     match /contacts/{contactId} {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() &&
+        request.resource.data.id == contactId &&
+        request.resource.data.type in ['person', 'organisation'] &&
+        request.resource.data.name is string &&
+        request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdByUid == request.auth.uid &&
         request.resource.data.updatedByUid == request.auth.uid &&
-        request.resource.data.archived == false;
+        request.resource.data.updatedByName is string &&
+        request.resource.data.archived == false &&
+        request.resource.data.keys().hasOnly([
+          'id', 'type', 'name', 'aliases', 'organisationId', 'affiliation',
+          'roleTitle', 'category', 'phone', 'email', 'address', 'district',
+          'notes', 'programmes', 'firstSeen', 'lastSeen', 'createdBy',
+          'createdByUid', 'createdAt', 'updatedAt', 'updatedByUid',
+          'updatedByName', 'source', 'archived', 'interactions', 'mergedInto'
+        ]);
       allow update: if isManagerOrStaff() &&
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.updatedByUid == request.auth.uid &&

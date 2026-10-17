@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   Girl,
@@ -94,15 +93,16 @@ export async function parseExcelFile(
   employees: EmployeeRecord[] = [],
 ): Promise<FileAnalysisResult> {
   const buffer = await file.arrayBuffer();
+  const XLSX = await import('xlsx');
   const workbook = XLSX.read(buffer, {
     type: 'array',
     cellFormula: true,
     cellNF: true,
     cellText: true,
   });
-  const spreadsheetAnalysis = analyzeSpreadsheetWorkbook(workbook);
-  const spreadsheetImportPreview = createSpreadsheetImportPreview(
-    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff, employees, file.name,
+  const spreadsheetAnalysis = await analyzeSpreadsheetWorkbook(workbook);
+  const spreadsheetImportPreview = await createSpreadsheetImportPreview(
+    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, employees, file.name,
   );
   const sheetNames = workbook.SheetNames;
   const primarySheet = workbook.Sheets[sheetNames[0]];
@@ -650,6 +650,8 @@ export async function commitImportBatch(
     budgets: [...(db.budgets || [])],
     procurementLists: [...(db.procurementLists || [])],
     projectProjections: [...(db.projectProjections || [])],
+    inventoryItems: [...(db.inventoryItems || [])],
+    assets: [...(db.assets || [])],
     payrollRecords: [...(db.payrollRecords || [])],
     employees: [...(db.employees || [])],
     earlyYearsRecords: [...(db.earlyYearsRecords || [])],
@@ -780,16 +782,21 @@ export async function commitImportBatch(
       const importedOtherAmounts = Array.isArray(data.otherPayrollAmounts)
         ? data.otherPayrollAmounts as Array<{ type: string; amount: number; payPeriod?: string; sourceReference?: string }>
         : [];
+      const contractFields = data.contractFields && typeof data.contractFields === 'object'
+        ? data.contractFields
+        : {};
       const employee: EmployeeRecord = {
         ...existingEmployee,
+        ...contractFields,
         id: employeeId,
         fullName: String(data.employeeName || item.title || '').trim(),
         department: data.department || existingEmployee?.department,
-        positionTitle: data.positionTitle || existingEmployee?.positionTitle,
+        positionTitle: contractFields.position || data.positionTitle || existingEmployee?.positionTitle,
+        position: contractFields.position || existingEmployee?.position,
         sourceYear: Number(data.sourceYear) || existingEmployee?.sourceYear,
-        employmentStatus: useImportedEmploymentStatus
+        employmentStatus: contractFields.employmentStatus || (useImportedEmploymentStatus
           ? data.employmentStatus
-          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active',
+          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active'),
         needsEmploymentReview: false,
         salaryMWK: useImportedSalary ? Number(data.currentSalary) : existingEmployee?.salaryMWK || 0,
         latestSalaryPeriod: useImportedSalary ? importedSalaryPeriod : existingEmployee?.latestSalaryPeriod,

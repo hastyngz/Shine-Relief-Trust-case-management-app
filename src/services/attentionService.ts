@@ -1,5 +1,6 @@
 import type { AppDatabase } from '../types';
 import { PROGRAMMES, type ProgrammeId } from '../data/programmes';
+import { buildGirlEarlyWarnings, type EarlyWarningThresholds } from './earlyWarningService';
 
 export type AttentionSeverity = 'high' | 'medium' | 'low';
 
@@ -17,7 +18,9 @@ const dayMs = 24 * 60 * 60 * 1000;
 export function buildNeedsAttention(
   db: AppDatabase,
   today = new Date().toISOString().slice(0, 10),
-  canViewCaseReviews = true
+  canViewCaseReviews = true,
+  canViewHealthRecords = false,
+  earlyWarningThresholds: Partial<EarlyWarningThresholds> = {},
 ): AttentionItem[] {
   const rows: Array<{ item: AttentionItem; sortDate: string }> = [];
   const todayMs = new Date(`${today}T00:00:00Z`).getTime();
@@ -138,6 +141,10 @@ export function buildNeedsAttention(
       },
       sortDate: `${programme.startYear}-01-01`,
     });
+  });
+
+  buildGirlEarlyWarnings(db, today, canViewHealthRecords, earlyWarningThresholds).forEach((item) => {
+    rows.push({ item, sortDate: today });
   });
 
   return rows

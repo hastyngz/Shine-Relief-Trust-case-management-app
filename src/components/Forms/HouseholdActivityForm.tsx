@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Household, Girl, HouseholdActivity, HouseholdActivityType } from '../../types';
-import { Sparkles, Save, X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
+import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 
 const ACTIVITY_LOCATIONS = ['Shine House', 'Shine Village', 'Church', 'School', 'Community'];
@@ -11,7 +12,7 @@ interface HouseholdActivityFormProps {
   onSave: (
     data: Omit<HouseholdActivity, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onCancel: () => void;
 }
 
@@ -37,6 +38,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
   const [recordedBy, setRecordedBy] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveButtonStatus>('idle');
 
   const toggleGirl = (id: string) => {
     if (selectedGirlIds.includes(id)) {
@@ -54,7 +56,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activityName.trim()) {
       setError('Please provide an activity name or title.');
@@ -65,7 +67,10 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
       return;
     }
 
-    onSave(
+    setError('');
+    setSaveStatus('saving');
+    try {
+      const result = await onSave(
       {
         householdId: household.id,
         date,
@@ -84,11 +89,21 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
         recordedBy: recordedBy.trim() || undefined,
       },
       pendingPhotos
-    );
+      );
+      if (result === false) {
+        setError('This record was not saved. Check your permissions and try again.');
+        setSaveStatus('error');
+        return;
+      }
+      setSaveStatus('done');
+    } catch {
+      setError('Could not save this activity. Your changes are still on this form; please try again.');
+      setSaveStatus('error');
+    }
   };
 
   return (
-    <div id="household-activity-form" className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
+    <div id="household-activity-form" className="fx-card bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
       <div className="bg-teal-900 text-white px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-amber-400" />
@@ -102,7 +117,8 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-stone-300 hover:text-white p-1 rounded-lg transition-colors"
+          aria-label="Close form"
+          className="fx-press text-stone-300 hover:text-white p-1 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
         >
           <X className="w-5 h-5" />
         </button>
@@ -110,7 +126,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
 
       <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
         {error && (
-          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+          <div role="alert" aria-live="assertive" className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
             {error}
           </div>
         )}
@@ -356,13 +372,7 @@ export const HouseholdActivityForm: React.FC<HouseholdActivityFormProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="px-5 py-2 text-sm font-semibold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            Save Activity
-          </button>
+          <SaveButton status={saveStatus} idleLabel="Save Activity" doneLabel="Saved on this phone" className="fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition-colors" />
         </div>
       </form>
     </div>

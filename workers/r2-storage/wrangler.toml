@@ -1,0 +1,16 @@
+name = "shine-relief-r2-storage-api"
+main = "index.mjs"
+compatibility_date = "2026-10-14"
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
+workers_dev = true
+
+[vars]
+FIREBASE_WEB_API_KEY = "AIzaSyBSovgPDgjHokLIQd4kv8FGBe1vcdzpnGU"
+FIREBASE_PROJECT_ID = "shine-relief-trust-cms"
+CLOUDFLARE_R2_ENDPOINT = "https://9a7cfcaf1c569951cca8c99d872dec88.r2.cloudflarestorage.com"
+CLOUDFLARE_R2_BUCKET_NAME = "shine-relief-trust-cms-storage"
+CORS_ALLOWED_ORIGINS = "https://shine-relief-trust-cms.web.app,https://shine-relief-trust-cms.firebaseapp.com"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "91b798c7acfc4ad4829bf1dd5c609a68"

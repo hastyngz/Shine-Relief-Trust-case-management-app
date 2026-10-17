@@ -54,14 +54,19 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; before?: unknown; after?: unknown }>>([]);
   const [fixedReportVersion, setFixedReportVersion] = useState(0);
 
+  // Keep the dependency tied to staff identity, not the roster array reference.
+  // Unrelated roster refreshes should not repeat this sensitive Firestore read.
+  const salaryHistoryStaffKey = JSON.stringify(staff.map((person) => person.uid || person.id).filter(Boolean).sort());
+
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
     let mounted = true;
-    getEmployeeSalaryHistoryForStaff(staff.map((person) => person.uid || person.id))
+    const staffIds = JSON.parse(salaryHistoryStaffKey) as string[];
+    getEmployeeSalaryHistoryForStaff(staffIds)
       .then((records) => { if (mounted) setSalaryHistory(records); })
       .catch(() => { if (mounted) setSalaryLoadFailed(true); });
     return () => { mounted = false; };
-  }, [isAdmin, role, staff]);
+  }, [isAdmin, role, salaryHistoryStaffKey]);
 
   useEffect(() => {
     if (reportId !== 'quarterly-management') return;
@@ -299,7 +304,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const handleExcelExport = async () => {
     if (!ensureQualityOverride()) return;
     try {
-      const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
+      const bytes = await generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
       const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;

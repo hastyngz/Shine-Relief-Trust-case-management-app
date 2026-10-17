@@ -1,22 +1,8 @@
-import {
-  AlignmentType,
-  Document,
+import type {
   FileChild,
-  Footer,
-  Header,
-  HeadingLevel,
-  ImageRun,
-  PageNumber,
-  Packer,
-  Paragraph,
   Table,
-  TableCell,
-  TableRow,
-  TableOfContents,
   TextRun,
 } from 'docx';
-import { jsPDF } from 'jspdf';
-import * as XLSX from 'xlsx';
 import type { ReportExportRecord } from '../types';
 
 export type FixedReportFormat = 'docx' | 'pdf' | 'marked-docx' | 'xlsx';
@@ -226,7 +212,8 @@ function privacySafeInput(input: FixedReportInput): FixedReportInput {
   };
 }
 
-function tableRows(table: NonNullable<FixedReportSection['table']>): Table {
+function tableRows(docx: typeof import('docx'), table: NonNullable<FixedReportSection['table']>): Table {
+  const { Table, TableCell, TableRow, Paragraph, TextRun } = docx;
   const rows = [table.headers, ...table.rows].map((row, rowIndex) => new TableRow({
     children: row.map((value) => new TableCell({
       children: [new Paragraph({
@@ -237,7 +224,8 @@ function tableRows(table: NonNullable<FixedReportSection['table']>): Table {
   return new Table({ rows });
 }
 
-function markedRuns(text: string, sectionTitle: string, input: FixedReportInput): TextRun[] {
+function markedRuns(docx: typeof import('docx'), text: string, sectionTitle: string, input: FixedReportInput): TextRun[] {
+  const { TextRun } = docx;
   const changes = input.format === 'marked-docx'
     ? input.changes.filter((change) => change.section === sectionTitle && change.newText && text.includes(change.newText))
       .sort((left, right) => text.indexOf(left.newText) - text.indexOf(right.newText))
@@ -257,7 +245,8 @@ function markedRuns(text: string, sectionTitle: string, input: FixedReportInput)
   return runs;
 }
 
-function paragraphs(input: FixedReportInput): FileChild[] {
+function paragraphs(docx: typeof import('docx'), input: FixedReportInput): FileChild[] {
+  const { AlignmentType, HeadingLevel, ImageRun, Paragraph, TableOfContents, TextRun } = docx;
   const items: FileChild[] = [];
   const sections = visibleSections(input);
   if (input.draft) {
@@ -274,9 +263,9 @@ function paragraphs(input: FixedReportInput): FileChild[] {
   sections.forEach((section, index) => {
     items.push(new Paragraph({ text: `${index + 1}. ${section.title}`, heading: HeadingLevel.HEADING_2 }));
     for (const text of (section.paragraphs || section.text.split(/\n+/)).filter(Boolean)) {
-      items.push(new Paragraph({ children: markedRuns(text, section.title, input) }));
+      items.push(new Paragraph({ children: markedRuns(docx, text, section.title, input) }));
     }
-    if (section.table?.headers.length) items.push(tableRows(section.table));
+    if (section.table?.headers.length) items.push(tableRows(docx, section.table));
     for (const image of section.images || []) {
       if (!image.altText.trim()) throw new Error(`An image in "${section.title}" needs alt text before export.`);
       items.push(new Paragraph({
@@ -308,6 +297,8 @@ function paragraphs(input: FixedReportInput): FileChild[] {
 }
 
 async function wordDocument(input: FixedReportInput): Promise<Blob> {
+  const docx = await import('docx');
+  const { AlignmentType, Document, Footer, Header, PageNumber, Packer, Paragraph, TextRun } = docx;
   const header = new Header({ children: [new Paragraph({
     alignment: AlignmentType.RIGHT,
     children: [new TextRun({ text: `SHINE Relief Trust${input.draft ? ' · DRAFT' : ''}`, bold: true })],
@@ -323,13 +314,14 @@ async function wordDocument(input: FixedReportInput): Promise<Blob> {
       properties: {},
       headers: { default: header },
       footers: { default: footer },
-      children: paragraphs(input),
+      children: paragraphs(docx, input),
     }],
   });
   return Packer.toBlob(doc);
 }
 
-function pdfDocument(input: FixedReportInput): Blob {
+async function pdfDocument(input: FixedReportInput): Promise<Blob> {
+  const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF();
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -427,7 +419,8 @@ function pdfDocument(input: FixedReportInput): Blob {
   return pdf.output('blob');
 }
 
-function changesWorkbook(input: FixedReportInput): Blob {
+async function changesWorkbook(input: FixedReportInput): Promise<Blob> {
+  const XLSX = await import('xlsx');
   const rows = [
     ['Section', 'Original text', 'New text', 'Who', 'Date and time', 'Reason'],
     ...input.changes.map((change) => [

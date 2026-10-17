@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Household, Girl, AppDatabase } from '../types';
 import { formatMWK } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { EmptySun } from './ui/EmptySun';
 import { PROGRAMME_BY_ID } from '../data/programmes';
 import {
   Home,
@@ -73,7 +74,7 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
         {!isViewOnly && (
           <button
             onClick={onAddHouse}
-            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95 self-start sm:self-center"
+            className="fx-press fx-btn-main px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform min-h-11 self-start sm:self-center"
           >
             <Plus className="w-4 h-4 text-amber-300" />
             <span>Add New Household</span>
@@ -115,7 +116,11 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
       {/* Houses Grid */}
       {filteredHouses.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-stone-200 p-6">
-          <Home className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          {households.length === 0 ? (
+            <div className="flex justify-center mb-2"><EmptySun /></div>
+          ) : (
+            <Home className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          )}
           <h3 className="text-base font-bold text-stone-800">
             {households.length === 0 ? 'No Households Registered Yet' : 'No Households Found'}
           </h3>
@@ -145,7 +150,7 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredHouses.map((house) => {
+          {filteredHouses.map((house, index) => {
           const houseGirls = girls.filter((g) => g.householdId === house.id);
           const houseRent = db.rentPayments.filter((r) => r.householdId === house.id);
           const houseExpenses = db.expenses.filter((e) => e.householdId === house.id);
@@ -154,7 +159,8 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
           return (
             <div
               key={house.id}
-              className="bg-white rounded-xl border border-stone-200 shadow-xs hover:border-teal-700 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+              style={{ "--i": index } as React.CSSProperties}
+              className="fx-rise fx-card bg-white rounded-xl border border-stone-200 shadow-xs hover:border-teal-700 transition-transform flex flex-col justify-between overflow-hidden"
             >
               {/* Card Header */}
               <div className="p-5 border-b border-stone-100">

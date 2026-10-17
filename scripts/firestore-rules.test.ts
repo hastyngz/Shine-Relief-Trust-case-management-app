@@ -117,26 +117,81 @@ async function run() {
     await assertSucceeds(setDoc(doc(worker, 'contacts/contact-worker'), {
       id: 'contact-worker', type: 'organisation', name: 'Worker Contact', category: 'school',
       aliases: [], phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
-      createdByUid: 'worker', updatedByUid: 'worker',
+      createdBy: 'worker', createdByUid: 'worker', createdAt: '2026-10-17T00:00:00.000Z',
+      updatedAt: '2026-10-17T00:00:00.000Z', updatedByUid: 'worker', updatedByName: 'worker',
+      source: 'manual', firstSeen: '2026-10-17', lastSeen: '2026-10-17',
     }));
     await assertFails(setDoc(doc(worker, 'contacts/contact-forged'), {
       id: 'contact-forged', type: 'person', name: 'Forged Contact', category: 'other',
       createdByUid: 'manager', updatedByUid: 'worker',
     }));
-    await assertSucceeds(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Updated by staff', updatedByUid: 'worker' }));
-    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Forged editor', updatedByUid: 'manager' }));
+    await assertSucceeds(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Updated by staff', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Forged editor', updatedByUid: 'manager', updatedByName: 'manager' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { createdByUid: 'manager', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { createdBy: 'manager', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { createdAt: 'forged', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(setDoc(doc(worker, 'contacts/contact-extra-field'), {
+      id: 'contact-extra-field', type: 'person', name: 'Unexpected Field', category: 'other',
+      aliases: [], phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
+      createdBy: 'worker', createdByUid: 'worker', createdAt: '2026-10-17T00:00:00.000Z',
+      updatedAt: '2026-10-17T00:00:00.000Z', updatedByUid: 'worker', updatedByName: 'worker',
+      source: 'manual', firstSeen: '2026-10-17', lastSeen: '2026-10-17', admin: true,
+    }));
     await assertFails(deleteDoc(doc(worker, 'contacts/contact-worker')));
+
+    // Asset register follows the same active-staff / manager-staff / admin-delete policy.
+    const assetRecord = {
+      id: 'asset-worker', assetTag: 'SHINE-AST-001', name: 'Office laptop', category: 'IT & Electronics',
+      location: 'Main Office', condition: 'Good', status: 'In Use', history: [],
+      createdAt: '2026-10-15T00:00:00.000Z', updatedAt: '2026-10-15T00:00:00.000Z',
+      createdBy: 'worker', updatedBy: 'worker', createdByUid: 'worker', updatedByUid: 'worker',
+    };
+    await assertSucceeds(setDoc(doc(worker, 'assets/asset-worker'), assetRecord));
+    await assertSucceeds(getDoc(doc(viewer, 'assets/asset-worker')));
+    await assertSucceeds(updateDoc(doc(worker, 'assets/asset-worker'), { condition: 'Fair', updatedByUid: 'worker' }));
+    await assertFails(deleteDoc(doc(worker, 'assets/asset-worker')));
+    await assertSucceeds(deleteDoc(doc(admin, 'assets/asset-worker')));
+
 
     await assertSucceeds(getDoc(doc(viewer, 'caseActions/action-1')));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));
+    const caseGoal = {
+      id: 'goal-worker', girlId: 'girl-1', title: 'Improve attendance', baseline: '70%',
+      targetOutcome: '90% attendance', measureOfSuccess: 'Monthly attendance report', status: 'In progress',
+      progressNotes: [], createdByUid: 'worker', createdBy: 'worker', createdAt: '2026-09-26T00:00:00.000Z',
+      updatedByUid: 'worker', updatedBy: 'worker', updatedAt: '2026-09-26T00:00:00.000Z',
+    };
+    await assertSucceeds(setDoc(doc(worker, 'caseGoals/goal-worker'), caseGoal));
+    await assertSucceeds(getDoc(doc(viewer, 'caseGoals/goal-worker')));
+    await assertFails(setDoc(doc(viewer, 'caseGoals/goal-viewer'), { ...caseGoal, id: 'goal-viewer', createdByUid: 'viewer' }));
+    await assertFails(updateDoc(doc(worker, 'caseGoals/goal-worker'), { status: 'Achieved', updatedByUid: 'worker' }));
+    await assertSucceeds(updateDoc(doc(worker, 'caseGoals/goal-worker'), { status: 'Achieved', outcome: 'Attendance rose to 92%', updatedByUid: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'caseGoals/goal-worker'), { girlId: 'girl-2', updatedByUid: 'worker' }));
+    await assertFails(deleteDoc(doc(worker, 'caseGoals/goal-worker')));
+    await assertSucceeds(deleteDoc(doc(manager, 'caseGoals/goal-worker')));
     await assertFails(getDoc(doc(viewer, 'healthFollowUps/health-1')));
     await assertSucceeds(getDoc(doc(manager, 'healthFollowUps/health-1')));
     await assertFails(getDoc(doc(viewer, 'attachments/medical-photo')));
+    // A broad targetId `in` query can mix ordinary and health-sensitive attachments.
+    // Firestore rules are not filters, so an ordinary viewer must not be able to
+    // read the mixed result set just because one target is otherwise accessible.
+    await assertFails(getDocs(query(
+      collection(viewer, 'attachments'),
+      where('targetId', 'in', ['girl-1', 'household-1']),
+    )));
     await assertSucceeds(getDoc(doc(manager, 'attachments/medical-photo')));
     const safeAttachmentTypes = ['girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity', 'rentPayment', 'expense'];
     await Promise.all(safeAttachmentTypes.map((targetType) => assertSucceeds(getDocs(query(collection(viewer, 'attachments'), where('targetType', '==', targetType), where('category', 'not-in', ['Medical Document', 'Prescription']))))));
+    const reportAttachmentTypes = [
+      'girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity',
+      'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense', 'healthFollowUp',
+    ];
+    await assertSucceeds(getDocs(query(
+      collection(manager, 'attachments'),
+      where('targetType', 'in', reportAttachmentTypes),
+    )));
     await assertFails(getDoc(doc(admin, 'safeguardingCases/case-1')));
     await assertFails(getDoc(doc(viewer, 'employeeSalaryHistory/salary-1')));
     await assertFails(getDoc(doc(worker, 'employeeSalaryHistory/salary-1')));

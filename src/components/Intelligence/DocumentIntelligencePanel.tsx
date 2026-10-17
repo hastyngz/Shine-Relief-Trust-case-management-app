@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FileSearch, Upload } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE_URL } from '../../services/apiBase';
 
 export const DocumentIntelligencePanel: React.FC = () => {
   const { currentUser } = useAuth();
@@ -18,7 +19,7 @@ export const DocumentIntelligencePanel: React.FC = () => {
       const token = await currentUser.getIdToken();
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = ''; bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-      const response = await fetch('/api/ai/analyze-document', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ documentBase64: btoa(binary), mimeType: file.type }) });
+      const response = await fetch(`${API_BASE_URL}/api/ai/analyze-document`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ documentBase64: btoa(binary), mimeType: file.type }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Document analysis failed.');
       setResult(JSON.stringify(payload.extractedData || {}, null, 2));

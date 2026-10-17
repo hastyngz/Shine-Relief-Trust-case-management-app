@@ -2,7 +2,6 @@ import type {
   EmployeeRecord,
   PayrollRecord,
   SalaryHistoryRecord,
-  StaffUser,
 } from '../types';
 
 export interface MonthlyPayrollEmployee {
@@ -24,6 +23,20 @@ export interface MonthlyPayrollSummary {
   outstandingTotal: number;
   paidCount: number;
   outstandingCount: number;
+}
+
+export function employeeRecordFromPayrollRecord(record: PayrollRecord): EmployeeRecord {
+  return {
+    id: record.employeeId,
+    fullName: record.employeeName,
+    department: record.departmentOrProgramme,
+    salaryMWK: record.applicableSalary,
+    employmentStatus: 'Active',
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    createdBy: record.createdBy,
+    updatedBy: record.updatedBy,
+  };
 }
 
 export function monthlyPayrollTaskId(period: string): string {
@@ -64,7 +77,6 @@ function applicableSalary(
 export function buildMonthlyPayrollSummary(
   period: string,
   importedEmployees: EmployeeRecord[],
-  staff: StaffUser[],
   salaryHistory: SalaryHistoryRecord[],
   payrollRecords: PayrollRecord[],
 ): MonthlyPayrollSummary {
@@ -83,18 +95,6 @@ export function buildMonthlyPayrollSummary(
       positionTitle: employee.positionTitle,
     });
   });
-  staff.forEach((person) => {
-    if (person.status !== 'Active' || person.employmentStatus && person.employmentStatus !== 'Active') return;
-    if (!employees.has(person.id)) {
-      employees.set(person.id, {
-        employeeId: person.id,
-        employeeName: person.fullName,
-        department: person.departmentOrTitle,
-        positionTitle: person.position,
-      });
-    }
-  });
-
   const rows = Array.from(employees.values()).flatMap((employee) => {
     const profile = importedEmployees.find((candidate) => candidate.id === employee.employeeId);
     const salaryFallback = profile?.latestSalaryPeriod && profile.latestSalaryPeriod > periodEnd

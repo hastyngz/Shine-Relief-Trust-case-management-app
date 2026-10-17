@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { AppDatabase } from '../types';
-import { resetDatabaseToSeed, exportDatabaseJSON, importDatabaseJSON } from '../utils/storage';
+import { resetDatabaseToSeed, exportDatabaseJSON, restoreDatabaseJSON } from '../utils/storage';
 import { syncEntireDatabaseToFirestore, getSyncStatus, subscribeSyncStatus, SyncStatus } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
+import { inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired } from '../services/offlineSync';
 import { Database, Download, Upload, RotateCcw, X, Check, AlertCircle, CloudCheck, RefreshCw, ShieldAlert } from 'lucide-react';
 
 interface DataModalProps {
@@ -43,7 +44,7 @@ export const DataModal: React.FC<DataModalProps> = ({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      setMessage({ text: 'Database records and attachment metadata exported. Media files remain in Firebase Storage.', type: 'success' });
+      setMessage({ text: 'Database records and attachment metadata exported. Media files remain in Cloudflare R2.', type: 'success' });
     } catch (err) {
       setMessage({ text: 'Could not export database backup: ' + String(err), type: 'error' });
     }
@@ -61,12 +62,23 @@ export const DataModal: React.FC<DataModalProps> = ({
     reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
-        const success = await importDatabaseJSON(content);
-        if (success) {
+        let allowDiscardPendingChangesDuringRecovery = false;
+        if (isDatabaseResetRecoveryRequired()) {
+          const pendingState = await inspectPendingOfflineChanges();
+          if (pendingState === 'pending') {
+            const confirmed = window.confirm(
+              'A previous reset or backup restore was interrupted. This device still has queued offline edits that could recreate or overwrite records. Retrying this backup restore will permanently discard those queued edits. Only continue if this backup is the intended source of truth.'
+            );
+            if (!confirmed) return;
+            allowDiscardPendingChangesDuringRecovery = true;
+          }
+        }
+        const result = await restoreDatabaseJSON(content, { allowDiscardPendingChangesDuringRecovery });
+        if (result.status === 'success') {
           setMessage({ text: 'Database restored and synchronized to Cloud Firestore successfully!', type: 'success' });
           onDataChanged();
         } else {
-          setMessage({ text: 'Failed to restore: Invalid backup file format.', type: 'error' });
+          setMessage({ text: result.message, type: 'error' });
         }
       } catch (err) {
         setMessage({ text: 'Error reading file: ' + String(err), type: 'error' });
@@ -104,7 +116,7 @@ export const DataModal: React.FC<DataModalProps> = ({
     try {
       await resetDatabaseToSeed();
       setConfirmReset(false);
-      setMessage({ text: 'All data cleared from both Cloud Firestore and local storage.', type: 'success' });
+      setMessage({ text: 'Operational records cleared from Cloud Firestore and local storage. Staff access, messaging and designated audit records are preserved.', type: 'success' });
       onDataChanged();
     } catch (err) {
       setMessage({ text: 'Could not clear all records: ' + String(err), type: 'error' });
@@ -242,7 +254,7 @@ export const DataModal: React.FC<DataModalProps> = ({
                 {confirmReset ? (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2">
                     <p className="text-xs text-red-800 font-semibold">
-                      Are you sure? This will delete all girl profiles, households, follow-ups, and financial logs from both Cloud Firestore and local storage.
+                      Are you sure? This deletes operational records across case management, finance, staff/payroll, inventory/assets, programmes and planning from Cloud Firestore and this device. Staff sign-in, messaging, safeguarding cases and designated audit/report history are preserved.
                     </p>
                     <div className="flex gap-2">
                       <button
