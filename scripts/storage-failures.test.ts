@@ -654,9 +654,11 @@ const failedInsertions: Array<[string, () => unknown]> = [
   ['import audit', () => addImportAuditRecord({ source: 'synthetic test' } as never)],
   ['person', () => addPerson({ fullName: 'Synthetic failed person' } as never)],
 ];
+events.length = 0;
 for (const [label, create] of failedInsertions) {
   assert.throws(create, /not saved on this device/i, `${label} reports local persistence failure`);
 }
+assert.ok(!events.includes('shine_db_updated'), 'failed insertions do not notify app listeners of unsaved data');
 const afterFailedInsertions = getDatabase();
 assertInsertionCollectionsPreserved(afterFailedInsertions, 'failed insertion');
 
