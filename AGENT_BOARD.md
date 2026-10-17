@@ -447,19 +447,14 @@ Suggestion format:
 
 
 
-### S-026 · Enforce SHINE AI's protected-data boundary
+### S-026 · SHINE AI functionality restoration follow-up
 - From: Mosaic (ChatGPT), 2026-10-17
-- Type: security / privacy risk
-- Evidence: the prior server flow forwarded uploaded audio/documents to Gemini and chat prompts/tool results to OpenRouter, including possible protected SHINE records.
-- Change: the shared external-AI policy gate is hard-disabled. /api/ai/chat returns a privacy notice before loading records; audio/document routes return 503 before provider calls; service functions independently guard chat, audio and document processing. Browser speech recognition requires explicit processLocally support and forces local processing. Tests assert no provider request or database load occurs while the gate is closed.
-- Limitation: AI chat, cloud transcription and AI document analysis are intentionally unavailable until a privacy-approved private processing route is implemented and tested. No private model or free/private inference service was assumed to exist; no paid provider was introduced.
-- Status: mitigation implemented; latest CI verification pending.
-### 2026-10-17 · Mosaic (ChatGPT) · AI privacy implementation handoff
-- Area: SHINE AI chat, audio, documents and browser voice.
-- State: all external AI processing is blocked by a shared hard-disabled policy gate in src/server/aiService.ts; server endpoints reject requests before record retrieval or provider calls. Browser speech recognition is accepted only when processLocally is supported and explicitly enabled. Automated tests assert the service does not load records or make provider requests when disabled.
-- Verification: AI-boundary and TypeScript/build checks passed in GitHub Actions run 39054505528 before final gate centralization/config documentation commits. Re-run for the latest commit is pending; no real Android device test has been done.
-- Next: keep the gate closed until a private, privacy-approved, no-cost inference path is selected and validated. Restore AI functionality only with tests proving protected prompts, history, records, audio and documents cannot reach third-party providers. Do not introduce paid services or assume a free tier is private.
-- Reflection: the safe fix pauses AI rather than pretending a public provider is private. This is a real usability trade-off; remaining work is to find and verify an acceptable private processing route without weakening SHINE's data boundary. — Mosaic (ChatGPT), 2026-10-17
+- Context: a prior change hard-disabled external AI chat, cloud transcription and document analysis, and restricted browser speech recognition. The project owner reported that these features had worked well and asked to move on rather than keep pursuing an unresolved AI fix.
+- Correction: the disabling change was a usability regression and has been reverted. Commits `d9920c9`, `746bd8f`, `82b615a`, `7e0312d` and `a210278` restored the previous endpoint/service/voice/configuration/test behaviour on `Replit`.
+- Verification: GitHub Actions run 39055693666 completed successfully for the final restoration commit, including TypeScript, the existing AI/import regression checks, production build, security-rule checks and offline E2E. This validates CI, not the live provider credentials or every runtime AI flow.
+- Status: functionality restored in source; AI investigation paused by owner. Do not re-disable existing AI features as a precautionary workaround. Do not add paid services or change the AI phone layout.
+- Reflection: preserving existing working behaviour should have been the first priority; the broad restriction caused avoidable disruption. Any future AI change must be narrow, user-approved and verified against the existing workflows. — Mosaic (ChatGPT), 2026-10-17
+
 ### 2026-10-17 · Mosaic (ChatGPT) · contact offline-save implementation handoff
 - Area: contacts create/edit/archive/interaction persistence.
 - Change: create, edit, archive and interaction mutations now save to the existing local database and trigger the app's established change-diff queue; direct single-record Firestore writes were removed from these paths. Contact listing overlays only queued contact edits over live server results. The Contacts view reflects locally saved records immediately and surfaces local-storage failures. Contact merging now explicitly refuses to run offline because it must update both records atomically.
@@ -474,3 +469,11 @@ Suggestion format:
 - Change: create/edit/archive/interaction now save locally and are picked up by the existing per-record queue; queued records are overlaid over live reads; the UI reflects local saves and surfaces storage errors. Merge remains atomic and online-only, and now refuses to run when offline or when either contact has queued changes.
 - Verification: contact queue-diff regression coverage and full CI checks/E2E passed for commit 07f22192221bee36e6d9a0e56dcba22ba65acefb. The pending-edit merge guard was added afterward and is awaiting the latest CI run.
 - Remaining: there is no atomic multi-record offline merge operation yet. Manual Android/offline-device testing was not performed. — Mosaic (ChatGPT), 2026-10-17
+
+### S-028 · Budget monitoring mixed financial years in month summaries
+- From: Mosaic (ChatGPT), 2026-10-17
+- Evidence: when the period filter was set to “All Periods”, monthly budget cards grouped solely by month number and hard-coded the year label to 2026. January records from multiple years could be combined, and forecasts/category/programme summaries could silently include unrelated years.
+- Change: added a financial-year selector for budget monitoring; monthly cards, forecast and grouped variance summaries now use a consistent year-scoped budget set. Exact-period filtering still scopes the selected period. Added regression coverage for mixed-year input and invalid year values.
+- Verification: GitHub Actions run 39057236419 passed both `checks` and `e2e` for commit `d87bca0`; TypeScript, all existing checks, production build and eight offline E2E tests passed.
+- Remaining: the main budget table and headline totals retain their existing all-period semantics when “All Periods” is selected; this change specifically scopes the monitoring/forecast/grouped summary panel. The dashboard console TypeError seen in the same E2E logs is still under investigation and should not be treated as fixed by this work.
+- Status: summary-year isolation implemented and CI-verified; live browser/mobile verification not performed. — Mosaic (ChatGPT), 2026-10-17
