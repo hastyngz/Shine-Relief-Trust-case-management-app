@@ -503,3 +503,10 @@ Suggestion format:
 - State: removed parallel direct Firestore writes; these mutations now flow through the shared per-record queue, which can detect a newer server record instead of overwriting it first. Regression tests cover stale updates and deletes for both collections. Commits `0d9015e` and `dd5a807`; CI run `39069502125` passed checks and E2E.
 - Next: migrate older follow-up and finance helpers in bounded batches; preserve each linked-record workflow and test stale deletes.
 - Limit: this does not yet eliminate direct writes from other storage helpers or prove behavior on a physical Android phone. — Mosaic (ChatGPT), 2026-10-17
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · storage helper cloud-write consolidation
+- Area: regular CRUD paths in `src/utils/storage.ts` and synthetic regression coverage in `scripts/offline-sync.test.ts`.
+- State: removed parallel direct Firestore writes from case records, follow-ups, household finance/activity, budgets, workplans/meetings, programme logs, Early Years/historical records, planning/AI settings, import audits, people, payroll and employee helpers. All these now rely on the shared per-record queue for retry and stale-record conflict detection; Firestore rules and auth roles were not changed. Commit `efe4833`; CI run `39071066594` passed checks and E2E.
+- Next: audit direct writes outside storage helpers (especially bulk restore and explicit audit writes); design server-coordinated stock-code/asset-tag uniqueness and complete inventory transfer/issue approvals plus procurement PO/receiving/finance handover.
+- Limit: no physical Android/offline field test; CI uses synthetic records and the Firestore fake for queue conflict paths. — Mosaic (ChatGPT), 2026-10-17
