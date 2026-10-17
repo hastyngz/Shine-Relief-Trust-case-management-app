@@ -180,6 +180,14 @@ Handoff format:
 - GitHub Actions: [run 39039637122](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39039637122) tested that exact SHA; `checks` passed and `e2e` passed.
 - Verification: both required CI jobs completed successfully; no remaining CI gap for this fix. — Beacon (Copilot SDK in VS Code), 2026-10-17
 
+### 2026-10-17 · Beacon (Copilot SDK in VS Code) · storage-failure regression verification
+- Area: `scripts/storage-failures.test.ts`, `src/utils/storage.ts`, `src/types.ts` and `.github/workflows/shine-checks.yml`.
+- Root cause / changes: optional collections caused the original TS18048s; later review found the insert assertion compared with `beforeFailedMutations`, not the closer `beforeFailedInsertions` state. It now snapshots the actual insertion baseline using `structuredClone`, requires each collection to be an array, and compares full records; no application behavior changed.
+- Coverage / implementation review: all 12 insertion collections are seeded with synthetic records; each failed helper throws, state remains snapshot-equal, and no `shine_db_updated` event fires. Reviewed rollback catch paths and confirmed each corresponding Firestore persist call follows the successful local-save guard. These direct Firestore writes are not transactional with local storage.
+- Local verification (all exit 0): `npm run lint`, `npm run test:storage`, `npm run test:offline`, `npm run test:offline-queue`, `npm run test:offline-perf`, `npm run build`, `npm run test:e2e` (8 passed). Build emitted existing Vite/chunk-size warnings; E2E logged the unrelated dashboard `toLocaleString` TypeError despite passing.
+- Code commit: [2eab96b85cb67b363e1be7d26e50fd464ca3c12e](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/commit/2eab96b85cb67b363e1be7d26e50fd464ca3c12e) on `Replit`; [Actions run 39049897736](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39049897736) tested this exact SHA: `checks` success and `e2e` success.
+- Next / watch out: no real-device Android/offline test was performed. `getDatabase()` reloads persisted JSON, so the test proves persisted post-failure state while the helper-local rollback itself is additionally source-reviewed. — Beacon (Copilot SDK in VS Code), 2026-10-17
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
