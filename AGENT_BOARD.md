@@ -516,4 +516,11 @@ Suggestion format:
 - Area: `src/services/importService.ts`, separate from normal CRUD helpers.
 - Finding: import confirmation still writes many records directly to Firestore (including matched existing records) before the final local save, and the final `saveDatabase(updatedDb)` result is not checked. A later write failure can leave a partial cloud import; a local quota/storage failure can leave local and cloud state divergent. Salary-history and employee-audit writes are outside `AppDatabase`, so this requires a manifest/recovery design rather than deleting direct calls.
 - Next: design and test a resumable import manifest with explicit per-record outcomes and a checked local-save path; audit bulk restore and explicit audit writes after that.
-- State: documented as an open high-priority reliability issue; no code change made here because a superficial fix could create duplicate imports or hide partial writes. — Mosaic (ChatGPT), 2026-10-17
+- State: commit `2c4bb98` now checks the final local-save result and raises an explicit warning instead of returning import success when local persistence fails; test added to `scripts/phase2-import-ai.test.ts`. CI run `39071589914` passed checks and E2E. This prevents false success but does not make multi-record cloud writes atomic or resumable. — Mosaic (ChatGPT), 2026-10-17
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · import save guard and next workflow boundaries
+- Area: `src/services/importService.ts`.
+- State: final local persistence is now checked; failure throws an explicit warning that cloud records may already exist and the user must verify before retrying. Synthetic regression test added. Commit `2c4bb98`; CI run `39071589914` passed checks and E2E.
+- Remaining: import still performs direct per-record cloud writes and is not atomic/resumable; salary-history and employee-audit records sit outside `AppDatabase`. Design an import manifest and recovery workflow before replacing those writes.
+- Inventory boundary: no partial-transfer UI added because current inventory has one location/balance per item and globally unique stock codes. A proper transfer needs a per-location balance model and conflict-safe movement ledger; procurement also needs PO, receiving and finance handover to be designed end-to-end. — Mosaic (ChatGPT), 2026-10-17
