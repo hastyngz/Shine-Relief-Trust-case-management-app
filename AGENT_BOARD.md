@@ -194,6 +194,12 @@ Handoff format:
 - Next: remove/consolidate the duplicate rule without widening access; align contact create/update callers and tests with the intended audit fields, then run `npm run test:rules`, `npm run lint` and CI.
 - Watch out: this is a code-reviewed finding, not an emulator-reproduced result. No application or rules code changed in this audit; no tests were run. — Mosaic (ChatGPT), 2026-10-17
 
+### 2026-10-17 · Mosaic (ChatGPT) · AI data-boundary audit
+- Area: external AI providers and protected SHINE record data.
+- State: code review confirms `src/server/aiService.ts` sends audio/document payloads to Gemini and serializes record-tool results into OpenRouter chat messages. This conflicts with `AGENTS.md`'s rule that beneficiary, household, health and safeguarding data must not be sent to third-party AI.
+- Next: treat this as a privacy/security blocker for sensitive use; map every AI route and tool payload, then use only an approved secured processing path or strictly prevent protected data from reaching external providers.
+- Watch out: this is a source-code finding, not a provider-contract or production-traffic audit. No AI code changed and no AI-specific tests were run. — Mosaic (ChatGPT), 2026-10-17
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
@@ -437,5 +443,15 @@ Suggestion format:
 - Evidence: `firestore.rules` contains two `match /contacts/{contactId}` blocks. The earlier block permits broader create/update operations; Firestore allow clauses from matching blocks are ORed, so the later update field allowlist is not a restriction on the earlier rule. `scripts/firestore-rules.test.ts` checks basic contact writes but not attempts to change forbidden fields.
 - Idea: consolidate to one authoritative rule, keep the intended audit fields and archive-only behavior, update contact callers/tests, and add negative rules tests for forbidden fields and forged audit metadata.
 - Effort: medium
+- Status: new
+
+
+
+### S-026 · Enforce SHINE AI's protected-data boundary
+- From: Mosaic (ChatGPT), 2026-10-17
+- Type: security / privacy risk
+- Evidence: `src/server/aiService.ts` forwards uploaded audio and documents as Gemini inline data and sends AI tool results in OpenRouter request messages. Those tool results can contain girl, household, education, health or financial records; `AGENTS.md` prohibits sending protected SHINE data to third-party AI.
+- Idea: map all AI endpoints and tool payloads, classify data, and enforce an approved secured processing route or block sensitive content before it leaves SHINE. Add tests proving protected fields and record payloads cannot reach external providers; do not rely on UI copy or staff discretion alone.
+- Effort: medium-large
 - Status: new
 
