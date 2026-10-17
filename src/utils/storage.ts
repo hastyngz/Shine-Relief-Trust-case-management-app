@@ -39,8 +39,6 @@ import {
   persistPayrollRecordToFirestore,
   deletePayrollRecordFromFirestore,
   persistEmployeeRecordToFirestore,
-  persistPersonToFirestore,
-  deletePersonFromFirestore,
   clearAllFirestoreCollections,
   syncEntireDatabaseToFirestore,
   persistPhase2Record,
@@ -1835,9 +1833,6 @@ export function addPerson(personData: Omit<Person, 'id'> & { id?: string }): Per
     db.people = previousPeople;
     throw error;
   }
-  persistPersonToFirestore(newPerson).catch((err) =>
-    console.error('Failed to persist person to Firestore:', err)
-  );
 
   return newPerson;
 }
@@ -1866,9 +1861,6 @@ export function updatePerson(person: Person): Person {
     db.people = previousPeople;
     throw error;
   }
-  persistPersonToFirestore(updated).catch((err) =>
-    console.error('Failed to update person in Firestore:', err)
-  );
 
   return updated;
 }
@@ -1886,9 +1878,6 @@ export function deletePerson(id: string): boolean {
     db.people = previousPeople;
     return false;
  }
-  deletePersonFromFirestore(id).catch((err) =>
-    console.error('Failed to delete person from Firestore:', err)
-  );
 
   return true;
 }

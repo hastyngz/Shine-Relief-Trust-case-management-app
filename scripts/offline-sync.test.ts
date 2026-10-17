@@ -498,6 +498,8 @@ const {
   deleteFeedingProgramLog,
   saveForecastSettings,
   saveAISettings,
+  addPerson,
+  deletePerson,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -781,5 +783,31 @@ const aiSettingsFlush = await flushPendingOfflineSnapshots();
 assert.equal(aiSettingsFlush.conflicts.length, 0, 'new AI settings queue without a conflict');
 assert.equal(server.get('aiSettings', aiSettings.id).enabled, true,
   'queued AI settings creation reaches Firestore');
+
+
+ // --- 20. People directory changes use the conflict-aware queue -------------
+const personBaseline = normalizeImportedDatabase({
+  people: [{ id: 'PER-QUEUE-STALE', fullName: 'Baseline synthetic person', personType: 'guardian', linkedGirlIds: [], linkedHouseholdIds: [], sourceDocuments: [], dateFirstIdentified: T1, dateRegistered: T1, createdBy: 'Synthetic', createdDate: T1, updatedBy: 'Synthetic', updatedDate: T1, status: 'Active', isLoginUser: false } as any],
+});
+await resetCaseSyncState(personBaseline);
+server.seed('people', 'PER-QUEUE-STALE', { ...personBaseline.people![0], fullName: 'Changed elsewhere', updatedDate: T3 });
+assert.equal(deletePerson('PER-QUEUE-STALE'), true, 'local person deletion succeeds after local persistence');
+assert.equal(server.get('people', 'PER-QUEUE-STALE').fullName, 'Changed elsewhere',
+  'person deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const personDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(personDeleteFlush.conflicts.length, 1, 'stale person deletion is surfaced as a conflict');
+assert.equal(server.get('people', 'PER-QUEUE-STALE').fullName, 'Changed elsewhere',
+  'person conflict handling preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ people: [] }));
+const addedPerson = addPerson({ id: 'PER-QUEUE-NEW', fullName: 'Synthetic new person', personType: 'guardian', linkedGirlIds: [], linkedHouseholdIds: [], sourceDocuments: [], dateFirstIdentified: T1, dateRegistered: T1, createdBy: 'Synthetic', createdDate: T1, updatedBy: 'Synthetic', updatedDate: T1, status: 'Active', isLoginUser: false } as any);
+assert.equal(server.get('people', addedPerson.id), undefined,
+  'person creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const personCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(personCreateFlush.conflicts.length, 0, 'new person queues without a conflict');
+assert.equal(server.get('people', addedPerson.id).fullName, 'Synthetic new person',
+  'queued person creation reaches Firestore');
 
 console.log('Offline per-record queue and conflict tests passed.');
