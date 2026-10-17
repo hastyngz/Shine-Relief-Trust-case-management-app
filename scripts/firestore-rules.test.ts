@@ -117,14 +117,26 @@ async function run() {
     await assertSucceeds(setDoc(doc(worker, 'contacts/contact-worker'), {
       id: 'contact-worker', type: 'organisation', name: 'Worker Contact', category: 'school',
       aliases: [], phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
-      createdByUid: 'worker', updatedByUid: 'worker',
+      createdBy: 'worker', createdByUid: 'worker', createdAt: '2026-10-17T00:00:00.000Z',
+      updatedAt: '2026-10-17T00:00:00.000Z', updatedByUid: 'worker', updatedByName: 'worker',
+      source: 'manual', firstSeen: '2026-10-17', lastSeen: '2026-10-17',
     }));
     await assertFails(setDoc(doc(worker, 'contacts/contact-forged'), {
       id: 'contact-forged', type: 'person', name: 'Forged Contact', category: 'other',
       createdByUid: 'manager', updatedByUid: 'worker',
     }));
-    await assertSucceeds(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Updated by staff', updatedByUid: 'worker' }));
-    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Forged editor', updatedByUid: 'manager' }));
+    await assertSucceeds(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Updated by staff', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { notes: 'Forged editor', updatedByUid: 'manager', updatedByName: 'manager' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { createdByUid: 'manager', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { createdBy: 'manager', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'contacts/contact-worker'), { createdAt: 'forged', updatedByUid: 'worker', updatedByName: 'worker' }));
+    await assertFails(setDoc(doc(worker, 'contacts/contact-extra-field'), {
+      id: 'contact-extra-field', type: 'person', name: 'Unexpected Field', category: 'other',
+      aliases: [], phone: [], email: [], notes: '', programmes: [], interactions: [], archived: false,
+      createdBy: 'worker', createdByUid: 'worker', createdAt: '2026-10-17T00:00:00.000Z',
+      updatedAt: '2026-10-17T00:00:00.000Z', updatedByUid: 'worker', updatedByName: 'worker',
+      source: 'manual', firstSeen: '2026-10-17', lastSeen: '2026-10-17', admin: true,
+    }));
     await assertFails(deleteDoc(doc(worker, 'contacts/contact-worker')));
 
     // Asset register follows the same active-staff / manager-staff / admin-delete policy.
