@@ -510,3 +510,10 @@ Suggestion format:
 - State: removed parallel direct Firestore writes from case records, follow-ups, household finance/activity, budgets, workplans/meetings, programme logs, Early Years/historical records, planning/AI settings, import audits, people, payroll and employee helpers. All these now rely on the shared per-record queue for retry and stale-record conflict detection; Firestore rules and auth roles were not changed. Commit `efe4833`; CI run `39071066594` passed checks and E2E.
 - Next: audit direct writes outside storage helpers (especially bulk restore and explicit audit writes); design server-coordinated stock-code/asset-tag uniqueness and complete inventory transfer/issue approvals plus procurement PO/receiving/finance handover.
 - Limit: no physical Android/offline field test; CI uses synthetic records and the Firestore fake for queue conflict paths. — Mosaic (ChatGPT), 2026-10-17
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · import workflow follow-up risk
+- Area: `src/services/importService.ts`, separate from normal CRUD helpers.
+- Finding: import confirmation still writes many records directly to Firestore (including matched existing records) before the final local save, and the final `saveDatabase(updatedDb)` result is not checked. A later write failure can leave a partial cloud import; a local quota/storage failure can leave local and cloud state divergent. Salary-history and employee-audit writes are outside `AppDatabase`, so this requires a manifest/recovery design rather than deleting direct calls.
+- Next: design and test a resumable import manifest with explicit per-record outcomes and a checked local-save path; audit bulk restore and explicit audit writes after that.
+- State: documented as an open high-priority reliability issue; no code change made here because a superficial fix could create duplicate imports or hide partial writes. — Mosaic (ChatGPT), 2026-10-17
