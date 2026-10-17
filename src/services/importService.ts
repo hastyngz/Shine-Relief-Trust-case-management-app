@@ -58,6 +58,18 @@ import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spre
 import { uploadPhotoAttachment } from './attachmentService';
 import { PROGRAMMES } from '../data/programmes';
 
+/**
+ * Import confirmation currently has a few separate cloud writes (notably salary history
+ * and employee audit logs) that are not represented in AppDatabase. If the final local
+ * save fails, do not falsely report success: earlier cloud writes may already have landed.
+ */
+export function assertImportLocalSaveSucceeded(result: ReturnType<typeof saveDatabase>): void {
+  if (result.ok) return;
+  throw new Error(
+    'The import could not be saved on this device after cloud writes began. Some records may already exist in Firestore. Do not repeat the import blindly; check Import Audit and sync status before retrying.'
+  );
+}
+
 function employeeImportWriteError(collectionName: string, recordId: string, error: unknown): Error {
   const details = error instanceof Error ? error.message : String(error);
   const isPermissionDenied = typeof error === 'object' && error !== null
@@ -1527,7 +1539,8 @@ export async function commitImportBatch(
   updatedDb.importAudits?.unshift(finalAudit);
   await persistImportAuditToFirestore(finalAudit);
 
-  saveDatabase(updatedDb);
+  const localSaveResult = saveDatabase(updatedDb);
+  assertImportLocalSaveSucceeded(localSaveResult);
 
   return { success: true, createdAudit: finalAudit };
 }

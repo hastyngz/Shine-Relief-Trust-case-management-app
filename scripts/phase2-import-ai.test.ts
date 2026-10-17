@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
-import { analyzeImportRows } from '../src/services/importService';
+import { analyzeImportRows, assertImportLocalSaveSucceeded } from '../src/services/importService';
 import { processAIChat } from '../src/server/aiService';
 import { executeAITool } from '../src/server/aiTools';
 import { AppDatabase, StaffUser } from '../src/types';
@@ -144,7 +144,16 @@ async function run() {
     else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
   }
 
-  console.log('Import and AI scope tests passed.');
+  
+assert.doesNotThrow(() => assertImportLocalSaveSucceeded({ ok: true } as any),
+  'successful local import persistence must be accepted');
+assert.throws(
+  () => assertImportLocalSaveSucceeded({ ok: false, error: new Error('QuotaExceededError') } as any),
+  /Some records may already exist in Firestore\. Do not repeat the import blindly/,
+  'failed final local save must not return import success when earlier cloud writes may already have landed',
+);
+
+console.log('Import and AI scope tests passed.');
 }
 
 run().catch((error) => {
