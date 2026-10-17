@@ -129,14 +129,10 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
         notes: draft.notes.trim(),
         programmes: splitValues(draft.programmes),
       };
-      if (selected) {
-        await updateContact(selected.id, changes, actor);
-      } else {
-        await createContact({ ...changes, aliases: [changes.name] }, actor);
-      }
-      const refreshedContacts = await refreshContacts();
+      const savedContact = selected ? await updateContact(selected.id, changes, actor) : await createContact({ ...changes, aliases: [changes.name] }, actor);
+      setContacts((current) => [...current.filter((contact) => contact.id !== savedContact.id), savedContact].sort((x, y) => x.name.localeCompare(y.name)));
       setEditing(false);
-      if (selected) setSelected(refreshedContacts.find((contact) => contact.id === selected.id) || null);
+      if (selected) setSelected(savedContact);
     } catch (saveError) {
       setError('Contact could not be saved. Check your staff access and try again.');
     } finally {
