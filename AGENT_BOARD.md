@@ -477,3 +477,15 @@ Suggestion format:
 - Verification: GitHub Actions run 39057236419 passed both `checks` and `e2e` for commit `d87bca0`; TypeScript, all existing checks, production build and eight offline E2E tests passed.
 - Remaining: the main budget table and headline totals retain their existing all-period semantics when “All Periods” is selected; this change specifically scopes the monitoring/forecast/grouped summary panel. The dashboard console TypeError seen in the same E2E logs is still under investigation and should not be treated as fixed by this work.
 - Status: summary-year isolation implemented and CI-verified; live browser/mobile verification not performed. — Mosaic (ChatGPT), 2026-10-17
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · local duplicate identifier guard
+- Area: inventory and asset register persistence.
+- State: storage-level saves now reject duplicate stock codes and asset tags after trimming and case-folding, not only through form validation. Regression tests confirm rejected duplicates do not mutate either register. Commit: 7fb6c62; checks and E2E passed.
+- Limit: this is a per-device guard. It cannot guarantee uniqueness against a different device adding the same code concurrently; the current per-record queue has no safe cross-record uniqueness transaction/conflict model. Do not describe global uniqueness as solved.
+- Next: design a server-coordinated uniqueness check that preserves offline queue semantics and presents a meaningful recoverable conflict; avoid a superficial Firestore query or overwriting a different record. — Mosaic (ChatGPT), 2026-10-17
+
+### 2026-10-17 · Mosaic (ChatGPT) · dashboard currency error follow-up
+- Area: dashboard formatting and E2E diagnostics.
+- State: formatMWK now handles missing/non-finite values, and dashboard expense totals ignore malformed totalCost values. Financial regression tests and E2E passed in run 39057561321; its E2E log did not contain the earlier toLocaleString TypeError.
+- Limit: this is evidence that the defensive fix removed the observed error in that run, not a manual device reproduction or proof that every dashboard rendering path is clean. Re-check if the error reappears. — Mosaic (ChatGPT), 2026-10-17

@@ -164,3 +164,12 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Regression tests now exercise payroll/personnel local-save failures and the above delete failure paths, checking that the records remain available after storage recovers.
 - Verification: GitHub Actions run 38910331290 passed both the `checks` job (including TypeScript, focused test suites and production build) and the offline end-to-end job for code commit `08161ec`. The subsequent board/documentation-only commits do not change application code; their workflow is still to be observed separately.
 - Remaining risk: create/update operations for some older follow-up, meeting, programme, Early Years, person and inventory helpers still mutate in-memory collections before `saveDatabaseOrThrow` without restoring the previous collection if local persistence fails. Direct Firestore write failures after a successful local save also need a clear user-facing retry/reconciliation path. Continue one domain at a time and test offline queue/conflict behaviour before changing persistence patterns.
+
+
+### Inventory and asset identifier uniqueness — local guard added
+- saveInventoryItem and saveAssetRecord now enforce case-insensitive, whitespace-trimmed stock-code/asset-tag uniqueness in the current device database, so callers that bypass the form-level check cannot silently add a duplicate locally. Regression tests verify rejection leaves the existing register unchanged. CI run 39065356973 passed both checks and e2e for commit 7fb6c62.
+- **Still open:** this is not a cross-device invariant. Two offline devices can independently add the same identifier; the generic per-record sync transaction does not atomically check other records. Do not claim server/global uniqueness until a dedicated safe uniqueness/conflict workflow is designed and tested.
+
+### Dashboard numeric formatting — defensive mitigation
+- formatMWK now returns 'Not recorded' for missing/non-finite values, and dashboard expenditure totals ignore non-finite totalCost values. The currency regression suite and E2E passed in run 39057561321; the E2E log no longer showed the previously observed toLocaleString TypeError.
+- This is a targeted mitigation, not a manual Android reproduction or exhaustive proof of all dashboard paths. Revisit if the TypeError returns.
