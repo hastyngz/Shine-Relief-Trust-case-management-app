@@ -588,6 +588,7 @@ baseline.feedingProgramLogs = [{ id: 'FEED-STORAGE-BASELINE', date: '2026-10-01'
 baseline.marketPrices = [{ id: 'MARKET-STORAGE-BASELINE', item: 'Synthetic item' } as never];
 baseline.earlyYearsRecords = [{ id: 'EYS-STORAGE-BASELINE', childId: 'SYNTHETIC-CHILD' } as never];
 baseline.historicalRecords = [{ id: 'HIST-STORAGE-BASELINE', girlId: 'SG-STORAGE-BASELINE' } as never];
+baseline.importAudits = [{ id: 'AUD-STORAGE-BASELINE' } as never];
 baseline.people = [{ id: 'PERSON-STORAGE-BASELINE', fullName: 'Synthetic Person' } as never];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
 const beforeFailedMutations = {
@@ -621,13 +622,13 @@ const insertionCounts = {
   familyFollowUps: beforeFailedInsertions.familyFollowUps.length,
   rentPayments: beforeFailedInsertions.rentPayments.length,
   householdActivities: beforeFailedInsertions.householdActivities.length,
-  meetings: beforeFailedInsertions.meetings.length,
-  feedingProgramLogs: beforeFailedInsertions.feedingProgramLogs.length,
-  marketPrices: beforeFailedInsertions.marketPrices.length,
-  earlyYearsRecords: beforeFailedInsertions.earlyYearsRecords.length,
-  historicalRecords: beforeFailedInsertions.historicalRecords.length,
-  importAudits: beforeFailedInsertions.importAudits.length,
-  people: beforeFailedInsertions.people.length,
+  meetings: beforeFailedInsertions.meetings?.length ?? 0,
+  feedingProgramLogs: beforeFailedInsertions.feedingProgramLogs?.length ?? 0,
+  marketPrices: beforeFailedInsertions.marketPrices?.length ?? 0,
+  earlyYearsRecords: beforeFailedInsertions.earlyYearsRecords?.length ?? 0,
+  historicalRecords: beforeFailedInsertions.historicalRecords?.length ?? 0,
+  importAudits: beforeFailedInsertions.importAudits?.length ?? 0,
+  people: beforeFailedInsertions.people?.length ?? 0,
 };
 const failedInsertions: Array<[string, () => unknown]> = [
   ['education follow-up', () => addEducationalFollowUp({ girlId: 'SYNTHETIC-GIRL' } as never)],
@@ -647,8 +648,9 @@ for (const [label, create] of failedInsertions) {
   assert.throws(create, /not saved on this device/i, `${label} reports local persistence failure`);
 }
 const afterFailedInsertions = getDatabase();
-for (const [field, count] of Object.entries(insertionCounts)) {
-  assert.equal((afterFailedInsertions as any)[field].length, count, `failed insert restores ${field}`);
+for (const field of Object.keys(insertionCounts) as Array<keyof typeof insertionCounts>) {
+  const records = afterFailedInsertions[field];
+  assert.equal(Array.isArray(records) ? records.length : 0, insertionCounts[field], `failed insert restores ${field}`);
 }
 
 assert.throws(
