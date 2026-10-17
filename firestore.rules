@@ -374,22 +374,6 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Contact details are private staff data. Edits remain attributable and contacts are archived, never deleted.
-    match /contacts/{contactId} {
-      allow read: if isStaffActive();
-      allow create: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == contactId &&
-        request.resource.data.type in ['person', 'organisation'] &&
-        request.resource.data.name is string &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow update: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == resource.data.id &&
-        request.resource.data.createdByUid == resource.data.createdByUid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow delete: if false;
-    }
-
     // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
     match /safeguardingCases/{caseId} {
       allow read, write: if false;
@@ -560,9 +544,21 @@ service cloud.firestore {
     match /contacts/{contactId} {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() &&
+        request.resource.data.id == contactId &&
+        request.resource.data.type in ['person', 'organisation'] &&
+        request.resource.data.name is string &&
+        request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdByUid == request.auth.uid &&
         request.resource.data.updatedByUid == request.auth.uid &&
-        request.resource.data.archived == false;
+        request.resource.data.updatedByName is string &&
+        request.resource.data.archived == false &&
+        request.resource.data.keys().hasOnly([
+          'id', 'type', 'name', 'aliases', 'organisationId', 'affiliation',
+          'roleTitle', 'category', 'phone', 'email', 'address', 'district',
+          'notes', 'programmes', 'firstSeen', 'lastSeen', 'createdBy',
+          'createdByUid', 'createdAt', 'updatedAt', 'updatedByUid',
+          'updatedByName', 'source', 'archived', 'interactions', 'mergedInto'
+        ]);
       allow update: if isManagerOrStaff() &&
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.updatedByUid == request.auth.uid &&
