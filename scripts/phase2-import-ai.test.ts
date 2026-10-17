@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
@@ -78,6 +79,9 @@ async function verifyPayrollYearInference() {
 }
 
 async function run() {
+  const aiAssistantSource = readFileSync(new URL('../src/components/AIAssistant/AIAssistantView.tsx', import.meta.url), 'utf8');
+  assert.match(aiAssistantSource, /'processLocally' in recognition/, 'voice input must refuse browsers that cannot guarantee local-only processing');
+  assert.match(aiAssistantSource, /recognition\.processLocally = true/, 'voice input must explicitly require on-device processing');
   await verifyPayrollYearInference();
   const healthPreview = analyzeImportRows([
     {
