@@ -490,6 +490,12 @@ const {
   addMeetingRecord,
   updateMeetingRecord,
   deleteMeetingRecord,
+  addMarketPrice,
+  deleteEarlyYearsRecord,
+  addHistoricalCaseRecord,
+  deleteHistoricalCaseRecord,
+  addFeedingProgramLog,
+  deleteFeedingProgramLog,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -678,5 +684,73 @@ const workplanCreateFlush = await flushPendingOfflineSnapshots();
 assert.equal(workplanCreateFlush.conflicts.length, 0, 'new workplan queues without a conflict');
 assert.equal(server.get('workplans', addedWorkplan.id).title, 'Synthetic queue-only workplan',
   'queued workplan creation reaches Firestore');
+
+
+ // --- 18. Programme and case-history records use conflict-aware queue --------
+const earlyYearsBaseline = normalizeImportedDatabase({
+  earlyYearsRecords: [{ id: 'ECD-QUEUE-STALE', childId: 'SYNTHETIC-CHILD', notes: 'Baseline synthetic record', createdAt: T1 } as any],
+});
+await resetCaseSyncState(earlyYearsBaseline);
+server.seed('earlyYearsRecords', 'ECD-QUEUE-STALE', { ...earlyYearsBaseline.earlyYearsRecords![0] });
+server.seed('earlyYearsRecords', 'ECD-QUEUE-STALE', { ...earlyYearsBaseline.earlyYearsRecords![0], notes: 'Changed elsewhere', updatedAt: T3 });
+assert.equal(deleteEarlyYearsRecord('ECD-QUEUE-STALE'), true, 'local early-years deletion succeeds after local persistence');
+assert.equal(server.get('earlyYearsRecords', 'ECD-QUEUE-STALE').notes, 'Changed elsewhere',
+  'early-years deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const earlyYearsDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(earlyYearsDeleteFlush.conflicts.length, 1, 'stale early-years deletion is surfaced as a conflict');
+assert.equal(server.get('earlyYearsRecords', 'ECD-QUEUE-STALE').notes, 'Changed elsewhere',
+  'early-years conflict handling preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ marketPrices: [] }));
+const addedMarketPrice = addMarketPrice({ item: 'Synthetic market item', price: 125 } as any);
+assert.equal(server.get('marketPrices', addedMarketPrice.id), undefined,
+  'market price creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const marketCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(marketCreateFlush.conflicts.length, 0, 'new market price queues without a conflict');
+assert.equal(server.get('marketPrices', addedMarketPrice.id).id, addedMarketPrice.id,
+  'queued market price creation reaches Firestore');
+
+
+const feedingBaseline = normalizeImportedDatabase({
+  feedingProgramLogs: [{ id: 'FEED-QUEUE-STALE', date: '2026-01-01', studentsPresent: 2, mealsServed: 2, foodItems: [], quantities: {}, estimatedCost: 100, createdAt: T1 } as any],
+});
+await resetCaseSyncState(feedingBaseline);
+server.seed('feedingProgramLogs', 'FEED-QUEUE-STALE', { ...feedingBaseline.feedingProgramLogs![0] });
+server.seed('feedingProgramLogs', 'FEED-QUEUE-STALE', { ...feedingBaseline.feedingProgramLogs![0], estimatedCost: 150, updatedAt: T3 });
+assert.equal(deleteFeedingProgramLog('FEED-QUEUE-STALE'), true, 'local feeding-log deletion succeeds after local persistence');
+assert.equal(server.get('feedingProgramLogs', 'FEED-QUEUE-STALE').estimatedCost, 150,
+  'feeding-log deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const feedingDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(feedingDeleteFlush.conflicts.length, 1, 'stale feeding-log deletion is surfaced as a conflict');
+assert.equal(server.get('feedingProgramLogs', 'FEED-QUEUE-STALE').estimatedCost, 150,
+  'feeding-log conflict handling preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ feedingProgramLogs: [] }));
+const addedFeedingLog = addFeedingProgramLog({ date: '2026-01-02', studentsPresent: 2, mealsServed: 2, foodItems: [], quantities: {}, estimatedCost: 0, createdBy: 'Synthetic tester' } as any);
+assert.equal(server.get('feedingProgramLogs', addedFeedingLog.id), undefined,
+  'feeding-log creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const feedingCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(feedingCreateFlush.conflicts.length, 0, 'new feeding log queues without a conflict');
+assert.equal(server.get('feedingProgramLogs', addedFeedingLog.id).id, addedFeedingLog.id,
+  'queued feeding-log creation reaches Firestore');
+
+const historicalBaseline = normalizeImportedDatabase({
+  historicalRecords: [{ id: 'HIST-QUEUE-STALE', girlId: 'SYNTHETIC-GIRL', summary: 'Baseline synthetic history', createdAt: T1 } as any],
+});
+await resetCaseSyncState(historicalBaseline);
+server.seed('historicalCaseRecords', 'HIST-QUEUE-STALE', { ...historicalBaseline.historicalRecords![0] });
+server.seed('historicalCaseRecords', 'HIST-QUEUE-STALE', { ...historicalBaseline.historicalRecords![0], summary: 'Changed elsewhere', updatedAt: T3 });
+assert.equal(deleteHistoricalCaseRecord('HIST-QUEUE-STALE'), true, 'local historical-record deletion succeeds after local persistence');
+assert.equal(server.get('historicalCaseRecords', 'HIST-QUEUE-STALE').summary, 'Changed elsewhere',
+  'historical deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const historicalDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(historicalDeleteFlush.conflicts.length, 1, 'stale historical-record deletion is surfaced as a conflict');
+assert.equal(server.get('historicalCaseRecords', 'HIST-QUEUE-STALE').summary, 'Changed elsewhere',
+  'historical conflict handling preserves the newer server record');
 
 console.log('Offline per-record queue and conflict tests passed.');

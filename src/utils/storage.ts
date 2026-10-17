@@ -39,8 +39,6 @@ import {
   persistPayrollRecordToFirestore,
   deletePayrollRecordFromFirestore,
   persistEmployeeRecordToFirestore,
-  persistHistoricalCaseRecordToFirestore,
-  deleteHistoricalCaseRecordFromFirestore,
   persistImportAuditToFirestore,
   persistPersonToFirestore,
   deletePersonFromFirestore,
@@ -48,16 +46,10 @@ import {
   syncEntireDatabaseToFirestore,
   persistPhase2Record,
   appendCaseActionAudit,
-  persistFeedingProgramLogToFirestore,
-  deleteFeedingProgramLogFromFirestore,
-  persistMarketPriceToFirestore,
-  deleteMarketPriceFromFirestore,
   persistForecastSettingsToFirestore,
   persistWhatIfScenarioToFirestore,
   persistIntelligenceSuggestionToFirestore,
   persistAISettingsToFirestore,
-  persistEarlyYearsRecordToFirestore,
-  deleteEarlyYearsRecordFromFirestore,
 } from '../services/firestoreSync';
 import {
   CaseAction,
@@ -1612,7 +1604,6 @@ export function addFeedingProgramLog(item: Omit<FeedingProgramLog, 'id' | 'creat
     db.feedingProgramLogs = previousFeedingProgramLogs;
     throw error;
   }
-  persistFeedingProgramLogToFirestore(log).catch((err) => console.error('Failed to persist feeding log:', err));
   return log;
 }
 
@@ -1627,7 +1618,6 @@ export function deleteFeedingProgramLog(id: string): boolean {
     db.feedingProgramLogs = previousLogs;
     return false;
   }
-  deleteFeedingProgramLogFromFirestore(id).catch((err) => console.error('Failed to delete feeding log:', err));
   return true;
 }
 
@@ -1643,7 +1633,6 @@ export function addMarketPrice(item: Omit<MarketPriceRecord, 'id' | 'createdAt'>
     db.marketPrices = previousMarketPrices;
     throw error;
   }
-  persistMarketPriceToFirestore(record).catch((err) => console.error('Failed to persist market price:', err));
   return record;
 }
 
@@ -1658,7 +1647,6 @@ export function deleteMarketPrice(id: string): boolean {
     db.marketPrices = previousPrices;
     return false;
   }
-  deleteMarketPriceFromFirestore(id).catch((err) => console.error('Failed to delete market price:', err));
   return true;
 }
 
@@ -1735,7 +1723,6 @@ export function addEarlyYearsRecord(item: Omit<EarlyYearsRecord, 'id' | 'created
     db.earlyYearsRecords = previousEarlyYearsRecords;
     throw error;
   }
-  persistEarlyYearsRecordToFirestore(record).catch((err) => console.error('Failed to persist early-years record:', err));
   return record;
 }
 
@@ -1750,7 +1737,6 @@ export function deleteEarlyYearsRecord(id: string): boolean {
     db.earlyYearsRecords = previousRecords;
     return false;
   }
-  deleteEarlyYearsRecordFromFirestore(id).catch((err) => console.error('Failed to delete early-years record:', err));
   return true;
 }
 
@@ -1776,9 +1762,6 @@ export function addHistoricalCaseRecord(
     db.historicalRecords = previousHistoricalRecords;
     throw error;
   }
-  persistHistoricalCaseRecordToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist historical record to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -1793,9 +1776,6 @@ export function deleteHistoricalCaseRecord(id: string): boolean {
     db.historicalRecords = previousRecords;
     return false;
   }
-  deleteHistoricalCaseRecordFromFirestore(id).catch((err) =>
-    console.error('Failed to delete historical record from Firestore:', err)
-  );
   return true;
 }
 
