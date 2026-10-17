@@ -294,8 +294,10 @@ export async function listContacts(includeArchived = false): Promise<ContactReco
     }
     const local = localContacts.get(entry.recordId);
     const queued = entry.data as ContactRecord | null;
-    if (queued) contactsById.set(entry.recordId, queued);
-    else if (local) contactsById.set(entry.recordId, local);
+    // Local storage is the latest user-visible draft; the queued payload may
+    // lag during the app's debounce window, so use it only as a fallback.
+    if (local) contactsById.set(entry.recordId, local);
+    else if (queued) contactsById.set(entry.recordId, queued);
   }
 
   return [...contactsById.values()]
