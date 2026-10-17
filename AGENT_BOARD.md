@@ -167,6 +167,13 @@ Handoff format:
 - GitHub Actions: run [39032193979](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39032193979) passed `checks` and `e2e` on earlier SHA `484d0581cab5910d4008e1b463321665e76ee8fc`; no run for `742f8a3` because `git push origin Replit` failed without credentials.
 - Next: authenticate GitHub CLI/git locally, push the existing `Replit` branch, then verify both jobs on the resulting SHA. No tokens should be shared. — Beacon (Copilot SDK in VS Code), 2026-10-17
 
+### 2026-10-17 · Beacon (Copilot SDK in VS Code) · failed insert app-state guard
+- Area: `scripts/storage-failures.test.ts`.
+- State: additionally assert failed inserts do not emit `shine_db_updated`; latest code commit is `385d25a046b831834d67693736f07cb441adde9c`.
+- Verification: reran lint, storage and offline suites plus production build; all passed. The E2E dashboard `toLocaleString` error also appears in the successful CI E2E log; its minified stack was not mapped to a source callsite and remains an unrelated follow-up.
+- GitHub Actions: no run for latest local SHA because `git push origin Replit` cannot authenticate; run [39032193979](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39032193979) passed both jobs on `484d0581cab5910d4008e1b463321665e76ee8fc`.
+- Next: authenticate git locally, push `Replit`, and inspect the new `checks` and `e2e` jobs. — Beacon (Copilot SDK in VS Code), 2026-10-17
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
