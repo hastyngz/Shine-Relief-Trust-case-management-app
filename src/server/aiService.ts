@@ -5,6 +5,9 @@ import { AI_TOOL_DECLARATIONS, executeAITool } from './aiTools';
 // Lazy client initialization for Gemini API
 let genAIClient: GoogleGenAI | null = null;
 
+// SHINE data must not be sent to external AI providers. Re-enable only after a privacy-approved private route exists.
+const EXTERNAL_AI_PROCESSING_ALLOWED = false;
+
 function getGenAI(): GoogleGenAI {
   if (!genAIClient) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -384,6 +387,15 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
       success: false,
       reply: 'Access Denied: Your staff account is suspended or inactive.',
       errorMessage: 'Staff account is inactive or suspended.',
+    };
+  }
+
+  if (!EXTERNAL_AI_PROCESSING_ALLOWED) {
+    return {
+      success: false,
+      reply: 'SHINE AI chat is paused to protect confidential records. No prompt, chat history, record lookup or AI request was sent to an external provider. Continue using the normal SHINE modules until a privacy-approved private processing route is available.',
+      isUnavailable: true,
+      errorMessage: 'AI processing paused by SHINE privacy policy.',
     };
   }
 
