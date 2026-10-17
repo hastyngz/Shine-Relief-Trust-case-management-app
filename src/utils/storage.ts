@@ -1790,8 +1790,14 @@ export function deleteMarketPrice(id: string): boolean {
 
 export function saveForecastSettings(item: ForecastSettings): ForecastSettings {
   const db = getDatabase();
+  const previousForecastSettings = [...(db.forecastSettings || [])];
   db.forecastSettings = [item];
-  saveDatabaseOrThrow(db, 'forecast settings');
+  try {
+    saveDatabaseOrThrow(db, 'forecast settings');
+  } catch (error) {
+    db.forecastSettings = previousForecastSettings;
+    throw error;
+  }
   persistForecastSettingsToFirestore(item).catch((err) => console.error('Failed to persist forecast settings:', err));
   return item;
 }
@@ -1814,19 +1820,31 @@ export function addWhatIfScenario(item: Omit<WhatIfScenario, 'id' | 'createdAt'>
 
 export function saveIntelligenceSuggestion(item: IntelligenceSuggestion): IntelligenceSuggestion {
   const db = getDatabase();
+  const previousSuggestions = [...(db.intelligenceSuggestions || [])];
   if (!db.intelligenceSuggestions) db.intelligenceSuggestions = [];
   const existingIndex = db.intelligenceSuggestions.findIndex((suggestion) => suggestion.id === item.id);
   if (existingIndex >= 0) db.intelligenceSuggestions[existingIndex] = item;
   else db.intelligenceSuggestions.unshift(item);
-  saveDatabaseOrThrow(db, 'intelligence suggestion');
+  try {
+    saveDatabaseOrThrow(db, 'intelligence suggestion');
+  } catch (error) {
+    db.intelligenceSuggestions = previousSuggestions;
+    throw error;
+  }
   persistIntelligenceSuggestionToFirestore(item).catch((err) => console.error('Failed to persist intelligence suggestion:', err));
   return item;
 }
 
 export function saveAISettings(item: AISettings): AISettings {
   const db = getDatabase();
+  const previousAISettings = [...(db.aiSettings || [])];
   db.aiSettings = [item];
-  saveDatabaseOrThrow(db, 'AI settings');
+  try {
+    saveDatabaseOrThrow(db, 'AI settings');
+  } catch (error) {
+    db.aiSettings = previousAISettings;
+    throw error;
+  }
   persistAISettingsToFirestore(item).catch((err) => console.error('Failed to persist AI settings:', err));
   return item;
 }
@@ -2081,11 +2099,17 @@ export function saveAssetRecord(asset: AssetRecord): AssetRecord {
 
 export function addCustomPersonType(type: string): string[] {
   const db = getDatabase();
+  const previousCustomPersonTypes = [...(db.customPersonTypes || [])];
   if (!db.customPersonTypes) db.customPersonTypes = [];
   const clean = type.trim();
   if (clean && !db.customPersonTypes.includes(clean)) {
     db.customPersonTypes.push(clean);
-    saveDatabaseOrThrow(db, 'custom person type');
+    try {
+      saveDatabaseOrThrow(db, 'custom person type');
+    } catch (error) {
+      db.customPersonTypes = previousCustomPersonTypes;
+      throw error;
+    }
   }
   return db.customPersonTypes;
 }

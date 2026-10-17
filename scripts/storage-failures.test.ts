@@ -30,6 +30,10 @@ const {
   saveIncomingCloudSnapshot,
   saveInventoryItem,
   saveAssetRecord,
+  saveForecastSettings,
+  saveIntelligenceSuggestion,
+  saveAISettings,
+  addCustomPersonType,
   addGirl,
   updateGirl,
   deleteGirl,
@@ -595,6 +599,10 @@ baseline.importAudits = [{ id: 'AUD-STORAGE-BASELINE' } as never];
 baseline.people = [{ id: 'PERSON-STORAGE-BASELINE', fullName: 'Synthetic Person' } as never];
 baseline.inventoryItems = [{ id: 'INV-STORAGE-BASELINE', stockCode: 'SYN-INV-1', name: 'Synthetic inventory item', quantityOnHand: 4, minimumStockLevel: 1, unit: 'units', location: 'Main Office', movements: [] } as never];
 baseline.assets = [{ id: 'ASSET-STORAGE-BASELINE', assetTag: 'SYN-ASSET-1', name: 'Synthetic asset', history: [] } as never];
+baseline.forecastSettings = [{ id: 'FORECAST-BASELINE' } as never];
+baseline.aiSettings = [{ id: 'AI-SETTINGS-BASELINE' } as never];
+baseline.intelligenceSuggestions = [{ id: 'SUGGESTION-BASELINE', title: 'Original synthetic suggestion' } as never];
+baseline.customPersonTypes = ['Synthetic original type'];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
 assert.throws(() => saveInventoryItem({ id: 'INV-DUPLICATE-CODE', stockCode: ' syn-inv-1 ', name: 'Duplicate synthetic item', quantityOnHand: 1, minimumStockLevel: 0, unit: 'units', location: 'Main Office', movements: [] } as never), /stock code is already in use/i, 'storage layer rejects duplicate stock codes after trimming and case-folding');
 assert.throws(() => saveAssetRecord({ id: 'ASSET-DUPLICATE-TAG', assetTag: ' syn-asset-1 ', name: 'Duplicate synthetic asset', history: [] } as never), /asset tag is already in use/i, 'storage layer rejects duplicate asset tags after trimming and case-folding');
@@ -621,6 +629,10 @@ const beforeFailedMutations = {
   people: [...baseline.people],
   inventoryItems: [...(baseline.inventoryItems || [])],
   assets: [...(baseline.assets || [])],
+  forecastSettings: [...(baseline.forecastSettings || [])],
+  aiSettings: [...(baseline.aiSettings || [])],
+  intelligenceSuggestions: [...(baseline.intelligenceSuggestions || [])],
+  customPersonTypes: [...(baseline.customPersonTypes || [])],
 };
 
 fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
@@ -749,6 +761,10 @@ assert.equal(deleteHousehold('SH-STORAGE-BASELINE'), false, 'household deletion 
 assert.equal(deleteWorkplanItem('WP-STORAGE-BASELINE'), false, 'workplan deletion reports failure when local persistence fails');
 assert.throws(() => saveInventoryItem({ id: 'INV-STORAGE-NEW', stockCode: 'SYN-INV-2', name: 'Unsaved inventory item', quantityOnHand: 1, minimumStockLevel: 0, unit: 'units', location: 'Main Office', movements: [] } as never), /Could not save inventory changes/, 'inventory save reports local persistence failure');
 assert.throws(() => saveAssetRecord({ id: 'ASSET-STORAGE-NEW', assetTag: 'SYN-ASSET-2', name: 'Unsaved asset', history: [] } as never), /Could not save asset changes/, 'asset save reports local persistence failure');
+assert.throws(() => saveForecastSettings({ id: 'FORECAST-UNSAVED' } as never), /not saved on this device/i, 'forecast settings report failed local persistence');
+assert.throws(() => saveAISettings({ id: 'AI-SETTINGS-UNSAVED' } as never), /not saved on this device/i, 'AI settings report failed local persistence');
+assert.throws(() => saveIntelligenceSuggestion({ id: 'SUGGESTION-BASELINE', title: 'Unsaved replacement' } as never), /not saved on this device/i, 'intelligence suggestion updates report failed local persistence');
+assert.throws(() => addCustomPersonType('Unsaved synthetic type'), /not saved on this device/i, 'custom person type reports failed local persistence');
 fakeLocalStorage.setItem = originalSetItem;
 const afterFailedMutations = getDatabase();
 assert.deepEqual(afterFailedMutations.girls, beforeFailedMutations.girls, 'failed beneficiary mutations restore the original girls');
@@ -770,6 +786,10 @@ assert.deepEqual(afterFailedMutations.historicalRecords, beforeFailedMutations.h
 assert.deepEqual(afterFailedMutations.people, beforeFailedMutations.people, 'failed person deletion restores the person');
 assert.deepEqual(afterFailedMutations.inventoryItems, beforeFailedMutations.inventoryItems, 'failed inventory save leaves the persisted inventory register unchanged');
 assert.deepEqual(afterFailedMutations.assets, beforeFailedMutations.assets, 'failed asset save leaves the persisted asset register unchanged');
+assert.deepEqual(afterFailedMutations.forecastSettings, beforeFailedMutations.forecastSettings, 'failed forecast settings save restores the prior settings');
+assert.deepEqual(afterFailedMutations.aiSettings, beforeFailedMutations.aiSettings, 'failed AI settings save restores the prior settings');
+assert.deepEqual(afterFailedMutations.intelligenceSuggestions, beforeFailedMutations.intelligenceSuggestions, 'failed intelligence suggestion save restores the prior suggestions');
+assert.deepEqual(afterFailedMutations.customPersonTypes, beforeFailedMutations.customPersonTypes, 'failed custom person type save restores the prior options');
 assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
 // Empty/corrupt storage fallback must return a fresh seed copy, not the shared
