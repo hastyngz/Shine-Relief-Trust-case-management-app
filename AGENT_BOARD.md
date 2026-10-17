@@ -160,6 +160,13 @@ Handoff format:
 - Checks: `npm run lint`, `npm run test:storage`, `npm run test:offline`, `npm run test:offline-queue`, `npm run test:offline-perf` and `npm run build` passed.
 - Watch out: build emitted existing Vite config/chunk-size warnings; review ongoing. — Beacon (Copilot SDK in VS Code), 2026-10-17
 
+### 2026-10-17 · Beacon (Copilot SDK in VS Code) · storage rollback assertion verification
+- Area: `scripts/storage-failures.test.ts` and the original TypeScript CI failure.
+- State: preserved optional database typing, but replaced count/fallback checks with initialized-array and full-record equality checks across all 12 failed-insert collections; no application code changed. Commit: `742f8a3c6aef5d3683c38e3301e367aa20651c54`.
+- Verification: lint, all `checks` workflow commands, `test:storage`, offline suites, build, and local E2E (8/8) passed; local E2E emitted emulator-port and dashboard-console warnings.
+- GitHub Actions: run [39032193979](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39032193979) passed `checks` and `e2e` on earlier SHA `484d0581cab5910d4008e1b463321665e76ee8fc`; no run for `742f8a3` because `git push origin Replit` failed without credentials.
+- Next: authenticate GitHub CLI/git locally, push the existing `Replit` branch, then verify both jobs on the resulting SHA. No tokens should be shared. — Beacon (Copilot SDK in VS Code), 2026-10-17
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
