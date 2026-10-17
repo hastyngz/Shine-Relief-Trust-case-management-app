@@ -35,12 +35,6 @@ import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, is
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
-  persistRentPaymentToFirestore,
-  deleteRentPaymentFromFirestore,
-  persistExpenseToFirestore,
-  deleteExpenseFromFirestore,
-  persistHouseholdActivityToFirestore,
-  deleteHouseholdActivityFromFirestore,
   persistBudgetItemToFirestore,
   deleteBudgetItemFromFirestore,
   persistAnnualBudgetPlanToFirestore,
@@ -666,9 +660,6 @@ export function deleteRentPayment(id: string): boolean {
     db.rentPayments = previous;
     return false;
   }
-  deleteRentPaymentFromFirestore(id).catch((err) =>
-    console.error('Failed to delete rent payment from Firestore:', err)
-  );
   return db.rentPayments.length < initialLength;
 }
 
@@ -682,9 +673,6 @@ export function deleteExpense(id: string): boolean {
     db.expenses = previousExpenses;
     return false;
   }
-  deleteExpenseFromFirestore(id).catch((err) =>
-    console.error('Failed to delete expense from Firestore:', err)
-  );
   return true;
 }
 
@@ -698,9 +686,6 @@ export function deleteHouseholdActivity(id: string): boolean {
     db.householdActivities = previous;
     return false;
  }
-  deleteHouseholdActivityFromFirestore(id).catch((err) =>
-    console.error('Failed to delete household activity from Firestore:', err)
-  );
   return db.householdActivities.length < initialLength;
 }
 
@@ -804,9 +789,6 @@ export function addRentPayment(
     db.rentPayments = previousRentPayments;
     throw error;
   }
-  persistRentPaymentToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist rent payment to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -833,9 +815,6 @@ export function addExpense(
     db.expenses = previousExpenses;
     throw error;
   }
-  persistExpenseToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist expense to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -858,9 +837,6 @@ export function updateExpense(
     db.expenses = previousExpenses;
     throw error;
   }
-  persistExpenseToFirestore(updatedItem).catch((err) =>
-    console.error('Failed to persist expense update to Firestore:', err)
-  );
   return updatedItem;
 }
 
@@ -887,9 +863,6 @@ export function addHouseholdActivity(
     db.householdActivities = previousHouseholdActivities;
     throw error;
   }
-  persistHouseholdActivityToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist household activity to Firestore:', err)
-  );
   return newItem;
 }
 

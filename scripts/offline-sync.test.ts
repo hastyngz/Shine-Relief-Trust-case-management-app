@@ -478,6 +478,8 @@ const {
   deleteHousehold,
   addHealthFollowUp,
   deleteHealthFollowUp,
+  addRentPayment,
+  deleteExpense,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -563,5 +565,31 @@ const healthCreateFlush = await flushPendingOfflineSnapshots();
 assert.equal(healthCreateFlush.conflicts.length, 0, 'new health follow-up queues without a conflict');
 assert.equal(server.get('healthFollowUps', addedHealth.id).summary, 'Synthetic health queue test',
   'queued health follow-up creation reaches Firestore');
+
+
+ // --- 15. Household finance/activity writes use the conflict-aware queue ----
+const expenseBaseline = normalizeImportedDatabase({
+  expenses: [{ id: 'EXP-QUEUE-STALE', householdId: 'SYNTHETIC-HOUSEHOLD', totalCost: 100, paymentStatus: 'Paid', createdAt: T1, updatedAt: T1 } as any],
+});
+await resetCaseSyncState(expenseBaseline);
+server.seed('expenses', 'EXP-QUEUE-STALE', { ...expenseBaseline.expenses[0], totalCost: 125, updatedAt: T3 });
+assert.equal(deleteExpense('EXP-QUEUE-STALE'), true, 'local expense deletion succeeds after local persistence');
+assert.equal(server.get('expenses', 'EXP-QUEUE-STALE').totalCost, 125,
+  'expense deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const expenseDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(expenseDeleteFlush.conflicts.length, 1, 'stale expense deletion is surfaced as a conflict');
+assert.equal(server.get('expenses', 'EXP-QUEUE-STALE').totalCost, 125,
+  'expense conflict handling preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ rentPayments: [] }));
+const addedRent = addRentPayment({ householdId: 'SYNTHETIC-HOUSEHOLD', amount: 100 } as any);
+assert.equal(server.get('rentPayments', addedRent.id), undefined,
+  'rent payment creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const rentCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(rentCreateFlush.conflicts.length, 0, 'new rent payment queues without a conflict');
+assert.equal(server.get('rentPayments', addedRent.id).id, addedRent.id,
+  'queued rent payment creation reaches Firestore');
 
 console.log('Offline per-record queue and conflict tests passed.');
