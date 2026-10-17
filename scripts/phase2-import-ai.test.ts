@@ -149,7 +149,7 @@ assert.doesNotThrow(() => assertImportLocalSaveSucceeded({ ok: true } as any),
   'successful local import persistence must be accepted');
 assert.throws(
   () => assertImportLocalSaveSucceeded({ ok: false, error: new Error('QuotaExceededError') } as any),
-  /Some records may already exist in Firestore\. Do not repeat the import blindly/,
+  /Some records may already exist in Firestore\. Do not repeat the import blindly; refresh and verify the imported records/,
   'failed final local save must not return import success when earlier cloud writes may already have landed',
 );
 

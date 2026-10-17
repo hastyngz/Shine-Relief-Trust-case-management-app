@@ -66,7 +66,7 @@ import { PROGRAMMES } from '../data/programmes';
 export function assertImportLocalSaveSucceeded(result: ReturnType<typeof saveDatabase>): void {
   if (result.ok) return;
   throw new Error(
-    'The import could not be saved on this device after cloud writes began. Some records may already exist in Firestore. Do not repeat the import blindly; check Import Audit and sync status before retrying.'
+    'The import could not be saved on this device after cloud writes began. Some records may already exist in Firestore. Do not repeat the import blindly; refresh and verify the imported records with an administrator before retrying.'
   );
 }
 
