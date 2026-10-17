@@ -602,8 +602,8 @@ const budgetBaseline = normalizeImportedDatabase({
   budgets: [{ id: 'BDG-QUEUE-STALE', testValue: 'baseline', createdAt: T1, updatedAt: T1 } as any],
 });
 await resetCaseSyncState(budgetBaseline);
-server.seed('budgets', 'BDG-QUEUE-STALE', { ...budgetBaseline.budgets[0], testValue: 'server-newer', updatedAt: T3 });
-assert.equal(updateBudgetItem('BDG-QUEUE-STALE', { testValue: 'local-edit' } as any)?.testValue, 'local-edit',
+server.seed('budgets', 'BDG-QUEUE-STALE', { ...budgetBaseline.budgets![0], testValue: 'server-newer', updatedAt: T3 });
+assert.equal((updateBudgetItem('BDG-QUEUE-STALE', { testValue: 'local-edit' } as any) as any)?.testValue, 'local-edit',
   'local budget update is saved before queued synchronization');
 assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget update must not directly overwrite a newer server record');
@@ -614,7 +614,7 @@ assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget conflict handling preserves the newer server record');
 
 await resetCaseSyncState(budgetBaseline);
-server.seed('budgets', 'BDG-QUEUE-STALE', { ...budgetBaseline.budgets[0], testValue: 'server-newer', updatedAt: T3 });
+server.seed('budgets', 'BDG-QUEUE-STALE', { ...budgetBaseline.budgets![0], testValue: 'server-newer', updatedAt: T3 });
 assert.equal(deleteBudgetItem('BDG-QUEUE-STALE'), true, 'local budget deletion succeeds after local persistence');
 assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget deletion must not directly erase a newer server record');
