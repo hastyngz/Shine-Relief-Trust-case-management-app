@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
 import { analyzeImportRows } from '../src/services/importService';
-import { analyzeDocument, processAIChat, transcribeAudio } from '../src/server/aiService';
+import { analyzeDocument, isExternalAIProcessingApproved, processAIChat, transcribeAudio } from '../src/server/aiService';
 import { executeAITool } from '../src/server/aiTools';
 import { AppDatabase, StaffUser } from '../src/types';
 import { getAICollectionsForTool } from '../workers/r2-storage/aiBackend';
@@ -79,6 +79,7 @@ async function verifyPayrollYearInference() {
 }
 
 async function run() {
+  assert.equal(isExternalAIProcessingApproved(), false, 'external AI stays disabled until a private processing route is approved');
   const aiAssistantSource = readFileSync(new URL('../src/components/AIAssistant/AIAssistantView.tsx', import.meta.url), 'utf8');
   assert.match(aiAssistantSource, /'processLocally' in recognition/, 'voice input must refuse browsers that cannot guarantee local-only processing');
   assert.match(aiAssistantSource, /recognition\.processLocally = true/, 'voice input must explicitly require on-device processing');
