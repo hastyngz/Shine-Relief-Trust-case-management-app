@@ -476,6 +476,8 @@ const {
   deleteGirl,
   updateHousehold,
   deleteHousehold,
+  addHealthFollowUp,
+  deleteHealthFollowUp,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -534,5 +536,32 @@ const householdDeleteFlush = await flushPendingOfflineSnapshots();
 assert.equal(householdDeleteFlush.conflicts.length, 1, 'stale household delete is surfaced as a conflict');
 assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed before delete elsewhere',
   'conflict handling preserves the newer server household record on delete');
+
+
+ // --- 14. Health follow-ups also use the queue and preserve stale server data --
+const healthBaseline = normalizeImportedDatabase({
+  healthFollowUps: [{ id: 'HLT-QUEUE-STALE', girlId: 'SYNTHETIC-GIRL', summary: 'Baseline synthetic record', createdAt: T1, updatedAt: T1 } as any],
+});
+await resetCaseSyncState(healthBaseline);
+server.seed('healthFollowUps', 'HLT-QUEUE-STALE', { ...healthBaseline.healthFollowUps[0] });
+server.seed('healthFollowUps', 'HLT-QUEUE-STALE', { ...healthBaseline.healthFollowUps[0], summary: 'Changed on another device', updatedAt: T3 });
+assert.equal(deleteHealthFollowUp('HLT-QUEUE-STALE'), true, 'local health follow-up deletion succeeds after local persistence');
+assert.equal(server.get('healthFollowUps', 'HLT-QUEUE-STALE').summary, 'Changed on another device',
+  'health deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const healthDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(healthDeleteFlush.conflicts.length, 1, 'stale health follow-up deletion is surfaced as a conflict');
+assert.equal(server.get('healthFollowUps', 'HLT-QUEUE-STALE').summary, 'Changed on another device',
+  'health conflict handling preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ healthFollowUps: [] }));
+const addedHealth = addHealthFollowUp({ girlId: 'SYNTHETIC-GIRL', summary: 'Synthetic health queue test' } as any);
+assert.equal(server.get('healthFollowUps', addedHealth.id), undefined,
+  'health follow-up creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const healthCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(healthCreateFlush.conflicts.length, 0, 'new health follow-up queues without a conflict');
+assert.equal(server.get('healthFollowUps', addedHealth.id).summary, 'Synthetic health queue test',
+  'queued health follow-up creation reaches Firestore');
 
 console.log('Offline per-record queue and conflict tests passed.');

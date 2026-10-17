@@ -35,12 +35,6 @@ import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, is
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
-  persistEduFollowUpToFirestore,
-  deleteEduFollowUpFromFirestore,
-  persistHealthFollowUpToFirestore,
-  deleteHealthFollowUpFromFirestore,
-  persistFamilyFollowUpToFirestore,
-  deleteFamilyFollowUpFromFirestore,
   persistRentPaymentToFirestore,
   deleteRentPaymentFromFirestore,
   persistExpenseToFirestore,
@@ -633,9 +627,6 @@ export function deleteEducationalFollowUp(id: string): boolean {
     db.educationalFollowUps = previous;
     return false;
   }
-  deleteEduFollowUpFromFirestore(id).catch((err) =>
-    console.error('Failed to delete educational follow-up from Firestore:', err)
-  );
   return db.educationalFollowUps.length < initialLength;
 }
 
@@ -649,9 +640,6 @@ export function deleteHealthFollowUp(id: string): boolean {
     db.healthFollowUps = previous;
     return false;
   }
-  deleteHealthFollowUpFromFirestore(id).catch((err) =>
-    console.error('Failed to delete health follow-up from Firestore:', err)
-  );
   return db.healthFollowUps.length < initialLength;
 }
 
@@ -665,9 +653,6 @@ export function deleteFamilyFollowUp(id: string): boolean {
     db.familyFollowUps = previous;
     return false;
   }
-  deleteFamilyFollowUpFromFirestore(id).catch((err) =>
-    console.error('Failed to delete family follow-up from Firestore:', err)
-  );
   return db.familyFollowUps.length < initialLength;
 }
 
@@ -742,9 +727,6 @@ export function addEducationalFollowUp(
     db.educationalFollowUps = previousEducationalFollowUps;
     throw error;
   }
-  persistEduFollowUpToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist educational follow-up to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -771,9 +753,6 @@ export function addHealthFollowUp(
     db.healthFollowUps = previousHealthFollowUps;
     throw error;
   }
-  persistHealthFollowUpToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist health follow-up to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -800,9 +779,6 @@ export function addFamilyFollowUp(
     db.familyFollowUps = previousFamilyFollowUps;
     throw error;
   }
-  persistFamilyFollowUpToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist family follow-up to Firestore:', err)
-  );
   return newItem;
 }
 
