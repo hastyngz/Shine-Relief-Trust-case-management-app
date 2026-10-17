@@ -8,6 +8,10 @@ let genAIClient: GoogleGenAI | null = null;
 // SHINE data must not be sent to external AI providers. Re-enable only after a privacy-approved private route exists.
 const EXTERNAL_AI_PROCESSING_ALLOWED = false;
 
+export function isExternalAIProcessingApproved(): boolean {
+  return EXTERNAL_AI_PROCESSING_ALLOWED;
+}
+
 function getGenAI(): GoogleGenAI {
   if (!genAIClient) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -74,7 +78,7 @@ export interface AIChatResponse {
 }
 
 export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<{ transcription: string; reviewRequired: boolean; extractedData: Record<string, unknown> }> {
-  if (!EXTERNAL_AI_PROCESSING_ALLOWED) throw new Error('Audio transcription is disabled by SHINE privacy policy.');
+  if (!isExternalAIProcessingApproved()) throw new Error('Audio transcription is disabled by SHINE privacy policy.');
   if (!audioBase64 || audioBase64.length > 20_000_000) throw new Error('Audio payload is missing or too large.');
   const allowedMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/m4a', 'audio/webm'];
   if (!allowedMimeTypes.includes(mimeType)) throw new Error('Unsupported audio type.');
