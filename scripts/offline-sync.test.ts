@@ -28,6 +28,7 @@ export async function getDoc(ref) {
   return { exists: () => value !== undefined, data: () => (value ? { ...value } : undefined) };
 }
 export async function setDoc(ref, data) { serverRecords.set(ref.collection + '/' + ref.id, { ...data }); }
+export async function updateDoc(ref, data) { const key = ref.collection + '/' + ref.id; const current = serverRecords.get(key); if (current === undefined) throw new Error('No document to update'); serverRecords.set(key, { ...current, ...data }); }
 export async function deleteDoc(ref) { serverRecords.delete(ref.collection + '/' + ref.id); }
 export function writeBatch() {
   return { set: (ref, data) => setDoc(ref, data), delete: (ref) => deleteDoc(ref), commit: async () => {} };
@@ -512,6 +513,7 @@ assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed before delete 
   'conflict handling preserves the newer server girl record on delete');
 
 await resetCaseSyncState(girlBaseline);
+server.seed('girls', 'SG-QUEUE-STALE', { ...girlBaseline.girls[0] });
 server.seed('households', 'SH-QUEUE-STALE', { ...girlBaseline.households[0], name: 'Changed on another device', updatedAt: T3 });
 updateHousehold('SH-QUEUE-STALE', { name: 'Changed on this device' } as any);
 assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed on another device',
@@ -523,6 +525,7 @@ assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed on anothe
   'conflict handling preserves the newer server household record');
 
 await resetCaseSyncState(girlBaseline);
+server.seed('girls', 'SG-QUEUE-STALE', { ...girlBaseline.girls[0] });
 server.seed('households', 'SH-QUEUE-STALE', { ...girlBaseline.households[0], name: 'Changed before delete elsewhere', updatedAt: T3 });
 assert.equal(deleteHousehold('SH-QUEUE-STALE'), true, 'local household deletion is accepted after local persistence');
 assert.ok(server.get('households', 'SH-QUEUE-STALE'), 'local household delete must not directly erase a newer server record');
