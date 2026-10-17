@@ -24,6 +24,7 @@ requirements, follow the stricter requirement and explain the conflict.
    in code, logs, tests, screenshots, commits or reports.
 6. Never claim a check passed unless you ran it. Report skipped or blocked checks.
 7. Never knowingly leave a feature half-finished or present a partial workflow as complete. Finish the user-facing flow end to end, including persistence, permissions, error/retry states, integration, and regression tests. If a genuine blocker prevents completion, leave the safest coherent state possible, make the unfinished part explicit in the UI or documentation where appropriate, record the exact blocker and next step, and report it plainly. Never fake success, leave dead controls, or hide unfinished work.
+8. The project owner uses no paid services. Do not introduce, enable, or rely on any paid service, subscription, paid API, usage-billed provider, or paid dependency without the owner's explicit approval. Prefer existing infrastructure and genuinely free allowances; verify current limits and do not assume a free tier is unlimited. Never make production functionality depend on a newly introduced paid service.
 
 ## Data handling
 - Staff HR data (contracts, payroll, salary history, personnel documents,
