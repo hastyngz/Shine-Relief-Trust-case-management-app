@@ -36,9 +36,6 @@ import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
   deleteAnnualBudgetPlanFromFirestore,
-  persistPayrollRecordToFirestore,
-  deletePayrollRecordFromFirestore,
-  persistEmployeeRecordToFirestore,
   clearAllFirestoreCollections,
   syncEntireDatabaseToFirestore,
   persistPhase2Record,
@@ -1251,9 +1248,6 @@ export function addPayrollRecord(
     db.payrollRecords = previousPayrollRecords;
     throw error;
   }
-  persistPayrollRecordToFirestore(newRecord).catch((err) =>
-    console.error('Failed to persist payroll record to Firestore:', err)
-  );
   return newRecord;
 }
 
@@ -1282,9 +1276,6 @@ export function updatePayrollRecord(
     db.payrollRecords = previousPayrollRecords;
     throw error;
   }
-  persistPayrollRecordToFirestore(updated).catch((err) =>
-    console.error('Failed to update payroll record in Firestore:', err)
-  );
   return updated;
 }
 
@@ -1300,9 +1291,6 @@ export function deletePayrollRecord(id: string): boolean {
     db.payrollRecords = previousPayrollRecords;
     return false;
   }
-  deletePayrollRecordFromFirestore(id).catch((err) =>
-    console.error('Failed to delete payroll record from Firestore:', err)
-  );
   return true;
 }
 
@@ -1333,7 +1321,6 @@ export async function updateEmployeeRecord(
     db.employees = previousEmployees;
     throw error;
   }
-  await persistEmployeeRecordToFirestore(updated);
   return updated;
 }
 

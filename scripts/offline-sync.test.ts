@@ -500,6 +500,10 @@ const {
   saveAISettings,
   addPerson,
   deletePerson,
+  addPayrollRecord,
+  updatePayrollRecord,
+  deletePayrollRecord,
+  updateEmployeeRecord,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -809,5 +813,86 @@ const personCreateFlush = await flushPendingOfflineSnapshots();
 assert.equal(personCreateFlush.conflicts.length, 0, 'new person queues without a conflict');
 assert.equal(server.get('people', addedPerson.id).fullName, 'Synthetic new person',
   'queued person creation reaches Firestore');
+
+
+ // --- 21. Payroll and employee writes retain role rules and queue conflicts --
+const payrollBaseRecord = {
+  id: 'PAY-QUEUE-STALE',
+  employeeId: 'EMP-QUEUE-STALE',
+  employeeName: 'Synthetic employee',
+  payPeriod: '2026-10',
+  payPeriodStartDate: '2026-10-01',
+  payPeriodEndDate: '2026-10-31',
+  applicableSalary: 100,
+  salaryHistoryRecordIds: [],
+  expectedAmount: 100,
+  amountPaid: 0,
+  paymentStatus: 'Pending',
+  createdBy: 'Synthetic manager',
+  createdByUid: 'uid-a',
+  createdAt: T1,
+  updatedBy: 'Synthetic manager',
+  updatedByUid: 'uid-a',
+  updatedAt: T1,
+};
+const payrollBaseline = normalizeImportedDatabase({ payrollRecords: [payrollBaseRecord as any] });
+await resetCaseSyncState(payrollBaseline);
+server.seed('payrollRecords', payrollBaseRecord.id, { ...payrollBaseRecord, expectedAmount: 125, updatedAt: T3 });
+assert.equal(updatePayrollRecord(payrollBaseRecord.id, { expectedAmount: 200 } as any, 'Synthetic manager', 'uid-a')?.expectedAmount, 200,
+  'local payroll update is saved before queued synchronization');
+assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
+  'payroll update must not directly overwrite a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const payrollUpdateFlush = await flushPendingOfflineSnapshots();
+assert.equal(payrollUpdateFlush.conflicts.length, 1, 'stale payroll update is surfaced as a conflict');
+assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
+  'payroll conflict preserves the newer server record');
+
+await resetCaseSyncState(payrollBaseline);
+server.seed('payrollRecords', payrollBaseRecord.id, { ...payrollBaseRecord, expectedAmount: 125, updatedAt: T3 });
+assert.equal(deletePayrollRecord(payrollBaseRecord.id), true, 'local payroll deletion succeeds after local persistence');
+assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
+  'payroll deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const payrollDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(payrollDeleteFlush.conflicts.length, 1, 'stale payroll deletion is surfaced as a conflict');
+assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
+  'payroll delete conflict preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ payrollRecords: [] }));
+const addedPayroll = addPayrollRecord({
+  employeeId: 'EMP-QUEUE-NEW',
+  employeeName: 'Synthetic employee',
+  payPeriod: '2026-10',
+  payPeriodStartDate: '2026-10-01',
+  payPeriodEndDate: '2026-10-31',
+  applicableSalary: 100,
+  salaryHistoryRecordIds: [],
+  expectedAmount: 100,
+  amountPaid: 0,
+  paymentStatus: 'Pending',
+} as any, 'Synthetic manager', 'uid-a');
+assert.equal(server.get('payrollRecords', addedPayroll.id), undefined,
+  'payroll creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const payrollCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(payrollCreateFlush.conflicts.length, 0, 'new payroll record queues without a conflict');
+assert.equal(server.get('payrollRecords', addedPayroll.id).id, addedPayroll.id,
+  'queued payroll creation reaches Firestore');
+
+const employeeBaseline = normalizeImportedDatabase({
+  employees: [{ id: 'EMP-QUEUE-STALE', fullName: 'Synthetic employee', salaryMWK: 100, createdAt: T1, updatedAt: T1, createdBy: 'Synthetic manager', updatedBy: 'Synthetic manager' } as any],
+});
+await resetCaseSyncState(employeeBaseline);
+server.seed('employees', 'EMP-QUEUE-STALE', { ...employeeBaseline.employees![0], salaryMWK: 150, updatedAt: T3 });
+assert.equal((await updateEmployeeRecord('EMP-QUEUE-STALE', { salaryMWK: 200 } as any, 'Synthetic manager'))?.salaryMWK, 200,
+  'local employee update is saved before queued synchronization');
+assert.equal(server.get('employees', 'EMP-QUEUE-STALE').salaryMWK, 150,
+  'employee update must not directly overwrite a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const employeeUpdateFlush = await flushPendingOfflineSnapshots();
+assert.equal(employeeUpdateFlush.conflicts.length, 1, 'stale employee update is surfaced as a conflict');
+assert.equal(server.get('employees', 'EMP-QUEUE-STALE').salaryMWK, 150,
+  'employee conflict preserves the newer server record');
 
 console.log('Offline per-record queue and conflict tests passed.');
