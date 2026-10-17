@@ -496,3 +496,10 @@ Suggestion format:
 - State: forecast settings, AI settings, intelligence suggestions and custom person types now restore their previous in-memory values if local persistence fails; synthetic regression assertions cover each path. Commit `9d6fac5`; GitHub Actions run `39068946069` passed both checks and E2E.
 - Next: continue tracing older direct Firestore writes after local success; rejected writes are still logged without a consistent user-facing retry/reconciliation workflow.
 - Limit: CI covers automated checks, not a physical Android/offline field test. — Mosaic (ChatGPT), 2026-10-17
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · case-record queue-only writes
+- Area: girl and household create/update/delete in `src/utils/storage.ts`.
+- State: removed parallel direct Firestore writes; these mutations now flow through the shared per-record queue, which can detect a newer server record instead of overwriting it first. Regression tests cover stale updates and deletes for both collections. Commits `0d9015e` and `dd5a807`; CI run `39069502125` passed checks and E2E.
+- Next: migrate older follow-up and finance helpers in bounded batches; preserve each linked-record workflow and test stale deletes.
+- Limit: this does not yet eliminate direct writes from other storage helpers or prove behavior on a physical Android phone. — Mosaic (ChatGPT), 2026-10-17
