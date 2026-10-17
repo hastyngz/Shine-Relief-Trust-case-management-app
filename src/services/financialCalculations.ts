@@ -72,7 +72,7 @@ export function filterBudgetLines(
 
 /** Restrict budget reporting to one calendar/financial year without changing the table's period filter. */
 export function filterBudgetLinesByYear(lines: BudgetItem[], year: string): BudgetItem[] {
-  if (!/^\\d{4}$/.test(year)) return [];
+  if (!/^\d{4}$/.test(year)) return [];
   return lines.filter((line) => typeof line.period === 'string' && line.period.startsWith(`${year}-`));
 }
 
