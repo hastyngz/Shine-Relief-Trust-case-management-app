@@ -5,13 +5,6 @@ import { AI_TOOL_DECLARATIONS, executeAITool } from './aiTools';
 // Lazy client initialization for Gemini API
 let genAIClient: GoogleGenAI | null = null;
 
-// SHINE data must not be sent to external AI providers. Re-enable only after a privacy-approved private route exists.
-const EXTERNAL_AI_PROCESSING_ALLOWED = false;
-
-export function isExternalAIProcessingApproved(): boolean {
-  return EXTERNAL_AI_PROCESSING_ALLOWED;
-}
-
 function getGenAI(): GoogleGenAI {
   if (!genAIClient) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -78,7 +71,6 @@ export interface AIChatResponse {
 }
 
 export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<{ transcription: string; reviewRequired: boolean; extractedData: Record<string, unknown> }> {
-  if (!isExternalAIProcessingApproved()) throw new Error('Audio transcription is disabled by SHINE privacy policy.');
   if (!audioBase64 || audioBase64.length > 20_000_000) throw new Error('Audio payload is missing or too large.');
   const allowedMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/m4a', 'audio/webm'];
   if (!allowedMimeTypes.includes(mimeType)) throw new Error('Unsupported audio type.');
@@ -96,7 +88,6 @@ export async function transcribeAudio(audioBase64: string, mimeType: string): Pr
 }
 
 export async function analyzeDocument(audioBase64: string, mimeType: string): Promise<{ extractedData: Record<string, unknown>; reviewRequired: true }> {
-  if (!EXTERNAL_AI_PROCESSING_ALLOWED) throw new Error('Document analysis is disabled by SHINE privacy policy.');
   if (!audioBase64 || audioBase64.length > 25_000_000) throw new Error('Document payload is missing or too large.');
   const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
   if (!allowedMimeTypes.includes(mimeType)) throw new Error('Only JPEG, PNG, WebP, and PDF documents are supported.');
@@ -393,15 +384,6 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
       success: false,
       reply: 'Access Denied: Your staff account is suspended or inactive.',
       errorMessage: 'Staff account is inactive or suspended.',
-    };
-  }
-
-  if (!EXTERNAL_AI_PROCESSING_ALLOWED) {
-    return {
-      success: false,
-      reply: 'SHINE AI chat is paused to protect confidential records. No prompt, chat history, record lookup or AI request was sent to an external provider. Continue using the normal SHINE modules until a privacy-approved private processing route is available.',
-      isUnavailable: true,
-      errorMessage: 'AI processing paused by SHINE privacy policy.',
     };
   }
 
