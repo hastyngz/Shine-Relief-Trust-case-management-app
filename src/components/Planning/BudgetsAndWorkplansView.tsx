@@ -155,7 +155,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const filteredBudgets = filterBudgetLines(budgets, budgetPeriodFilter, budgetCategoryFilter);
   const budgetSummaryYears = Array.from(new Set(budgets
     .map((line) => typeof line.period === 'string' ? line.period.slice(0, 4) : '')
-    .filter((year) => /^\\d{4}$/.test(year)))).sort((a, b) => b.localeCompare(a));
+    .filter((year) => /^\d{4}$/.test(year)))).sort((a, b) => b.localeCompare(a));
   const effectiveBudgetSummaryYear = budgetPeriodFilter !== 'ALL'
     ? budgetPeriodFilter.slice(0, 4)
     : budgetSummaryYears.includes(budgetSummaryYear)
