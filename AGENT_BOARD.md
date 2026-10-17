@@ -450,20 +450,16 @@ Suggestion format:
 ### S-026 · Enforce SHINE AI's protected-data boundary
 - From: Mosaic (ChatGPT), 2026-10-17
 - Type: security / privacy risk
-- Evidence: `src/server/aiService.ts` forwards uploaded audio and documents as Gemini inline data and sends AI tool results in OpenRouter request messages. Those tool results can contain girl, household, education, health or financial records; `AGENTS.md` prohibits sending protected SHINE data to third-party AI.
-- Idea: map all AI endpoints and tool payloads, classify data, and enforce an approved secured processing route or block sensitive content before it leaves SHINE. Add tests proving protected fields and record payloads cannot reach external providers; do not rely on UI copy or staff discretion alone.
-- Effort: medium-large
-- Status: new
-
-
-
-### 2026-10-17 · Mosaic (ChatGPT) · AI data-flow review handoff
-- Area: SHINE AI privacy and no-cost constraint.
-- State: confirmed /api/ai/chat sends tool results to OpenRouter; /api/ai/transcribe and /api/ai/analyze-document send raw audio/documents to Gemini. Existing phase2-import-ai.test.ts currently mocks OpenRouter and expects girl-profile fields to be sent, so its assumptions must change for the protected-data boundary.
-- Next: build a privacy-preserving path that keeps deterministic data lookups/calculations inside SHINE and prevents protected prompts, history, records, audio and documents reaching third-party AI. Do not introduce paid services or assume a free tier is private.
-- Watch out: AGENTS.md explicitly prohibits third-party AI for protected data. Do not disable everything without a coherent safe fallback; do not claim a local/private model exists unless verified. — Mosaic (ChatGPT), 2026-10-17
-
-
+- Evidence: the prior server flow forwarded uploaded audio/documents to Gemini and chat prompts/tool results to OpenRouter, including possible protected SHINE records.
+- Change: the shared external-AI policy gate is hard-disabled. /api/ai/chat returns a privacy notice before loading records; audio/document routes return 503 before provider calls; service functions independently guard chat, audio and document processing. Browser speech recognition requires explicit processLocally support and forces local processing. Tests assert no provider request or database load occurs while the gate is closed.
+- Limitation: AI chat, cloud transcription and AI document analysis are intentionally unavailable until a privacy-approved private processing route is implemented and tested. No private model or free/private inference service was assumed to exist; no paid provider was introduced.
+- Status: mitigation implemented; latest CI verification pending.
+### 2026-10-17 · Mosaic (ChatGPT) · AI privacy implementation handoff
+- Area: SHINE AI chat, audio, documents and browser voice.
+- State: all external AI processing is blocked by a shared hard-disabled policy gate in src/server/aiService.ts; server endpoints reject requests before record retrieval or provider calls. Browser speech recognition is accepted only when processLocally is supported and explicitly enabled. Automated tests assert the service does not load records or make provider requests when disabled.
+- Verification: AI-boundary and TypeScript/build checks passed in GitHub Actions run 39054505528 before final gate centralization/config documentation commits. Re-run for the latest commit is pending; no real Android device test has been done.
+- Next: keep the gate closed until a private, privacy-approved, no-cost inference path is selected and validated. Restore AI functionality only with tests proving protected prompts, history, records, audio and documents cannot reach third-party providers. Do not introduce paid services or assume a free tier is private.
+- Reflection: the safe fix pauses AI rather than pretending a public provider is private. This is a real usability trade-off; remaining work is to find and verify an acceptable private processing route without weakening SHINE's data boundary. — Mosaic (ChatGPT), 2026-10-17
 ### 2026-10-17 · Mosaic (ChatGPT) · contact offline-save implementation handoff
 - Area: contacts create/edit/archive/interaction persistence.
 - Change: create, edit, archive and interaction mutations now save to the existing local database and trigger the app's established change-diff queue; direct single-record Firestore writes were removed from these paths. Contact listing overlays only queued contact edits over live server results. The Contacts view reflects locally saved records immediately and surfaces local-storage failures. Contact merging now explicitly refuses to run offline because it must update both records atomically.
@@ -474,6 +470,7 @@ Suggestion format:
 ### S-027 · Contact create/edit/merge bypasses the offline change queue
 - From: Mosaic (ChatGPT), 2026-10-17
 - Type: reliability / offline correctness
-- Evidence: `src/services/contactsService.ts` calls Firestore `setDoc`, `updateDoc` and transactions directly, while `src/services/offlineSync.ts` and `firestoreSync.ts` already include contacts in the per-record queue and listener sync. `ContactsView` falls back to locally cached contacts when listing fails, but create/edit/merge/archive still depend on live Firestore writes.
-- Next: move contact mutations onto the established local-save and per-record queue flow, preserving merge integrity, archive-only semantics, audit fields and conflict handling; add offline create/edit/archive/merge tests and reload checks.
-- Watch out: don't merely queue merge as two unrelated writes; preserve atomic duplicate/primary handling or add a coherent conflict-safe merge operation. — Mosaic (ChatGPT), 2026-10-17
+- Evidence: single-contact writes bypassed the existing per-record queue.
+- Change: create/edit/archive/interaction now save locally and are picked up by the existing per-record queue; queued records are overlaid over live reads; the UI reflects local saves and surfaces storage errors. Merge remains atomic and online-only, and now refuses to run when offline or when either contact has queued changes.
+- Verification: contact queue-diff regression coverage and full CI checks/E2E passed for commit 07f22192221bee36e6d9a0e56dcba22ba65acefb. The pending-edit merge guard was added afterward and is awaiting the latest CI run.
+- Remaining: there is no atomic multi-record offline merge operation yet. Manual Android/offline-device testing was not performed. — Mosaic (ChatGPT), 2026-10-17
