@@ -148,6 +148,29 @@ assert.equal(entries[0].baseUpdatedAt, T1, 'baseUpdatedAt records the version th
 const untouched = computeChangeEntries(baseline, baseline);
 assert.equal(untouched.length, 0);
 
+// Contact creation and edits must use the same per-record queue as other
+// operational records, including their baseline for concurrent-edit detection.
+const contactBase = { id: 'CONTACT-001', name: 'Test School', type: 'organisation', updatedAt: T1 };
+const contactEdit = { ...contactBase, name: 'Updated Test School', updatedAt: T2 };
+const contactEntries = computeChangeEntries(
+  db({ contacts: [contactEdit] }),
+  db({ contacts: [contactBase] }),
+);
+assert.equal(contactEntries.length, 1);
+assert.equal(contactEntries[0].collection, 'contacts');
+assert.equal(contactEntries[0].recordId, 'CONTACT-001');
+assert.equal(contactEntries[0].operation, 'set');
+assert.equal(contactEntries[0].baseUpdatedAt, T1);
+
+const newContactEntries = computeChangeEntries(
+  db({ contacts: [{ id: 'CONTACT-002', name: 'Offline School', type: 'organisation', updatedAt: T2 }] }),
+  db({ contacts: [] }),
+);
+assert.equal(newContactEntries.length, 1);
+assert.equal(newContactEntries[0].collection, 'contacts');
+assert.equal(newContactEntries[0].recordId, 'CONTACT-002');
+assert.equal(newContactEntries[0].operation, 'set');
+
 // --- 2. Two devices editing the same record ---------------------------------
 server.reset();
 server.seed('girls', 'SG-001', girl('SG-001', T3, 'Edited on phone B'));
