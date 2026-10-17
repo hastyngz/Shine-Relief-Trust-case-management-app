@@ -3,7 +3,7 @@ import express from 'express';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
+import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument, isExternalAIProcessingApproved } from './src/server/aiService';
 import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, resolveAuthenticatedUid, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
 import { createRateLimiter, getRateLimitConfig } from './src/server/rateLimit';
@@ -177,14 +177,7 @@ async function startServer() {
     }
   });
 
-  // SHINE policy: external model processing is disabled until an approved
-// private, no-cost route is implemented. This deliberately has no environment
-// override so a stray secret or deployment setting cannot re-enable data egress.
-function isExternalAIProcessingApproved(): boolean {
-  return false;
-}
-
-// Secure SHINE AI Assistant endpoint
+  // Secure SHINE AI Assistant endpoint
   app.post('/api/ai/chat', aiLimiter, async (req, res) => {
     try {
       const staffUser = await authenticateAIRequest(req.headers.authorization);
