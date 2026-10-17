@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type { AppDatabase } from '../src/types';
 
 // ---------------------------------------------------------------------------
 // Minimal browser globals so src/utils/storage.ts can run under tsx.
@@ -608,6 +609,7 @@ const beforeFailedMutations = {
   marketPrices: [...baseline.marketPrices],
   earlyYearsRecords: [...baseline.earlyYearsRecords],
   historicalRecords: [...baseline.historicalRecords],
+  importAudits: [...baseline.importAudits],
   people: [...baseline.people],
 };
 
@@ -616,20 +618,28 @@ fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure
 // Add paths that previously mutated the shared database before a failed save
 // and left the unsaved record in memory for a later caller to accidentally reuse.
 const beforeFailedInsertions = getDatabase();
-const insertionCounts = {
-  educationalFollowUps: beforeFailedInsertions.educationalFollowUps.length,
-  healthFollowUps: beforeFailedInsertions.healthFollowUps.length,
-  familyFollowUps: beforeFailedInsertions.familyFollowUps.length,
-  rentPayments: beforeFailedInsertions.rentPayments.length,
-  householdActivities: beforeFailedInsertions.householdActivities.length,
-  meetings: beforeFailedInsertions.meetings?.length ?? 0,
-  feedingProgramLogs: beforeFailedInsertions.feedingProgramLogs?.length ?? 0,
-  marketPrices: beforeFailedInsertions.marketPrices?.length ?? 0,
-  earlyYearsRecords: beforeFailedInsertions.earlyYearsRecords?.length ?? 0,
-  historicalRecords: beforeFailedInsertions.historicalRecords?.length ?? 0,
-  importAudits: beforeFailedInsertions.importAudits?.length ?? 0,
-  people: beforeFailedInsertions.people?.length ?? 0,
+const insertionCollectionFields = [
+  'educationalFollowUps',
+  'healthFollowUps',
+  'familyFollowUps',
+  'rentPayments',
+  'householdActivities',
+  'meetings',
+  'feedingProgramLogs',
+  'marketPrices',
+  'earlyYearsRecords',
+  'historicalRecords',
+  'importAudits',
+  'people',
+] as const;
+const assertInsertionCollectionsPreserved = (db: AppDatabase, phase: string): void => {
+  for (const field of insertionCollectionFields) {
+    const records = db[field];
+    assert.ok(Array.isArray(records), `${phase} keeps ${field} initialized`);
+    assert.deepEqual(records, beforeFailedMutations[field], `${phase} preserves original ${field} records`);
+  }
 };
+assertInsertionCollectionsPreserved(beforeFailedInsertions, 'insertion baseline');
 const failedInsertions: Array<[string, () => unknown]> = [
   ['education follow-up', () => addEducationalFollowUp({ girlId: 'SYNTHETIC-GIRL' } as never)],
   ['health follow-up', () => addHealthFollowUp({ girlId: 'SYNTHETIC-GIRL' } as never)],
@@ -648,10 +658,7 @@ for (const [label, create] of failedInsertions) {
   assert.throws(create, /not saved on this device/i, `${label} reports local persistence failure`);
 }
 const afterFailedInsertions = getDatabase();
-for (const field of Object.keys(insertionCounts) as Array<keyof typeof insertionCounts>) {
-  const records = afterFailedInsertions[field];
-  assert.equal(Array.isArray(records) ? records.length : 0, insertionCounts[field], `failed insert restores ${field}`);
-}
+assertInsertionCollectionsPreserved(afterFailedInsertions, 'failed insertion');
 
 assert.throws(
   () => addGirl({ id: 'SG-STORAGE-FAIL', name: 'Synthetic unsaved beneficiary' } as never),
