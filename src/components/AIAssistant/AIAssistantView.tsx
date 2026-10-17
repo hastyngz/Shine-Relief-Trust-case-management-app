@@ -60,6 +60,7 @@ interface SpeechRecognitionEventLike {
 
 interface BrowserSpeechRecognition {
   lang: string;
+  processLocally?: boolean;
   continuous: boolean;
   interimResults: boolean;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
@@ -426,6 +427,14 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     }
 
     const recognition = new SpeechRecognition();
+    // Browser speech recognition may upload microphone audio to a vendor. Only
+    // use it when the browser explicitly supports local-only processing.
+    if (!('processLocally' in recognition)) {
+      setVoiceError('Voice input is unavailable because this browser cannot guarantee on-device processing. Type your question instead.');
+      setVoiceConversation(false);
+      return;
+    }
+    recognition.processLocally = true;
     recognition.lang = voiceLanguage;
     recognition.continuous = false;
     recognition.interimResults = false;
