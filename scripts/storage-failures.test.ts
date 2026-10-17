@@ -632,11 +632,23 @@ const insertionCollectionFields = [
   'importAudits',
   'people',
 ] as const;
+type InsertionCollectionField = typeof insertionCollectionFields[number];
+const insertionCollectionSnapshots = new Map<InsertionCollectionField, readonly unknown[]>();
+const captureInsertionCollectionSnapshots = (db: AppDatabase): void => {
+  for (const field of insertionCollectionFields) {
+    const records = db[field];
+    assert.ok(Array.isArray(records), `insertion baseline keeps ${field} initialized`);
+    insertionCollectionSnapshots.set(field, structuredClone(records));
+  }
+};
+captureInsertionCollectionSnapshots(beforeFailedInsertions);
 const assertInsertionCollectionsPreserved = (db: AppDatabase, phase: string): void => {
   for (const field of insertionCollectionFields) {
     const records = db[field];
     assert.ok(Array.isArray(records), `${phase} keeps ${field} initialized`);
-    assert.deepEqual(records, beforeFailedMutations[field], `${phase} preserves original ${field} records`);
+    const expected = insertionCollectionSnapshots.get(field);
+    assert.ok(expected, `${phase} has an original ${field} snapshot`);
+    assert.deepEqual(records, expected, `${phase} preserves original ${field} records`);
   }
 };
 assertInsertionCollectionsPreserved(beforeFailedInsertions, 'insertion baseline');
