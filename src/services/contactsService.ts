@@ -1,11 +1,8 @@
 import {
-  arrayUnion,
   collection,
   doc,
   getDocs,
   runTransaction,
-  setDoc,
-  updateDoc,
 } from 'firebase/firestore';
 import { firestore } from '../firebase';
 import { getDatabase, saveDatabase } from '../utils/storage';
