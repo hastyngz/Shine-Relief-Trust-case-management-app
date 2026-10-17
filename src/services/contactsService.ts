@@ -418,6 +418,8 @@ export async function mergeContacts(
   actor: { uid: string; name: string }
 ): Promise<void> {
   if (!isBrowserOnline()) throw new Error('Contact merging needs an internet connection because both records must be updated together. Reconnect and retry; neither contact was changed.');
+  const pendingContactChanges = (await loadQueue()).filter((entry) => entry.collection === 'contacts' && (entry.recordId === primaryId || entry.recordId === duplicateId));
+  if (pendingContactChanges.length) throw new Error('These contacts have unsynced local changes. Let them sync or resolve their conflicts before merging; no merge was performed.');
   const primaryRef = doc(firestore, 'contacts', primaryId);
   const duplicateRef = doc(firestore, 'contacts', duplicateId);
   await runTransaction(firestore, async (transaction) => {
