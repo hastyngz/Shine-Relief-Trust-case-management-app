@@ -39,8 +39,6 @@ import {
   persistPayrollRecordToFirestore,
   deletePayrollRecordFromFirestore,
   persistEmployeeRecordToFirestore,
-  persistWorkplanItemToFirestore,
-  deleteWorkplanItemFromFirestore,
   persistHistoricalCaseRecordToFirestore,
   deleteHistoricalCaseRecordFromFirestore,
   persistImportAuditToFirestore,
@@ -50,8 +48,6 @@ import {
   syncEntireDatabaseToFirestore,
   persistPhase2Record,
   appendCaseActionAudit,
-  persistMeetingToFirestore,
-  deleteMeetingFromFirestore,
   persistFeedingProgramLogToFirestore,
   deleteFeedingProgramLogFromFirestore,
   persistMarketPriceToFirestore,
@@ -1382,9 +1378,6 @@ export function addWorkplanItem(
     db.workplans = previousWorkplans;
     throw error;
   }
-  persistWorkplanItemToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist workplan item to Firestore:', err)
-  );
   return newItem;
 }
 
@@ -1411,9 +1404,6 @@ export function updateWorkplanItem(
     db.workplans = previousWorkplans;
     throw error;
   }
-  persistWorkplanItemToFirestore(updated).catch((err) =>
-    console.error('Failed to update workplan item in Firestore:', err)
-  );
   return updated;
 }
 
@@ -1428,9 +1418,6 @@ export function deleteWorkplanItem(id: string): boolean {
     db.workplans = previousWorkplans;
     return false;
   }
-  deleteWorkplanItemFromFirestore(id).catch((err) =>
-    console.error('Failed to delete workplan item from Firestore:', err)
-  );
   return true;
 }
 
@@ -1579,7 +1566,6 @@ export function addMeetingRecord(item: Omit<MeetingRecord, 'id' | 'createdAt' | 
     db.meetings = previousMeetings;
     throw error;
   }
-  persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to persist meeting:', err));
   return meeting;
 }
 
@@ -1597,7 +1583,6 @@ export function updateMeetingRecord(id: string, updates: Partial<MeetingRecord>)
     db.meetings = previousMeetings;
     throw error;
   }
-  persistMeetingToFirestore(meeting).catch((err) => console.error('Failed to update meeting:', err));
   return meeting;
 }
 
@@ -1612,7 +1597,6 @@ export function deleteMeetingRecord(id: string): boolean {
     db.meetings = previousMeetings;
     return false;
   }
-  deleteMeetingFromFirestore(id).catch((err) => console.error('Failed to delete meeting:', err));
   return true;
 }
 

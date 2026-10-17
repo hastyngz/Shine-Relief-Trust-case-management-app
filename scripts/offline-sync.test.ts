@@ -484,6 +484,12 @@ const {
   updateBudgetItem,
   deleteBudgetItem,
   addAnnualBudgetPlan,
+  addWorkplanItem,
+  updateWorkplanItem,
+  deleteWorkplanItem,
+  addMeetingRecord,
+  updateMeetingRecord,
+  deleteMeetingRecord,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -633,5 +639,44 @@ const annualBudgetFlush = await flushPendingOfflineSnapshots();
 assert.equal(annualBudgetFlush.conflicts.length, 0, 'new annual budget plan queues without a conflict');
 assert.equal(server.get('annualBudgets', addedAnnualBudget.id).id, addedAnnualBudget.id,
   'queued annual budget plan creation reaches Firestore');
+
+
+ // --- 17. Workplans and meetings use the conflict-aware queue ----------------
+const planningBaseline = normalizeImportedDatabase({
+  workplans: [{ id: 'WKP-QUEUE-STALE', title: 'Baseline workplan', createdAt: T1, updatedAt: T1 } as any],
+  meetings: [{ id: 'MTG-QUEUE-STALE', title: 'Baseline meeting', dateTime: T1, attendees: [], status: 'Planned', minutesText: '', summaryAndOutcomes: '', createdBy: 'Synthetic tester', createdAt: T1, updatedAt: T1 } as any],
+});
+await resetCaseSyncState(planningBaseline);
+server.seed('workplans', 'WKP-QUEUE-STALE', { ...planningBaseline.workplans![0], title: 'Server newer', updatedAt: T3 });
+assert.equal((updateWorkplanItem('WKP-QUEUE-STALE', { title: 'Local edit' } as any) as any)?.title, 'Local edit',
+  'local workplan update is saved before queued synchronization');
+assert.equal(server.get('workplans', 'WKP-QUEUE-STALE').title, 'Server newer',
+  'workplan update must not directly overwrite a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const workplanUpdateFlush = await flushPendingOfflineSnapshots();
+assert.equal(workplanUpdateFlush.conflicts.length, 1, 'stale workplan update is surfaced as a conflict');
+assert.equal(server.get('workplans', 'WKP-QUEUE-STALE').title, 'Server newer',
+  'workplan conflict handling preserves the newer server record');
+
+await resetCaseSyncState(planningBaseline);
+server.seed('meetings', 'MTG-QUEUE-STALE', { ...planningBaseline.meetings![0], title: 'Server newer', updatedAt: T3 });
+assert.equal(deleteMeetingRecord('MTG-QUEUE-STALE'), true, 'local meeting deletion succeeds after local persistence');
+assert.equal(server.get('meetings', 'MTG-QUEUE-STALE').title, 'Server newer',
+  'meeting deletion must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const meetingDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(meetingDeleteFlush.conflicts.length, 1, 'stale meeting deletion is surfaced as a conflict');
+assert.equal(server.get('meetings', 'MTG-QUEUE-STALE').title, 'Server newer',
+  'meeting conflict handling preserves the newer server record');
+
+await resetCaseSyncState(normalizeImportedDatabase({ workplans: [] }));
+const addedWorkplan = addWorkplanItem({ title: 'Synthetic queue-only workplan' } as any);
+assert.equal(server.get('workplans', addedWorkplan.id), undefined,
+  'workplan creation must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const workplanCreateFlush = await flushPendingOfflineSnapshots();
+assert.equal(workplanCreateFlush.conflicts.length, 0, 'new workplan queues without a conflict');
+assert.equal(server.get('workplans', addedWorkplan.id).title, 'Synthetic queue-only workplan',
+  'queued workplan creation reaches Firestore');
 
 console.log('Offline per-record queue and conflict tests passed.');
