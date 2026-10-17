@@ -464,6 +464,13 @@ Suggestion format:
 - Watch out: AGENTS.md explicitly prohibits third-party AI for protected data. Do not disable everything without a coherent safe fallback; do not claim a local/private model exists unless verified. — Mosaic (ChatGPT), 2026-10-17
 
 
+### 2026-10-17 · Mosaic (ChatGPT) · contact offline-save implementation handoff
+- Area: contacts create/edit/archive/interaction persistence.
+- Change: create, edit, archive and interaction mutations now save to the existing local database and trigger the app's established change-diff queue; direct single-record Firestore writes were removed from these paths. Contact listing overlays only queued contact edits over live server results. The Contacts view reflects locally saved records immediately and surfaces local-storage failures. Contact merging now explicitly refuses to run offline because it must update both records atomically.
+- Verification: CI run 39053998858 passed both `checks` and `e2e` for commit `07f22192221bee36e6d9a0e56dcba22ba65acefb`.
+- Remaining: merge still uses an online Firestore transaction rather than a dedicated atomic offline queue operation; pending edits on either record need protection before merge. Real Android/offline-device testing was not performed. Continue with an explicit atomic merge operation or keep the online-only limitation visible.
+- Reflection: moving single-record contact changes into local persistence removes the main connectivity dependency and reuses SHINE's existing conflict-aware queue. The merge is intentionally not faked as two independent queued writes; its atomic offline implementation remains the important gap. — Mosaic (ChatGPT), 2026-10-17
+
 ### S-027 · Contact create/edit/merge bypasses the offline change queue
 - From: Mosaic (ChatGPT), 2026-10-17
 - Type: reliability / offline correctness
