@@ -596,6 +596,10 @@ baseline.people = [{ id: 'PERSON-STORAGE-BASELINE', fullName: 'Synthetic Person'
 baseline.inventoryItems = [{ id: 'INV-STORAGE-BASELINE', stockCode: 'SYN-INV-1', name: 'Synthetic inventory item', quantityOnHand: 4, minimumStockLevel: 1, unit: 'units', location: 'Main Office', movements: [] } as never];
 baseline.assets = [{ id: 'ASSET-STORAGE-BASELINE', assetTag: 'SYN-ASSET-1', name: 'Synthetic asset', history: [] } as never];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
+assert.throws(() => saveInventoryItem({ id: 'INV-DUPLICATE-CODE', stockCode: ' syn-inv-1 ', name: 'Duplicate synthetic item', quantityOnHand: 1, minimumStockLevel: 0, unit: 'units', location: 'Main Office', movements: [] } as never), /stock code is already in use/i, 'storage layer rejects duplicate stock codes after trimming and case-folding');
+assert.throws(() => saveAssetRecord({ id: 'ASSET-DUPLICATE-TAG', assetTag: ' syn-asset-1 ', name: 'Duplicate synthetic asset', history: [] } as never), /asset tag is already in use/i, 'storage layer rejects duplicate asset tags after trimming and case-folding');
+assert.equal(getDatabase().inventoryItems?.length, 1, 'rejected duplicate stock code does not mutate the inventory register');
+assert.equal(getDatabase().assets?.length, 1, 'rejected duplicate asset tag does not mutate the asset register');
 const beforeFailedMutations = {
   girls: [...baseline.girls],
   households: [...baseline.households],

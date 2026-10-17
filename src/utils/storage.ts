@@ -2037,6 +2037,10 @@ export function saveInventoryItem(item: InventoryItem): InventoryItem {
   const db = getDatabase();
   if (!db.inventoryItems) db.inventoryItems = [];
   const previousItems = [...db.inventoryItems];
+  const normalizedStockCode = item.stockCode.trim().toLocaleLowerCase('en-US');
+  if (normalizedStockCode && db.inventoryItems.some((entry) => entry.id !== item.id && entry.stockCode.trim().toLocaleLowerCase('en-US') === normalizedStockCode)) {
+    throw new Error('That stock code is already in use on this device. Sync and refresh the register before retrying if another staff member may have added it.');
+  }
   const now = new Date().toISOString();
   const index = db.inventoryItems.findIndex((entry) => entry.id === item.id);
   const saved: InventoryItem = { ...item, updatedAt: now, movements: Array.isArray(item.movements) ? item.movements : [] };
@@ -2057,6 +2061,10 @@ export function saveAssetRecord(asset: AssetRecord): AssetRecord {
   const db = getDatabase();
   if (!db.assets) db.assets = [];
   const previousAssets = [...db.assets];
+  const normalizedAssetTag = asset.assetTag.trim().toLocaleLowerCase('en-US');
+  if (normalizedAssetTag && db.assets.some((entry) => entry.id !== asset.id && entry.assetTag.trim().toLocaleLowerCase('en-US') === normalizedAssetTag)) {
+    throw new Error('That asset tag is already in use on this device. Sync and refresh the register before retrying if another staff member may have registered it.');
+  }
   const now = new Date().toISOString();
   const index = db.assets.findIndex((entry) => entry.id === asset.id);
   const saved: AssetRecord = { ...asset, updatedAt: now, history: Array.isArray(asset.history) ? asset.history : [] };
