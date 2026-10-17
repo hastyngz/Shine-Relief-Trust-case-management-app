@@ -28,6 +28,8 @@ const {
   getDatabase,
   saveDatabase,
   saveIncomingCloudSnapshot,
+  saveInventoryItem,
+  saveAssetRecord,
   addGirl,
   updateGirl,
   deleteGirl,
@@ -591,6 +593,8 @@ baseline.earlyYearsRecords = [{ id: 'EYS-STORAGE-BASELINE', childId: 'SYNTHETIC-
 baseline.historicalRecords = [{ id: 'HIST-STORAGE-BASELINE', girlId: 'SG-STORAGE-BASELINE' } as never];
 baseline.importAudits = [{ id: 'AUD-STORAGE-BASELINE' } as never];
 baseline.people = [{ id: 'PERSON-STORAGE-BASELINE', fullName: 'Synthetic Person' } as never];
+baseline.inventoryItems = [{ id: 'INV-STORAGE-BASELINE', stockCode: 'SYN-INV-1', name: 'Synthetic inventory item', quantityOnHand: 4, minimumStockLevel: 1, unit: 'units', location: 'Main Office', movements: [] } as never];
+baseline.assets = [{ id: 'ASSET-STORAGE-BASELINE', assetTag: 'SYN-ASSET-1', name: 'Synthetic asset', history: [] } as never];
 assert.equal(saveDatabase(baseline).ok, true, 'synthetic baseline is persisted before storage is disabled');
 const beforeFailedMutations = {
   girls: [...baseline.girls],
@@ -611,6 +615,8 @@ const beforeFailedMutations = {
   historicalRecords: [...baseline.historicalRecords],
   importAudits: [...baseline.importAudits],
   people: [...baseline.people],
+  inventoryItems: [...(baseline.inventoryItems || [])],
+  assets: [...(baseline.assets || [])],
 };
 
 fakeLocalStorage.setItem = () => { throw new Error('synthetic local save failure'); };
@@ -737,6 +743,8 @@ assert.equal(deletePerson('PERSON-STORAGE-BASELINE'), false, 'person deletion re
 assert.equal(deleteGirl('SG-STORAGE-BASELINE'), false, 'girl deletion reports failure when local persistence fails');
 assert.equal(deleteHousehold('SH-STORAGE-BASELINE'), false, 'household deletion reports failure when local persistence fails');
 assert.equal(deleteWorkplanItem('WP-STORAGE-BASELINE'), false, 'workplan deletion reports failure when local persistence fails');
+assert.throws(() => saveInventoryItem({ id: 'INV-STORAGE-NEW', stockCode: 'SYN-INV-2', name: 'Unsaved inventory item', quantityOnHand: 1, minimumStockLevel: 0, unit: 'units', location: 'Main Office', movements: [] } as never), /Could not save inventory changes/, 'inventory save reports local persistence failure');
+assert.throws(() => saveAssetRecord({ id: 'ASSET-STORAGE-NEW', assetTag: 'SYN-ASSET-2', name: 'Unsaved asset', history: [] } as never), /Could not save asset changes/, 'asset save reports local persistence failure');
 fakeLocalStorage.setItem = originalSetItem;
 const afterFailedMutations = getDatabase();
 assert.deepEqual(afterFailedMutations.girls, beforeFailedMutations.girls, 'failed beneficiary mutations restore the original girls');
@@ -756,6 +764,8 @@ assert.deepEqual(afterFailedMutations.marketPrices, beforeFailedMutations.market
 assert.deepEqual(afterFailedMutations.earlyYearsRecords, beforeFailedMutations.earlyYearsRecords, 'failed early-years deletion restores the record');
 assert.deepEqual(afterFailedMutations.historicalRecords, beforeFailedMutations.historicalRecords, 'failed historical record deletion restores the timeline');
 assert.deepEqual(afterFailedMutations.people, beforeFailedMutations.people, 'failed person deletion restores the person');
+assert.deepEqual(afterFailedMutations.inventoryItems, beforeFailedMutations.inventoryItems, 'failed inventory save leaves the persisted inventory register unchanged');
+assert.deepEqual(afterFailedMutations.assets, beforeFailedMutations.assets, 'failed asset save leaves the persisted asset register unchanged');
 assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAIL'), 'a failed create does not leak into persisted records');
 
 // Empty/corrupt storage fallback must return a fresh seed copy, not the shared
