@@ -13,6 +13,7 @@ import {
   filterBudgetLinesByYear,
 } from '../src/services/financialCalculations';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../src/services/expenseAudit';
+import { formatMWK } from '../src/utils/export';
 
 const salary = (id: string, employeeId: string, effectiveDate: string, salaryAmount: number): SalaryHistoryRecord => ({
   id, employeeId, effectiveDate, salaryAmount, salaryFrequency: 'Monthly', reasonForChange: 'Fixture',
@@ -121,5 +122,10 @@ const payrollRecords = [
 ] satisfies PayrollRecord[];
 assert.equal(filterPayrollRecords(payrollRecords, { financialYear: '2025', month: 2, paymentStatus: 'Unpaid' }).length, 1);
 assert.equal(filterPayrollRecords(payrollRecords, { employeeId: 'employee-1' }).length, 1);
+
+assert.equal(formatMWK(123456), 'MWK 123,456');
+assert.equal(formatMWK(undefined), 'Not recorded');
+assert.equal(formatMWK(null), 'Not recorded');
+assert.equal(formatMWK(Number.NaN), 'Not recorded');
 
 console.log('Phase 3B payroll and budget calculation tests passed.');
