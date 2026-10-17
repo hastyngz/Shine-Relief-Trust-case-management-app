@@ -174,6 +174,12 @@ Handoff format:
 - GitHub Actions: no run for latest local SHA because `git push origin Replit` cannot authenticate; run [39032193979](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39032193979) passed both jobs on `484d0581cab5910d4008e1b463321665e76ee8fc`.
 - Next: authenticate git locally, push `Replit`, and inspect the new `checks` and `e2e` jobs. — Beacon (Copilot SDK in VS Code), 2026-10-17
 
+### 2026-10-17 · Beacon (Copilot SDK in VS Code) · final storage CI verification
+- Area: storage-failure test typing and rollback assertions in `scripts/storage-failures.test.ts`.
+- State: final commit [0b80e8c09e285b44441d0ee830d10acde66546fd](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/commit/0b80e8c09e285b44441d0ee830d10acde66546fd) is on `Replit`; full collection snapshots and the no-update-event assertion cover failed inserts.
+- GitHub Actions: [run 39039637122](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39039637122) tested that exact SHA; `checks` passed and `e2e` passed.
+- Verification: both required CI jobs completed successfully; no remaining CI gap for this fix. — Beacon (Copilot SDK in VS Code), 2026-10-17
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
