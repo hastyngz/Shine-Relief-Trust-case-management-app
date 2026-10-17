@@ -465,4 +465,71 @@ fakeWindow.localStorage.setItem = originalStorageSetItem;
 await clearOfflineChangesAfterDatabaseReset(resetDb);
 assert.equal(isDatabaseResetRecoveryRequired(), false, 'successful baseline persistence releases the reset recovery lock');
 
+
+// --- 13. Case records use the conflict-aware queue, never direct setDoc ------
+const {
+  getDatabase: getStorageDatabase,
+  saveDatabase: saveLocalDatabase,
+  normalizeImportedDatabase,
+  updateGirl,
+  deleteGirl,
+  updateHousehold,
+  deleteHousehold,
+} = await import('../src/utils/storage');
+
+async function resetCaseSyncState(base: any) {
+  values.clear();
+  server.reset();
+  await clearOfflineChangesAfterDatabaseReset(base);
+  assert.equal(saveLocalDatabase(base).ok, true, 'synthetic case baseline is saved locally');
+  setLastSyncedSnapshot(base);
+}
+
+const girlBaseline = normalizeImportedDatabase({
+  girls: [{ id: 'SG-QUEUE-STALE', name: 'Baseline Girl', householdId: 'SH-QUEUE-STALE', createdAt: T1, updatedAt: T1 } as any],
+  households: [{ id: 'SH-QUEUE-STALE', name: 'Baseline household', createdAt: T1, updatedAt: T1 } as any],
+});
+await resetCaseSyncState(girlBaseline);
+server.seed('girls', 'SG-QUEUE-STALE', { ...girlBaseline.girls[0] });
+server.seed('girls', 'SG-QUEUE-STALE', { ...girlBaseline.girls[0], name: 'Changed on another device', updatedAt: T3 });
+updateGirl('SG-QUEUE-STALE', { name: 'Changed on this device' } as any);
+assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed on another device',
+  'editing a girl locally must not bypass the queue and overwrite a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const girlUpdateFlush = await flushPendingOfflineSnapshots();
+assert.equal(girlUpdateFlush.conflicts.length, 1, 'stale girl update is surfaced as a conflict');
+assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed on another device',
+  'conflict handling preserves the newer server girl record');
+
+await resetCaseSyncState(girlBaseline);
+server.seed('girls', 'SG-QUEUE-STALE', { ...girlBaseline.girls[0], name: 'Changed before delete elsewhere', updatedAt: T3 });
+assert.equal(deleteGirl('SG-QUEUE-STALE'), true, 'local girl deletion is accepted after local persistence');
+assert.ok(server.get('girls', 'SG-QUEUE-STALE'), 'local delete must not directly erase a newer server girl record');
+await recordOfflineChanges(getStorageDatabase());
+const girlDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(girlDeleteFlush.conflicts.length, 1, 'stale girl delete is surfaced as a conflict');
+assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed before delete elsewhere',
+  'conflict handling preserves the newer server girl record on delete');
+
+await resetCaseSyncState(girlBaseline);
+server.seed('households', 'SH-QUEUE-STALE', { ...girlBaseline.households[0], name: 'Changed on another device', updatedAt: T3 });
+updateHousehold('SH-QUEUE-STALE', { name: 'Changed on this device' } as any);
+assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed on another device',
+  'editing a household locally must not bypass the queue and overwrite a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const householdUpdateFlush = await flushPendingOfflineSnapshots();
+assert.equal(householdUpdateFlush.conflicts.length, 1, 'stale household update is surfaced as a conflict');
+assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed on another device',
+  'conflict handling preserves the newer server household record');
+
+await resetCaseSyncState(girlBaseline);
+server.seed('households', 'SH-QUEUE-STALE', { ...girlBaseline.households[0], name: 'Changed before delete elsewhere', updatedAt: T3 });
+assert.equal(deleteHousehold('SH-QUEUE-STALE'), true, 'local household deletion is accepted after local persistence');
+assert.ok(server.get('households', 'SH-QUEUE-STALE'), 'local household delete must not directly erase a newer server record');
+await recordOfflineChanges(getStorageDatabase());
+const householdDeleteFlush = await flushPendingOfflineSnapshots();
+assert.equal(householdDeleteFlush.conflicts.length, 1, 'stale household delete is surfaced as a conflict');
+assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed before delete elsewhere',
+  'conflict handling preserves the newer server household record on delete');
+
 console.log('Offline per-record queue and conflict tests passed.');

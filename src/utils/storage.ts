@@ -35,10 +35,6 @@ import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, is
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
-  persistGirlToFirestore,
-  deleteGirlFromFirestore,
-  persistHouseholdToFirestore,
-  deleteHouseholdFromFirestore,
   persistEduFollowUpToFirestore,
   deleteEduFollowUpFromFirestore,
   persistHealthFollowUpToFirestore,
@@ -479,7 +475,7 @@ export function generateFollowUpId(prefix: string): string {
   return `${prefix}-${timestamp}${random}`;
 }
 
-// Entity operations with automatic Firebase Firestore cloud persistence
+// Entity operations persist locally first; the shared per-record queue is the sole cloud-write path.
 export function addGirl(
   girl: Omit<Girl, 'createdAt' | 'updatedAt'>,
   auditActor?: string
@@ -501,10 +497,6 @@ export function addGirl(
     db.girls = previousGirls;
     throw error;
   }
-  // Persist directly to Cloud Firestore
-  persistGirlToFirestore(newGirl).catch((err) =>
-    console.error('Failed to persist girl to Firestore:', err)
-  );
   return newGirl;
 }
 
@@ -530,21 +522,12 @@ export function updateGirl(
     db.girls = previousGirls;
     throw error;
   }
-  // Persist update to Cloud Firestore
-  persistGirlToFirestore(updated).catch((err) =>
-    console.error('Failed to update girl in Firestore:', err)
-  );
   return updated;
 }
 
 export function deleteGirl(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.girls.length;
-  // Collect linked follow-up IDs for cloud deletion
-  const linkedEdu = db.educationalFollowUps.filter((e) => e.girlId === id).map((e) => e.id);
-  const linkedHealth = db.healthFollowUps.filter((h) => h.girlId === id).map((h) => h.id);
-  const linkedFamily = db.familyFollowUps.filter((f) => f.girlId === id).map((f) => f.id);
-
   const previousGirls = db.girls;
   const previousEducationalFollowUps = db.educationalFollowUps;
   const previousHealthFollowUps = db.healthFollowUps;
@@ -561,10 +544,6 @@ export function deleteGirl(id: string): boolean {
     return false;
   }
 
-  // Delete from Cloud Firestore
-  deleteGirlFromFirestore(id, { edu: linkedEdu, health: linkedHealth, family: linkedFamily }).catch(
-    (err) => console.error('Failed to delete girl from Firestore:', err)
-  );
   return db.girls.length < initialLength;
 }
 
@@ -589,10 +568,6 @@ export function addHousehold(
     db.households = previousHouseholds;
     throw error;
   }
-  // Persist directly to Cloud Firestore
-  persistHouseholdToFirestore(newHouse).catch((err) =>
-    console.error('Failed to persist household to Firestore:', err)
-  );
   return newHouse;
 }
 
@@ -618,10 +593,6 @@ export function updateHousehold(
     db.households = previousHouseholds;
     throw error;
   }
-  // Persist update to Cloud Firestore
-  persistHouseholdToFirestore(updated).catch((err) =>
-    console.error('Failed to update household in Firestore:', err)
-  );
   return updated;
 }
 
@@ -629,12 +600,6 @@ export function deleteHousehold(id: string): boolean {
   const db = getDatabase();
   const initialLength = db.households.length;
   if (!db.households.some((household) => household.id === id)) return false;
-  // Collect affected girls and linked financial/activity logs
-  const affectedGirlIds = db.girls.filter((g) => g.householdId === id).map((g) => g.id);
-  const linkedRent = db.rentPayments.filter((r) => r.householdId === id).map((r) => r.id);
-  const linkedExpense = db.expenses.filter((e) => e.householdId === id).map((e) => e.id);
-  const linkedActivity = db.householdActivities.filter((a) => a.householdId === id).map((a) => a.id);
-
   const previousHouseholds = db.households;
   const previousGirls = db.girls;
   const previousRentPayments = db.rentPayments;
@@ -654,12 +619,6 @@ export function deleteHousehold(id: string): boolean {
     return false;
   }
 
-  // Delete from Cloud Firestore
-  deleteHouseholdFromFirestore(id, affectedGirlIds, {
-    rent: linkedRent,
-    expense: linkedExpense,
-    activity: linkedActivity,
-  }).catch((err) => console.error('Failed to delete household from Firestore:', err));
 
   return db.households.length < initialLength;
 }
