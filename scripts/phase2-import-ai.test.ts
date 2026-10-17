@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
 import { analyzeImportRows } from '../src/services/importService';
-import { processAIChat } from '../src/server/aiService';
+import { analyzeDocument, processAIChat, transcribeAudio } from '../src/server/aiService';
 import { executeAITool } from '../src/server/aiTools';
 import { AppDatabase, StaffUser } from '../src/types';
 import { getAICollectionsForTool } from '../workers/r2-storage/aiBackend';
@@ -109,39 +109,30 @@ async function run() {
   assert.deepEqual(getAICollectionsForTool('getCaseActions', {}, restrictedStaff), ['caseActions']);
 
   const originalFetch = globalThis.fetch;
-  const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
-  process.env.OPENROUTER_API_KEY = 'test-key';
-  let completion = 0;
+  let providerRequestCount = 0;
+  let databaseLoadCount = 0;
   globalThis.fetch = async () => {
-    const body = completion++ === 0
-      ? {
-          model: 'provider/tool-model',
-          choices: [{ message: { tool_calls: [{ id: 'call-1', function: { name: 'searchGirls', arguments: JSON.stringify({ query: 'Test' }) } }] } }],
-        }
-      : { model: 'provider/final-model', choices: [{ message: { content: 'Test response.' } }] };
-    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    providerRequestCount += 1;
+    throw new Error('Unexpected external AI request in privacy test.');
   };
   try {
     const response = await processAIChat({
       message: 'Find Test Girl',
       staffUser: staff,
-      loadDatabase: async (toolName) => {
-        assert.equal(toolName, 'searchGirls');
+      loadDatabase: async () => {
+        databaseLoadCount += 1;
         return db;
       },
     });
-    assert.deepEqual(response.modelsUsed, ['provider/tool-model', 'provider/final-model']);
-    assert.deepEqual(response.sourceRefs, [{
-      id: 'SG-001',
-      collection: 'girls',
-      date: '2024-01-01',
-      girlId: 'SG-001',
-      householdId: 'SH-01',
-    }]);
+    assert.equal(response.success, false);
+    assert.equal(response.isUnavailable, true);
+    assert.match(response.reply, /paused to protect confidential records/i);
+    assert.equal(databaseLoadCount, 0, 'the AI service must not load beneficiary records while external processing is disabled');
+    await assert.rejects(() => transcribeAudio('c3ludGhldGlj', 'audio/wav'), /disabled by SHINE privacy policy/);
+    await assert.rejects(() => analyzeDocument('c3ludGhldGlj', 'application/pdf'), /disabled by SHINE privacy policy/);
+    assert.equal(providerRequestCount, 0, 'chat, audio and document operations must not call external providers');
   } finally {
     globalThis.fetch = originalFetch;
-    if (originalOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
-    else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
   }
 
   console.log('Import and AI scope tests passed.');
