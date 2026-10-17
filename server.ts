@@ -315,6 +315,7 @@ function isExternalAIProcessingApproved(): boolean {
       if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
       const aiSettings = await getAISettings();
       if (aiSettings.enabled === false || aiSettings.documentAnalysis === false) return res.status(403).json({ error: 'Document analysis is disabled by an Administrator.' });
+      if (!isExternalAIProcessingApproved()) return res.status(503).json({ error: 'AI document analysis is paused to protect SHINE data. No document was sent to an external AI provider. File the document and enter details manually.' });
       if (typeof req.body?.documentBase64 !== 'string' || typeof req.body?.mimeType !== 'string') return res.status(400).json({ error: 'Document data and MIME type are required.' });
       const result = await analyzeDocument(req.body.documentBase64, req.body.mimeType);
       await writeAIAudit({ userId: staff.uid, userEmail: staff.email, userRole: staff.role, timestamp: new Date().toISOString(), aiFunction: 'document_analysis', status: 'success', recordIdsAccessed: [], reviewStatus: 'review_required' });
