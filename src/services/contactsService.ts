@@ -294,8 +294,8 @@ export async function listContacts(includeArchived = false): Promise<ContactReco
     }
     const local = localContacts.get(entry.recordId);
     const queued = entry.data as ContactRecord | null;
-    if (local) contactsById.set(entry.recordId, local);
-    else if (queued) contactsById.set(entry.recordId, queued);
+    if (queued) contactsById.set(entry.recordId, queued);
+    else if (local) contactsById.set(entry.recordId, local);
   }
 
   return [...contactsById.values()]
@@ -430,6 +430,16 @@ export async function mergeContacts(
     if (!primarySnapshot.exists() || !duplicateSnapshot.exists()) throw new Error('Both contacts must exist to merge.');
     const primary = primarySnapshot.data() as ContactRecord;
     const duplicate = duplicateSnapshot.data() as ContactRecord;
+    // The UI can start a merge before the app's debounced queue has persisted
+    // a just-saved local edit. Compare cached versions too, so a transaction
+    // cannot silently merge older server data over a pending device edit.
+    const localContacts = new Map((getDatabase().contacts || []).map((contact) => [contact.id, contact]));
+    const localPrimary = localContacts.get(primaryId);
+    const localDuplicate = localContacts.get(duplicateId);
+    if ((localPrimary && localPrimary.updatedAt !== primary.updatedAt) ||
+        (localDuplicate && localDuplicate.updatedAt !== duplicate.updatedAt)) {
+      throw new Error('A contact changed locally or on the server since it was last synced. Refresh and sync both contacts before merging; no merge was performed.');
+    }
     const now = new Date().toISOString();
     transaction.update(primaryRef, {
       aliases: Array.from(new Set([...primary.aliases, duplicate.name, ...duplicate.aliases])),
