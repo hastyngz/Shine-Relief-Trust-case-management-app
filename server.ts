@@ -177,7 +177,14 @@ async function startServer() {
     }
   });
 
-  // Secure SHINE AI Assistant endpoint
+  // SHINE policy: external model processing is disabled until an approved
+// private, no-cost route is implemented. This deliberately has no environment
+// override so a stray secret or deployment setting cannot re-enable data egress.
+function isExternalAIProcessingApproved(): boolean {
+  return false;
+}
+
+// Secure SHINE AI Assistant endpoint
   app.post('/api/ai/chat', aiLimiter, async (req, res) => {
     try {
       const staffUser = await authenticateAIRequest(req.headers.authorization);
@@ -188,6 +195,26 @@ async function startServer() {
           success: false,
           reply: 'Please provide a question of 1 to 4,000 characters.',
           errorMessage: 'Invalid message.',
+        });
+      }
+
+      if (!isExternalAIProcessingApproved()) {
+        const timestamp = new Date().toISOString();
+        await writeAIAudit({
+          userId: staffUser.uid,
+          userEmail: staffUser.email,
+          userRole: staffUser.role,
+          timestamp,
+          aiFunction: 'privacy boundary blocked external AI',
+          status: 'failure',
+          recordIdsAccessed: [],
+          errorMessage: 'AI processing paused by SHINE privacy policy.',
+        });
+        return res.status(503).json({
+          success: false,
+          reply: 'SHINE AI chat is temporarily paused to protect confidential records. The current AI route can send prompts and retrieved records to a third-party provider, which is not permitted for SHINE data. No record lookup or AI request was made. Continue using the normal SHINE modules. Chat can be re-enabled after a privacy-approved, no-cost private processing route is implemented and tested.',
+          isUnavailable: true,
+          errorMessage: 'AI processing paused by SHINE privacy policy.',
         });
       }
 
