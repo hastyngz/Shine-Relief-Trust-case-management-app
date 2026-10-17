@@ -2036,13 +2036,17 @@ export function deletePerson(id: string): boolean {
 export function saveInventoryItem(item: InventoryItem): InventoryItem {
   const db = getDatabase();
   if (!db.inventoryItems) db.inventoryItems = [];
+  const previousItems = [...db.inventoryItems];
   const now = new Date().toISOString();
   const index = db.inventoryItems.findIndex((entry) => entry.id === item.id);
   const saved: InventoryItem = { ...item, updatedAt: now, movements: Array.isArray(item.movements) ? item.movements : [] };
   if (index >= 0) db.inventoryItems[index] = saved;
   else db.inventoryItems.unshift({ ...saved, createdAt: item.createdAt || now });
   const result = saveDatabase(db);
-  if (!result.ok) throw new Error('Could not save inventory changes on this device. Check available storage and try again.');
+  if (!result.ok) {
+    db.inventoryItems = previousItems;
+    throw new Error('Could not save inventory changes on this device. Check available storage and try again.');
+  }
   // saveDatabase dispatches the shared db-updated event; App.tsx diffs this record into
   // the per-record offline queue, preserving conflict detection instead of racing it
   // with a direct Firestore write from this helper.
@@ -2052,13 +2056,17 @@ export function saveInventoryItem(item: InventoryItem): InventoryItem {
 export function saveAssetRecord(asset: AssetRecord): AssetRecord {
   const db = getDatabase();
   if (!db.assets) db.assets = [];
+  const previousAssets = [...db.assets];
   const now = new Date().toISOString();
   const index = db.assets.findIndex((entry) => entry.id === asset.id);
   const saved: AssetRecord = { ...asset, updatedAt: now, history: Array.isArray(asset.history) ? asset.history : [] };
   if (index >= 0) db.assets[index] = saved;
   else db.assets.unshift({ ...saved, createdAt: asset.createdAt || now });
   const result = saveDatabase(db);
-  if (!result.ok) throw new Error('Could not save asset changes on this device. Check available storage and try again.');
+  if (!result.ok) {
+    db.assets = previousAssets;
+    throw new Error('Could not save asset changes on this device. Check available storage and try again.');
+  }
   // Shared database event feeds the conflict-aware offline queue.
   return saved;
 }
