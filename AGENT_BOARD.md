@@ -443,7 +443,7 @@ Suggestion format:
 - Evidence: `firestore.rules` contains two `match /contacts/{contactId}` blocks. The earlier block permits broader create/update operations; Firestore allow clauses from matching blocks are ORed, so the later update field allowlist is not a restriction on the earlier rule. `scripts/firestore-rules.test.ts` checks basic contact writes but not attempts to change forbidden fields.
 - Idea: consolidate to one authoritative rule, keep the intended audit fields and archive-only behavior, update contact callers/tests, and add negative rules tests for forbidden fields and forged audit metadata.
 - Effort: medium
-- Status: new
+- Status: implemented in firestore.rules and scripts/firestore-rules.test.ts; TypeScript and all checks steps passed in CI run 39052533425; end-to-end job still running at handoff.
 
 
 
@@ -455,3 +455,10 @@ Suggestion format:
 - Effort: medium-large
 - Status: new
 
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · AI data-flow review handoff
+- Area: SHINE AI privacy and no-cost constraint.
+- State: confirmed /api/ai/chat sends tool results to OpenRouter; /api/ai/transcribe and /api/ai/analyze-document send raw audio/documents to Gemini. Existing phase2-import-ai.test.ts currently mocks OpenRouter and expects girl-profile fields to be sent, so its assumptions must change for the protected-data boundary.
+- Next: build a privacy-preserving path that keeps deterministic data lookups/calculations inside SHINE and prevents protected prompts, history, records, audio and documents reaching third-party AI. Do not introduce paid services or assume a free tier is private.
+- Watch out: AGENTS.md explicitly prohibits third-party AI for protected data. Do not disable everything without a coherent safe fallback; do not claim a local/private model exists unless verified. — Mosaic (ChatGPT), 2026-10-17
