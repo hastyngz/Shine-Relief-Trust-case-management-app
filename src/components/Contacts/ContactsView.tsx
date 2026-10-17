@@ -134,7 +134,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
       setEditing(false);
       if (selected) setSelected(savedContact);
     } catch (saveError) {
-      setError('Contact could not be saved. Check your staff access and try again.');
+      setError(saveError instanceof Error ? saveError.message : 'Contact could not be saved. Check your staff access and try again.');
     } finally {
       setSaving(false);
     }
@@ -148,8 +148,8 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
       const refreshedContacts = await refreshContacts();
       setSelected(refreshedContacts.find((contact) => contact.id === selected.id) || null);
       setMergeTarget('');
-    } catch {
-      setError('Contacts could not be merged. Both records must still exist.');
+    } catch (mergeError) {
+      setError(mergeError instanceof Error ? mergeError.message : 'Contacts could not be merged. Both records must still exist.');
     } finally {
       setSaving(false);
     }
@@ -157,9 +157,17 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
 
   const doArchive = async () => {
     if (!selected || !canEdit || !window.confirm(`Archive ${selected.name}? This keeps the contact history.`)) return;
-    await archiveContact(selected.id, actor);
-    setSelected(null);
-    await refreshContacts();
+    setSaving(true);
+    try {
+      const archived = await archiveContact(selected.id, actor);
+      setContacts((current) => current.map((contact) => contact.id === archived.id ? archived : contact));
+      setSelected(null);
+      setError('');
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : 'Contact could not be archived. Try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateDraft = (field: keyof ContactDraft, value: string) => setDraft((current) => ({ ...current, [field]: value }));
