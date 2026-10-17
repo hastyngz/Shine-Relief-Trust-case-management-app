@@ -39,17 +39,12 @@ import {
   persistPayrollRecordToFirestore,
   deletePayrollRecordFromFirestore,
   persistEmployeeRecordToFirestore,
-  persistImportAuditToFirestore,
   persistPersonToFirestore,
   deletePersonFromFirestore,
   clearAllFirestoreCollections,
   syncEntireDatabaseToFirestore,
   persistPhase2Record,
   appendCaseActionAudit,
-  persistForecastSettingsToFirestore,
-  persistWhatIfScenarioToFirestore,
-  persistIntelligenceSuggestionToFirestore,
-  persistAISettingsToFirestore,
 } from '../services/firestoreSync';
 import {
   CaseAction,
@@ -1660,7 +1655,6 @@ export function saveForecastSettings(item: ForecastSettings): ForecastSettings {
     db.forecastSettings = previousForecastSettings;
     throw error;
   }
-  persistForecastSettingsToFirestore(item).catch((err) => console.error('Failed to persist forecast settings:', err));
   return item;
 }
 
@@ -1676,7 +1670,6 @@ export function addWhatIfScenario(item: Omit<WhatIfScenario, 'id' | 'createdAt'>
     db.whatIfScenarios = previousWhatIfScenarios;
     throw error;
   }
-  persistWhatIfScenarioToFirestore(scenario).catch((err) => console.error('Failed to persist scenario:', err));
   return scenario;
 }
 
@@ -1693,7 +1686,6 @@ export function saveIntelligenceSuggestion(item: IntelligenceSuggestion): Intell
     db.intelligenceSuggestions = previousSuggestions;
     throw error;
   }
-  persistIntelligenceSuggestionToFirestore(item).catch((err) => console.error('Failed to persist intelligence suggestion:', err));
   return item;
 }
 
@@ -1707,7 +1699,6 @@ export function saveAISettings(item: AISettings): AISettings {
     db.aiSettings = previousAISettings;
     throw error;
   }
-  persistAISettingsToFirestore(item).catch((err) => console.error('Failed to persist AI settings:', err));
   return item;
 }
 
@@ -1799,9 +1790,6 @@ export function addImportAuditRecord(
     db.importAudits = previousImportAudits;
     throw error;
   }
-  persistImportAuditToFirestore(newItem).catch((err) =>
-    console.error('Failed to persist import audit to Firestore:', err)
-  );
   return newItem;
 }
 

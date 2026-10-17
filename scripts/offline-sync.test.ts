@@ -496,6 +496,8 @@ const {
   deleteHistoricalCaseRecord,
   addFeedingProgramLog,
   deleteFeedingProgramLog,
+  saveForecastSettings,
+  saveAISettings,
 } = await import('../src/utils/storage');
 
 async function resetCaseSyncState(base: any) {
@@ -752,5 +754,32 @@ const historicalDeleteFlush = await flushPendingOfflineSnapshots();
 assert.equal(historicalDeleteFlush.conflicts.length, 1, 'stale historical-record deletion is surfaced as a conflict');
 assert.equal(server.get('historicalCaseRecords', 'HIST-QUEUE-STALE').summary, 'Changed elsewhere',
   'historical conflict handling preserves the newer server record');
+
+
+ // --- 19. Forecast and AI settings use the conflict-aware queue --------------
+const forecastBaseline = normalizeImportedDatabase({
+  forecastSettings: [{ id: 'FCST-QUEUE-STALE', inflationPercent: 5, fuelPricePercent: 3, transportMultiplierPercent: 2, seasonalFoodPercent: 4, authorizedBy: 'Synthetic', updatedAt: T1 } as any],
+});
+await resetCaseSyncState(forecastBaseline);
+server.seed('forecastSettings', 'FCST-QUEUE-STALE', { ...forecastBaseline.forecastSettings![0], inflationPercent: 9, updatedAt: T3 });
+saveForecastSettings({ ...forecastBaseline.forecastSettings![0], inflationPercent: 6, updatedAt: T2 } as any);
+assert.equal(server.get('forecastSettings', 'FCST-QUEUE-STALE').inflationPercent, 9,
+  'forecast settings save must not directly overwrite a newer server value');
+await recordOfflineChanges(getStorageDatabase());
+const forecastFlush = await flushPendingOfflineSnapshots();
+assert.equal(forecastFlush.conflicts.length, 1, 'stale forecast settings update is surfaced as a conflict');
+assert.equal(server.get('forecastSettings', 'FCST-QUEUE-STALE').inflationPercent, 9,
+  'forecast settings conflict preserves the newer server value');
+
+await resetCaseSyncState(normalizeImportedDatabase({ aiSettings: [] }));
+const aiSettings = { id: 'AI-SETTINGS-QUEUE', enabled: true, speechToText: true, textToSpeech: false, documentAnalysis: true, naturalLanguageSearch: false, dailyUsageLimit: 5, updatedByUid: 'synthetic-user', updatedAt: T1 };
+saveAISettings(aiSettings as any);
+assert.equal(server.get('aiSettings', aiSettings.id), undefined,
+  'AI settings save must not issue a parallel direct Firestore write');
+await recordOfflineChanges(getStorageDatabase());
+const aiSettingsFlush = await flushPendingOfflineSnapshots();
+assert.equal(aiSettingsFlush.conflicts.length, 0, 'new AI settings queue without a conflict');
+assert.equal(server.get('aiSettings', aiSettings.id).enabled, true,
+  'queued AI settings creation reaches Firestore');
 
 console.log('Offline per-record queue and conflict tests passed.');
