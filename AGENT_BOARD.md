@@ -489,3 +489,10 @@ Suggestion format:
 - Area: dashboard formatting and E2E diagnostics.
 - State: formatMWK now handles missing/non-finite values, and dashboard expense totals ignore malformed totalCost values. Financial regression tests and E2E passed in run 39057561321; its E2E log did not contain the earlier toLocaleString TypeError.
 - Limit: this is evidence that the defensive fix removed the observed error in that run, not a manual device reproduction or proof that every dashboard rendering path is clean. Re-check if the error reappears. — Mosaic (ChatGPT), 2026-10-17
+
+
+### 2026-10-17 · Mosaic (ChatGPT) · settings persistence rollback
+- Area: local-storage failure handling in `src/utils/storage.ts`.
+- State: forecast settings, AI settings, intelligence suggestions and custom person types now restore their previous in-memory values if local persistence fails; synthetic regression assertions cover each path. Commit `9d6fac5`; GitHub Actions run `39068946069` passed both checks and E2E.
+- Next: continue tracing older direct Firestore writes after local success; rejected writes are still logged without a consistent user-facing retry/reconciliation workflow.
+- Limit: CI covers automated checks, not a physical Android/offline field test. — Mosaic (ChatGPT), 2026-10-17
