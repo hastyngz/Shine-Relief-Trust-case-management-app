@@ -556,3 +556,10 @@ Suggestion format:
 - State: `persistImportAuditToFirestore` now checks an existing restricted source inside a Firestore transaction before writing audit metadata; conflicting reuse of an audit ID is rejected rather than overwriting source rows.
 - Next: validate with offline regression tests and CI; the broader import workflow still needs a resumable manifest because salary-history and employee-audit writes are separate side effects.
 - Watch out: this does not make the whole import atomic and does not replace the required legacy source-data migration before deploying rules. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · import collision test type fix
+- Area: CI validation for restricted import-source retry safety.
+- State: inspected failed run 39112516876: offline E2E passed, but TypeScript rejected three new test fixtures missing required `ImportAuditRecord` fields. Updating the synthetic fixtures to satisfy the production contract.
+- Next: rerun lint/build and the focused offline tests through CI; then continue procurement workflow work.
+- Watch out: the previous run is a failure, not a pass; do not confuse the passing E2E job with the failed checks job. — Mosaic (ChatGPT), 2026-10-18
