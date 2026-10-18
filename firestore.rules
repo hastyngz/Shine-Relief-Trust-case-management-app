@@ -433,8 +433,35 @@ service cloud.firestore {
 
     match /procurementLists/{id} {
       allow read: if isStaffActive();
-      allow create: if isManagerOrStaff() && request.resource.data.status == 'draft' && !request.resource.data.keys().hasAny(['approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy', 'receivedAt', 'receivedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference']);
-      allow update: if isManagerOrStaff() && (resource.data.status == 'draft' || isManagerOrAdmin() || (request.resource.data.status == resource.data.status && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy', 'updatedAt', 'updatedBy']))) && (request.resource.data.status == resource.data.status || isManagerOrAdmin()) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference']) || isManagerOrAdmin());
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.status == 'draft' &&
+        !request.resource.data.keys().hasAny([
+          'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
+          'receivedAt', 'receivedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]);
+      allow update: if isManagerOrStaff() &&
+        (resource.data.status == 'draft' || isManagerOrAdmin() ||
+          (request.resource.data.status == resource.data.status &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy', 'updatedAt', 'updatedBy']))) &&
+        (request.resource.data.status == resource.data.status ||
+          (isManagerOrAdmin() && (
+            (resource.data.status == 'draft' && request.resource.data.status == 'approved' &&
+             request.resource.data.approvedAt is string && request.resource.data.approvedBy is string) ||
+            (resource.data.status == 'approved' && request.resource.data.status == 'purchased' &&
+             request.resource.data.purchaseOrderReference is string && request.resource.data.purchaseOrderReference.size() > 0 &&
+             request.resource.data.orderedAt is string && request.resource.data.orderedBy is string)
+          ))) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
+          'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]) || isManagerOrAdmin()) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['receivedAt', 'receivedBy']) ||
+          resource.data.status == 'purchased') &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]) || (resource.data.status == 'purchased' && resource.data.receivedAt is string &&
+          request.resource.data.financeHandedOverAt is string &&
+          request.resource.data.financeReference is string && request.resource.data.financeReference.size() > 0));
       allow delete: if isAdmin();
     }
 

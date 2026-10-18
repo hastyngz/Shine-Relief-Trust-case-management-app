@@ -284,10 +284,12 @@ async function run() {
     await assertFails(setDoc(doc(manager, 'employeeSalaryHistory/salary-2'), { salaryAmount: 130000 }));
     await assertSucceeds(updateDoc(doc(worker, 'procurementLists/procurement-test'), { purpose: 'Staff can update a draft' }));
     await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { status: 'approved', approvedBy: 'worker' }));
-    await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'approved', approvedBy: 'manager' }));
+    await assertFails(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'purchased', purchaseOrderReference: 'PO-TEST', orderedAt: '2026-01-02T00:00:00.000Z', orderedBy: 'manager' }));
+    await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'approved', approvedBy: 'manager', approvedAt: '2026-01-01T12:00:00.000Z' }));
     await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { purpose: 'Cannot edit after approval' }));
     await assertSucceeds(updateDoc(doc(worker, 'procurementLists/procurement-test'), { receivedAt: '2026-01-02T00:00:00.000Z', receivedBy: 'worker' }));
     await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { financeReference: 'FORGED-REF' }));
+    await assertFails(updateDoc(doc(manager, 'procurementLists/procurement-test'), { financeHandedOverAt: '2026-01-03T00:00:00.000Z', financeHandedOverBy: 'manager', financeReference: 'EARLY-HANDOVER' }));
 
     console.log('Firestore rules tests passed.');
   } finally {
