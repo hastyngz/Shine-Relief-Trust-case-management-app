@@ -207,6 +207,12 @@ Handoff format:
 - Next: treat this as a privacy/security blocker for sensitive use; map every AI route and tool payload, then use only an approved secured processing path or strictly prevent protected data from reaching external providers.
 - Watch out: this is a source-code finding, not a provider-contract or production-traffic audit. No AI code changed and no AI-specific tests were run. — Mosaic (ChatGPT), 2026-10-17
 
+### 2026-10-18 · Mosaic (ChatGPT) · restricted import-source sync boundary
+- Area: `src/services/firestoreSync.ts`, `firestore.rules`, import-source migration.
+- Finding: queued `ImportAuditRecord.sourceData` could be written into `importAudits`, which ordinary staff can read, bypassing the intended `restrictedImportSources` boundary.
+- Fix: queue writer splits source data at the final write boundary, rules reject embedded source data and hide legacy affected docs from ordinary staff, and a dry-run-first Admin SDK migration was added. Regression tests cover queue retries and rules.
+- Important: run the migration dry-run, review conflicts, then apply it before deploying the new rules; no production data was inspected or changed in this session. — Mosaic (ChatGPT), 2026-10-18
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16

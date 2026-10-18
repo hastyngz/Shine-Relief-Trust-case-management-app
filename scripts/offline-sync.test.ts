@@ -172,6 +172,34 @@ assert.equal(newContactEntries[0].collection, 'contacts');
 assert.equal(newContactEntries[0].recordId, 'CONTACT-002');
 assert.equal(newContactEntries[0].operation, 'set');
 
+// Restricted import source rows must never be written into the staff-readable audit collection.
+server.reset();
+const restrictedAudit = {
+  id: 'AUD-SECURE-001',
+  fileName: 'synthetic-import.xlsx',
+  importedAt: T2,
+  status: 'completed',
+  sourceData: { rows: [{ syntheticLabel: 'restricted-source-row' }] },
+};
+const restrictedAuditQueue = computeChangeEntries(
+  db({ importAudits: [restrictedAudit] }),
+  db({ importAudits: [] }),
+);
+assert.equal(restrictedAuditQueue.length, 1);
+const restrictedAuditFlush = await syncChangeEntriesToFirestore(restrictedAuditQueue);
+assert.equal(restrictedAuditFlush.applied, 1);
+assert.equal(server.get('importAudits', 'AUD-SECURE-001').sourceData, undefined,
+  'sourceData must not be written to the staff-readable importAudits collection');
+assert.deepEqual(
+  server.get('restrictedImportSources', 'AUD-SECURE-001').sourceData,
+  restrictedAudit.sourceData,
+  'sourceData must be stored in the separately permissioned restrictedImportSources collection',
+);
+// Retrying after a later queue failure must be idempotent and must not overwrite the restricted source.
+const restrictedAuditRetry = await syncChangeEntriesToFirestore(restrictedAuditQueue);
+assert.equal(restrictedAuditRetry.conflicts.length, 0);
+assert.equal(server.get('importAudits', 'AUD-SECURE-001').sourceData, undefined);
+
 // --- 2. Two devices editing the same record ---------------------------------
 server.reset();
 server.seed('girls', 'SG-001', girl('SG-001', T3, 'Edited on phone B'));

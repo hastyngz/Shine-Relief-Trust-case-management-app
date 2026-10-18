@@ -35,6 +35,13 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
+    await setDoc(doc(firestore, 'importAudits/legacy-source-data'), {
+      id: 'legacy-source-data',
+      fileName: 'synthetic.xlsx',
+      importedAt: '2026-10-18T00:00:00.000Z',
+      status: 'completed',
+      sourceData: { rows: [{ syntheticLabel: 'legacy-private-row' }] },
+    });
     await setDoc(doc(firestore, 'caseActions/action-1'), {
       id: 'action-1',
       title: 'Visit school',
@@ -111,6 +118,23 @@ async function run() {
     const manager = testEnvironment.authenticatedContext('manager', { email: 'manager@example.test' }).firestore();
     const admin = testEnvironment.authenticatedContext('admin', { email: 'admin@example.test' }).firestore();
     const anonymous = testEnvironment.unauthenticatedContext().firestore();
+
+    // Original import rows must be separate from staff-readable audit metadata.
+    await assertSucceeds(setDoc(doc(worker, 'importAudits/audit-safe'), {
+      id: 'audit-safe', fileName: 'synthetic.xlsx', importedAt: '2026-10-18T00:00:00.000Z', status: 'completed',
+    }));
+    await assertFails(setDoc(doc(worker, 'importAudits/audit-with-source-data'), {
+      id: 'audit-with-source-data', fileName: 'synthetic.xlsx', importedAt: '2026-10-18T00:00:00.000Z',
+      status: 'completed', sourceData: { rows: [{ syntheticLabel: 'private-row' }] },
+    }));
+    await assertFails(getDoc(doc(worker, 'importAudits/legacy-source-data')));
+    await assertSucceeds(getDoc(doc(manager, 'importAudits/legacy-source-data')));
+    await assertSucceeds(setDoc(doc(worker, 'restrictedImportSources/source-worker'), {
+      id: 'source-worker', auditId: 'source-worker', fileName: 'synthetic.xlsx',
+      importedAt: '2026-10-18T00:00:00.000Z', sourceData: { rows: [{ syntheticLabel: 'private-row' }] },
+    }));
+    await assertFails(getDoc(doc(worker, 'restrictedImportSources/source-worker')));
+    await assertSucceeds(getDoc(doc(manager, 'restrictedImportSources/source-worker')));
 
     await assertSucceeds(getDoc(doc(worker, 'contacts/contact-1')));
     await assertFails(getDoc(doc(anonymous, 'contacts/contact-1')));

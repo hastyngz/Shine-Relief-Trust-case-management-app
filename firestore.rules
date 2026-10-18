@@ -512,11 +512,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Import Audits - Document parsing audit trails
+    // Import audit metadata is staff-readable; original source rows belong only in
+    // restrictedImportSources. Legacy audit docs containing sourceData stay hidden from
+    // ordinary staff until the repair migration removes that field.
     match /importAudits/{id} {
-      allow read: if isStaffActive();
-      allow create: if isManagerOrStaff();
-      allow update, delete: if isAdmin();
+      allow read: if isStaffActive() &&
+        (!resource.data.keys().hasAny(['sourceData']) || isManagerOrAdmin());
+      allow create: if isManagerOrStaff() &&
+        !request.resource.data.keys().hasAny(['sourceData']);
+      allow update: if isAdmin() &&
+        !request.resource.data.keys().hasAny(['sourceData']);
+      allow delete: if isAdmin();
     }
 
     match /restrictedImportSources/{id} {

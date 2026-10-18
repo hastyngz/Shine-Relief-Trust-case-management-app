@@ -1282,6 +1282,19 @@ export async function syncChangeEntriesToFirestore(
   updateSyncStatus('saving');
 
   for (const entry of entries) {
+    const isImportAudit = entry.collection === COLLECTIONS.IMPORT_AUDITS &&
+      entry.operation !== 'delete' && Boolean(entry.data);
+    const sourceData = isImportAudit && entry.data?.sourceData &&
+      typeof entry.data.sourceData === 'object' && !Array.isArray(entry.data.sourceData)
+      ? entry.data.sourceData as Record<string, unknown>
+      : undefined;
+    // Import audit metadata is readable by all active staff. Source rows must only
+    // be stored in the separately permissioned restrictedImportSources collection.
+    const auditData = isImportAudit && entry.data
+      ? Object.fromEntries(Object.entries(entry.data).filter(([key]) => key !== 'sourceData'))
+      : entry.data;
+    const isRestrictedImportSource = entry.collection === COLLECTIONS.RESTRICTED_IMPORT_SOURCES &&
+      entry.operation !== 'delete' && Boolean(entry.data);
     const ref = doc(firestore, entry.collection, entry.recordId);
     try {
       const conflict = await runTransaction(firestore, async (transaction) => {
@@ -1290,15 +1303,54 @@ export async function syncChangeEntriesToFirestore(
         const serverUpdatedAt = typeof serverData?.updatedAt === 'string' ? serverData.updatedAt : null;
         const localUpdatedAt = typeof entry.data?.updatedAt === 'string' ? entry.data.updatedAt : null;
 
-        // Already applied by this device (its own online write): not a conflict.
-        if (serverUpdatedAt && localUpdatedAt && serverUpdatedAt === localUpdatedAt) return null;
+        // Restricted source documents are create-only for ordinary staff. Treat
+        // an identical retry as success, but never overwrite a different source.
+        if (isRestrictedImportSource && serverData) {
+          if (stableContentHash(serverData) === stableContentHash(entry.data || {})) return null;
+          return {
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: serverData,
+            updatedAt: serverUpdatedAt,
+            updatedBy: typeof serverData.updatedBy === 'string' ? serverData.updatedBy : null,
+          };
+        }
 
-        // Records without reliable timestamps use a content fingerprint. A
-        // different server copy means another device changed it since our baseline.
-        if (serverData && entry.baseHash && stableContentHash(serverData) !== entry.baseHash) {
-          // If the server already contains this exact local payload, treat it as
-          // an idempotent retry rather than reporting our own write as a conflict.
-          if (!entry.data || stableContentHash(serverData) !== stableContentHash(entry.data)) {
+        // Compare only the public audit metadata. Legacy queued entries may still
+        // carry sourceData locally, but it must never be written to importAudits.
+        if (isImportAudit && serverData) {
+          const comparableServer = Object.fromEntries(Object.entries(serverData).filter(([key]) => key !== 'sourceData'));
+          if (stableContentHash(comparableServer) !== stableContentHash(auditData || {})) {
+            return {
+              collection: entry.collection,
+              recordId: entry.recordId,
+              data: serverData,
+              updatedAt: serverUpdatedAt,
+              updatedBy: typeof serverData.updatedBy === 'string' ? serverData.updatedBy : null,
+            };
+          }
+        } else {
+          // Already applied by this device (its own online write): not a conflict.
+          if (serverUpdatedAt && localUpdatedAt && serverUpdatedAt === localUpdatedAt) return null;
+
+          // Records without reliable timestamps use a content fingerprint. A
+          // different server copy means another device changed it since our baseline.
+          if (serverData && entry.baseHash && stableContentHash(serverData) !== entry.baseHash) {
+            // If the server already contains this exact local payload, treat it as
+            // an idempotent retry rather than reporting our own write as a conflict.
+            if (!entry.data || stableContentHash(serverData) !== stableContentHash(entry.data)) {
+              return {
+                collection: entry.collection,
+                recordId: entry.recordId,
+                data: serverData,
+                updatedAt: serverUpdatedAt,
+                updatedBy: typeof serverData?.updatedBy === 'string' ? serverData.updatedBy : null,
+              };
+            }
+          }
+
+          // The server changed the record after this device last saw it.
+          if (serverUpdatedAt && entry.baseUpdatedAt && serverUpdatedAt > entry.baseUpdatedAt) {
             return {
               collection: entry.collection,
               recordId: entry.recordId,
@@ -1309,27 +1361,48 @@ export async function syncChangeEntriesToFirestore(
           }
         }
 
-        // The server changed the record after this device last saw it.
-        if (serverUpdatedAt && entry.baseUpdatedAt && serverUpdatedAt > entry.baseUpdatedAt) {
-          return {
-            collection: entry.collection,
-            recordId: entry.recordId,
-            data: serverData,
-            updatedAt: serverUpdatedAt,
-            updatedBy: typeof serverData?.updatedBy === 'string' ? serverData.updatedBy : null,
-          };
-        }
-
         if (entry.operation === 'delete') {
           if (snapshot.exists()) transaction.delete(ref);
         } else {
-          transaction.set(ref, sanitizeForFirestore(entry.data || {}), { merge: true });
+          transaction.set(ref, sanitizeForFirestore(isImportAudit ? (auditData || {}) : (entry.data || {})), { merge: true });
         }
         return null;
       });
 
-      if (conflict) result.conflicts.push(conflict);
-      else result.applied += 1;
+      if (conflict) {
+        result.conflicts.push(conflict);
+      } else {
+        result.applied += 1;
+
+        if (entry.operation === 'delete' && entry.collection === COLLECTIONS.IMPORT_AUDITS) {
+          await deleteDoc(doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId));
+        }
+
+        // Old queue entries may still contain sourceData inside the audit record.
+        // Split it at the last write boundary so even those entries cannot expose
+        // source rows through the broadly readable importAudits collection.
+        if (sourceData && entry.data) {
+          const sourceRecord: RestrictedImportSourceData = {
+            id: entry.recordId,
+            auditId: entry.recordId,
+            fileName: typeof entry.data.fileName === 'string' ? entry.data.fileName : '',
+            importedAt: typeof entry.data.importedAt === 'string' ? entry.data.importedAt : '',
+            sourceData,
+          };
+          const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId);
+          await runTransaction(firestore, async (transaction) => {
+            const sourceSnapshot = await transaction.get(sourceRef);
+            if (sourceSnapshot.exists()) {
+              const existing = sourceSnapshot.data() as Record<string, any>;
+              if (stableContentHash(existing) !== stableContentHash(sourceRecord)) {
+                throw new Error('A restricted import source with different data already exists; refusing to overwrite it.');
+              }
+              return;
+            }
+            transaction.set(sourceRef, sanitizeForFirestore(sourceRecord));
+          });
+        }
+      }
     } catch (err) {
       // Network or permission failure: keep the entry queued for a later flush.
       console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);
@@ -1341,7 +1414,6 @@ export async function syncChangeEntriesToFirestore(
   if (!result.conflicts.length) updateSyncStatus('synced');
   return result;
 }
-
 /** Writes an audit entry for a detected or resolved sync conflict. */
 export async function appendSyncConflictAudit(event: {
   action: 'conflict_detected' | 'conflict_resolved';
