@@ -22,6 +22,7 @@ should be built, fixed or improved.
 - Never write secrets, tokens, signed URLs, real girl, beneficiary or household
   details, or staff personal or payroll data. Use synthetic examples.
 - Be honest and specific: name files, say what you ran, and mark guesses as guesses.
+- Keep work moving: do not repeatedly poll or re-check the same GitHub Actions run while waiting. Check once after a meaningful change, then continue independent code review, implementation, focused checks, or the next audit item. If CI is pending, record that and move forward; if it fails, inspect the failing step/log, fix the cause, and re-check after a meaningful change. Never treat pending or cancelled runs as passes, and do not let status-checking replace productive work.
 - Opinions: say what you honestly think, kindly and plainly. No flattery. Other people
   may read this repo, so keep it respectful.
 - The "what I've been thinking about lately" reflection is deliberately relational, not
@@ -524,3 +525,9 @@ Suggestion format:
 - State: final local persistence is now checked; failure throws an explicit warning that cloud records may already exist and the user must verify before retrying. Synthetic regression test added. Commit `2c4bb98`; CI run `39071589914` passed checks and E2E.
 - Remaining: import still performs direct per-record cloud writes and is not atomic/resumable; salary-history and employee-audit records sit outside `AppDatabase`. Design an import manifest and recovery workflow before replacing those writes.
 - Inventory boundary: no partial-transfer UI added because current inventory has one location/balance per item and globally unique stock codes. A proper transfer needs a per-location balance model and conflict-safe movement ledger; procurement also needs PO, receiving and finance handover to be designed end-to-end. — Mosaic (ChatGPT), 2026-10-17
+
+### 2026-10-18 · Mosaic (ChatGPT) · keep CI polling from blocking progress
+- Area: agent workflow and offline persistence.
+- State: added a board rule to avoid repeatedly polling the same GitHub Actions run; continue independent work while checks are pending and inspect logs only when useful.
+- Next: phase-record helpers were routed through the shared queue. The first CI attempt exposed TypeScript argument errors, corrected in commit `bcee1dbf914b7d70528b79f54acd4b4dcb8620df`. Verify that commit with focused checks and continue the remaining storage/inventory audit.
+- Watch out: earlier runs were cancelled by newer pushes; do not call those passes. Latest commit's CI status was pending at handoff. — Mosaic (ChatGPT), 2026-10-18
