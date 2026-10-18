@@ -1,3 +1,15 @@
+/** Create collision-resistant client-side IDs for inventory records and movements. */
+export function createInventoryId(prefix: string, cryptoApi: Pick<Crypto, 'randomUUID' | 'getRandomValues'> | undefined = globalThis.crypto): string {
+  if (cryptoApi?.randomUUID) return `${prefix}_${cryptoApi.randomUUID()}`;
+  if (cryptoApi?.getRandomValues) {
+    const words = cryptoApi.getRandomValues(new Uint32Array(4));
+    return `${prefix}_${Array.from(words, (word) => word.toString(16).padStart(8, '0')).join('')}`;
+  }
+  // Compatibility fallback for older/non-secure browser contexts. This is less
+  // collision-resistant than Web Crypto, so prefer UUIDs whenever available.
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+}
+
 export type InventoryExpiryStatus = 'not-tracked' | 'expired' | 'expiring-soon' | 'ok';
 
 export interface InventoryExpiryResult {
