@@ -197,5 +197,5 @@ A targeted code inspection found that the persistence architecture is not yet un
 ### Procurement workflow implementation — 2026-10-18
 - Added approval validation for non-empty lists, positive quantities/prices, and three supplier quotes plus a selected preferred quote for items at or above the configured threshold (default MWK 500,000).
 - The UI can select a quote, validate/approve, record an order reference, confirm receipt, and hand an invoice/receipt/voucher reference to finance. Failed local saves show an error.
-- Firestore rules restrict status transitions and approval/order/finance metadata to managers/administrators, prevent skipping approval/order stages, require receipt before finance handover, and let staff record receipt without editing procurement details after approval.
+- Firestore rules restrict status transitions and approval/order/finance metadata to managers/administrators. Staff can record receipt but cannot edit procurement details after approval.
 - Remaining: no partial deliveries, per-item received quantities, purchase-order line documents, payment reconciliation, or cross-device supplier deduplication. CI verification pending.

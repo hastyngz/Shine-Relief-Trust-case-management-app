@@ -35,7 +35,7 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
-    await setDoc(doc(firestore, 'procurementLists/procurement-test'), { id: 'procurement-test', title: 'Synthetic procurement test', purpose: 'Rules fixture only', items: [], totalMWK: 0, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'manager', updatedBy: 'manager' });
+    await setDoc(doc(firestore, 'procurementLists/procurement-test'), { id: 'procurement-test', title: 'Synthetic procurement test', purpose: 'Rules fixture only', items: [{ description: 'Synthetic test item', quantity: 1, unit: 'item', unitPriceMWK: 1, totalMWK: 1, priceStatus: 'quoted' }], totalMWK: 1, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'manager', updatedBy: 'manager' });
     await setDoc(doc(firestore, 'importAudits/legacy-source-data'), {
       id: 'legacy-source-data',
       fileName: 'synthetic.xlsx',
@@ -287,9 +287,11 @@ async function run() {
     await assertFails(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'purchased', purchaseOrderReference: 'PO-TEST', orderedAt: '2026-01-02T00:00:00.000Z', orderedBy: 'manager' }));
     await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'approved', approvedBy: 'manager', approvedAt: '2026-01-01T12:00:00.000Z' }));
     await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { purpose: 'Cannot edit after approval' }));
-    await assertSucceeds(updateDoc(doc(worker, 'procurementLists/procurement-test'), { receivedAt: '2026-01-02T00:00:00.000Z', receivedBy: 'worker' }));
-    await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { financeReference: 'FORGED-REF' }));
     await assertFails(updateDoc(doc(manager, 'procurementLists/procurement-test'), { financeHandedOverAt: '2026-01-03T00:00:00.000Z', financeHandedOverBy: 'manager', financeReference: 'EARLY-HANDOVER' }));
+    await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'purchased', purchaseOrderReference: 'PO-TEST', orderedAt: '2026-01-02T00:00:00.000Z', orderedBy: 'manager' }));
+    await assertSucceeds(updateDoc(doc(worker, 'procurementLists/procurement-test'), { receivedAt: '2026-01-03T00:00:00.000Z', receivedBy: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { financeReference: 'FORGED-REF' }));
+    await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { financeHandedOverAt: '2026-01-04T00:00:00.000Z', financeHandedOverBy: 'manager', financeReference: 'INV-TEST' }));
 
     console.log('Firestore rules tests passed.');
   } finally {

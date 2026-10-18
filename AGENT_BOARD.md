@@ -574,6 +574,6 @@ Suggestion format:
 
 ### 2026-10-18 · Mosaic (ChatGPT) · procurement workflow vertical slice
 - Area: quote selection, approval, ordering, receiving, and finance handover.
-- State: added a typed approval validator, preferred-quote capture, order reference, receipt confirmation, finance reference, and Firestore role enforcement. Rules also enforce draft → approved → purchased transitions, receipt-before-finance-handover, and protect workflow metadata.
+- State: added a typed approval validator, preferred-quote capture, order reference, receipt confirmation, finance reference, and Firestore role enforcement. Approval/order/finance metadata are manager/admin-only; ordinary staff can record receipt.
 - Next: validate TypeScript, procurement tests, Firestore emulator rules, and build in CI; inspect failing logs before continuing.
 - Watch out: existing lists only; no full purchase-order document or per-item partial-delivery ledger yet. — Mosaic (ChatGPT), 2026-10-18

@@ -446,7 +446,7 @@ service cloud.firestore {
         (request.resource.data.status == resource.data.status ||
           (isManagerOrAdmin() && (
             (resource.data.status == 'draft' && request.resource.data.status == 'approved' &&
-             request.resource.data.approvedAt is string && request.resource.data.approvedBy is string) ||
+             request.resource.data.items.size() > 0 && request.resource.data.approvedAt is string && request.resource.data.approvedBy is string) ||
             (resource.data.status == 'approved' && request.resource.data.status == 'purchased' &&
              request.resource.data.purchaseOrderReference is string && request.resource.data.purchaseOrderReference.size() > 0 &&
              request.resource.data.orderedAt is string && request.resource.data.orderedBy is string)

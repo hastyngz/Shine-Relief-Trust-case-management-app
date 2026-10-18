@@ -1378,7 +1378,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           disabled={!canEdit || list.status !== 'draft'}
                           className="field mt-1 w-44"
                           value={list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK}
-                          onChange={(event) => saveProcurementList(list, { quoteThresholdMWK: Math.max(0, Number(event.target.value) || 0) })
+                          onChange={(event) => saveProcurementList(list, { quoteThresholdMWK: Math.max(0, Number(event.target.value) || 0) })}
                         />
                       </label>
                     </header>
