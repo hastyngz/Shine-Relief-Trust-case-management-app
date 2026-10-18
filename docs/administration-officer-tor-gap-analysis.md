@@ -192,3 +192,10 @@ A targeted code inspection found that the persistence architecture is not yet un
 ### Direct import-source collision protection — follow-up (2026-10-18)
 - The direct import-audit writer now uses a Firestore transaction to read the restricted source before writing audit metadata. Replaying the same audit is idempotent; reusing an audit ID for different source content fails without overwriting the existing source or writing misleading audit metadata.
 - Added regression coverage to `scripts/offline-sync.test.ts` for same-source retries and conflicting source reuse. This test uses a synthetic in-memory Firestore fake; GitHub Actions must still validate the committed change.
+
+
+### Procurement workflow implementation — 2026-10-18
+- Added approval validation for non-empty lists, positive quantities/prices, and three supplier quotes plus a selected preferred quote for items at or above the configured threshold (default MWK 500,000).
+- The UI can select a quote, validate/approve, record an order reference, confirm receipt, and hand an invoice/receipt/voucher reference to finance. Failed local saves show an error.
+- Firestore rules restrict status transitions and approval/order/finance metadata to managers/administrators. Staff can record receipt but cannot edit procurement details after approval.
+- Remaining: no partial deliveries, per-item received quantities, purchase-order line documents, payment reconciliation, or cross-device supplier deduplication. CI verification pending.

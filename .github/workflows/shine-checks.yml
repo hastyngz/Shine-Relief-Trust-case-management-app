@@ -63,6 +63,9 @@ jobs:
       - name: Test spreadsheet import and AI access boundaries
         run: npm run test:phase2
 
+      - name: Test procurement quote and approval workflow
+        run: npm run test:procurement
+
       - name: Test payroll and gratuity calculations
         run: npm run test:payroll
 

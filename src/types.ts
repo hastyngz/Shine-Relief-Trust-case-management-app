@@ -828,6 +828,8 @@ export interface ProcurementListItem {
   itemNumber?: string;
   budgetLineId?: string;
   quotes?: ProcurementQuote[];
+  selectedQuoteSupplier?: string;
+  selectedQuoteAmountMWK?: number;
 }
 
 export interface ProcurementList {
@@ -839,6 +841,16 @@ export interface ProcurementList {
   totalMWK: number;
   status: 'draft' | 'approved' | 'purchased';
   quoteThresholdMWK?: number;
+  approvedAt?: string;
+  approvedBy?: string;
+  purchaseOrderReference?: string;
+  orderedAt?: string;
+  orderedBy?: string;
+  receivedAt?: string;
+  receivedBy?: string;
+  financeHandedOverAt?: string;
+  financeHandedOverBy?: string;
+  financeReference?: string;
   createdAt: string;
   updatedAt: string;
   createdBy: string;

@@ -35,6 +35,7 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
+    await setDoc(doc(firestore, 'procurementLists/procurement-test'), { id: 'procurement-test', title: 'Synthetic procurement test', purpose: 'Rules fixture only', items: [], totalMWK: 0, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'manager', updatedBy: 'manager' });
     await setDoc(doc(firestore, 'importAudits/legacy-source-data'), {
       id: 'legacy-source-data',
       fileName: 'synthetic.xlsx',
@@ -281,6 +282,12 @@ async function run() {
     }));
     await assertFails(updateDoc(doc(worker, 'reportExports/fixed-export-worker'), { finalLocked: false }));
     await assertFails(setDoc(doc(manager, 'employeeSalaryHistory/salary-2'), { salaryAmount: 130000 }));
+    await assertSucceeds(updateDoc(doc(worker, 'procurementLists/procurement-test'), { purpose: 'Staff can update a draft' }));
+    await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { status: 'approved', approvedBy: 'worker' }));
+    await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { status: 'approved', approvedBy: 'manager' }));
+    await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { purpose: 'Cannot edit after approval' }));
+    await assertSucceeds(updateDoc(doc(worker, 'procurementLists/procurement-test'), { receivedAt: '2026-01-02T00:00:00.000Z', receivedBy: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { financeReference: 'FORGED-REF' }));
 
     console.log('Firestore rules tests passed.');
   } finally {

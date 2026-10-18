@@ -56,6 +56,7 @@ import { filterBudgetLines, filterBudgetLinesByYear } from '../../services/finan
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
+import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, selectProcurementQuote } from '../../services/procurementWorkflow';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
@@ -89,6 +90,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [workplanProgrammeId, setWorkplanProgrammeId] = useState<ProgrammeId | ''>('');
   const [seasonalMonthsDraft, setSeasonalMonthsDraft] = useState<number[]>([]);
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, { supplier: string; amount: string }>>({});
+  const [purchaseOrderDrafts, setPurchaseOrderDrafts] = useState<Record<string, string>>({});
+  const [financeReferenceDrafts, setFinanceReferenceDrafts] = useState<Record<string, string>>({});
+  const canApproveProcurement = isAdmin || staffProfile?.role === 'Manager';
   const focusedQualityKey = useRef('');
 
   useEffect(() => {
@@ -126,29 +130,44 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const schedules = db.schedules || [];
   const procurementLists = db.procurementLists || [];
 
-  const updateProcurementItem = (
-    list: ProcurementList,
-    itemIndex: number,
-    updates: Partial<ProcurementListItem>,
-  ) => {
-    const items = list.items.map((item, index) => index === itemIndex ? { ...item, ...updates } : item);
-    updateProcurementList(list.id, { items }, actorName);
-    onRefresh();
+  const saveProcurementList = (list: ProcurementList, updates: Partial<ProcurementList>) => {
+    try { const saved = updateProcurementList(list.id, updates, actorName); if (!saved) throw new Error('This procurement list no longer exists. Refresh and try again.'); onRefresh(); return true; }
+    catch (error) { window.alert(`Procurement change was not saved: ${error instanceof Error ? error.message : 'storage or sync error'}`); return false; }
   };
-
+  const updateProcurementItem = (list: ProcurementList, itemIndex: number, updates: Partial<ProcurementListItem>) => {
+    if (list.status !== 'draft') return;
+    const items = list.items.map((item, index) => index === itemIndex ? { ...item, ...updates } : item);
+    const totalMWK = items.reduce((sum, item) => sum + (item.totalMWK ?? ((item.unitPriceMWK || 0) * item.quantity)), 0);
+    saveProcurementList(list, { items, totalMWK });
+  };
   const addProcurementQuote = (list: ProcurementList, itemIndex: number) => {
-    const draftKey = `${list.id}:${itemIndex}`;
-    const draft = quoteDrafts[draftKey];
-    const amountMWK = Number(draft?.amount);
-    if (!draft?.supplier.trim() || !Number.isFinite(amountMWK) || amountMWK <= 0) return;
-    const item = list.items[itemIndex];
-    const quotes: ProcurementQuote[] = [...(item.quotes || []), {
-      supplier: draft.supplier.trim(),
-      amountMWK,
-      quotedAt: new Date().toISOString().slice(0, 10),
-    }];
-    updateProcurementItem(list, itemIndex, { quotes });
+    if (list.status !== 'draft') return;
+    const draftKey = `${list.id}:${itemIndex}`; const draft = quoteDrafts[draftKey];
+    const supplier = draft?.supplier.trim() || ''; const amountMWK = Number(draft?.amount);
+    if (!supplier || !Number.isFinite(amountMWK) || amountMWK <= 0) { window.alert('Enter a supplier name and a positive quote amount in MWK.'); return; }
+    const item = list.items[itemIndex]; const quotes = item.quotes || [];
+    if (quotes.length >= 3) { window.alert('Three quotes are already recorded for this item.'); return; }
+    if (quotes.some((quote) => quote.supplier.trim().toLocaleLowerCase() === supplier.toLocaleLowerCase())) { window.alert('That supplier already has a quote for this item.'); return; }
+    updateProcurementItem(list, itemIndex, { quotes: [...quotes, { supplier, amountMWK, quotedAt: new Date().toISOString().slice(0, 10) }] });
     setQuoteDrafts((current) => ({ ...current, [draftKey]: { supplier: '', amount: '' } }));
+  };
+  const approveProcurementList = (list: ProcurementList) => {
+    if (!canApproveProcurement || list.status !== 'draft') return; const check = checkProcurementApproval(list);
+    if (!check.allowed) { window.alert(`Cannot approve this procurement list yet:\n\n• ${check.blockers.join('\n• ')}`); return; }
+    saveProcurementList(list, { status: 'approved', approvedAt: new Date().toISOString(), approvedBy: actorName });
+  };
+  const markProcurementPurchased = (list: ProcurementList) => {
+    if (!canApproveProcurement || list.status !== 'approved') return; const purchaseOrderReference = purchaseOrderDrafts[list.id]?.trim() || '';
+    if (!purchaseOrderReference) { window.alert('Enter the purchase order or order reference before marking this list purchased.'); return; }
+    saveProcurementList(list, { status: 'purchased', purchaseOrderReference, orderedAt: new Date().toISOString(), orderedBy: actorName });
+  };
+  const confirmProcurementReceipt = (list: ProcurementList) => {
+    if (list.status !== 'purchased' || list.receivedAt) return; saveProcurementList(list, { receivedAt: new Date().toISOString(), receivedBy: actorName });
+  };
+  const handOverProcurementToFinance = (list: ProcurementList) => {
+    if (!canApproveProcurement || !list.receivedAt || list.financeHandedOverAt) return; const financeReference = financeReferenceDrafts[list.id]?.trim() || '';
+    if (!financeReference) { window.alert('Enter the invoice, receipt or finance voucher reference before handover.'); return; }
+    saveProcurementList(list, { financeHandedOverAt: new Date().toISOString(), financeHandedOverBy: actorName, financeReference });
   };
 
   // Filtered Budgets
@@ -1356,13 +1375,10 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         <input
                           type="number"
                           min="0"
-                          disabled={!canEdit}
+                          disabled={!canEdit || list.status !== 'draft'}
                           className="field mt-1 w-44"
-                          value={list.quoteThresholdMWK ?? 500000}
-                          onChange={(event) => updateProcurementList(list.id, {
-                            quoteThresholdMWK: Math.max(0, Number(event.target.value) || 0),
-                          }, actorName)}
-                          onBlur={onRefresh}
+                          value={list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK}
+                          onChange={(event) => saveProcurementList(list, { quoteThresholdMWK: Math.max(0, Number(event.target.value) || 0) })
                         />
                       </label>
                     </header>
@@ -1371,7 +1387,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         const itemTotal = item.totalMWK ?? (
                           item.unitPriceMWK === undefined ? undefined : item.unitPriceMWK * item.quantity
                         );
-                        const quoteRequired = itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? 500000);
+                        const quoteRequired = itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK);
                         // Unknown/unclear prices need supplier quotes to establish a price even before the threshold can be evaluated.
                         const quoteCollectionAvailable = quoteRequired || item.priceStatus !== 'quoted';
                         const draftKey = `${list.id}:${index}`;
@@ -1396,7 +1412,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                             <label className="text-[11px] font-semibold text-stone-700">
                               Attach to budget line
                               <select
-                                disabled={!canEdit}
+                                disabled={!canEdit || list.status !== 'draft'}
                                 value={item.budgetLineId || ''}
                                 onChange={(event) => updateProcurementItem(list, index, { budgetLineId: event.target.value || undefined })}
                                 className="field mt-1 w-full"
@@ -1409,11 +1425,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                             </label>
                             <div className="space-y-1">
                               {(item.quotes || []).map((quote, quoteIndex) => (
-                                <p key={`${quote.supplier}-${quoteIndex}`} className="text-[11px] text-stone-700">
-                                  {quote.supplier}: {formatMWK(quote.amountMWK)}
-                                </p>
-                              ))}
-                              {canEdit && quoteCollectionAvailable && (item.quotes?.length || 0) < 3 && (
+                                <div key={`${quote.supplier}-${quoteIndex}`} className="flex items-center justify-between gap-2 text-[11px] text-stone-700">
+                                  <span>{quote.supplier}: {formatMWK(quote.amountMWK)}{item.selectedQuoteSupplier === quote.supplier ? ' · Selected' : ''}</span>
+                                  {canEdit && list.status === 'draft' && <button type="button" onClick={() => { try { updateProcurementItem(list, index, selectProcurementQuote(item, quote)); } catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to select this quote.'); } }} className="rounded border border-stone-300 px-2 py-1 font-semibold hover:bg-stone-100">Select</button>}
+                                </div>
+                              ))
+                              {canEdit && list.status === 'draft' && quoteCollectionAvailable && (item.quotes?.length || 0) < 3 && (
                                 <div className="flex gap-1">
                                   <input
                                     aria-label="Quote supplier"
@@ -1449,8 +1466,15 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         );
                       })}
                     </div>
-                    <footer className="border-t border-stone-200 bg-stone-50 px-4 py-3 text-xs font-bold text-stone-800">
-                      Quoted subtotal: {formatMWK(list.totalMWK)}
+                    <footer className="space-y-3 border-t border-stone-200 bg-stone-50 px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-stone-800"><span>Quoted subtotal: {formatMWK(list.items.reduce((sum, item) => sum + (item.totalMWK ?? ((item.unitPriceMWK || 0) * item.quantity)), 0))}</span><span>Workflow: {list.status}{list.approvedBy ? ` · approved by ${list.approvedBy}` : ''}</span></div>
+                      {list.status === 'draft' && canApproveProcurement && <div className="space-y-2"><button type="button" onClick={() => approveProcurementList(list)} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Validate &amp; approve</button><p className="text-[11px] text-stone-600">Approval checks item prices, quantities and the three-quote threshold.</p></div>}
+                      {list.status === 'approved' && canApproveProcurement && <div className="flex flex-wrap items-end gap-2"><label className="min-w-48 flex-1 text-[11px] font-semibold text-stone-700">Purchase order / order reference<input aria-label="Purchase order reference" className="field mt-1 w-full" value={purchaseOrderDrafts[list.id] ?? list.purchaseOrderReference ?? ''} onChange={(event) => setPurchaseOrderDrafts((current) => ({ ...current, [list.id]: event.target.value }))} /></label><button type="button" onClick={() => markProcurementPurchased(list)} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Record order</button></div>}
+                      {list.status === 'purchased' && <div className="space-y-2"><p className="text-[11px] text-stone-700">Order reference: <strong>{list.purchaseOrderReference || 'Not recorded'}</strong>{list.orderedAt ? ` · ordered ${formatDate(list.orderedAt.slice(0, 10))} by ${list.orderedBy || 'staff'}` : ''}</p>
+                        {!list.receivedAt ? (canEdit && <button type="button" onClick={() => confirmProcurementReceipt(list)} className="rounded-lg border border-teal-800 px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">Confirm goods received</button>) : <p className="text-[11px] font-semibold text-emerald-800">Received {formatDate(list.receivedAt.slice(0, 10))} · recorded by {list.receivedBy || 'staff'}</p>}
+                        {list.receivedAt && !list.financeHandedOverAt && canApproveProcurement && <div className="flex flex-wrap items-end gap-2"><label className="min-w-48 flex-1 text-[11px] font-semibold text-stone-700">Invoice / receipt / voucher reference<input aria-label="Finance handover reference" className="field mt-1 w-full" value={financeReferenceDrafts[list.id] ?? ''} onChange={(event) => setFinanceReferenceDrafts((current) => ({ ...current, [list.id]: event.target.value }))} /></label><button type="button" onClick={() => handOverProcurementToFinance(list)} className="rounded-lg bg-stone-800 px-3 py-2 text-xs font-bold text-white hover:bg-stone-900">Hand over to finance</button></div>}
+                        {list.financeHandedOverAt && <p className="text-[11px] font-semibold text-emerald-800">Finance handover recorded {formatDate(list.financeHandedOverAt.slice(0, 10))} · {list.financeReference} · {list.financeHandedOverBy}</p>}
+                      </div>}
                     </footer>
                   </article>
                 ))}

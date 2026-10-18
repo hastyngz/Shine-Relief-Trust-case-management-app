@@ -433,7 +433,8 @@ service cloud.firestore {
 
     match /procurementLists/{id} {
       allow read: if isStaffActive();
-      allow create, update: if isManagerOrStaff();
+      allow create: if isManagerOrStaff() && request.resource.data.status == 'draft' && !request.resource.data.keys().hasAny(['approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy', 'receivedAt', 'receivedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference']);
+      allow update: if isManagerOrStaff() && (resource.data.status == 'draft' || isManagerOrAdmin() || (request.resource.data.status == resource.data.status && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy', 'updatedAt', 'updatedBy']))) && (request.resource.data.status == resource.data.status || isManagerOrAdmin()) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference']) || isManagerOrAdmin());
       allow delete: if isAdmin();
     }
 
