@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarClock, CalendarDays, CheckCircle2, CircleDot, ClipboardList, Flag, Plus, RefreshCw } from 'lucide-react';
 import { AppDatabase, CaseAction, CaseActionPriority, CaseActionStatus, CaseActionSourceType } from '../types';
 import { addCaseAction, updateCaseAction } from '../utils/storage';
-import { persistPhase2Record } from '../services/firestoreSync';
 import { useAuth } from '../contexts/AuthContext';
 import { SwipeRow } from './ui/SwipeRow';
 
@@ -167,7 +166,6 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     }, actor);
 
     try {
-      await persistPhase2Record('caseActions', action);
       const token = await currentUser!.getIdToken();
       await fetch('/api/case-actions/notify', {
         method: 'POST',
@@ -202,7 +200,6 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     if (!assignee || nextStaffId === action.assignedStaffId) return;
     const updatedAction = updateCaseAction(action.id, { assignedStaffId: assignee.uid, assignedStaffName: assignee.fullName }, actor);
     try {
-      if (updatedAction) await persistPhase2Record('caseActions', updatedAction);
       const token = await currentUser!.getIdToken();
       await fetch('/api/case-actions/notify', {
         method: 'POST',
