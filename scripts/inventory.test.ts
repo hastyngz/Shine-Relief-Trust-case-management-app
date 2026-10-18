@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../src/utils/inventory';
+import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../src/utils/inventory';
 
 assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
+
+const generatedInventoryIds = new Set(Array.from({ length: 1000 }, () => createInventoryId('inv')));
+assert.equal(generatedInventoryIds.size, 1000, 'inventory IDs should be unique across a batch');
+assert.ok([...generatedInventoryIds].every((id) => id.startsWith('inv_')), 'inventory IDs should retain their type prefix');
 assert.deepEqual(getInventoryExpiryStatus(undefined, '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
 assert.deepEqual(getInventoryExpiryStatus('not-a-date', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
 assert.deepEqual(getInventoryExpiryStatus('2026-02-31', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
