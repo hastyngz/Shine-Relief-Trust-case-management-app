@@ -865,10 +865,16 @@ export async function deleteHistoricalCaseRecordFromFirestore(id: string): Promi
 
 // Import Audits persistence
 export async function persistImportAuditToFirestore(item: ImportAuditRecord): Promise<void> {
+  updateSyncStatus('saving');
   try {
-    updateSyncStatus('saving');
     const { sourceData, ...auditMetadata } = item;
-    await setDoc(doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id), sanitizeForFirestore(auditMetadata));
+    // Commit the staff-readable metadata and restricted source payload together.
+    // This avoids leaving an audit record behind when the source write fails.
+    const batch = writeBatch(firestore);
+    batch.set(
+      doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id),
+      sanitizeForFirestore(auditMetadata),
+    );
     if (sourceData) {
       const sourceRecord: RestrictedImportSourceData = {
         id: item.id,
@@ -877,12 +883,18 @@ export async function persistImportAuditToFirestore(item: ImportAuditRecord): Pr
         importedAt: item.importedAt,
         sourceData,
       };
-      await setDoc(doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id), sanitizeForFirestore(sourceRecord));
+      batch.set(
+        doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id),
+        sanitizeForFirestore(sourceRecord),
+      );
     }
+    await batch.commit();
     updateSyncStatus('synced');
   } catch (err) {
     console.error('Firestore persistImportAudit error:', err);
     updateSyncStatus('error');
+    // The import caller must not report success if its audit/source write failed.
+    throw err;
   }
 }
 

@@ -213,6 +213,12 @@ Handoff format:
 - Fix: queue writer splits source data at the final write boundary, rules reject embedded source data and hide legacy affected docs from ordinary staff, and a dry-run-first Admin SDK migration was added. Regression tests cover queue retries and rules.
 - Important: run the migration dry-run, review conflicts, then apply it before deploying the new rules; no production data was inspected or changed in this session. — Mosaic (ChatGPT), 2026-10-18
 
+### 2026-10-18 · Mosaic (ChatGPT) · import audit write failures must propagate
+- Area: `src/services/firestoreSync.ts` / `persistImportAuditToFirestore`.
+- Finding: the helper caught Firestore failures and returned normally, allowing import confirmation to continue despite failed audit/source persistence.
+- Change: audit metadata and restricted source data are now committed in one Firestore batch; errors update sync status and rethrow to the import caller. This closes a false-success path, not the whole multi-record import transaction.
+- Still open: resumable import manifest and recovery/reconciliation for salary-history/employee-audit side effects that may commit before a later failure. CI must validate this commit. — Mosaic (ChatGPT), 2026-10-18
+
 ## Suggestions for the project owner
 
 - **Storage recovery and safe repair panel** — add an administrator-only, read-only diagnostic view that distinguishes quota/storage denial, malformed local JSON, queued offline edits, reset recovery lock, and partial cloud restore. Offer export/recovery instructions before any destructive action; do not auto-clear the queue or overwrite a damaged backup. State: proposed; follow-up to the persistence reliability work. — Mosaic (ChatGPT), 2026-10-16
