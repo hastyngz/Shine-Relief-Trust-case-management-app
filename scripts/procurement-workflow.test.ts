@@ -13,6 +13,20 @@ const selected = selectProcurementQuote({ ...expensiveItem, quotes }, quotes[2])
 assert.equal(selected.selectedQuoteSupplier, 'Supplier C'); assert.equal(selected.selectedQuoteAmountMWK, 900000);
 assert.equal(selected.unitPriceMWK, 90000); assert.equal(selected.totalMWK, 900000);
 assert.equal(checkProcurementApproval({ ...baseList, items: [selected] }).allowed, true);
+const previouslyUnpriced: ProcurementListItem = { description: 'Synthetic toner', quantity: 1, unit: 'cartridge', priceStatus: 'missing' };
+const singleQuote: ProcurementQuote = { supplier: 'Only supplier', amountMWK: 12000 };
+const oneQuoteSelection = selectProcurementQuote({ ...previouslyUnpriced, quotes: [singleQuote] }, singleQuote);
+assert.equal(checkProcurementApproval({ ...baseList, items: [oneQuoteSelection] }).allowed, false,
+  'selecting one quote must not erase the three-quote requirement created by a missing price');
+const threeUnpricedQuotes: ProcurementQuote[] = [
+  singleQuote,
+  { supplier: 'Second supplier', amountMWK: 13000 },
+  { supplier: 'Third supplier', amountMWK: 12500 },
+];
+const selectedFromMissingPrice = selectProcurementQuote({ ...previouslyUnpriced, quotes: threeUnpricedQuotes }, singleQuote);
+assert.equal(checkProcurementApproval({ ...baseList, items: [selectedFromMissingPrice] }).allowed, true,
+  'an originally unpriced item can pass after three distinct quotes and preferred quote selection');
+
 assert.throws(() => selectProcurementQuote(baseItem, { supplier: 'Supplier', amountMWK: 0 }), /positive MWK amount/);
 assert.throws(() => selectProcurementQuote({ ...baseItem, quantity: 0 }, quotes[0]), /valid item quantity/);
 console.log('Procurement workflow tests passed.');

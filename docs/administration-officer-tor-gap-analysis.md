@@ -199,3 +199,5 @@ A targeted code inspection found that the persistence architecture is not yet un
 - The UI can select a quote, validate/approve, record an order reference, confirm receipt, and hand an invoice/receipt/voucher reference to finance. Failed local saves show an error.
 - Firestore rules restrict status transitions and approval/order/finance metadata to managers/administrators. Staff can record receipt but cannot edit procurement details after approval.
 - Remaining: no partial deliveries, per-item received quantities, purchase-order line documents, payment reconciliation, or cross-device supplier deduplication. CI verification pending.
+
+- Approval validation retains the three-quote requirement when an originally missing/unclear price becomes quoted, preventing a single below-threshold quote from bypassing the price-discovery gate.

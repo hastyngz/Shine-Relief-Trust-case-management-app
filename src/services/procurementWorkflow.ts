@@ -5,7 +5,7 @@ export function selectProcurementQuote(item: ProcurementListItem, quote: Procure
   const quantity = Number(item.quantity);
   if (!Number.isFinite(quote.amountMWK) || quote.amountMWK <= 0) throw new Error('A supplier quote must be a positive MWK amount.');
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Set a valid item quantity before selecting a supplier quote.');
-  return { ...item, selectedQuoteSupplier: quote.supplier, selectedQuoteAmountMWK: quote.amountMWK, unitPriceMWK: quote.amountMWK / quantity, totalMWK: quote.amountMWK, priceStatus: 'quoted' };
+  return { ...item, selectedQuoteSupplier: quote.supplier, selectedQuoteAmountMWK: quote.amountMWK, quoteRequirementReason: item.priceStatus !== 'quoted' ? 'price-unknown' : item.quoteRequirementReason, unitPriceMWK: quote.amountMWK / quantity, totalMWK: quote.amountMWK, priceStatus: 'quoted' };
 }
 export function checkProcurementApproval(list: ProcurementList): ProcurementApprovalCheck {
   const blockers: string[] = [];
@@ -17,7 +17,7 @@ export function checkProcurementApproval(list: ProcurementList): ProcurementAppr
     if (!Number.isFinite(quantity) || quantity <= 0) blockers.push(`${label}: quantity must be greater than zero.`);
     if (!item.unit?.trim()) blockers.push(`${label}: unit is missing.`);
     if (item.priceStatus !== 'quoted' || !Number.isFinite(unitPrice) || unitPrice <= 0 || !Number.isFinite(total) || total <= 0) blockers.push(`${label}: confirm a valid price before approval.`);
-    const requiresThreeQuotes = item.priceStatus !== 'quoted' || total >= threshold;
+    const requiresThreeQuotes = item.priceStatus !== 'quoted' || total >= threshold || item.quoteRequirementReason === 'price-unknown';
     if (requiresThreeQuotes && (item.quotes?.length || 0) < 3) blockers.push(`${label}: three supplier quotes are required (${item.quotes?.length || 0}/3).`);
     if (requiresThreeQuotes && (!item.selectedQuoteSupplier?.trim() || !Number.isFinite(item.selectedQuoteAmountMWK) || (item.selectedQuoteAmountMWK || 0) <= 0)) blockers.push(`${label}: select the preferred supplier quote.`);
   });

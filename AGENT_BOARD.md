@@ -577,3 +577,10 @@ Suggestion format:
 - State: added a typed approval validator, preferred-quote capture, order reference, receipt confirmation, finance reference, and Firestore role enforcement. Approval/order/finance metadata are manager/admin-only; ordinary staff can record receipt.
 - Next: validate TypeScript, procurement tests, Firestore emulator rules, and build in CI; inspect failing logs before continuing.
 - Watch out: existing lists only; no full purchase-order document or per-item partial-delivery ledger yet. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · preserve missing-price quote gate
+- Area: procurement approval validation.
+- State: identified a state-transition edge case: selecting one below-threshold quote could turn an originally missing-price item into a quoted item and erase the three-quote requirement. Added a persistent typed reason and regression tests for one-vs-three quotes.
+- Next: verify with CI; the full check job and procurement E2E were green before this edge-case correction.
+- Watch out: still no partial-delivery ledger or payment reconciliation. — Mosaic (ChatGPT), 2026-10-18

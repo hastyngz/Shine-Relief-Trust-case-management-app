@@ -830,6 +830,7 @@ export interface ProcurementListItem {
   quotes?: ProcurementQuote[];
   selectedQuoteSupplier?: string;
   selectedQuoteAmountMWK?: number;
+  quoteRequirementReason?: 'threshold' | 'price-unknown';
 }
 
 export interface ProcurementList {
