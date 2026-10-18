@@ -56,3 +56,9 @@ export function getInventoryStocktakeAdjustment(previousQuantity: number, counte
   const variance = countedQuantity - previousQuantity;
   return { previousQuantity, countedQuantity, variance, quantity: Math.abs(variance) };
 }
+
+
+/** Keep the single-location stock model honest until a transfer ledger exists. */
+export function resolveInventoryLocationForSave(currentLocation: string | undefined, requestedLocation: string, isEditing: boolean): string {
+  return isEditing && currentLocation ? currentLocation : requestedLocation;
+}

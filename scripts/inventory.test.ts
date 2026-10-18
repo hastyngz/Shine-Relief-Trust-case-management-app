@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../src/utils/inventory';
+import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../src/utils/inventory';
 
 assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
 
@@ -21,3 +21,7 @@ assert.throws(() => getInventoryStocktakeAdjustment(10, -1), RangeError);
 assert.throws(() => getInventoryStocktakeAdjustment(Number.NaN, 1), RangeError);
 
 console.log('Inventory helper tests passed.');
+
+assert.equal(resolveInventoryLocationForSave('Main Office', 'Farm', true), 'Main Office', 'editing details must not silently move stock');
+assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', true), 'Farm', 'legacy records without a location can be repaired');
+assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', false), 'Farm', 'new stock items retain their requested opening location');

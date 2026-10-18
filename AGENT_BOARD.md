@@ -598,3 +598,11 @@ Suggestion format:
 - State: added an operator runbook and a release checklist gate; dry run is read-only, conflicts block proceeding, and the migration is explicitly described as per-record rather than collection-atomic.
 - Next: authorised Firebase admin must run the dry run, resolve any conflicts, apply, then verify role-specific access before revised rules are deployed. No production data was inspected or changed here.
 - Scope: Cloudflare KV remains intentionally disconnected. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · prevent unrecorded inventory relocation
+- Area: inventory register integrity.
+- Finding: editing an existing stock item allowed changing its single stored location without a transfer movement. Because the schema only holds one balance/location, this could make stock appear to move without a traceable transfer.
+- Change: existing-item location is now read-only in the edit form and the save helper preserves its current location; new items can still choose their opening location. Added regression assertions for both paths.
+- Next: design location-specific balances and paired, retry-safe transfer movements before enabling transfers. Run lint, inventory tests, build and E2E in CI; no physical Android test performed.
+- Scope: Cloudflare KV remains intentionally disconnected. — Mosaic (ChatGPT), 2026-10-18

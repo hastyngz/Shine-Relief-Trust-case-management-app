@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, 
 import type { InventoryItem, InventoryMovement, InventoryMovementType } from '../types';
 import { saveInventoryItem } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
-import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../utils/inventory';
+import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -87,7 +87,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         category: newItem.category,
         unit: newItem.unit,
         minimumStockLevel: minimum,
-        location: newItem.location,
+        location: resolveInventoryLocationForSave(editingTarget.location, newItem.location, true),
         supplier: newItem.supplier.trim() || undefined,
         unitCostMWK: cost,
         expiryDate: newItem.expiryDate || undefined,
@@ -232,7 +232,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <label className="text-sm font-semibold text-stone-700">Unit of measure *<select value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{units.map((v) => <option key={v}>{v}</option>)}</select></label>
           {!editingTarget ? <label className="text-sm font-semibold text-stone-700">Opening quantity<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
           <label className="text-sm font-semibold text-stone-700">Minimum stock level<input type="number" min="0" step="0.01" value={newItem.minimum} onChange={(e) => setNewItem({ ...newItem, minimum: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
-          <label className="text-sm font-semibold text-stone-700">Storage location<select value={newItem.location} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{locations.map((v) => <option key={v}>{v}</option>)}</select></label>
+          <label className="text-sm font-semibold text-stone-700">Storage location<select value={newItem.location} disabled={Boolean(editingTarget)} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal disabled:cursor-not-allowed disabled:bg-stone-100">{locations.map((v) => <option key={v}>{v}</option>)}</select>{editingTarget && <span className="mt-1 block text-xs font-normal text-amber-800">Location changes are disabled until SHINE has a traceable stock-transfer workflow. This prevents stock from appearing to move without a transfer record.</span>}</label>
           <label className="text-sm font-semibold text-stone-700">Unit cost (MWK)<input type="number" min="0" step="0.01" value={newItem.unitCost} onChange={(e) => setNewItem({ ...newItem, unitCost: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Supplier<input value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Expiry date (if applicable)<input type="date" value={newItem.expiryDate} onChange={(e) => setNewItem({ ...newItem, expiryDate: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
