@@ -606,3 +606,10 @@ Suggestion format:
 - Change: existing-item location is now read-only in the edit form and the save helper preserves its current location; new items can still choose their opening location. Added regression assertions for both paths.
 - Next: design location-specific balances and paired, retry-safe transfer movements before enabling transfers. Run lint, inventory tests, build and E2E in CI; no physical Android test performed.
 - Scope: Cloudflare KV remains intentionally disconnected. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · close inventory view-only edit gap
+- Area: inventory UI role affordances.
+- Finding: the Edit details control was visible to view-only users even though stock movement controls were hidden and Firestore rejects their writes. This could create a misleading local-save success followed by a denied sync.
+- Change: hide Edit details for view-only users, consistent with the other inventory mutations. This is a UI affordance fix; Firestore rules remain the authorization boundary and were not changed.
+- Verification: awaiting CI for the current Replit head; no real device test performed. — Mosaic (ChatGPT), 2026-10-18
