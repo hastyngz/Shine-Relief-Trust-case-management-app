@@ -38,7 +38,6 @@ import {
   deleteAnnualBudgetPlanFromFirestore,
   clearAllFirestoreCollections,
   syncEntireDatabaseToFirestore,
-  persistPhase2Record,
   appendCaseActionAudit,
 } from '../services/firestoreSync';
 import {
@@ -851,7 +850,6 @@ type Phase2TrackedRecord = {
 
 function addPhase2Record<T extends Phase2TrackedRecord>(
   dbField: string,
-  collectionName: string,
   prefix: string,
   data: Omit<T, keyof Phase2TrackedRecord>,
   actor: string,
@@ -878,13 +876,6 @@ function addPhase2Record<T extends Phase2TrackedRecord>(
     allData[dbField] = previousRecords;
     throw error;
   }
-  if (collectionName !== 'procurementLists') {
-    // Procurement lists participate in the per-record offline queue. A parallel
-    // direct setDoc would bypass baseUpdatedAt conflict checks.
-    persistPhase2Record(collectionName, record).catch((err) =>
-      console.error(`Failed to persist ${collectionName}:`, err)
-    );
-  }
   return record;
 }
 
@@ -897,7 +888,7 @@ export function addCaseAction(
     if (existing) return existing;
   }
   const { id, ...actionData } = data;
-  const record = addPhase2Record<CaseAction>('caseActions', 'caseActions', 'ACTN', {
+  const record = addPhase2Record<CaseAction>('caseActions', 'ACTN', {
     ...actionData,
     createdByUid: actor.uid,
     updatedByUid: actor.uid,
@@ -942,9 +933,6 @@ export function updateCaseAction(
     db.caseActions = previousRecords;
     throw error;
   }
-  persistPhase2Record('caseActions', updated).catch((err) =>
-    console.error('Failed to update case action:', err)
-  );
   appendCaseActionAudit({
     action: 'updated',
     recordId: id,
@@ -981,7 +969,6 @@ export function updateEducationHistoryRecord(
     db.educationHistory = previousRecords;
     throw error;
   }
-  persistPhase2Record('educationHistory', updated).catch((err) => console.error('Failed to update education history:', err));
   return updated;
 }
 
@@ -1000,7 +987,7 @@ export function addExaminationRecord(
 export function addAttendanceRecord(
   data: Omit<AttendanceRecord, keyof Phase2TrackedRecord>, actorName: string
 ): AttendanceRecord {
-  return addPhase2Record<AttendanceRecord>('attendanceRecords', 'attendanceRecords', 'ATT', data, actorName);
+  return addPhase2Record<AttendanceRecord>('attendanceRecords', 'ATT', data, actorName);
 }
 
 export function updateAttendanceRecord(
@@ -1022,7 +1009,6 @@ export function updateAttendanceRecord(
     db.attendanceRecords = previousRecords;
     throw error;
   }
-  persistPhase2Record('attendanceRecords', updated).catch((err) => console.error('Failed to update attendance record:', err));
   return updated;
 }
 
@@ -1051,7 +1037,6 @@ export function updateGirlLeaveRecord(
     db.girlLeaves = previousRecords;
     throw error;
   }
-  persistPhase2Record('girlLeaves', updated).catch((err) => console.error('Failed to update leave record:', err));
   return updated;
 }
 
@@ -1080,7 +1065,6 @@ export function updateProgrammeLog(
     db.programmeLogs = previousRecords;
     throw error;
   }
-  persistPhase2Record('programmeLogs', updated).catch((err) => console.error('Failed to update programme log:', err));
   return updated;
 }
 
@@ -1397,7 +1381,7 @@ export function addProcurementList(
   data: Omit<ProcurementList, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>,
   actor = 'SHINE Staff'
 ): ProcurementList {
-  return addPhase2Record<ProcurementList>('procurementLists', 'procurementLists', 'PRC', data, actor);
+  return addPhase2Record<ProcurementList>('procurementLists', 'PRC', data, actor);
 }
 
 export function updateProcurementList(
@@ -1432,7 +1416,7 @@ export function addProjectProjection(
   data: Omit<ProjectProjection, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>,
   actor = 'SHINE Staff'
 ): ProjectProjection {
-  return addPhase2Record<ProjectProjection>('projectProjections', 'projectProjections', 'PRJ', data, actor);
+  return addPhase2Record<ProjectProjection>('projectProjections', 'PRJ', data, actor);
 }
 
 // ----------------------------------------------------------------------
