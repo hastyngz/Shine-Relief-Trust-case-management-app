@@ -26,21 +26,7 @@ import {
 import { generateFollowUpId, generatePersonId, saveDatabase } from '../utils/storage';
 import { auth } from '../firebase';
 import {
-  persistGirlToFirestore,
-  persistHouseholdToFirestore,
-  persistEduFollowUpToFirestore,
-  persistHealthFollowUpToFirestore,
-  persistFamilyFollowUpToFirestore,
-  persistHistoricalCaseRecordToFirestore,
-  persistHouseholdActivityToFirestore,
-  persistWorkplanItemToFirestore,
-  persistBudgetItemToFirestore,
-  persistPayrollRecordToFirestore,
-  persistPhase2Record,
-  persistEarlyYearsRecordToFirestore,
-  persistPersonToFirestore,
   persistImportAuditToFirestore,
-  persistEmployeeRecordToFirestore,
   persistEmployeeSalaryHistoryToFirestore,
   appendEmployeeAuditLog,
 } from './firestoreSync';
@@ -718,7 +704,6 @@ export async function commitImportBatch(
         createdAt: new Date().toISOString(),
       };
       updatedDb.historicalRecords?.unshift(newHist);
-      await persistHistoricalCaseRecordToFirestore(newHist);
     }
     // 2. Group / Programme Activity or Agriculture Activity
     else if (
@@ -748,7 +733,6 @@ export async function commitImportBatch(
       };
       linkedRecordId = newActivity.id;
       updatedDb.householdActivities.unshift(newActivity);
-      await persistHouseholdActivityToFirestore(newActivity);
     }
     // 3. Early Years Programme Record
     else if (item.classification === 'EARLY_YEARS_RECORD' || item.targetEntity === 'earlyYears') {
@@ -777,7 +761,6 @@ export async function commitImportBatch(
       linkedRecordId = newEarlyYears.id;
       if (!updatedDb.earlyYearsRecords) updatedDb.earlyYearsRecords = [];
       updatedDb.earlyYearsRecords.unshift(newEarlyYears);
-      await persistEarlyYearsRecordToFirestore(newEarlyYears);
     }
     else if (item.targetEntity === 'employee') {
       const data = item.extractedData;
@@ -903,11 +886,6 @@ export async function commitImportBatch(
             updatedAt: now,
           };
           updatedDb.payrollRecords!.unshift(payment);
-          try {
-            await persistPayrollRecordToFirestore(payment);
-          } catch (error) {
-            throw employeeImportWriteError('payrollRecords', payment.id, error);
-          }
           importedPayrollRecords += 1;
         }
       }
@@ -948,19 +926,9 @@ export async function commitImportBatch(
           updatedAt: nowForSpecial,
         };
         updatedDb.payrollRecords!.unshift(specialRecord);
-        try {
-          await persistPayrollRecordToFirestore(specialRecord);
-        } catch (error) {
-          throw employeeImportWriteError('payrollRecords', specialRecord.id, error);
-        }
         importedPayrollRecords += 1;
       }
       employee.salaryHistoryRecordIds = Array.from(importedSalaryIds);
-      try {
-        await persistEmployeeRecordToFirestore(employee);
-      } catch (error) {
-        throw employeeImportWriteError('employees', employee.id, error);
-      }
       const employeeImportEventId = `employee_import_${auditId}_${employeeId}`.replace(/[^A-Za-z0-9_-]/g, '_');
       try {
         await appendEmployeeAuditLog({
@@ -1016,7 +984,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.payrollRecords) updatedDb.payrollRecords = [];
       updatedDb.payrollRecords.unshift(payroll);
-      await persistPayrollRecordToFirestore(payroll);
       linkedRecordId = payroll.id;
     }
     else if (item.targetEntity === 'procurementList') {
@@ -1041,7 +1008,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.procurementLists) updatedDb.procurementLists = [];
       updatedDb.procurementLists.unshift(procurement);
-      await persistPhase2Record('procurementLists', { ...procurement });
       linkedRecordId = procurement.id;
     }
     else if (item.targetEntity === 'projectProjection') {
@@ -1062,7 +1028,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.projectProjections) updatedDb.projectProjections = [];
       updatedDb.projectProjections.unshift(projection);
-      await persistPhase2Record('projectProjections', { ...projection });
       linkedRecordId = projection.id;
     }
     else if (item.targetEntity === 'budget') {
@@ -1090,7 +1055,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.budgets) updatedDb.budgets = [];
       updatedDb.budgets.unshift(budget);
-      await persistBudgetItemToFirestore(budget);
       linkedRecordId = budget.id;
     }
     else if (item.classification === 'WORKPLAN_PRIORITY' || item.targetEntity === 'workplan') {
@@ -1150,7 +1114,6 @@ export async function commitImportBatch(
       } else {
         updatedDb.workplans.unshift(newWorkplan);
       }
-      await persistWorkplanItemToFirestore(newWorkplan);
       linkedRecordId = newWorkplan.id;
     }
     // 5. Photographic Highlights / Embedded Photos
@@ -1211,8 +1174,7 @@ export async function commitImportBatch(
         };
         if (!updatedDb.historicalRecords) updatedDb.historicalRecords = [];
         updatedDb.historicalRecords.unshift(newHist);
-        await persistHistoricalCaseRecordToFirestore(newHist);
-        linkedRecordId = newHist.id;
+          linkedRecordId = newHist.id;
       } else if (item.matchedPersonAction === 'REGISTER_AS_NEW_GIRL') {
         const nextGirlNum = updatedDb.girls.length + 1;
         const newGirlId = `SG-${String(nextGirlNum).padStart(3, '0')}`;
@@ -1240,8 +1202,7 @@ export async function commitImportBatch(
           updatedAt: new Date().toISOString(),
         };
         updatedDb.girls.unshift(newGirl);
-        await persistGirlToFirestore(newGirl);
-
+  
         // Also add historical record for this newly registered girl
         const newHist: HistoricalCaseRecord = {
           id: generateFollowUpId('HCR'),
@@ -1264,8 +1225,7 @@ export async function commitImportBatch(
         };
         if (!updatedDb.historicalRecords) updatedDb.historicalRecords = [];
         updatedDb.historicalRecords.unshift(newHist);
-        await persistHistoricalCaseRecordToFirestore(newHist);
-      } else if (item.matchedPersonAction === 'DO_NOT_REGISTER' || item.matchedPersonAction === 'IGNORE') {
+        } else if (item.matchedPersonAction === 'DO_NOT_REGISTER' || item.matchedPersonAction === 'IGNORE') {
         // Skip
       } else if (
         (item.matchedPersonAction === 'ADD_TO_EXISTING_PERSON' || item.resultType === 'EXISTING_PERSON_MATCHED') &&
@@ -1316,8 +1276,7 @@ export async function commitImportBatch(
           };
 
           updatedDb.people[existingIdx] = updatedPerson;
-          await persistPersonToFirestore(updatedPerson);
-        }
+            }
       } else {
         // Register brand new Person
         const personId = generatePersonId(updatedDb.people);
@@ -1357,8 +1316,7 @@ export async function commitImportBatch(
         };
 
         updatedDb.people.unshift(newPerson);
-        await persistPersonToFirestore(newPerson);
-      }
+        }
     }
     // 7. New Girl Profile (if explicitly confirmed)
     else if (item.resultType === 'NEW_RECORD' && item.targetEntity === 'girl') {
@@ -1368,7 +1326,6 @@ export async function commitImportBatch(
         updatedAt: new Date().toISOString(),
       } as Girl;
       updatedDb.girls.unshift(newGirl);
-      await persistGirlToFirestore(newGirl);
     }
     // 8. Profile Update (if recent differences)
     else if (item.resultType === 'PROFILE_UPDATE' && item.targetEntity === 'girl' && item.matchedId) {
@@ -1379,8 +1336,7 @@ export async function commitImportBatch(
           ...item.extractedData,
           updatedAt: new Date().toISOString(),
         };
-        await persistGirlToFirestore(updatedDb.girls[idx]);
-      }
+        }
     }
     // 9. Educational Follow-Up
     else if (item.targetEntity === 'educationalFollowUp') {
@@ -1391,7 +1347,6 @@ export async function commitImportBatch(
         updatedAt: new Date().toISOString(),
       };
       updatedDb.educationalFollowUps.unshift(newEdu as any);
-      await persistEduFollowUpToFirestore(newEdu as any);
     }
     // 10. Health Follow-up (only after staff review and confirmation)
     else if (item.targetEntity === 'healthFollowUp' && item.matchedId) {
@@ -1405,7 +1360,6 @@ export async function commitImportBatch(
         updatedBy: auditRecord.importedByName,
       } as HealthFollowUp;
       updatedDb.healthFollowUps.unshift(newHealth);
-      await persistHealthFollowUpToFirestore(newHealth);
     }
 
     if (createsWorkplan && item.targetEntity !== 'workplan' && item.classification !== 'WORKPLAN_PRIORITY') {
@@ -1435,7 +1389,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.workplans) updatedDb.workplans = [];
       updatedDb.workplans.unshift(linkedWorkplan);
-      await persistWorkplanItemToFirestore(linkedWorkplan);
     }
 
     processed++;
