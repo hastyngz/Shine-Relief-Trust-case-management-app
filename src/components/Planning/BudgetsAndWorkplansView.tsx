@@ -1429,7 +1429,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                   <span>{quote.supplier}: {formatMWK(quote.amountMWK)}{item.selectedQuoteSupplier === quote.supplier ? ' · Selected' : ''}</span>
                                   {canEdit && list.status === 'draft' && <button type="button" onClick={() => { try { updateProcurementItem(list, index, selectProcurementQuote(item, quote)); } catch (error) { window.alert(error instanceof Error ? error.message : 'Unable to select this quote.'); } }} className="rounded border border-stone-300 px-2 py-1 font-semibold hover:bg-stone-100">Select</button>}
                                 </div>
-                              ))
+                              ))}
                               {canEdit && list.status === 'draft' && quoteCollectionAvailable && (item.quotes?.length || 0) < 3 && (
                                 <div className="flex gap-1">
                                   <input
