@@ -591,3 +591,10 @@ Suggestion format:
 - State: the selected-quote helper retains the original missing-price requirement; the UI now also keeps the visible “Three quotes required” counter and add-quote controls after the first quote is selected. Added a browser regression assertion.
 - Next: verify the new E2E path on the latest branch head.
 - Watch out: partial delivery and payment reconciliation remain future workflow work. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · production migration gate
+- Area: legacy import-audit source-data migration readiness.
+- State: added an operator runbook and a release checklist gate; dry run is read-only, conflicts block proceeding, and the migration is explicitly described as per-record rather than collection-atomic.
+- Next: authorised Firebase admin must run the dry run, resolve any conflicts, apply, then verify role-specific access before revised rules are deployed. No production data was inspected or changed here.
+- Scope: Cloudflare KV remains intentionally disconnected. — Mosaic (ChatGPT), 2026-10-18

@@ -2,6 +2,19 @@
 
 Use a laptop with Chrome. Test with demo/test records only—never use real girls' personal or health details in screenshots or test notes.
 
+## 0. Production data migration gate — import audit source data
+
+**Do this before deploying the revised Firestore rules.** Legacy import audit records may still contain embedded source data and may become inaccessible to ordinary staff under the stricter rules.
+
+1. Ask an authorised Firebase administrator to follow `docs/import-audit-source-migration.md`.
+2. Confirm the dry run was reviewed and all conflicts resolved before applying.
+3. Confirm the post-migration dry run reports no remaining legacy records to repair and no conflicts.
+4. Confirm role-specific access checks and Firestore rules tests passed on the exact release commit.
+5. Record who ran and reviewed the migration and the summary counts. Never record source rows, beneficiary details or credentials.
+6. If the migration has not been verified, **do not deploy the revised Firestore rules**. Do not bypass the gate by weakening permissions.
+
+Cloudflare KV remains intentionally disconnected and is outside this release gate.
+
 ## 1. Offline edit and recovery
 1. Open SHINE while online and sign in.
 2. Open a test girl's record, make a harmless change, and save.
