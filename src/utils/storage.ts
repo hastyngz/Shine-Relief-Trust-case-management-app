@@ -947,7 +947,7 @@ export function updateCaseAction(
 export function addEducationHistoryRecord(
   data: Omit<EducationHistoryRecord, keyof Phase2TrackedRecord>, actorName: string
 ): EducationHistoryRecord {
-  return addPhase2Record('educationHistory', 'educationHistory', 'EDH', data, actorName);
+  return addPhase2Record('educationHistory', 'EDH', data, actorName);
 }
 
 export function updateEducationHistoryRecord(
@@ -975,13 +975,13 @@ export function updateEducationHistoryRecord(
 export function addAcademicSupportRecord(
   data: Omit<AcademicSupportRecord, keyof Phase2TrackedRecord>, actorName: string
 ): AcademicSupportRecord {
-  return addPhase2Record('academicSupports', 'academicSupports', 'ACS', data, actorName);
+  return addPhase2Record('academicSupports', 'ACS', data, actorName);
 }
 
 export function addExaminationRecord(
   data: Omit<ExaminationRecord, keyof Phase2TrackedRecord>, actorName: string
 ): ExaminationRecord {
-  return addPhase2Record('examinationRecords', 'examinationRecords', 'EXM', data, actorName);
+  return addPhase2Record('examinationRecords', 'EXM', data, actorName);
 }
 
 export function addAttendanceRecord(
@@ -1015,7 +1015,7 @@ export function updateAttendanceRecord(
 export function addGirlLeaveRecord(
   data: Omit<GirlLeaveRecord, keyof Phase2TrackedRecord>, actorName: string
 ): GirlLeaveRecord {
-  return addPhase2Record('girlLeaves', 'girlLeaves', 'LEV', data, actorName);
+  return addPhase2Record('girlLeaves', 'LEV', data, actorName);
 }
 
 export function updateGirlLeaveRecord(
@@ -1043,7 +1043,7 @@ export function updateGirlLeaveRecord(
 export function addProgrammeLog(
   data: Omit<ProgrammeLogRecord, keyof Phase2TrackedRecord>, actorName: string
 ): ProgrammeLogRecord {
-  return addPhase2Record('programmeLogs', 'programmeLogs', 'PRG', data, actorName);
+  return addPhase2Record('programmeLogs', 'PRG', data, actorName);
 }
 
 export function updateProgrammeLog(
@@ -1071,7 +1071,7 @@ export function updateProgrammeLog(
 export function addCaseReview(
   data: Omit<CaseReview, keyof Phase2TrackedRecord>, actorName: string
 ): CaseReview {
-  return addPhase2Record('caseReviews', 'caseReviews', 'REV', data, actorName);
+  return addPhase2Record('caseReviews', 'REV', data, actorName);
 }
 
 // ----------------------------------------------------------------------
