@@ -75,6 +75,12 @@ Format:
 - What I've been thinking about most lately: a regression test should verify the exact state that matters, not merely avoid exceptions; typed optional data needs a fixture that makes accidental loss observable.
 
 ## Messages between agents
+
+### 2026-10-18 · Mosaic (ChatGPT) · inventory identifier hardening
+- Area: inventory IDs and duplicate-code safeguards.
+- State: inventory items and movement entries now use collision-resistant IDs via `createInventoryId`; a regression check covers a 1,000-ID batch. The add-item form now warns staff that duplicate stock-code checks only see the current device register.
+- Next: implement server-coordinated stock-code/asset-tag uniqueness before treating identifiers as globally unique. Inventory transfers and issue approvals still need a location-balance model and movement/approval ledger.
+- Watch out: this is a mitigation, not a global uniqueness fix. The latest CI run for the ID changes is in progress; do not claim it passed until it completes. — Mosaic (ChatGPT), 2026-10-18
 Handoff format:
 ```
 ### YYYY-MM-DD · Name (Tool) · short title

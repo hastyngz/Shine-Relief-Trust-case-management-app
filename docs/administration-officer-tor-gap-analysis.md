@@ -167,6 +167,7 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 
 ### Inventory and asset identifier uniqueness — local guard added
+- Inventory record and movement IDs now use `crypto.randomUUID()` where supported, with a Web Crypto random-value fallback and a last-resort compatibility fallback. `scripts/inventory.test.ts` checks a 1,000-ID batch for collisions and prefix retention. This reduces record-ID collision risk; it does **not** solve duplicate stock codes or asset tags created on different devices.
 - saveInventoryItem and saveAssetRecord now enforce case-insensitive, whitespace-trimmed stock-code/asset-tag uniqueness in the current device database, so callers that bypass the form-level check cannot silently add a duplicate locally. Regression tests verify rejection leaves the existing register unchanged. CI run 39065356973 passed both checks and e2e for commit 7fb6c62.
 - **Still open:** this is not a cross-device invariant. Two offline devices can independently add the same identifier; the generic per-record sync transaction does not atomically check other records. Do not claim server/global uniqueness until a dedicated safe uniqueness/conflict workflow is designed and tested.
 
