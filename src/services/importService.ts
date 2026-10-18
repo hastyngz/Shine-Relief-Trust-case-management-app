@@ -594,7 +594,9 @@ export function analyzeImportRows(
 }
 
 /**
- * Commits approved import preview items to Firestore and updates local database
+ * Applies approved import preview items to the local database. AppDatabase records flow through
+ * the shared per-record offline queue; separate restricted-source, salary-history, employee-audit,
+ * photo-storage and import-audit side effects still use their dedicated secured services.
  */
 export async function commitImportBatch(
   approvedItems: ImportPreviewItem[],
