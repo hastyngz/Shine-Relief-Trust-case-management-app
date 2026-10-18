@@ -201,3 +201,4 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Remaining: no partial deliveries, per-item received quantities, purchase-order line documents, payment reconciliation, or cross-device supplier deduplication. CI verification pending.
 
 - Approval validation retains the three-quote requirement when an originally missing/unclear price becomes quoted, preventing a single below-threshold quote from bypassing the price-discovery gate.
+- The UI keeps the three-quote counter visible after selecting the first quote for an originally unpriced item, and the E2E test exercises that state transition.

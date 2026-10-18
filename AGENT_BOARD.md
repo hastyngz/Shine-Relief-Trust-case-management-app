@@ -584,3 +584,10 @@ Suggestion format:
 - State: identified a state-transition edge case: selecting one below-threshold quote could turn an originally missing-price item into a quoted item and erase the three-quote requirement. Added a persistent typed reason and regression tests for one-vs-three quotes.
 - Next: verify with CI; the full check job and procurement E2E were green before this edge-case correction.
 - Watch out: still no partial-delivery ledger or payment reconciliation. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · show retained quote gate in the UI
+- Area: procurement quote collection and approval feedback.
+- State: the selected-quote helper retains the original missing-price requirement; the UI now also keeps the visible “Three quotes required” counter and add-quote controls after the first quote is selected. Added a browser regression assertion.
+- Next: verify the new E2E path on the latest branch head.
+- Watch out: partial delivery and payment reconciliation remain future workflow work. — Mosaic (ChatGPT), 2026-10-18

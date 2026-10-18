@@ -1387,7 +1387,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         const itemTotal = item.totalMWK ?? (
                           item.unitPriceMWK === undefined ? undefined : item.unitPriceMWK * item.quantity
                         );
-                        const quoteRequired = itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK);
+                        const quoteRequired = (itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK)) || item.quoteRequirementReason === 'price-unknown';
                         // Unknown/unclear prices need supplier quotes to establish a price even before the threshold can be evaluated.
                         const quoteCollectionAvailable = quoteRequired || item.priceStatus !== 'quoted';
                         const draftKey = `${list.id}:${index}`;

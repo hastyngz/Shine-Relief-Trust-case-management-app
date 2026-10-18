@@ -55,4 +55,8 @@ test('staff can collect a supplier quote when an item price is missing', async (
   await expect(list).toContainText('E2E Supplier A');
   await expect(list).toContainText('12,000');
   await expect(list).toContainText('Collect supplier quotes to establish the price: 1/3');
+
+  // Selecting a single quote must not erase the three-quote requirement for an item that started unpriced.
+  await list.getByRole('button', { name: 'Select' }).click();
+  await expect(list).toContainText('Three quotes required: 1/3');
 });
