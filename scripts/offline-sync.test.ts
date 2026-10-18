@@ -123,7 +123,7 @@ Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEven
 const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
-const { syncChangeEntriesToFirestore } = await import('../src/services/firestoreSync');
+const { syncChangeEntriesToFirestore, persistImportAuditToFirestore } = await import('../src/services/firestoreSync');
 
 const T1 = '2026-01-01T10:00:00.000Z';
 const T2 = '2026-01-01T11:00:00.000Z';
@@ -199,6 +199,48 @@ assert.deepEqual(
 const restrictedAuditRetry = await syncChangeEntriesToFirestore(restrictedAuditQueue);
 assert.equal(restrictedAuditRetry.conflicts.length, 0);
 assert.equal(server.get('importAudits', 'AUD-SECURE-001').sourceData, undefined);
+
+// The direct import-audit helper must also be retry-safe and preserve a source
+// document if an audit ID is accidentally reused with different input.
+server.reset();
+const directAudit = {
+  id: 'AUD-DIRECT-001',
+  fileName: 'synthetic-direct.xlsx',
+  importedAt: T2,
+  status: 'completed',
+  sourceData: { rows: [{ syntheticLabel: 'direct-source-row' }] },
+};
+await persistImportAuditToFirestore(directAudit);
+assert.equal(server.get('importAudits', directAudit.id).sourceData, undefined);
+assert.deepEqual(server.get('restrictedImportSources', directAudit.id).sourceData, directAudit.sourceData);
+await persistImportAuditToFirestore(directAudit);
+assert.deepEqual(server.get('restrictedImportSources', directAudit.id).sourceData, directAudit.sourceData,
+  'retrying the same audit must preserve its restricted source');
+
+server.reset();
+const preservedSource = {
+  id: 'AUD-DIRECT-COLLISION',
+  auditId: 'AUD-DIRECT-COLLISION',
+  fileName: 'previous-source.xlsx',
+  importedAt: T1,
+  sourceData: { rows: [{ syntheticLabel: 'do-not-overwrite' }] },
+};
+server.seed('restrictedImportSources', preservedSource.id, preservedSource);
+await assert.rejects(
+  persistImportAuditToFirestore({
+    id: preservedSource.id,
+    fileName: 'different-source.xlsx',
+    importedAt: T2,
+    status: 'completed',
+    sourceData: { rows: [{ syntheticLabel: 'new-source' }] },
+  }),
+  /different restricted import source already exists/,
+);
+assert.deepEqual(server.get('restrictedImportSources', preservedSource.id), preservedSource,
+  'a collision must preserve the previously stored source');
+assert.equal(server.get('importAudits', preservedSource.id), undefined,
+  'audit metadata must not be written when source collision validation fails');
+
 
 // --- 2. Two devices editing the same record ---------------------------------
 server.reset();

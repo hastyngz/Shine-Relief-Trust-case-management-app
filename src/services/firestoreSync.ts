@@ -868,27 +868,37 @@ export async function persistImportAuditToFirestore(item: ImportAuditRecord): Pr
   updateSyncStatus('saving');
   try {
     const { sourceData, ...auditMetadata } = item;
-    // Commit the staff-readable metadata and restricted source payload together.
-    // This avoids leaving an audit record behind when the source write fails.
-    const batch = writeBatch(firestore);
-    batch.set(
-      doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id),
-      sanitizeForFirestore(auditMetadata),
-    );
-    if (sourceData) {
-      const sourceRecord: RestrictedImportSourceData = {
-        id: item.id,
-        auditId: item.id,
-        fileName: item.fileName,
-        importedAt: item.importedAt,
-        sourceData,
-      };
-      batch.set(
-        doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id),
-        sanitizeForFirestore(sourceRecord),
-      );
-    }
-    await batch.commit();
+    const auditRef = doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id);
+    const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id);
+    const sourceRecord: RestrictedImportSourceData | undefined = sourceData
+      ? {
+          id: item.id,
+          auditId: item.id,
+          fileName: item.fileName,
+          importedAt: item.importedAt,
+          sourceData,
+        }
+      : undefined;
+
+    // Read the restricted source before writing anything. A retry for the same
+    // audit is idempotent, but a reused ID must never replace different source
+    // rows that may be needed to investigate a previous import.
+    await runTransaction(firestore, async (transaction) => {
+      if (sourceRecord) {
+        const existingSource = await transaction.get(sourceRef);
+        if (existingSource.exists()) {
+          const existingData = existingSource.data() as RestrictedImportSourceData;
+          if (stableContentHash(existingData) !== stableContentHash(sourceRecord)) {
+            throw new Error(
+              'A different restricted import source already exists for this audit ID. The existing source was preserved; use a new import audit ID or reconcile it with an administrator.',
+            );
+          }
+        } else {
+          transaction.set(sourceRef, sanitizeForFirestore(sourceRecord));
+        }
+      }
+      transaction.set(auditRef, sanitizeForFirestore(auditMetadata));
+    });
     updateSyncStatus('synced');
   } catch (err) {
     console.error('Firestore persistImportAudit error:', err);

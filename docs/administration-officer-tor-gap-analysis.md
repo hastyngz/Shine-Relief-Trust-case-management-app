@@ -187,3 +187,8 @@ A targeted code inspection found that the persistence architecture is not yet un
 - `persistImportAuditToFirestore` previously caught Firestore errors and returned normally, allowing its import caller to proceed as though the audit had been saved. It now writes readable audit metadata and restricted source data in one Firestore batch and rethrows failures after updating sync status, so the caller cannot report success for a failed audit write.
 - This narrows one false-success path but does not make the entire import transactional: separate salary-history/employee-audit side effects may already have committed before a later failure. The import manifest/resume/reconciliation design remains open.
 - Validation status: committed for CI; no production import was executed from this session.
+
+
+### Direct import-source collision protection — follow-up (2026-10-18)
+- The direct import-audit writer now uses a Firestore transaction to read the restricted source before writing audit metadata. Replaying the same audit is idempotent; reusing an audit ID for different source content fails without overwriting the existing source or writing misleading audit metadata.
+- Added regression coverage to `scripts/offline-sync.test.ts` for same-source retries and conflicting source reuse. This test uses a synthetic in-memory Firestore fake; GitHub Actions must still validate the committed change.

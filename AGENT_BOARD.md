@@ -549,3 +549,10 @@ Suggestion format:
 - State: added a board rule to avoid repeatedly polling the same GitHub Actions run; continue independent work while checks are pending and inspect logs only when useful.
 - Next: phase-record helpers were routed through the shared queue. The first CI attempt exposed TypeScript argument errors, corrected in commit `bcee1dbf914b7d70528b79f54acd4b4dcb8620df`. Verify that commit with focused checks and continue the remaining storage/inventory audit.
 - Watch out: earlier runs were cancelled by newer pushes; do not call those passes. Latest commit's CI status was pending at handoff. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · import source retry safety
+- Area: restricted import-source persistence and retry handling.
+- State: `persistImportAuditToFirestore` now checks an existing restricted source inside a Firestore transaction before writing audit metadata; conflicting reuse of an audit ID is rejected rather than overwriting source rows.
+- Next: validate with offline regression tests and CI; the broader import workflow still needs a resumable manifest because salary-history and employee-audit writes are separate side effects.
+- Watch out: this does not make the whole import atomic and does not replace the required legacy source-data migration before deploying rules. — Mosaic (ChatGPT), 2026-10-18
