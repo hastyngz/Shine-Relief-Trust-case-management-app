@@ -218,7 +218,7 @@ const directAudit = {
   conflictsCount: 0,
   errorsCount: 0,
   importedAt: T2,
-  status: 'completed',
+  status: 'completed' as const,
   sourceData: { rows: [{ syntheticLabel: 'direct-source-row' }] },
 };
 await persistImportAuditToFirestore(directAudit);
@@ -253,7 +253,7 @@ await assert.rejects(
   conflictsCount: 0,
   errorsCount: 0,
     importedAt: T2,
-    status: 'completed',
+    status: 'completed' as const,
     sourceData: { rows: [{ syntheticLabel: 'new-source' }] },
   }),
   /different restricted import source already exists/,

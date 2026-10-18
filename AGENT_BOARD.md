@@ -563,3 +563,10 @@ Suggestion format:
 - State: inspected failed run 39112516876: offline E2E passed, but TypeScript rejected three new test fixtures missing required `ImportAuditRecord` fields. Updating the synthetic fixtures to satisfy the production contract.
 - Next: rerun lint/build and the focused offline tests through CI; then continue procurement workflow work.
 - Watch out: the previous run is a failure, not a pass; do not confuse the passing E2E job with the failed checks job. — Mosaic (ChatGPT), 2026-10-18
+
+
+### 2026-10-18 · Mosaic (ChatGPT) · literal type narrowing in audit fixtures
+- Area: CI verification for import-source retry safety.
+- State: follow-up CI caught two test fixture statuses widening to `string`; narrowed them to the production status literal type. Offline E2E passed on the previous attempt, but the checks job remains failed until this correction is validated.
+- Next: continue broader workflow audit after the next meaningful CI result.
+- Watch out: no procurement changes were committed; the earlier attempted patch was rejected before any branch update. — Mosaic (ChatGPT), 2026-10-18
