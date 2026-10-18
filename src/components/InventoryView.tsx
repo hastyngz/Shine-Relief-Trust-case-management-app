@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, 
 import type { InventoryItem, InventoryMovement, InventoryMovementType } from '../types';
 import { saveInventoryItem } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
-import { getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../utils/inventory';
+import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue } from '../utils/inventory';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -18,9 +18,6 @@ const money = (value?: number) => typeof value === 'number' && Number.isFinite(v
   ? `MWK ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value)}`
   : 'Not recorded';
 
-function makeId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-}
 
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }) => {
   const { currentUser, staffProfile, isViewOnly } = useAuth();
@@ -105,11 +102,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       return;
     }
     const openingMovement: InventoryMovement[] = opening > 0 ? [{
-      id: makeId('mov'), type: 'Received', quantity: opening, date: getLocalDateInputValue(), location: newItem.location,
+      id: createInventoryId('mov'), type: 'Received', quantity: opening, date: getLocalDateInputValue(), location: newItem.location,
       reason: 'Opening balance at item registration', recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
     }] : [];
     const item: InventoryItem = {
-      id: makeId('inv'), stockCode: newItem.stockCode.trim(), name: newItem.name.trim(), category: newItem.category,
+      id: createInventoryId('inv'), stockCode: newItem.stockCode.trim(), name: newItem.name.trim(), category: newItem.category,
       unit: newItem.unit, quantityOnHand: opening, minimumStockLevel: minimum, location: newItem.location,
       supplier: newItem.supplier.trim() || undefined, unitCostMWK: cost, expiryDate: newItem.expiryDate || undefined, condition: newItem.condition, notes: newItem.notes.trim() || undefined,
       movements: openingMovement, createdAt: now, updatedAt: now, createdBy: actor, updatedBy: actor,
@@ -138,7 +135,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     const now = new Date().toISOString();
     const entry: InventoryMovement = {
-      id: makeId('mov'), type: movement.type as InventoryMovementType, quantity, date: movement.date,
+      id: createInventoryId('mov'), type: movement.type as InventoryMovementType, quantity, date: movement.date,
       location: movementTarget.location, destination: movement.destination.trim() || undefined,
       reference: movement.reference.trim() || undefined, reason: movement.reason.trim(),
       recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
@@ -168,7 +165,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const adjustment = getInventoryStocktakeAdjustment(stocktakeTarget.quantityOnHand, counted);
     const now = new Date().toISOString();
     const entry: InventoryMovement = {
-      id: makeId('mov'), type: 'Adjustment', quantity: adjustment.quantity, date: stocktake.date,
+      id: createInventoryId('mov'), type: 'Adjustment', quantity: adjustment.quantity, date: stocktake.date,
       location: stocktakeTarget.location,
       reference: 'STOCKTAKE',
       reason: `Physical stocktake: ${stocktake.reason.trim()}. System balance ${adjustment.previousQuantity}; counted ${adjustment.countedQuantity}; ${adjustment.variance === 0 ? 'no variance' : `variance ${adjustment.variance > 0 ? '+' : ''}${adjustment.variance}`} ${stocktakeTarget.unit}.`,
