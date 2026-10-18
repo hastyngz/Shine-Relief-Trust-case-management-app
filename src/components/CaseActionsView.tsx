@@ -198,7 +198,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   const reassign = async (action: CaseAction, nextStaffId: string) => {
     const assignee = allStaff.find((staff) => staff.uid === nextStaffId);
     if (!assignee || nextStaffId === action.assignedStaffId) return;
-    const updatedAction = updateCaseAction(action.id, { assignedStaffId: assignee.uid, assignedStaffName: assignee.fullName }, actor);
+    updateCaseAction(action.id, { assignedStaffId: assignee.uid, assignedStaffName: assignee.fullName }, actor);
     try {
       const token = await currentUser!.getIdToken();
       await fetch('/api/case-actions/notify', {
