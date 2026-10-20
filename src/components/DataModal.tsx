@@ -30,9 +30,13 @@ export const DataModal: React.FC<DataModalProps> = ({
     return subscribeSyncStatus(setSyncStatus);
   }, []);
 
-  if (!isOpen) return null;
+  if (!isOpen || !isAdmin) return null;
 
   const handleDownloadJSON = async () => {
+    if (!isAdmin) {
+      setMessage({ text: 'Database backup export is restricted to Administrators.', type: 'error' });
+      return;
+    }
     try {
       const jsonStr = await exportDatabaseJSON();
       const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -89,6 +93,10 @@ export const DataModal: React.FC<DataModalProps> = ({
   };
 
   const handleForceCloudSync = async () => {
+    if (!isAdmin) {
+      setMessage({ text: 'Full database sync is restricted to Administrators.', type: 'error' });
+      return;
+    }
     if (isViewOnly) {
       setMessage({ text: 'View-only staff cannot trigger cloud write.', type: 'error' });
       return;
