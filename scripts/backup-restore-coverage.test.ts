@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { BACKUP_RESTORE_COLLECTIONS } from '../src/services/firestoreResetPolicy';
 
 const source = readFileSync(new URL('../src/services/firestoreSync.ts', import.meta.url), 'utf8');
+const storageSource = readFileSync(new URL('../src/utils/storage.ts', import.meta.url), 'utf8');
 const requiredMappings: Array<[string, string, string]> = [
   ['girls', 'GIRLS', 'girls'],
   ['households', 'HOUSEHOLDS', 'households'],
@@ -62,5 +63,7 @@ assert.ok(source.includes('const collectionNames: readonly string[] = BACKUP_RES
   'backup replacement must use the shared collection policy');
 assert.ok(!BACKUP_RESTORE_COLLECTIONS.includes('employeeSalaryHistory' as never),
   'replacement must not delete salary history that is not represented by AppDatabase backups');
+assert.ok(storageSource.includes("String(attachment.targetType) !== 'safeguardingCase'"),
+  'general database backups must exclude safeguarding attachments');
 
 console.log('Backup restore coverage tests passed.');
