@@ -94,6 +94,14 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
   ), [selectedPeriod, payrollEmployees, salaryHistory, records]);
 
   useEffect(() => {
+    if (canProcessPayroll) return;
+    setSelectedEmployeeRecord(null);
+    setPaymentEmployee(null);
+    setEditingPayroll(null);
+    setShowPayrollModal(false);
+  }, [canProcessPayroll]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(interval);
   }, []);
@@ -519,7 +527,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
         </div>
       </div>
 
-      {showPayrollModal && (
+      {showPayrollModal && canProcessPayroll && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-stone-200">
             <h3 className="text-lg font-bold text-stone-900 mb-4">
@@ -631,7 +639,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
           </div>
         </div>
       )}
-      {selectedEmployeeRecord && currentUser && (
+      {selectedEmployeeRecord && canProcessPayroll && currentUser && (
         <EmployeeContractPanel
           key={selectedEmployeeRecord.id}
           employee={selectedEmployeeRecord}
