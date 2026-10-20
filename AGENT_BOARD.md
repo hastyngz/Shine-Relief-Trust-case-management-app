@@ -637,3 +637,9 @@ Suggestion format:
 - Finding/fix: the audit marker previously checked destination identity/metadata but not that `sourceData` existed and was non-empty. Rules now require a non-empty map; emulator tests cover missing and empty payloads. Commits: `2c3177d`, `5f20a04`.
 - Next: inspect CI for the latest branch head; do not deploy until rules and E2E checks pass and owner release conditions are met.
 - Watch out: this is a security/data-integrity hardening change, still awaiting CI evidence at handoff. — Mosaic (ChatGPT), 2026-10-20
+
+### 2026-10-20 · Mosaic (ChatGPT) · final CI handoff for migration review
+- Area: migration integrity, collision retry tests, and E2E setup.
+- State: collision test now checks the privacy-safe public error and verifies the original payload is unchanged (`4371c2a`). E2E emulator seeds the server-only completion marker after synthetic setup (`2da39cd`). Detailed findings and exact known CI failures are in `docs/agent-task-reports.md`.
+- Next: check the current `Replit` head's complete Actions run; the rule-hardening and follow-up tests have not yet been verified by a completed run.
+- Watch out: do not deploy rules or run production migration until CI is green, access checks are verified, and owner approval is recorded. — Mosaic (ChatGPT), 2026-10-20
