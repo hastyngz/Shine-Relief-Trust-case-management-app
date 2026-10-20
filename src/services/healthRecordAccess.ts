@@ -100,3 +100,14 @@ export function filterNotificationsByHealthPermission<T extends { relatedRecordT
     ? notifications
     : notifications.filter((notification) => notification.relatedRecordType !== 'healthFollowUp');
 }
+
+/** General programme reports must never contain safeguarding attachments. */
+export function isAttachmentAllowedInGeneralReport(
+  attachment: { targetType?: string; category?: string },
+  canViewHealthRecords: boolean,
+): boolean {
+  const targetType = String(attachment.targetType);
+  if (targetType === 'safeguardingCase') return false;
+  if (canViewHealthRecords) return true;
+  return targetType !== 'healthFollowUp' && !['Medical Document', 'Prescription'].includes(attachment.category || '');
+}

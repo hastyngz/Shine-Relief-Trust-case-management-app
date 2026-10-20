@@ -3,6 +3,7 @@ import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 import type { AppDatabase, ReportHistoryRecord, SalaryHistoryRecord, StaffUser } from '../../types';
 import { MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportWorkbook } from '../../services/managementReports';
 import { ManagementFilters, canAccessManagementDashboard, projectManagementDatabase } from '../../services/managementAnalytics';
+import { isAttachmentAllowedInGeneralReport } from '../../services/healthRecordAccess';
 import { appendEmployeeAuditLog, appendReportExport, appendReportHistory, getEmployeeSalaryHistoryForStaff } from '../../services/firestoreSync';
 import { archiveGeneratedReport } from '../../services/attachmentService';
 import { ReportConfig, generateWordReport, reviewReportQuality } from '../../services/reportGenerators';
@@ -334,6 +335,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     const followUpNotes = `Recorded follow-up indicators: ${openActions} open case actions and ${educationFollowUps} outstanding education follow-ups. No additional narrative claims are generated.`;
     const householdGirlIds = new Set((permittedDb.girls || []).filter((girl) => !filters.householdId || girl.householdId === filters.householdId).map((girl) => girl.id));
     const attachments = (permittedDb.attachments || []).filter((attachment) => {
+      if (!isAttachmentAllowedInGeneralReport(attachment, canViewHealthRecords)) return false;
       if ((filters.startDate && attachment.date < filters.startDate) || (filters.endDate && attachment.date > filters.endDate)) return false;
       if (filters.category && attachment.category !== filters.category) return false;
       if (filters.programme) {

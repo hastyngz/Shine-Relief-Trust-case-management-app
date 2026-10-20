@@ -13,6 +13,7 @@ import { qualityMessage } from '../../services/qualityMessages';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
+import { isAttachmentAllowedInGeneralReport } from '../../services/healthRecordAccess';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
 import { appendReportExport, appendReportHistory, getReportHistory } from '../../services/firestoreSync';
 import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat, type FixedReportSection } from '../../services/qualityFixedReport';
@@ -140,6 +141,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   }, [currentUser?.uid, isAdmin, role]);
 
   const scopedAttachments = attachments.filter((attachment) => {
+    if (!isAttachmentAllowedInGeneralReport(attachment, canViewHealthRecords)) return false;
     if (startDate && attachment.date < startDate) return false;
     if (endDate && attachment.date > endDate) return false;
     if (reportFilters.category && attachment.category !== reportFilters.category) return false;

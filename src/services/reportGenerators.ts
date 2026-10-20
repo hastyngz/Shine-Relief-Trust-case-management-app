@@ -248,7 +248,7 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
   let payroll = [...(db.payrollRecords || [])];
   let workplans = [...(db.workplans || [])];
   let schedules = [...(db.schedules || [])];
-  let photos = [...(db.attachments || [])].filter((attachment) => attachment.consent === true);
+  let photos = [...(db.attachments || [])].filter((attachment) => attachment.consent === true && String(attachment.targetType) !== 'safeguardingCase');
   let caseActions = [...(db.caseActions || [])];
   let caseReviews = [...(db.caseReviews || [])];
   let attendance = [...(db.attendanceRecords || [])];
