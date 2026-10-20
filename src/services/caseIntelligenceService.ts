@@ -26,10 +26,24 @@ export interface CaseIntelligenceAccess {
  * from stale locally cached records after a role/account change.
  */
 export function filterCaseIntelligenceData(db: AppDatabase, access: CaseIntelligenceAccess): AppDatabase {
+  const caseReviews = !access.canViewCaseReviews
+    ? []
+    : access.canViewHealthRecords
+      ? (db.caseReviews || [])
+      : (db.caseReviews || []).map(({ health: _health, ...review }) => review);
+  const attachments = (db.attachments || []).filter((attachment) =>
+    attachment.targetType !== 'safeguardingCase' &&
+    (access.canViewHealthRecords || (
+      attachment.targetType !== 'healthFollowUp' &&
+      !['Medical Document', 'Prescription'].includes(attachment.category)
+    ))
+  );
+
   return {
     ...db,
     healthFollowUps: access.canViewHealthRecords ? (db.healthFollowUps || []) : [],
-    caseReviews: access.canViewCaseReviews ? (db.caseReviews || []) : [],
+    caseReviews,
+    attachments,
   };
 }
 
