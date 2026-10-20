@@ -151,6 +151,14 @@ async function seedStaffAccount(): Promise<void> {
       updatedBy: 'E2E Setup',
     });
   }
+
+  // This emulator fixture represents a fully migrated environment. The marker
+  // is written with Admin SDK only after the setup has seeded no legacy audits.
+  // Production rules remain fail-closed until the real migration verifies them.
+  await db.collection('importAuditMigrationStatus').doc('sourceDataBoundary').set({
+    status: 'complete',
+    verifiedAt: now,
+  });
 }
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
