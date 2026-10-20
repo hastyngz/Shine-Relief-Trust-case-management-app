@@ -5,7 +5,7 @@ import { AppDatabase, CaseAction, EmployeeRecord, PayrollRecord, PayrollPaymentS
 import { addCaseAction, addPayrollRecord, deletePayrollRecord, updateCaseAction, updateEmployeeRecord, updatePayrollRecord } from '../utils/storage';
 import { getEmployeeSalaryHistoryForStaff } from '../services/firestoreSync';
 import { notifyPayrollProcessors } from '../services/messagingService';
-import { buildMonthlyPayrollSummary, employeeRecordFromPayrollRecord, formatPayrollPeriod, monthlyPayrollTaskId, payrollTaskDescription, payrollTaskStatus, shouldCreateMonthlyPayrollTask } from '../services/payrollService';
+import { buildMonthlyPayrollSummary, employeeRecordFromPayrollRecord, filterPayrollDataForViewer, formatPayrollPeriod, monthlyPayrollTaskId, payrollTaskDescription, payrollTaskStatus, shouldCreateMonthlyPayrollTask } from '../services/payrollService';
 import { EmployeeContractPanel } from './EmployeeContractPanel';
 
 interface PayrollDashboardProps {
@@ -40,6 +40,10 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
 
   const canViewPayroll = isAdmin || role === 'Manager' || role === 'Staff';
   const canProcessPayroll = isAdmin || role === 'Manager';
+  const payrollViewerData = useMemo(() => filterPayrollDataForViewer(
+    db.employees || [], db.payrollRecords || [], currentUser?.uid || '', canProcessPayroll,
+  ), [db.employees, db.payrollRecords, currentUser?.uid, canProcessPayroll]);
+  const payrollEmployees = payrollViewerData.employees;
 
   const openEmployeeProfile = (employeeId: string) => {
     if (!canProcessPayroll) return;
@@ -58,8 +62,8 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
     (db.employees || []).find((employee) => employee.id === employeeId)?.contractStartDate
   );
 
-  const records: PayrollRecord[] = db.payrollRecords || [];
-  const employeeIds = useMemo(() => Array.from(new Set((db.employees || []).map((employee) => employee.id))).sort(), [db.employees]);
+  const records: PayrollRecord[] = payrollViewerData.records;
+  const employeeIds = useMemo(() => Array.from(new Set(payrollEmployees.map((employee) => employee.id))).sort(), [payrollEmployees]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,8 +90,8 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
   }, [canProcessPayroll, employeeIds.join('|')]);
 
   const monthlySummary = useMemo(() => buildMonthlyPayrollSummary(
-    selectedPeriod, db.employees || [], salaryHistory, records,
-  ), [selectedPeriod, db.employees, salaryHistory, records]);
+    selectedPeriod, payrollEmployees, salaryHistory, records,
+  ), [selectedPeriod, payrollEmployees, salaryHistory, records]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
@@ -95,8 +99,8 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
   }, []);
 
   const currentMonthSummary = useMemo(() => buildMonthlyPayrollSummary(
-    currentPeriod, db.employees || [], salaryHistory, records,
-  ), [currentPeriod, db.employees, salaryHistory, records]);
+    currentPeriod, payrollEmployees, salaryHistory, records,
+  ), [currentPeriod, payrollEmployees, salaryHistory, records]);
 
   useEffect(() => {
     if (!canProcessPayroll || !shouldCreateMonthlyPayrollTask(now)) return;
@@ -372,7 +376,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
             </tbody>
           </table>
         </div>
-        {(db.employees || []).filter((employee) => employee.employmentStatus === 'Completed').length > 0 && (
+        {payrollEmployees.filter((employee) => employee.employmentStatus === 'Completed').length > 0 && (
           <p className="text-xs text-amber-900">{(db.employees || []).filter((employee) => employee.employmentStatus === 'Completed').length} former employee(s) remain available in historical payroll.</p>
         )}
       </section>
