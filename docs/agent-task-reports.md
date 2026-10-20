@@ -133,6 +133,23 @@ The previously pending workflow has now completed successfully for branch-head c
 
 ### What this does and does not establish
 
-The reviewed code and required CI suite now pass at the exact SHA above. No local test execution is claimed; the evidence is GitHub Actions. The suite does not perform a real Android handset/weak-signal manual test, production Firebase role verification, production dry run, production apply, backup/restore check, or rules deployment. It also does not run the repository's explicitly non-CI scripts `test:phase5`, `test:phase5-rules`, `test:phase5-e2e`, or `test:deployment-smoke`; these remain separate verification work if their areas are changed or need broader assurance.
+The migration, security, offline, Phase 5, payroll and backup-restore CI checks passed at the exact code SHA `b28860d2f46e35e7c4b9d2da0cdcdb3afdae13f4`, based on GitHub Actions run [39454754490](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39454754490). No local test execution is claimed. The suite still does not perform a real Android handset/weak-signal manual test, production Firebase role verification, production dry run, production apply, backup/restore rehearsal, or rules deployment. `test:deployment-smoke` remains outside ordinary CI because it defaults to live Firebase Hosting and Cloudflare Worker endpoints; only run it after selecting an approved staging target.
 
 **Production release gate remains closed.** No production data or rules were changed. The required owner approval, confirmed project, verified backup, reviewed zero-issue dry run, approved apply, full verification and production role-specific checks remain outstanding.
+
+
+## Follow-up permission and sensitive-data review — 2026-10-20
+
+### Findings corrected on `Replit`
+
+- **High — general database backup exposure:** the Header exposed Cloud & Data to all roles, and the modal exposed a full JSON database download and bulk cloud-sync action. The control is now administrator-only in both the Header and modal, with handler-level guards. General backups exclude safeguarding attachment metadata.
+- **High — staff payroll scope:** the payroll dashboard previously calculated summaries from the full local employee and payroll collections even though staff are only allowed to read their own payroll documents. A viewer-scoping helper now limits staff to records whose `employeeId` matches their authenticated UID and to a self-only employee profile; when the manager-only employee roster is unavailable, the profile can be derived from that staff member's own payroll record. Manager/admin data remains unfiltered.
+- **High — health-record display paths:** the dashboard's scheduled follow-ups/recent-activity list, Search Modal and Reports export centre had paths that could render medical information without consistently checking health-record permissions. They now gate the relevant lists and exports on `canViewHealthRecords`; case-review search is similarly gated on `canViewCaseReviews`.
+- **High — Phase 5 case intelligence:** summaries and suggestions now use permission-filtered data. The filtering removes health follow-ups for users without access, strips the health field from case reviews when the reviewer lacks health access, and excludes medical/prescription and legacy safeguarding attachments from general intelligence summaries.
+- Added synthetic regression assertions for the Phase 5 data filter and payroll visibility helper, a backup safeguard test, and a Playwright test asserting that ordinary staff cannot see the database-backup control or medical CSV exports.
+
+### Verification and remaining limits
+
+- GitHub Actions run [39454754490](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39454754490) completed successfully at code SHA `b28860d2f46e35e7c4b9d2da0cdcdb3afdae13f4`. Both `checks` and `e2e` jobs passed, including the expanded Phase 5, payroll and backup checks plus the new restricted-export E2E scenario.
+- This is a targeted code-level permission review, not a claim of exhaustive security certification. The production Firebase role configuration, real-device shared-account/cache behaviour and Android weak-signal use still require controlled verification.
+- No production migration, production data write or Firestore rules deployment was performed. The import-audit production release gate remains closed pending owner approval and the documented backup, dry-run, apply and post-apply checks.

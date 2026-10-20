@@ -651,3 +651,11 @@ Suggestion format:
 - Report: `docs/agent-task-reports.md` now records exact results and remaining verification limits.
 - Next: production remains gated on owner approval, confirmed Firebase project, verified backup/restore, reviewed clean dry run, approved apply and production role checks. No production operation was performed.
 - Watch out: emulator/CI success does not prove production data is migrated or rules deployed; no real Android/weak-signal test was performed. — Mosaic (ChatGPT), 2026-10-20
+
+
+### 2026-10-20 · Mosaic (ChatGPT) · sensitive-data permission fixes verified
+- Area: staff payroll visibility, database backup controls, health/case-review display paths and Phase 5 intelligence filtering.
+- Changes: backup/bulk-sync UI is administrator-only; general backups exclude safeguarding attachment metadata; staff payroll summaries/records are self-scoped; health exports, search and dashboard follow-ups are permission-gated.
+- Verification: [CI run 39454754490](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39454754490) passed both checks and E2E at code SHA `b28860d2f46e35e7c4b9d2da0cdcdb3afdae13f4`.
+- Limits: no production migration/rules deployment and no real Android/shared-device test. Full notes are in `docs/agent-task-reports.md`.
+- Candid reflection: repeated commits cancelled earlier CI runs; the useful correction was to stop after the final meaningful code change and wait for the complete suite. — Mosaic (ChatGPT), 2026-10-20
