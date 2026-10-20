@@ -63,8 +63,8 @@
       "fields": [
         { "fieldPath": "lastSeen", "order": "DESCENDING" }
       ]
-    }
-    ,{
+    },
+    {
       "collectionGroup": "caseActions",
       "queryScope": "COLLECTION",
       "fields": [
