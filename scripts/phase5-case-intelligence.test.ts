@@ -22,9 +22,9 @@ const sensitiveDb: any = {
 };
 const restrictedDb = filterCaseIntelligenceData(sensitiveDb, { canViewHealthRecords: false, canViewCaseReviews: false });
 assert.equal(restrictedDb.healthFollowUps.length, 0);
-assert.equal(restrictedDb.caseReviews.length, 0);
-assert.ok(!restrictedDb.attachments.some((item) => item.fileName === 'SYNTHETIC_MEDICAL_FILENAME'));
-assert.ok(!restrictedDb.attachments.some((item) => item.fileName === 'SYNTHETIC_SAFEGUARDING_FILENAME'));
+assert.equal((restrictedDb.caseReviews || []).length, 0);
+assert.ok(!(restrictedDb.attachments || []).some((item) => item.fileName === 'SYNTHETIC_MEDICAL_FILENAME'));
+assert.ok(!(restrictedDb.attachments || []).some((item) => item.fileName === 'SYNTHETIC_SAFEGUARDING_FILENAME'));
 const restrictedSummary = buildIntelligentCaseSummary(restrictedDb, 'g1');
 assert.ok(!JSON.stringify(restrictedSummary).includes('SYNTHETIC_MEDICAL_NOTE'));
 assert.ok(!JSON.stringify(restrictedSummary).includes('SYNTHETIC_HEALTH_RECOMMENDATION'));
@@ -32,7 +32,7 @@ assert.ok(!JSON.stringify(restrictedSummary).includes('SYNTHETIC_CASE_REVIEW_NOT
 assert.ok(!restrictedSummary?.upcomingActions.some((item) => item.includes('2026-10-10')));
 const permittedDb = filterCaseIntelligenceData(sensitiveDb, { canViewHealthRecords: true, canViewCaseReviews: true });
 assert.equal(permittedDb.healthFollowUps.length, 1);
-assert.equal(permittedDb.caseReviews.length, 1);
+assert.equal((permittedDb.caseReviews || []).length, 1);
 assert.ok(!JSON.stringify(filterCaseIntelligenceData(sensitiveDb, { canViewHealthRecords: false, canViewCaseReviews: true }).caseReviews).includes('SYNTHETIC_REVIEW_HEALTH_NOTE'));
 
 const summary = buildIntelligentCaseSummary(db, 'g1');
