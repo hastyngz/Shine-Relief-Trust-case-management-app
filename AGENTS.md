@@ -93,9 +93,12 @@ before saying a change is verified.
 | Imports, AI boundaries | `test:phase2` |
 | Browser workflows | `test:e2e` (specs in `e2e/`) |
 
-- CI is `.github/workflows/shine-checks.yml` and runs on pushes to `Replit`. It does
-  not run `test:phase5`, `test:phase5-rules`, `test:phase5-e2e` or
-  `test:deployment-smoke`; run those yourself when touching those areas.
+- CI is `.github/workflows/shine-checks.yml` and runs on pushes to `Replit`. It runs
+  `test:phase5`, `test:phase5-rules` and `test:phase5-e2e` alongside the other listed
+  checks. `test:deployment-smoke` is intentionally not part of ordinary CI because its
+  defaults target live Firebase Hosting and the Cloudflare Worker; only run it after
+  explicitly selecting an approved test/staging target and confirming the intended
+  network requests.
 - Automated tests do not replace a manual check on a real Android phone and on weak
   or no signal. Report manual checks separately, and say plainly when they were not
   done. `docs/release-checklist.md` covers the offline and update checks.
