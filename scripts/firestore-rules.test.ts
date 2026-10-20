@@ -94,6 +94,19 @@ async function seedData() {
       createdByUid: 'manager',
       updatedByUid: 'manager',
     });
+    await setDoc(doc(firestore, 'caseActions/action-health'), {
+      id: 'action-health',
+      title: 'SYNTHETIC_RESTRICTED_HEALTH_ACTION',
+      description: 'Synthetic health action fixture',
+      assignedStaffId: 'viewer',
+      assignedStaffName: 'viewer',
+      sourceType: 'healthFollowUp',
+      priority: 'High',
+      status: 'Open',
+      dueDate: '2026-10-01',
+      createdByUid: 'manager',
+      updatedByUid: 'manager',
+    });
     await setDoc(doc(firestore, 'healthFollowUps/health-1'), {
       id: 'health-1',
       girlId: 'girl-1',
@@ -300,7 +313,9 @@ async function run() {
     await assertSucceeds(getDoc(doc(admin, 'caseActions/action-safeguarding')));
     const safeguardingWorker = testEnvironment.authenticatedContext('safeguarding-worker', { email: 'safeguarding-worker@example.test' }).firestore();
     await assertSucceeds(getDoc(doc(safeguardingWorker, 'caseActions/action-safeguarding-authorized')));
-    await assertSucceeds(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', '!=', 'safeguarding'))));
+    await assertFails(getDoc(doc(viewer, 'caseActions/action-health')));
+    await assertSucceeds(getDoc(doc(manager, 'caseActions/action-health')));
+    await assertSucceeds(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', 'not-in', ['safeguarding', 'healthFollowUp']))));
     await assertFails(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));

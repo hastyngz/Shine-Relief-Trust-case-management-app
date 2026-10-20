@@ -246,10 +246,12 @@ service cloud.firestore {
     }
 
     match /caseActions/{actionId} {
-      allow read: if (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+      allow read: (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() ||
           (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
-      allow create: if (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+      allow create: (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() || (
           isStaffActive() &&
           resource == null &&
@@ -257,6 +259,8 @@ service cloud.firestore {
           request.resource.data.assignedStaffId == request.auth.uid
         ));
       allow update: if
+        (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
         (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() || (
@@ -266,13 +270,14 @@ service cloud.firestore {
             'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
           ])
         ));
-      allow delete: if (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) && isAdmin();
+      allow delete: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) && isAdmin();
     }
 
     match /caseActionAuditLogs/{eventId} {
       allow read: if (
-        get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'safeguarding' ||
-        canViewSafeguardingRecords()
+        (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords())
       ) && (isManagerOrAdmin() || (
         isStaffActive() &&
         get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.assignedStaffId == request.auth.uid
