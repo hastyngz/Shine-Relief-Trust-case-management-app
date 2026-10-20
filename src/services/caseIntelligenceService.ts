@@ -32,7 +32,7 @@ export function filterCaseIntelligenceData(db: AppDatabase, access: CaseIntellig
       ? (db.caseReviews || [])
       : (db.caseReviews || []).map(({ health: _health, ...review }) => review);
   const attachments = (db.attachments || []).filter((attachment) =>
-    attachment.targetType !== 'safeguardingCase' &&
+    String(attachment.targetType) !== 'safeguardingCase' &&
     (access.canViewHealthRecords || (
       attachment.targetType !== 'healthFollowUp' &&
       !['Medical Document', 'Prescription'].includes(attachment.category)
