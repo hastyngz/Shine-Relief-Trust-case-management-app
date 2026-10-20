@@ -163,6 +163,33 @@ async function run() {
       sourceData: { rows: [{ syntheticLabel: 'private-transaction-row' }] },
     };
     assert.equal((await getDoc(newImportAudit)).exists(), false, 'staff may check an absent audit ID without reading any source data');
+
+    // The marker must not certify an absent or empty restricted payload.
+    for (const [auditId, sourceData] of [
+      ['staff-source-missing-payload', undefined],
+      ['staff-source-empty-payload', {}],
+    ] as const) {
+      const incompleteAudit = doc(worker, `importAudits/${auditId}`);
+      const incompleteSource = doc(worker, `restrictedImportSources/${auditId}`);
+      await assertFails(runTransaction(worker, async (transaction) => {
+        const existingAudit = await transaction.get(incompleteAudit);
+        if (!existingAudit.exists()) {
+          const sourceDocument: Record<string, unknown> = {
+            id: auditId,
+            auditId,
+            fileName: 'synthetic.xlsx',
+            importedAt: '2026-10-18T00:00:00.000Z',
+          };
+          if (sourceData !== undefined) sourceDocument.sourceData = sourceData;
+          transaction.set(incompleteSource, sourceDocument);
+          transaction.set(incompleteAudit, {
+            ...newAuditMetadata,
+            id: auditId,
+          });
+        }
+      }));
+    }
+
     await assertSucceeds(runTransaction(worker, async (transaction) => {
       const existingAudit = await transaction.get(newImportAudit);
       if (!existingAudit.exists()) {
