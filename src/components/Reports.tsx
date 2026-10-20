@@ -718,8 +718,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   </button>
                 </div>
 
-                {/* 4. Health Follow-ups */}
-                <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
+                {canViewHealthRecords && <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
                   <div className="flex items-center gap-2">
                     <HeartPulse className="w-5 h-5 text-rose-800" />
                     <div>
@@ -734,7 +733,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Medical CSV</span>
                   </button>
-                </div>
+                </div>}
 
                 {/* 5. Family Follow-ups */}
                 <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
