@@ -30,10 +30,18 @@ export function filterPayrollDataForViewer(
 ): PayrollViewerData {
   if (canProcessPayroll) return { employees, records };
   if (!viewerUid) return { employees: [], records: [] };
-  return {
-    employees: employees.filter((employee) => employee.id === viewerUid),
-    records: records.filter((record) => record.employeeId === viewerUid),
-  };
+  const visibleRecords = records.filter((record) => record.employeeId === viewerUid);
+  const visibleEmployees = employees.filter((employee) => employee.id === viewerUid);
+  // Staff cannot read the manager-only employees collection. If their own
+  // payroll record is available, derive a minimal self-only summary profile.
+  if (visibleEmployees.length === 0 && visibleRecords.length > 0) {
+    const latestRecord = [...visibleRecords].sort((left, right) =>
+      right.payPeriodStartDate.localeCompare(left.payPeriodStartDate)
+      || right.updatedAt.localeCompare(left.updatedAt)
+    )[0];
+    visibleEmployees.push(employeeRecordFromPayrollRecord(latestRecord));
+  }
+  return { employees: visibleEmployees, records: visibleRecords };
 }
 
 export interface MonthlyPayrollSummary {
