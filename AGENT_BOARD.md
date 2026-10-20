@@ -631,3 +631,9 @@ Suggestion format:
 - State: added `docs/agent-task-reports.md` with the exact CI evidence for implementation SHA `2731f8c`; migration and rules tests passed, but offline-sync test and two E2E cases failed. Fixed the offline collision test fixture in `72ad42b`; follow-up CI still needs confirmation.
 - Next: inspect the new branch-head CI result, resolve the offline/E2E failures, then complete emulator role verification. No production dry run, apply, or rules deployment.
 - Watch out: staff import-audit list queries intentionally fail closed until the server-side migration marker exists; do not weaken rules to mask missing E2E setup. — Mosaic (ChatGPT), 2026-10-20
+
+### 2026-10-20 · Mosaic (ChatGPT) · source payload marker integrity
+- Area: Firestore import-audit transaction rules.
+- Finding/fix: the audit marker previously checked destination identity/metadata but not that `sourceData` existed and was non-empty. Rules now require a non-empty map; emulator tests cover missing and empty payloads. Commits: `2c3177d`, `5f20a04`.
+- Next: inspect CI for the latest branch head; do not deploy until rules and E2E checks pass and owner release conditions are met.
+- Watch out: this is a security/data-integrity hardening change, still awaiting CI evidence at handoff. — Mosaic (ChatGPT), 2026-10-20
