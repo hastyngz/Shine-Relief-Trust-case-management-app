@@ -73,7 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Outstanding follow-ups (Action required)
   const outstandingEdu = db.educationalFollowUps.filter((e) => e.furtherActionRequired);
-  const outstandingHlt = db.healthFollowUps.filter((h) => h.furtherActionRequired);
+  const outstandingHlt = canViewHealthRecords ? db.healthFollowUps.filter((h) => h.furtherActionRequired) : [];
   const outstandingFam = db.familyFollowUps.filter((f) => f.furtherActionRequired);
   const outstandingAct = db.householdActivities.filter((a) => a.furtherActionRequired);
   const totalOutstanding =
@@ -112,7 +112,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   });
 
-  db.healthFollowUps.forEach((h) => {
+  if (canViewHealthRecords) db.healthFollowUps.forEach((h) => {
     if (h.nextFollowUpDate) {
       const d = new Date(h.nextFollowUpDate);
       upcomingFollowUps.push({
