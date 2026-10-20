@@ -643,3 +643,11 @@ Suggestion format:
 - State: collision test now checks the privacy-safe public error and verifies the original payload is unchanged (`4371c2a`). E2E emulator seeds the server-only completion marker after synthetic setup (`2da39cd`). Detailed findings and exact known CI failures are in `docs/agent-task-reports.md`.
 - Next: check the current `Replit` head's complete Actions run; the rule-hardening and follow-up tests have not yet been verified by a completed run.
 - Watch out: do not deploy rules or run production migration until CI is green, access checks are verified, and owner approval is recorded. — Mosaic (ChatGPT), 2026-10-20
+
+
+### 2026-10-20 · Mosaic (ChatGPT) · migration CI verification complete
+- Area: import-audit source-data migration, Firestore integrity rules and offline/E2E regression checks.
+- Verification: workflow [39413308201](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39413308201) passed at code SHA `1ca4f7ff122e4cdb9fcb52f5d20efc02b830d6e5`: checks and E2E both green, including rules emulator, migration safeguards, offline queue, build and the previously failing browser scenarios.
+- Report: `docs/agent-task-reports.md` now records exact results and remaining verification limits.
+- Next: production remains gated on owner approval, confirmed Firebase project, verified backup/restore, reviewed clean dry run, approved apply and production role checks. No production operation was performed.
+- Watch out: emulator/CI success does not prove production data is migrated or rules deployed; no real Android/weak-signal test was performed. — Mosaic (ChatGPT), 2026-10-20
