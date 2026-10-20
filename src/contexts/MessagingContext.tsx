@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import { filterNotificationsByHealthPermission } from '../services/healthRecordAccess';
 import {
   StaffConversation,
   StaffMessage,
@@ -106,7 +107,7 @@ interface MessagingContextType {
 const MessagingContext = createContext<MessagingContextType | null>(null);
 
 export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, staffProfile, allStaff, isRegisteredStaff } = useAuth();
+  const { currentUser, staffProfile, allStaff, isRegisteredStaff, canViewHealthRecords } = useAuth();
 
   const [conversations, setConversations] = useState<StaffConversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<StaffConversation | null>(null);
@@ -175,11 +176,11 @@ export const MessagingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     const unsub = subscribeToNotifications(currentUser.uid, (list) => {
-      setNotifications(list);
+      setNotifications(filterNotificationsByHealthPermission(list, canViewHealthRecords));
     });
 
     return () => unsub();
-  }, [currentUser?.uid, isRegisteredStaff]);
+  }, [currentUser?.uid, isRegisteredStaff, canViewHealthRecords]);
 
   // Subscribe to Announcements in real time
   useEffect(() => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired } from '../src/services/healthRecordAccess';
+import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission } from '../src/services/healthRecordAccess';
 
 const staff = (role: string, canViewHealthRecords?: boolean) => ({ role, canViewHealthRecords }) as any;
 assert.equal(canStaffViewHealthRecords(staff('Administrator')), true);
@@ -11,6 +11,13 @@ assert.equal(canReceiveFollowUpNotification(staff('Staff'), 'familyFollowUp'), t
 assert.equal(canReceiveFollowUpNotification(staff('Staff'), 'healthFollowUp'), false);
 assert.equal(canReceiveFollowUpNotification(staff('Staff', true), 'healthFollowUp'), true);
 assert.equal(canReceiveFollowUpNotification(staff('Manager'), 'healthFollowUp'), true);
+const mixedNotifications = [
+  { id: 'general', relatedRecordType: 'girl' },
+  { id: 'legacy-health', relatedRecordType: 'healthFollowUp' },
+  { id: 'untyped', relatedRecordType: undefined },
+];
+assert.deepEqual(filterNotificationsByHealthPermission(mixedNotifications, false).map((item) => item.id), ['general', 'untyped']);
+assert.equal(filterNotificationsByHealthPermission(mixedNotifications, true).length, 3);
 
 const actionDb: any = {
   educationalFollowUps: [{ girlId: 'girl-edu', furtherActionRequired: true }],

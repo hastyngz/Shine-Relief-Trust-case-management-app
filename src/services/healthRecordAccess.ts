@@ -90,3 +90,13 @@ export function hasRestrictedCachedData(db: AppDatabase, access: RestrictedRecor
   )) return true;
   return false;
 }
+
+/** Keep old health-reminder notifications out of the visible inbox after permission revocation. */
+export function filterNotificationsByHealthPermission<T extends { relatedRecordType?: string }>(
+  notifications: T[],
+  canViewHealthRecords: boolean,
+): T[] {
+  return canViewHealthRecords
+    ? notifications
+    : notifications.filter((notification) => notification.relatedRecordType !== 'healthFollowUp');
+}
