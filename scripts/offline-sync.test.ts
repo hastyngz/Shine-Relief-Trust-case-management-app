@@ -255,7 +255,7 @@ await assert.rejects(
     importedAt: T2,
     status: 'completed' as const,
     sourceData: { rows: [{ syntheticLabel: 'new-source' }] },
-  }),
+  }, true, true),
   /different restricted import source already exists/,
 );
 assert.deepEqual(server.get('restrictedImportSources', preservedSource.id), preservedSource,
