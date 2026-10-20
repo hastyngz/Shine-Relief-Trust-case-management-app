@@ -63,6 +63,15 @@ jobs:
       - name: Test spreadsheet import and AI access boundaries
         run: npm run test:phase2
 
+      - name: Test Phase 5 operational intelligence
+        run: npm run test:phase5
+
+      - name: Test Phase 5 case intelligence chain
+        run: npm run test:phase5-e2e
+
+      - name: Test Phase 5 Firestore permissions in emulator
+        run: npm run test:phase5-rules
+
       - name: Test import-audit source migration safeguards
         run: npm run test:import-audit-migration
 
