@@ -16,6 +16,26 @@ export interface MonthlyPayrollEmployee {
   status: 'Paid' | 'Partially Paid' | 'Outstanding';
 }
 
+export interface PayrollViewerData {
+  employees: EmployeeRecord[];
+  records: PayrollRecord[];
+}
+
+/** Restrict the client-side payroll view as a second boundary after Firestore rules. */
+export function filterPayrollDataForViewer(
+  employees: EmployeeRecord[],
+  records: PayrollRecord[],
+  viewerUid: string,
+  canProcessPayroll: boolean,
+): PayrollViewerData {
+  if (canProcessPayroll) return { employees, records };
+  if (!viewerUid) return { employees: [], records: [] };
+  return {
+    employees: employees.filter((employee) => employee.id === viewerUid),
+    records: records.filter((record) => record.employeeId === viewerUid),
+  };
+}
+
 export interface MonthlyPayrollSummary {
   employees: MonthlyPayrollEmployee[];
   expectedTotal: number;
