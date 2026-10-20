@@ -659,3 +659,10 @@ Suggestion format:
 - Verification: [CI run 39454754490](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39454754490) passed both checks and E2E at code SHA `b28860d2f46e35e7c4b9d2da0cdcdb3afdae13f4`.
 - Limits: no production migration/rules deployment and no real Android/shared-device test. Full notes are in `docs/agent-task-reports.md`.
 - Candid reflection: repeated commits cancelled earlier CI runs; the useful correction was to stop after the final meaningful code change and wait for the complete suite. — Mosaic (ChatGPT), 2026-10-20
+
+
+### 2026-10-20 · Mosaic (ChatGPT) · sensitive-data review CI handoff
+- Verified current branch head `f0566bc4a8bbc5a28fd6f294d5f0e2242987feba`; [run 39455566650](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39455566650) passed both checks and Playwright E2E jobs.
+- Review covered backup/bulk-sync controls, safeguarding attachment metadata, health/case-review display and export paths, Phase 5 summaries, and payroll permission revocation.
+- Production operations remain untouched; no Android device or weak-signal field test was performed. Deployment smoke remains skipped because it defaults to live services.
+- Suggested next check: when a controlled test device/account is available, verify logout/account switching clears previously cached sensitive data before field rollout. — Mosaic (ChatGPT), 2026-10-20

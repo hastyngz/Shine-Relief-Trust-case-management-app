@@ -153,3 +153,13 @@ The migration, security, offline, Phase 5, payroll and backup-restore CI checks 
 - GitHub Actions run [39454754490](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39454754490) completed successfully at code SHA `b28860d2f46e35e7c4b9d2da0cdcdb3afdae13f4`. Both `checks` and `e2e` jobs passed, including the expanded Phase 5, payroll and backup checks plus the new restricted-export E2E scenario.
 - This is a targeted code-level permission review, not a claim of exhaustive security certification. The production Firebase role configuration, real-device shared-account/cache behaviour and Android weak-signal use still require controlled verification.
 - No production migration, production data write or Firestore rules deployment was performed. The import-audit production release gate remains closed pending owner approval and the documented backup, dry-run, apply and post-apply checks.
+
+
+## 2026-10-20 — Final CI verification for sensitive-data permission review
+
+- Current verified code head at the time of this report: `f0566bc4a8bbc5a28fd6f294d5f0e2242987feba` on the `Replit` branch.
+- GitHub Actions run [39455566650](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39455566650) completed successfully on that exact SHA. Both `checks` and `e2e` jobs passed.
+- The checks job passed TypeScript, UI feedback, Firestore listener and emulator rules tests, Phase 5 operational/case intelligence and rules tests, import-audit migration safeguards, payroll/gratuity, offline queue/performance/storage, inventory, asset, routing, Firestore access audit, and the production build. The Playwright offline E2E job passed, including the restricted backup/medical-export browser scenario present on this branch.
+- Scope covered by the permission review: administrator-only database backup/bulk-sync controls and handler guards; safeguarding attachment metadata exclusion from general backup/intelligence paths; health/case-review permission filters in dashboard, search, reports and Phase 5 summaries; staff-scoped payroll records and modal state cleanup after payroll-processing permission is revoked.
+- This confirms automated checks on the branch, not exhaustive security certification. No local device test, production rules deployment, production data migration, or production deployment-smoke request was performed. The deployment smoke script remains intentionally excluded from CI because its defaults target live services.
+- Remaining owner-controlled release work: review and approve any production migration separately; confirm backup/restore and dry-run evidence; and conduct controlled Android/shared-device and weak-signal checks before relying on those behaviours in the field.
