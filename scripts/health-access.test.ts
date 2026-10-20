@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions } from '../src/services/healthRecordAccess';
+import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions, canStaffReceiveCaseActionNotification } from '../src/services/healthRecordAccess';
 
 const staff = (role: string, canViewHealthRecords?: boolean) => ({ role, canViewHealthRecords }) as any;
 assert.equal(canStaffViewHealthRecords(staff('Administrator')), true);
@@ -26,6 +26,12 @@ assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'healthFollowUp', 
 assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'safeguarding' }), false);
 assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'manual' }), true);
 assert.deepEqual(excludeSafeguardingCaseActions([{ id: 'private', sourceType: 'safeguarding' }, { id: 'normal', sourceType: 'manual' }]).map((item) => item.id), ['normal']);
+assert.equal(canStaffReceiveCaseActionNotification({ role: 'Staff' }, 'healthFollowUp'), false);
+assert.equal(canStaffReceiveCaseActionNotification({ role: 'Staff', canViewHealthRecords: true }, 'healthFollowUp'), true);
+assert.equal(canStaffReceiveCaseActionNotification({ role: 'Manager' }, 'healthFollowUp'), true);
+assert.equal(canStaffReceiveCaseActionNotification({ role: 'Staff' }, 'safeguarding'), false);
+assert.equal(canStaffReceiveCaseActionNotification({ role: 'Staff', safeguardingPermissions: { canView: true } }, 'safeguarding'), true);
+assert.equal(canStaffReceiveCaseActionNotification({ role: 'Administrator' }, 'safeguarding'), true);
 
 const actionDb: any = {
   educationalFollowUps: [{ girlId: 'girl-edu', furtherActionRequired: true }],

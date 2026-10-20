@@ -121,3 +121,21 @@ export function isCaseActionAllowedInGeneralSearch(action: { sourceType?: string
 export function excludeSafeguardingCaseActions<T extends { sourceType?: string }>(actions: T[]): T[] {
   return actions.filter((action) => action.sourceType !== 'safeguarding');
 }
+
+/** Avoid sending a case-action alert to a recipient who cannot view its source record. */
+export function canStaffReceiveCaseActionNotification(
+  staff: {
+    role?: string;
+    canViewHealthRecords?: boolean;
+    safeguardingPermissions?: { canView?: boolean };
+  },
+  sourceType?: string,
+): boolean {
+  if (sourceType === 'healthFollowUp') {
+    return staff.role === 'Administrator' || staff.role === 'Manager' || staff.canViewHealthRecords === true;
+  }
+  if (sourceType === 'safeguarding') {
+    return staff.role === 'Administrator' || staff.safeguardingPermissions?.canView === true;
+  }
+  return true;
+}
