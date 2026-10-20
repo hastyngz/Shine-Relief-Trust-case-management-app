@@ -702,7 +702,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
     try {
       const result = await commitImportBatch(selectedItems, auditData, db, (current, total) =>
-        setImportProgress({ current, total }), approvedContacts, confirmedDueDatePeriods);
+        setImportProgress({ current, total }), approvedContacts, confirmedDueDatePeriods,
+        isAdmin || role === 'Manager', isAdmin);
 
       setCompletedAudit(result.createdAudit);
       setStep('completed');

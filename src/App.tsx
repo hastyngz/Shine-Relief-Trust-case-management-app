@@ -304,9 +304,14 @@ function AppContent() {
     if (!currentUser || isSuspended) return;
     if (!isBrowserOnline()) return;
     void flushPendingOfflineSnapshots({
-      actor: { uid: currentUser.uid, name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff' },
+      actor: {
+        uid: currentUser.uid,
+        name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff',
+        canReadImportSourceData: isAdmin || role === 'Manager',
+        canWriteImportAuditMetadata: isAdmin,
+      },
     });
-  }, [currentUser?.uid, isSuspended]);
+  }, [currentUser?.uid, currentUser?.displayName, isSuspended, staffProfile?.fullName, isAdmin, role]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -352,7 +357,14 @@ function AppContent() {
       void recordOfflineChanges(db);
     };
     const handleConnectivityChange = () => {
-      if (isBrowserOnline()) void flushPendingOfflineSnapshots();
+      if (isBrowserOnline()) void flushPendingOfflineSnapshots({
+        actor: currentUser ? {
+          uid: currentUser.uid,
+          name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff',
+          canReadImportSourceData: isAdmin || role === 'Manager',
+          canWriteImportAuditMetadata: isAdmin,
+        } : undefined,
+      });
       else flushLocalChanges();
     };
     const handleVisibility = () => {
@@ -370,7 +382,7 @@ function AppContent() {
       window.removeEventListener('pagehide', flushLocalChanges);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [db]);
+  }, [db, currentUser, staffProfile?.fullName, isAdmin, role]);
 
   // Listen for browser Back/Forward navigation via hashchange
   useEffect(() => {

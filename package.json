@@ -20,6 +20,7 @@
     "test:payroll": "tsx scripts/payroll-service.test.ts && tsx scripts/gratuity.test.ts",
     "test:firestore-listener-permissions": "tsx scripts/firestore-listener-permissions.test.ts",
     "test:rules": "firebase emulators:exec --only firestore \"tsx scripts/firestore-rules.test.ts\"",
+    "test:import-audit-migration": "tsx scripts/import-audit-source-migration.test.ts",
     "test:phase5-rules": "firebase emulators:exec --project demo-shine-phase5-rules --only firestore \"tsx scripts/phase5-rules.test.ts\"",
     "test:phase5": "tsx scripts/phase5-intelligence.test.ts && tsx scripts/phase5-case-intelligence.test.ts",
     "test:phase5-e2e": "tsx scripts/phase5-e2e.test.ts",

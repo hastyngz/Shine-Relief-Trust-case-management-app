@@ -32,7 +32,7 @@ function friendlyCollection(collection: string): string {
 }
 
 export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, onClose, storageWarning }) => {
-  const { currentUser, staffProfile, auditActor } = useAuth();
+  const { currentUser, staffProfile, auditActor, role, isAdmin } = useAuth();
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [queuedCount, setQueuedCount] = useState(0);
   const [storage, setStorage] = useState<{ usage: number; quota: number } | null>(null);
@@ -42,6 +42,8 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
   const actor = {
     uid: currentUser?.uid || 'unknown',
     name: staffProfile?.fullName || auditActor || currentUser?.email || 'SHINE staff',
+    canReadImportSourceData: isAdmin || role === 'Manager',
+    canWriteImportAuditMetadata: isAdmin,
   };
 
   const refresh = useCallback(async () => {

@@ -1274,6 +1274,7 @@ export interface ImportAuditRecord {
   qualityScores?: { quantification: number; impact: number; dataQuality: number };
   blockerOverrideReason?: string;
   qualityResolutions?: Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; field?: string; before?: unknown; after?: unknown }>;
+  sourceDataStoredInRestrictedCollection?: boolean;
   sourceData?: Record<string, unknown>;
 }
 

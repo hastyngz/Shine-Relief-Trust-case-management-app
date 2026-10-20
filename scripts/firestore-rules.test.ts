@@ -5,7 +5,7 @@ import {
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import assert from 'node:assert/strict';
-import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, orderBy, query, runTransaction, setDoc, updateDoc, where } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -130,12 +130,72 @@ async function run() {
     }));
     await assertFails(getDoc(doc(worker, 'importAudits/legacy-source-data')));
     await assertSucceeds(getDoc(doc(manager, 'importAudits/legacy-source-data')));
+    await assertFails(getDocs(collection(worker, 'importAudits')));
+    await assertSucceeds(getDocs(collection(manager, 'importAudits')));
+    await assertFails(getDoc(doc(worker, 'importAuditMigrationStatus/sourceDataBoundary')));
+    await assertFails(setDoc(doc(manager, 'importAuditMigrationStatus/sourceDataBoundary'), { status: 'complete' }));
     await assertSucceeds(setDoc(doc(worker, 'restrictedImportSources/source-worker'), {
       id: 'source-worker', auditId: 'source-worker', fileName: 'synthetic.xlsx',
       importedAt: '2026-10-18T00:00:00.000Z', sourceData: { rows: [{ syntheticLabel: 'private-row' }] },
     }));
     await assertFails(getDoc(doc(worker, 'restrictedImportSources/source-worker')));
     await assertSucceeds(getDoc(doc(manager, 'restrictedImportSources/source-worker')));
+    await assertSucceeds(getDoc(doc(admin, 'restrictedImportSources/source-worker')));
+    await assertFails(setDoc(doc(worker, 'restrictedImportSources/source-worker'), {
+      id: 'source-worker', auditId: 'source-worker', fileName: 'synthetic.xlsx',
+      importedAt: '2026-10-18T00:00:00.000Z', sourceData: { rows: [{ syntheticLabel: 'private-row' }] },
+    }));
+
+    const newImportAudit = doc(worker, 'importAudits/staff-transaction-create');
+    const newRestrictedSource = doc(worker, 'restrictedImportSources/staff-transaction-create');
+    const newAuditMetadata = {
+      id: 'staff-transaction-create',
+      fileName: 'synthetic.xlsx',
+      importedAt: '2026-10-18T00:00:00.000Z',
+      status: 'completed',
+      sourceDataStoredInRestrictedCollection: true,
+    };
+    const newSourceData = {
+      id: 'staff-transaction-create',
+      auditId: 'staff-transaction-create',
+      fileName: 'synthetic.xlsx',
+      importedAt: '2026-10-18T00:00:00.000Z',
+      sourceData: { rows: [{ syntheticLabel: 'private-transaction-row' }] },
+    };
+    assert.equal((await getDoc(newImportAudit)).exists(), false, 'staff may check an absent audit ID without reading any source data');
+    await assertSucceeds(runTransaction(worker, async (transaction) => {
+      const existingAudit = await transaction.get(newImportAudit);
+      if (!existingAudit.exists()) {
+        transaction.set(newRestrictedSource, newSourceData);
+        transaction.set(newImportAudit, newAuditMetadata);
+      }
+    }));
+    await assertFails(getDoc(newRestrictedSource));
+    await assertSucceeds(getDoc(doc(manager, 'restrictedImportSources/staff-transaction-create')));
+    await assertSucceeds(runTransaction(worker, async (transaction) => {
+      const existingAudit = await transaction.get(newImportAudit);
+      assert.deepEqual(existingAudit.data(), newAuditMetadata);
+    }));
+
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      const privilegedFirestore = context.firestore();
+      await setDoc(doc(privilegedFirestore, 'restrictedImportSources/legacy-source-data'), {
+        id: 'legacy-source-data',
+        auditId: 'legacy-source-data',
+        fileName: 'synthetic.xlsx',
+        importedAt: '2026-10-18T00:00:00.000Z',
+        sourceData: { rows: [{ syntheticLabel: 'legacy-private-row' }] },
+      });
+      await updateDoc(doc(privilegedFirestore, 'importAudits/legacy-source-data'), { sourceData: deleteField() });
+      await setDoc(doc(privilegedFirestore, 'importAuditMigrationStatus/sourceDataBoundary'), { status: 'complete' });
+    });
+    await assertSucceeds(getDocs(collection(worker, 'importAudits')));
+    await assertSucceeds(getDoc(doc(viewer, 'importAudits/legacy-source-data')));
+    await assertSucceeds(getDoc(doc(manager, 'importAudits/legacy-source-data')));
+    await assertFails(getDoc(doc(worker, 'restrictedImportSources/legacy-source-data')));
+    await assertFails(getDoc(doc(viewer, 'restrictedImportSources/legacy-source-data')));
+    await assertSucceeds(getDoc(doc(manager, 'restrictedImportSources/legacy-source-data')));
+    await assertSucceeds(getDoc(doc(admin, 'restrictedImportSources/legacy-source-data')));
 
     await assertSucceeds(getDoc(doc(worker, 'contacts/contact-1')));
     await assertFails(getDoc(doc(anonymous, 'contacts/contact-1')));

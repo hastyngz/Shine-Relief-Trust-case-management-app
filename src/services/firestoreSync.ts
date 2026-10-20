@@ -18,6 +18,7 @@ import {
 import { firestore } from '../firebase';
 import { deleteStoredFile } from './r2StorageClient';
 import { shouldSubscribeToCollection } from './firestoreListenerPermissions';
+import { planImportAuditWrites, type ImportAuditSourceShape } from './importAuditPersistence';
 import { BACKUP_RESTORE_COLLECTIONS, OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
 import {
   AppDatabase,
@@ -864,7 +865,11 @@ export async function deleteHistoricalCaseRecordFromFirestore(id: string): Promi
 }
 
 // Import Audits persistence
-export async function persistImportAuditToFirestore(item: ImportAuditRecord): Promise<void> {
+export async function persistImportAuditToFirestore(
+  item: ImportAuditRecord,
+  canReadImportSourceData = false,
+  canWriteImportAuditMetadata = false,
+): Promise<void> {
   updateSyncStatus('saving');
   try {
     const { sourceData, ...auditMetadata } = item;
@@ -880,31 +885,42 @@ export async function persistImportAuditToFirestore(item: ImportAuditRecord): Pr
         }
       : undefined;
 
-    // Read the restricted source before writing anything. A retry for the same
-    // audit is idempotent, but a reused ID must never replace different source
-    // rows that may be needed to investigate a previous import.
+    const persistedAuditMetadata = sanitizeForFirestore(sourceRecord
+      ? { ...auditMetadata, sourceDataStoredInRestrictedCollection: true }
+      : auditMetadata);
+    const persistedSourceRecord = sourceRecord ? sanitizeForFirestore(sourceRecord) : undefined;
+    const normalizedSourceRecord: ImportAuditSourceShape | undefined = persistedSourceRecord
+      ? (persistedSourceRecord as ImportAuditSourceShape)
+      : undefined;
+
+    // Exact retries can safely write the same source without reading it. Rules
+    // allow this for staff but reject any attempted source overwrite.
     await runTransaction(firestore, async (transaction) => {
-      if (sourceRecord) {
-        const existingSource = await transaction.get(sourceRef);
-        if (existingSource.exists()) {
-          const existingData = existingSource.data() as RestrictedImportSourceData;
-          if (stableContentHash(existingData) !== stableContentHash(sourceRecord)) {
-            throw new Error(
-              'A different restricted import source already exists for this audit ID. The existing source was preserved; use a new import audit ID or reconcile it with an administrator.',
-            );
-          }
-        } else {
-          transaction.set(sourceRef, sanitizeForFirestore(sourceRecord));
-        }
+      const existingAudit = await transaction.get(auditRef);
+      const existingSource = sourceRecord && canReadImportSourceData
+        ? await transaction.get(sourceRef)
+        : undefined;
+      const writePlan = planImportAuditWrites(
+        persistedAuditMetadata,
+        normalizedSourceRecord,
+        existingAudit.exists() ? existingAudit.data() : undefined,
+        existingSource?.exists() ? existingSource.data() : undefined,
+        canReadImportSourceData,
+        canWriteImportAuditMetadata,
+      );
+      if (writePlan.writeRestrictedSource && persistedSourceRecord) {
+        transaction.set(sourceRef, persistedSourceRecord);
       }
-      transaction.set(auditRef, sanitizeForFirestore(auditMetadata));
+      if (writePlan.writeAudit) {
+        transaction.set(auditRef, persistedAuditMetadata);
+      }
     });
     updateSyncStatus('synced');
   } catch (err) {
-    console.error('Firestore persistImportAudit error:', err);
+    console.error('Firestore persistImportAudit failed; source data and document IDs were not logged.');
     updateSyncStatus('error');
     // The import caller must not report success if its audit/source write failed.
-    throw err;
+    throw new Error('Import audit/source persistence failed. Source data was not logged.');
   }
 }
 
@@ -1297,11 +1313,12 @@ function stableContentHash(value: unknown): string {
 
 export async function syncChangeEntriesToFirestore(
   entries: OfflineChangeEntry[],
-  actor?: { uid: string; name: string },
+  actor?: { uid: string; name: string; canReadImportSourceData?: boolean; canWriteImportAuditMetadata?: boolean },
 ): Promise<SyncChangeResult> {
   const result: SyncChangeResult = { applied: 0, conflicts: [] };
   if (!entries.length) return result;
   updateSyncStatus('saving');
+  const committedImportSources = new Map<string, string>();
 
   for (const entry of entries) {
     const isImportAudit = entry.collection === COLLECTIONS.IMPORT_AUDITS &&
@@ -1313,12 +1330,73 @@ export async function syncChangeEntriesToFirestore(
     // Import audit metadata is readable by all active staff. Source rows must only
     // be stored in the separately permissioned restrictedImportSources collection.
     const auditData = isImportAudit && entry.data
-      ? Object.fromEntries(Object.entries(entry.data).filter(([key]) => key !== 'sourceData'))
+      ? {
+          ...Object.fromEntries(Object.entries(entry.data).filter(([key]) => key !== 'sourceData')),
+          ...(sourceData ? { sourceDataStoredInRestrictedCollection: true } : {}),
+        }
       : entry.data;
     const isRestrictedImportSource = entry.collection === COLLECTIONS.RESTRICTED_IMPORT_SOURCES &&
       entry.operation !== 'delete' && Boolean(entry.data);
     const ref = doc(firestore, entry.collection, entry.recordId);
     try {
+      if (isImportAudit && entry.data) {
+        const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId);
+        const sourceRecord: RestrictedImportSourceData | undefined = sourceData
+          ? {
+              id: entry.recordId,
+              auditId: entry.recordId,
+              fileName: typeof entry.data.fileName === 'string' ? entry.data.fileName : '',
+              importedAt: typeof entry.data.importedAt === 'string' ? entry.data.importedAt : '',
+              sourceData,
+            }
+          : undefined;
+          const sanitizedSourceRecord = sourceRecord ? sanitizeForFirestore(sourceRecord) : undefined;
+          const normalizedSourceRecord: ImportAuditSourceShape | undefined = sanitizedSourceRecord
+            ? (sanitizedSourceRecord as ImportAuditSourceShape)
+            : undefined;
+        await runTransaction(firestore, async (transaction) => {
+          const existingAudit = await transaction.get(ref);
+          const existingSource = sourceRecord && actor?.canReadImportSourceData
+            ? await transaction.get(sourceRef)
+            : undefined;
+          const writePlan = planImportAuditWrites(
+            sanitizeForFirestore(auditData || {}),
+            normalizedSourceRecord,
+            existingAudit.exists() ? existingAudit.data() : undefined,
+            existingSource?.exists() ? existingSource.data() : undefined,
+            actor?.canReadImportSourceData === true,
+            actor?.canWriteImportAuditMetadata === true,
+          );
+          if (writePlan.writeRestrictedSource && sourceRecord) {
+            transaction.set(sourceRef, sanitizedSourceRecord!);
+          }
+          if (writePlan.writeAudit) transaction.set(ref, sanitizeForFirestore(auditData || {}));
+        });
+        if (sanitizedSourceRecord) committedImportSources.set(entry.recordId, stableContentHash(sanitizedSourceRecord));
+        result.applied += 1;
+        continue;
+      }
+
+      if (
+        isRestrictedImportSource &&
+        entry.data &&
+        committedImportSources.get(entry.recordId) === stableContentHash(sanitizeForFirestore(entry.data))
+      ) {
+        result.applied += 1;
+        continue;
+      }
+
+      if (isRestrictedImportSource && !actor?.canReadImportSourceData && entry.data) {
+        // This collection is not readable by ordinary staff. A create-only write
+        // succeeds when absent; an existing document is denied rather than read
+        // or overwritten, keeping the queued entry available for privileged review.
+        await runTransaction(firestore, async (transaction) => {
+          transaction.set(ref, sanitizeForFirestore(entry.data || {}));
+        });
+        result.applied += 1;
+        continue;
+      }
+
       const conflict = await runTransaction(firestore, async (transaction) => {
         const snapshot = await transaction.get(ref);
         const serverData = snapshot.exists() ? (snapshot.data() as Record<string, any>) : null;
@@ -1385,7 +1463,7 @@ export async function syncChangeEntriesToFirestore(
 
         if (entry.operation === 'delete') {
           if (snapshot.exists()) transaction.delete(ref);
-        } else {
+        } else if (!isImportAudit || !serverData) {
           transaction.set(ref, sanitizeForFirestore(isImportAudit ? (auditData || {}) : (entry.data || {})), { merge: true });
         }
         return null;
@@ -1400,34 +1478,14 @@ export async function syncChangeEntriesToFirestore(
           await deleteDoc(doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId));
         }
 
-        // Old queue entries may still contain sourceData inside the audit record.
-        // Split it at the last write boundary so even those entries cannot expose
-        // source rows through the broadly readable importAudits collection.
-        if (sourceData && entry.data) {
-          const sourceRecord: RestrictedImportSourceData = {
-            id: entry.recordId,
-            auditId: entry.recordId,
-            fileName: typeof entry.data.fileName === 'string' ? entry.data.fileName : '',
-            importedAt: typeof entry.data.importedAt === 'string' ? entry.data.importedAt : '',
-            sourceData,
-          };
-          const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId);
-          await runTransaction(firestore, async (transaction) => {
-            const sourceSnapshot = await transaction.get(sourceRef);
-            if (sourceSnapshot.exists()) {
-              const existing = sourceSnapshot.data() as Record<string, any>;
-              if (stableContentHash(existing) !== stableContentHash(sourceRecord)) {
-                throw new Error('A restricted import source with different data already exists; refusing to overwrite it.');
-              }
-              return;
-            }
-            transaction.set(sourceRef, sanitizeForFirestore(sourceRecord));
-          });
-        }
       }
     } catch (err) {
       // Network or permission failure: keep the entry queued for a later flush.
-      console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);
+      if (isImportAudit || isRestrictedImportSource) {
+        console.error('Offline import source sync failed; source data and document IDs were not logged.');
+      } else {
+        console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);
+      }
       updateSyncStatus('error');
       throw err;
     }

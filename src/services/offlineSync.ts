@@ -467,7 +467,7 @@ export interface FlushResult {
  * newer than the version this device based its edit on.
  */
 export async function flushPendingOfflineSnapshots(
-  options: { actor?: { uid: string; name: string } } = {},
+  options: { actor?: { uid: string; name: string; canReadImportSourceData?: boolean; canWriteImportAuditMetadata?: boolean } } = {},
 ): Promise<FlushResult> {
   if (typeof window === 'undefined') return { flushed: false, applied: 0, conflicts: [] };
   // A reset that failed after cloud deletion leaves the local queue dangerous:

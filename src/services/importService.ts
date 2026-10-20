@@ -604,7 +604,9 @@ export async function commitImportBatch(
   db: AppDatabase,
   onProgress?: (processed: number, total: number) => void,
   approvedContacts: ConfirmedContactCandidate[] = [],
-  confirmedDueDatePeriods: Record<string, string> = {}
+  confirmedDueDatePeriods: Record<string, string> = {},
+  canReadImportSourceData = false,
+  canWriteImportAuditMetadata = false,
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
   const authenticatedUid = auth.currentUser?.uid;
   const importingEmployee = approvedItems.some((item) => item.selected && item.targetEntity === 'employee');
@@ -1492,7 +1494,7 @@ export async function commitImportBatch(
     payrollRecordsImportedCount: importedPayrollRecords,
   };
   updatedDb.importAudits?.unshift(finalAudit);
-  await persistImportAuditToFirestore(finalAudit);
+  await persistImportAuditToFirestore(finalAudit, canReadImportSourceData, canWriteImportAuditMetadata);
 
   const localSaveResult = saveDatabase(updatedDb);
   assertImportLocalSaveSucceeded(localSaveResult);

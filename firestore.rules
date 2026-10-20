@@ -79,6 +79,20 @@ service cloud.firestore {
       );
     }
 
+    function importAuditMigrationComplete() {
+      return exists(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary) &&
+        get(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary).data.status == 'complete';
+    }
+
+    function hasMatchingRestrictedImportSource(auditId, auditData) {
+      let sourcePath = /databases/$(database)/documents/restrictedImportSources/$(auditId);
+      return existsAfter(sourcePath) &&
+        getAfter(sourcePath).data.id == auditId &&
+        getAfter(sourcePath).data.auditId == auditId &&
+        getAfter(sourcePath).data.fileName == auditData.get('fileName', '') &&
+        getAfter(sourcePath).data.importedAt == auditData.get('importedAt', '');
+    }
+
     function canReadSafeguarding(caseId) {
       let caseRecord = get(/databases/$(database)/documents/safeguardingCases/$(caseId));
       return isAdmin() || (
@@ -542,15 +556,26 @@ service cloud.firestore {
 
     // Import audit metadata is staff-readable; original source rows belong only in
     // restrictedImportSources. Legacy audit docs containing sourceData stay hidden from
-    // ordinary staff until the repair migration removes that field.
+    // ordinary staff until the repair migration removes that field. Ordinary collection
+    // queries remain disabled until the Admin-SDK migration verifies the full collection.
     match /importAudits/{id} {
-      allow read: if isStaffActive() &&
-        (!resource.data.keys().hasAny(['sourceData']) || isManagerOrAdmin());
+      allow get: if isStaffActive() &&
+        (!exists(/databases/$(database)/documents/importAudits/$(id)) ||
+          !resource.data.keys().hasAny(['sourceData']) || isManagerOrAdmin());
+      allow list: if isManagerOrAdmin() || (isStaffActive() && importAuditMigrationComplete());
       allow create: if isManagerOrStaff() &&
-        !request.resource.data.keys().hasAny(['sourceData']);
+        !request.resource.data.keys().hasAny(['sourceData']) &&
+        (!request.resource.data.keys().hasAny(['sourceDataStoredInRestrictedCollection']) ||
+          request.resource.data.sourceDataStoredInRestrictedCollection == false ||
+          (request.resource.data.sourceDataStoredInRestrictedCollection == true &&
+            hasMatchingRestrictedImportSource(id, request.resource.data)));
       allow update: if isAdmin() &&
         !request.resource.data.keys().hasAny(['sourceData']);
       allow delete: if isAdmin();
+    }
+
+    match /importAuditMigrationStatus/{id} {
+      allow read, write: if false;
     }
 
     match /restrictedImportSources/{id} {
