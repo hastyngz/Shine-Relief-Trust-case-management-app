@@ -35,7 +35,9 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
-    await setDoc(doc(firestore, 'staffUsers/safeguarding-worker'), staff('safeguarding-worker', 'Staff', { safeguardingPermissions: { canView: true, canCreate: false, canEdit: false, canClose: false } }));
+    const safeguardingWorkerProfile = staff('safeguarding-worker', 'Staff');
+    safeguardingWorkerProfile.safeguardingPermissions = { canView: true, canCreate: false, canEdit: false, canClose: false };
+    await setDoc(doc(firestore, 'staffUsers/safeguarding-worker'), safeguardingWorkerProfile);
     await setDoc(doc(firestore, 'procurementLists/procurement-test'), { id: 'procurement-test', title: 'Synthetic procurement test', purpose: 'Rules fixture only', items: [{ description: 'Synthetic test item', quantity: 1, unit: 'item', unitPriceMWK: 1, totalMWK: 1, priceStatus: 'quoted' }], totalMWK: 1, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'manager', updatedBy: 'manager' });
     await setDoc(doc(firestore, 'importAudits/legacy-source-data'), {
       id: 'legacy-source-data',
