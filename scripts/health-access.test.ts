@@ -52,10 +52,10 @@ const staleAccess = { canViewHealthRecords: false, canViewCaseReviews: true, can
 const restrictedCache = filterRestrictedCachedData(staleCache, staleAccess);
 assert.equal(hasRestrictedCachedData(staleCache, staleAccess), true);
 assert.deepEqual(restrictedCache.healthFollowUps, []);
-assert.deepEqual(restrictedCache.historicalRecords.map((record: any) => record.id), ['school-history']);
+assert.deepEqual((restrictedCache.historicalRecords || []).map((record: any) => record.id), ['school-history']);
 assert.ok(!JSON.stringify(restrictedCache.caseReviews).includes('SYNTHETIC_PRIVATE_HEALTH'));
-assert.deepEqual(restrictedCache.caseActions.map((action: any) => action.id), ['normal-action']);
-assert.deepEqual(restrictedCache.attachments.map((attachment: any) => attachment.id), ['ordinary-photo']);
+assert.deepEqual((restrictedCache.caseActions || []).map((action: any) => action.id), ['normal-action']);
+assert.deepEqual((restrictedCache.attachments || []).map((attachment: any) => attachment.id), ['ordinary-photo']);
 assert.equal(hasRestrictedCachedData(restrictedCache, staleAccess), false);
 
 console.log('Health record access and follow-up notification checks passed.');
