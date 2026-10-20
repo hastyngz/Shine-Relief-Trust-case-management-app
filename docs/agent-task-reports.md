@@ -119,3 +119,20 @@ The first test-fixture adjustment exposed one more mismatch: `persistImportAudit
 The E2E global setup was also updated in commit `2da39cd9d0e27d632144250c681366ee14dc3458` to seed the server-only migration-completion marker in the isolated emulator after seeding synthetic fixtures. This represents the post-migration state expected by ordinary staff screens and should stop unrelated test runs from repeatedly logging expected denied `importAudits` list queries. It does not affect production. This setup change is a hypothesis-driven test-environment correction; only the E2E run result can show whether it resolves the two failures.
 
 The latest observed workflow run for commit `4371c2aca3d9d8e5dae16a7b2f1378908a746c1c` was queued/pending at the time of review, while a preceding E2E run was still in progress. The rules hardening, new rules tests, collision assertion correction, and E2E marker setup therefore remain **unverified by a completed run**. Recheck the exact branch head and its Actions run before considering this work verified.
+
+
+## Verification addendum — latest Replit head (2026-10-20)
+
+The previously pending workflow has now completed successfully for branch-head commit `1ca4f7ff122e4cdb9fcb52f5d20efc02b830d6e5`.
+
+- [GitHub Actions run 39413308201](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39413308201): overall **success**.
+- `checks` job: **success**. TypeScript/lint, Firestore listener permissions, Firestore rules emulator, import-audit migration safeguards, offline sync queue, offline performance budget, storage failure handling, inventory, asset export/verification, routing, Firestore access audit and production build all completed successfully.
+- `e2e` job: **success**. The Playwright offline end-to-end suite completed successfully after the synthetic migration completion marker was seeded in emulator setup.
+- The prior offline collision assertion failure and the two E2E failures are resolved at this tested branch head; this conclusion is based on the completed run, not on cancelled earlier runs.
+- The rules regression cases for absent and empty restricted source payloads are included in the successful emulator test step. This confirms the rule/test change against the emulator, not against a deployed production ruleset.
+
+### What this does and does not establish
+
+The reviewed code and required CI suite now pass at the exact SHA above. No local test execution is claimed; the evidence is GitHub Actions. The suite does not perform a real Android handset/weak-signal manual test, production Firebase role verification, production dry run, production apply, backup/restore check, or rules deployment. It also does not run the repository's explicitly non-CI scripts `test:phase5`, `test:phase5-rules`, `test:phase5-e2e`, or `test:deployment-smoke`; these remain separate verification work if their areas are changed or need broader assurance.
+
+**Production release gate remains closed.** No production data or rules were changed. The required owner approval, confirmed project, verified backup, reviewed zero-issue dry run, approved apply, full verification and production role-specific checks remain outstanding.
