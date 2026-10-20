@@ -15,6 +15,24 @@ export interface IntelligentCaseSummary {
   missingInformation: string[];
 }
 
+export interface CaseIntelligenceAccess {
+  canViewHealthRecords: boolean;
+  canViewCaseReviews: boolean;
+}
+
+/**
+ * Mask restricted case data before deriving client-side summaries or suggestions.
+ * Firestore remains the authoritative access boundary; this also protects views
+ * from stale locally cached records after a role/account change.
+ */
+export function filterCaseIntelligenceData(db: AppDatabase, access: CaseIntelligenceAccess): AppDatabase {
+  return {
+    ...db,
+    healthFollowUps: access.canViewHealthRecords ? (db.healthFollowUps || []) : [],
+    caseReviews: access.canViewCaseReviews ? (db.caseReviews || []) : [],
+  };
+}
+
 export interface DuplicateCandidate {
   recordType: 'girl' | 'household' | 'person';
   recordId: string;
