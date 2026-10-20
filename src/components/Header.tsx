@@ -254,15 +254,17 @@ export const Header: React.FC<HeaderProps> = ({
               />
             )}
 
-            <button
-              id="data-backup-btn"
-              onClick={onOpenDataModal}
-              className="hidden sm:flex p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium items-center gap-1.5 border border-teal-800 transition-colors"
-              title="Backup, export, or restore database"
-            >
-              <Database className="w-4 h-4 text-amber-400" />
-              <span className="hidden md:inline">Cloud & Data</span>
-            </button>
+            {isAdmin && (
+              <button
+                id="data-backup-btn"
+                onClick={onOpenDataModal}
+                className="hidden sm:flex p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium items-center gap-1.5 border border-teal-800 transition-colors"
+                title="Backup, export, or restore database"
+              >
+                <Database className="w-4 h-4 text-amber-400" />
+                <span className="hidden md:inline">Cloud & Data</span>
+              </button>
+            )}
 
             {!isViewOnly && (
               <button
