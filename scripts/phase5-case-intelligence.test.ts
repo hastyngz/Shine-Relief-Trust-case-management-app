@@ -14,11 +14,17 @@ const db: any = {
 const sensitiveDb: any = {
   ...db,
   healthFollowUps: [{ id: 'health-private', girlId: 'g1', date: '2026-09-10', reasonForVisit: 'SYNTHETIC_MEDICAL_NOTE', furtherActionRequired: true, recommendations: 'SYNTHETIC_HEALTH_RECOMMENDATION', nextFollowUpDate: '2026-09-30' }],
-  caseReviews: [{ id: 'review-private', girlId: 'g1', nextReviewDate: '2026-10-10', summary: 'SYNTHETIC_CASE_REVIEW_NOTE' }],
+  caseReviews: [{ id: 'review-private', girlId: 'g1', nextReviewDate: '2026-10-10', summary: 'SYNTHETIC_CASE_REVIEW_NOTE', health: 'SYNTHETIC_REVIEW_HEALTH_NOTE' }],
+  attachments: [
+    { id: 'medical-attachment', targetId: 'g1', targetType: 'girl', fileName: 'SYNTHETIC_MEDICAL_FILENAME', category: 'Medical Document' },
+    { id: 'safeguarding-attachment', targetId: 'g1', targetType: 'safeguardingCase', fileName: 'SYNTHETIC_SAFEGUARDING_FILENAME', category: 'Other' },
+  ],
 };
 const restrictedDb = filterCaseIntelligenceData(sensitiveDb, { canViewHealthRecords: false, canViewCaseReviews: false });
 assert.equal(restrictedDb.healthFollowUps.length, 0);
 assert.equal(restrictedDb.caseReviews.length, 0);
+assert.ok(!restrictedDb.attachments.some((item) => item.fileName === 'SYNTHETIC_MEDICAL_FILENAME'));
+assert.ok(!restrictedDb.attachments.some((item) => item.fileName === 'SYNTHETIC_SAFEGUARDING_FILENAME'));
 const restrictedSummary = buildIntelligentCaseSummary(restrictedDb, 'g1');
 assert.ok(!JSON.stringify(restrictedSummary).includes('SYNTHETIC_MEDICAL_NOTE'));
 assert.ok(!JSON.stringify(restrictedSummary).includes('SYNTHETIC_HEALTH_RECOMMENDATION'));
@@ -27,6 +33,7 @@ assert.ok(!restrictedSummary?.upcomingActions.some((item) => item.includes('2026
 const permittedDb = filterCaseIntelligenceData(sensitiveDb, { canViewHealthRecords: true, canViewCaseReviews: true });
 assert.equal(permittedDb.healthFollowUps.length, 1);
 assert.equal(permittedDb.caseReviews.length, 1);
+assert.ok(!JSON.stringify(filterCaseIntelligenceData(sensitiveDb, { canViewHealthRecords: false, canViewCaseReviews: true }).caseReviews).includes('SYNTHETIC_REVIEW_HEALTH_NOTE'));
 
 const summary = buildIntelligentCaseSummary(db, 'g1');
 assert.equal(summary?.girl.id, 'g1');
