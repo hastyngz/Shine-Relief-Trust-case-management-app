@@ -4,6 +4,8 @@
 **Branch:** `Replit`  
 **Reviewed implementation commit:** `2731f8c92e20dbf0ce908a48d27bb3e8b8e58ece`  
 **Follow-up test-fixture commit:** `72ad42b68de1ec1e1a1fa2d4b78125d7c472c2c8`  
+**Rules hardening commit:** `2c3177d10f5ac409b8601623700cf7982f21acee`  
+**Rules regression-test commit:** `5f20a04b37cefede7eee9c862e46bc1109bcf891`  
 **Status:** IMPLEMENTED BUT NOT FULLY VERIFIED
 
 ## Executive summary
@@ -40,6 +42,12 @@ The rules keep `importAuditMigrationStatus` inaccessible to client reads/writes 
 ### Migration test coverage
 
 The migration-specific test suite includes dry-run zero-write checks, already-clean records, matching and conflicting destinations, write failures, retry/interruption, concurrent changes, malformed records, list failures, completion-marker failures, explicit project confirmation, idempotency, and redaction of sensitive diagnostic content.
+
+### Additional rules integrity finding and fix
+
+A second code review found that `hasMatchingRestrictedImportSource` checked the destination's ID and metadata but did not require a non-empty `sourceData` map. In principle, a client could pair an audit marked `sourceDataStoredInRestrictedCollection: true` with a matching but empty restricted document. That would make the marker claim stronger than the rules had verified and could hide a missing source payload from the normal retry path.
+
+I hardened the rules in commit `2c3177d10f5ac409b8601623700cf7982f21acee` to require the post-write restricted document to contain a `sourceData` map with at least one key before the audit marker can be created. Commit `5f20a04b37cefede7eee9c862e46bc1109bcf891` adds emulator regression cases for both a missing source payload and an empty map, while retaining the existing valid atomic transaction test. These rule/test changes are **not verified until the latest CI run passes**; they must not be deployed on the basis of code review alone.
 
 ### Test-fixture issue found and follow-up
 
@@ -99,3 +107,7 @@ Keep production apply and rules deployment blocked until all of the following ar
 - Review the migration helper, CLI, Firestore rules and tests together; the in-memory migration tests do not replace emulator permission tests.
 - Confirm whether the two E2E failures are caused by missing emulator completion-marker setup or actual app regressions.
 - Do not run production apply or deploy rules without explicit owner approval.
+
+## Review addendum — 2026-10-20
+
+The review continued after the initial report. A further Firestore rules integrity gap was identified and addressed in the two commits listed above: the audit completion marker now requires a non-empty restricted source payload. The current branch head must be checked for CI results; previous run results do not validate these later commits. Production remains untouched and the release gate remains closed.
