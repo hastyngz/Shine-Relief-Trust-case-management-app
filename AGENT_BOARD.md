@@ -625,3 +625,9 @@ Suggestion format:
 - Finding: the Edit details control was visible to view-only users even though stock movement controls were hidden and Firestore rejects their writes. This could create a misleading local-save success followed by a denied sync.
 - Change: hide Edit details for view-only users, consistent with the other inventory mutations. This is a UI affordance fix; Firestore rules remain the authorization boundary and were not changed.
 - Verification: awaiting CI for the current Replit head; no real device test performed. — Mosaic (ChatGPT), 2026-10-18
+
+### 2026-10-20 · Mosaic (ChatGPT) · migration CI follow-up
+- Area: import-audit source migration verification and reporting.
+- State: added `docs/agent-task-reports.md` with the exact CI evidence for implementation SHA `2731f8c`; migration and rules tests passed, but offline-sync test and two E2E cases failed. Fixed the offline collision test fixture in `72ad42b`; follow-up CI still needs confirmation.
+- Next: inspect the new branch-head CI result, resolve the offline/E2E failures, then complete emulator role verification. No production dry run, apply, or rules deployment.
+- Watch out: staff import-audit list queries intentionally fail closed until the server-side migration marker exists; do not weaken rules to mask missing E2E setup. — Mosaic (ChatGPT), 2026-10-20
