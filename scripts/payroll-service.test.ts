@@ -3,6 +3,7 @@ import type { EmployeeRecord, PayrollRecord, SalaryHistoryRecord } from '../src/
 import {
   buildMonthlyPayrollSummary,
   employeeRecordFromPayrollRecord,
+  filterPayrollDataForViewer,
   formatPayrollPeriod,
   monthlyPayrollTaskId,
   payrollTaskDescription,
@@ -31,6 +32,14 @@ const paidRecord: PayrollRecord = {
   salaryHistoryRecordIds: ['salary-1-new'], expectedAmount: 80000, amountPaid: 80000,
   paymentStatus: 'Paid', createdBy: '', createdByUid: '', createdAt: '', updatedBy: '', updatedByUid: '', updatedAt: '',
 };
+const otherRecord: PayrollRecord = { ...paidRecord, id: 'pay-former', employeeId: 'emp-former', employeeName: 'Former Example' };
+const staffPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'emp-1', false);
+assert.deepEqual(staffPayroll.employees.map((employee) => employee.id), ['emp-1']);
+assert.deepEqual(staffPayroll.records.map((record) => record.id), ['pay-1']);
+const managerPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'manager-uid', true);
+assert.equal(managerPayroll.employees.length, employees.length);
+assert.equal(managerPayroll.records.length, 2);
+assert.deepEqual(filterPayrollDataForViewer(employees, [paidRecord], '', false), { employees: [], records: [] });
 const historicalProfile = employeeRecordFromPayrollRecord(paidRecord);
 assert.equal(historicalProfile.id, 'emp-1');
 assert.equal(historicalProfile.fullName, 'Alex Example');
