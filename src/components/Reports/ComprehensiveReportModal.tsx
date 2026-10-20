@@ -194,7 +194,9 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
     ...db,
     attachments,
     healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
-    caseActions: (db.caseActions || []).filter((action) => canViewSafeguarding || action.sourceType !== 'safeguarding'),
+    caseActions: (db.caseActions || []).filter((action) =>
+      action.sourceType !== 'safeguarding' && (canViewHealthRecords || action.sourceType !== 'healthFollowUp')
+    ),
     caseReviews: !canViewCaseReviews ? [] : canViewHealthRecords
       ? db.caseReviews || []
       : (db.caseReviews || []).map(({ health: _health, ...review }) => review),

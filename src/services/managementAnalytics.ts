@@ -28,7 +28,9 @@ export function projectManagementDatabase(
   return {
     ...db,
     healthFollowUps: permissions.canViewHealthRecords ? db.healthFollowUps : [],
-    caseActions: (db.caseActions || []).filter((action) => action.sourceType !== 'safeguarding'),
+    caseActions: (db.caseActions || []).filter((action) =>
+      action.sourceType !== 'safeguarding' && (permissions.canViewHealthRecords || action.sourceType !== 'healthFollowUp')
+    ),
     attachments: (db.attachments || []).filter((attachment) => {
       const targetType = String(attachment.targetType);
       return (targetType !== 'healthFollowUp' || permissions.canViewHealthRecords) &&

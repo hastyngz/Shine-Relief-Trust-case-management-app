@@ -23,8 +23,10 @@ assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'healthFollowUp', 
 assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'girl', category: 'Medical Document' }, false), false);
 assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'girl', category: 'Photo' }, false), true);
 assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'healthFollowUp', category: 'Photo' }, true), true);
-assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'safeguarding' }), false);
-assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'manual' }), true);
+assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'safeguarding' }, true), false);
+assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'healthFollowUp' }, false), false);
+assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'healthFollowUp' }, true), true);
+assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'manual' }, false), true);
 assert.deepEqual(excludeSafeguardingCaseActions([{ id: 'private', sourceType: 'safeguarding' }, { id: 'normal', sourceType: 'manual' }]).map((item) => item.id), ['normal']);
 assert.equal(canStaffReceiveCaseActionNotification({ role: 'Staff' }, 'healthFollowUp'), false);
 assert.equal(canStaffReceiveCaseActionNotification({ role: 'Staff', canViewHealthRecords: true }, 'healthFollowUp'), true);
@@ -46,7 +48,7 @@ const staleCache: any = {
   healthFollowUps: [{ id: 'health-cache', girlId: 'girl-health', furtherActionRequired: true }],
   historicalRecords: [{ id: 'medical-history', recordType: 'medical' }, { id: 'school-history', recordType: 'education' }],
   caseReviews: [{ id: 'review-cache', health: 'SYNTHETIC_PRIVATE_HEALTH', progress: 'School attendance improved' }],
-  caseActions: [{ id: 'safe-action', sourceType: 'safeguarding' }, { id: 'normal-action', sourceType: 'manual' }],
+  caseActions: [{ id: 'safe-action', sourceType: 'safeguarding' }, { id: 'health-action', sourceType: 'healthFollowUp' }, { id: 'normal-action', sourceType: 'manual' }],
   attachments: [
     { id: 'health-attachment', targetType: 'healthFollowUp', category: 'Other' },
     { id: 'medical-doc', targetType: 'girl', category: 'Medical Document' },

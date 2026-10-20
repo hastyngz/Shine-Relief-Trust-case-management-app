@@ -58,7 +58,8 @@ export function filterRestrictedCachedData(db: AppDatabase, access: RestrictedRe
     )) && (access.canViewSafeguarding || targetType !== 'safeguardingCase');
   });
   const caseActions = (db.caseActions || []).filter((action) =>
-    access.canViewSafeguarding || action.sourceType !== 'safeguarding'
+    (access.canViewSafeguarding || action.sourceType !== 'safeguarding') &&
+    (access.canViewHealthRecords || action.sourceType !== 'healthFollowUp')
   );
 
   return {
@@ -75,6 +76,7 @@ export function filterRestrictedCachedData(db: AppDatabase, access: RestrictedRe
 
 export function hasRestrictedCachedData(db: AppDatabase, access: RestrictedRecordAccess): boolean {
   if (!access.canViewHealthRecords && (
+    (db.caseActions || []).some((action) => action.sourceType === 'healthFollowUp') ||
     db.healthFollowUps.length > 0 ||
     (db.historicalRecords || []).some((record) => record.recordType === 'medical') ||
     (db.caseReviews || []).some((review) => Object.prototype.hasOwnProperty.call(review, 'health')) ||
@@ -113,8 +115,8 @@ export function isAttachmentAllowedInGeneralReport(
 }
 
 /** General search keeps safeguarding actions in the dedicated safeguarding results path. */
-export function isCaseActionAllowedInGeneralSearch(action: { sourceType?: string }): boolean {
-  return action.sourceType !== 'safeguarding';
+export function isCaseActionAllowedInGeneralSearch(action: { sourceType?: string }, canViewHealthRecords = false): boolean {
+  return action.sourceType !== 'safeguarding' && (canViewHealthRecords || action.sourceType !== 'healthFollowUp');
 }
 
 /** Remove safeguarding-linked actions from general exports, even for administrators. */

@@ -88,7 +88,10 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     name: staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff',
   };
   const canAssignTeamTasks = isAdmin || role === 'Manager';
-  const actions = (db.caseActions || []).filter((action) => action.sourceType !== 'safeguarding' || canViewSafeguarding);
+  const actions = (db.caseActions || []).filter((action) =>
+    (action.sourceType !== 'safeguarding' || canViewSafeguarding) &&
+    (action.sourceType !== 'healthFollowUp' || canViewHealthRecords)
+  );
   const today = new Date().toISOString().slice(0, 10);
   const endOfWeek = new Date();
   endOfWeek.setDate(endOfWeek.getDate() + 7);
