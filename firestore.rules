@@ -58,6 +58,13 @@ service cloud.firestore {
       );
     }
 
+    function canViewSafeguardingRecords() {
+      return isAdmin() || (
+        isStaffActive() &&
+        getStaffDoc(request.auth.uid).data.get('safeguardingPermissions', {}).get('canView', false) == true
+      );
+    }
+
     function canViewCaseReviews() {
       return isManagerOrAdmin() || (
         isStaffActive() &&
@@ -239,29 +246,37 @@ service cloud.firestore {
     }
 
     match /caseActions/{actionId} {
-      allow read: if isManagerOrAdmin() ||
-        (isStaffActive() && resource.data.assignedStaffId == request.auth.uid);
-      allow create: if isManagerOrAdmin() || (
-        isStaffActive() &&
-        resource == null &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.assignedStaffId == request.auth.uid
-      );
-      allow update: if isManagerOrAdmin() || (
-        isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
-        request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
-        ])
-      );
-      allow delete: if isAdmin();
+      allow read: if (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() ||
+          (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
+      allow create: if (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() || (
+          isStaffActive() &&
+          resource == null &&
+          request.resource.data.createdByUid == request.auth.uid &&
+          request.resource.data.assignedStaffId == request.auth.uid
+        ));
+      allow update: if
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() || (
+          isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
+          request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
+          ])
+        ));
+      allow delete: if (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) && isAdmin();
     }
 
     match /caseActionAuditLogs/{eventId} {
-      allow read: if isManagerOrAdmin() || (
+      allow read: if (
+        get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'safeguarding' ||
+        canViewSafeguardingRecords()
+      ) && (isManagerOrAdmin() || (
         isStaffActive() &&
         get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.assignedStaffId == request.auth.uid
-      );
+      ));
       allow create: if isStaffActive() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }

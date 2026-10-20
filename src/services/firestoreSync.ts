@@ -1586,6 +1586,7 @@ export function initFirestoreListeners(
   options: {
     uid?: string;
     canViewTeamTasks?: boolean;
+    canViewSafeguarding?: boolean;
     canReadHealthRecords?: boolean;
     canReadCaseReviews?: boolean;
     canReadImportSourceData?: boolean;
@@ -1726,11 +1727,17 @@ export function initFirestoreListeners(
     const colRef = collection(firestore, colName);
     const source: Query = colName === COLLECTIONS.PAYROLL_RECORDS && options.canReadManagementPlanning !== true
       ? query(colRef, where('employeeId', '==', options.uid))
-      : colName === COLLECTIONS.CASE_ACTIONS && options.uid && !options.canViewTeamTasks
-        ? query(colRef, where('assignedStaffId', '==', options.uid))
-        : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
-          ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
-          : colRef;
+      : colName === COLLECTIONS.CASE_ACTIONS && options.canViewSafeguarding !== true
+        ? options.canViewTeamTasks
+          ? query(colRef, where('sourceType', '!=', 'safeguarding'))
+          : options.uid
+            ? query(colRef, where('assignedStaffId', '==', options.uid), where('sourceType', '!=', 'safeguarding'))
+            : query(colRef, where('sourceType', '!=', 'safeguarding'))
+        : colName === COLLECTIONS.CASE_ACTIONS && options.uid && !options.canViewTeamTasks
+          ? query(colRef, where('assignedStaffId', '==', options.uid))
+          : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
+            ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
+            : colRef;
     const unsub = onSnapshot(
       source,
       { includeMetadataChanges: true },

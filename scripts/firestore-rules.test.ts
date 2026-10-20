@@ -35,6 +35,7 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
+    await setDoc(doc(firestore, 'staffUsers/safeguarding-worker'), staff('safeguarding-worker', 'Staff', { safeguardingPermissions: { canView: true, canCreate: false, canEdit: false, canClose: false } }));
     await setDoc(doc(firestore, 'procurementLists/procurement-test'), { id: 'procurement-test', title: 'Synthetic procurement test', purpose: 'Rules fixture only', items: [{ description: 'Synthetic test item', quantity: 1, unit: 'item', unitPriceMWK: 1, totalMWK: 1, priceStatus: 'quoted' }], totalMWK: 1, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'manager', updatedBy: 'manager' });
     await setDoc(doc(firestore, 'importAudits/legacy-source-data'), {
       id: 'legacy-source-data',
@@ -61,6 +62,32 @@ async function seedData() {
       assignedStaffName: 'worker',
       status: 'Open',
       priority: 'Medium',
+      dueDate: '2026-10-01',
+      createdByUid: 'manager',
+      updatedByUid: 'manager',
+    });
+    await setDoc(doc(firestore, 'caseActions/action-safeguarding'), {
+      id: 'action-safeguarding',
+      title: 'SYNTHETIC_RESTRICTED_ACTION',
+      description: 'Synthetic safeguarding action fixture',
+      assignedStaffId: 'viewer',
+      assignedStaffName: 'viewer',
+      sourceType: 'safeguarding',
+      priority: 'High',
+      status: 'Open',
+      dueDate: '2026-10-01',
+      createdByUid: 'manager',
+      updatedByUid: 'manager',
+    });
+    await setDoc(doc(firestore, 'caseActions/action-safeguarding-authorized'), {
+      id: 'action-safeguarding-authorized',
+      title: 'Synthetic authorized safeguarding action',
+      description: 'Synthetic authorized fixture',
+      assignedStaffId: 'safeguarding-worker',
+      assignedStaffName: 'safeguarding-worker',
+      sourceType: 'safeguarding',
+      priority: 'High',
+      status: 'Open',
       dueDate: '2026-10-01',
       createdByUid: 'manager',
       updatedByUid: 'manager',
@@ -266,6 +293,13 @@ async function run() {
 
 
     await assertSucceeds(getDoc(doc(viewer, 'caseActions/action-1')));
+    await assertFails(getDoc(doc(viewer, 'caseActions/action-safeguarding')));
+    await assertFails(getDoc(doc(manager, 'caseActions/action-safeguarding')));
+    await assertSucceeds(getDoc(doc(admin, 'caseActions/action-safeguarding')));
+    const safeguardingWorker = testEnvironment.authenticatedContext('safeguarding-worker', { email: 'safeguarding-worker@example.test' }).firestore();
+    await assertSucceeds(getDoc(doc(safeguardingWorker, 'caseActions/action-safeguarding-authorized')));
+    await assertSucceeds(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', '!=', 'safeguarding'))));
+    await assertFails(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));

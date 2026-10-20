@@ -281,13 +281,14 @@ function AppContent() {
     }, {
       uid: currentUser.uid,
       canViewTeamTasks: isAdmin || role === 'Manager',
+      canViewSafeguarding,
       canReadHealthRecords: canViewHealthRecords,
       canReadCaseReviews: canViewCaseReviews,
       canReadImportSourceData: isAdmin || role === 'Manager',
       canReadManagementPlanning: isAdmin || role === 'Manager',
     });
     return () => unsub();
-  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews]);
+  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
 
   // On load, drain any queue left by a previous offline session. Without this a
   // phone that was closed while offline and reopened already-online would keep
