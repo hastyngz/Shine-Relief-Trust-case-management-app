@@ -90,7 +90,10 @@ service cloud.firestore {
         getAfter(sourcePath).data.id == auditId &&
         getAfter(sourcePath).data.auditId == auditId &&
         getAfter(sourcePath).data.fileName == auditData.get('fileName', '') &&
-        getAfter(sourcePath).data.importedAt == auditData.get('importedAt', '');
+        getAfter(sourcePath).data.importedAt == auditData.get('importedAt', '') &&
+        getAfter(sourcePath).data.keys().hasAll(['sourceData']) &&
+        getAfter(sourcePath).data.sourceData is map &&
+        getAfter(sourcePath).data.sourceData.keys().size() > 0;
     }
 
     function canReadSafeguarding(caseId) {
