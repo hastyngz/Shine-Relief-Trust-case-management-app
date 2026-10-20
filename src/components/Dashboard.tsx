@@ -179,7 +179,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const openActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status)).length;
   const overdueActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status) && task.dueDate < todayStr).length;
   const highPriorityActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status) && ['High', 'Urgent'].includes(task.priority)).length;
-  const upcomingReviewCount = (db.caseReviews || []).filter((review) => review.nextReviewDate && review.nextReviewDate >= todayStr).length;
+  const upcomingReviewCount = canViewCaseReviews ? (db.caseReviews || []).filter((review) => review.nextReviewDate && review.nextReviewDate >= todayStr).length : 0;
   const girlsOnLeaveCount = (db.girlLeaves || []).filter((leave) => leave.status === 'Active').length;
 
   // Recent combined activities stream
@@ -201,7 +201,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       targetName: girlMap.get(e.girlId) || 'Girl',
       targetId: e.girlId,
     })),
-    ...db.healthFollowUps.map((h) => ({
+    ...(canViewHealthRecords ? db.healthFollowUps.map((h) => ({
       id: h.id,
       type: 'hlt' as const,
       date: h.date,
@@ -209,7 +209,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       details: `${h.medicalFacility} - ${h.treatmentProvided || h.healthIssueComplaint}`,
       targetName: girlMap.get(h.girlId) || 'Girl',
       targetId: h.girlId,
-    })),
+    })) : []),
     ...db.familyFollowUps.map((f) => ({
       id: f.id,
       type: 'fam' as const,
