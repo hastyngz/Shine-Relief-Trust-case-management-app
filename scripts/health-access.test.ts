@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport } from '../src/services/healthRecordAccess';
+import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions } from '../src/services/healthRecordAccess';
 
 const staff = (role: string, canViewHealthRecords?: boolean) => ({ role, canViewHealthRecords }) as any;
 assert.equal(canStaffViewHealthRecords(staff('Administrator')), true);
@@ -23,6 +23,9 @@ assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'healthFollowUp', 
 assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'girl', category: 'Medical Document' }, false), false);
 assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'girl', category: 'Photo' }, false), true);
 assert.equal(isAttachmentAllowedInGeneralReport({ targetType: 'healthFollowUp', category: 'Photo' }, true), true);
+assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'safeguarding' }), false);
+assert.equal(isCaseActionAllowedInGeneralSearch({ sourceType: 'manual' }), true);
+assert.deepEqual(excludeSafeguardingCaseActions([{ id: 'private', sourceType: 'safeguarding' }, { id: 'normal', sourceType: 'manual' }]).map((item) => item.id), ['normal']);
 
 const actionDb: any = {
   educationalFollowUps: [{ girlId: 'girl-edu', furtherActionRequired: true }],

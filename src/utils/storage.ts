@@ -33,6 +33,7 @@ import {
 import { INITIAL_DATABASE } from '../data/seedData';
 import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired, setLastSyncedSnapshot } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
+import { excludeSafeguardingCaseActions } from '../services/healthRecordAccess';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import {
   deleteAnnualBudgetPlanFromFirestore,
@@ -222,6 +223,7 @@ export const resetDatabaseToSeed = clearAllDatabase;
 
 export async function exportDatabaseJSON(): Promise<string> {
   const db = getDatabase();
+  db.caseActions = excludeSafeguardingCaseActions(db.caseActions || []);
   db.attachments = (await getAllAttachmentMetadata()).filter(
     (attachment) => String(attachment.targetType) !== 'safeguardingCase'
   );

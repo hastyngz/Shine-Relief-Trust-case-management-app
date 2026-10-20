@@ -111,3 +111,13 @@ export function isAttachmentAllowedInGeneralReport(
   if (canViewHealthRecords) return true;
   return targetType !== 'healthFollowUp' && !['Medical Document', 'Prescription'].includes(attachment.category || '');
 }
+
+/** General search keeps safeguarding actions in the dedicated safeguarding results path. */
+export function isCaseActionAllowedInGeneralSearch(action: { sourceType?: string }): boolean {
+  return action.sourceType !== 'safeguarding';
+}
+
+/** Remove safeguarding-linked actions from general exports, even for administrators. */
+export function excludeSafeguardingCaseActions<T extends { sourceType?: string }>(actions: T[]): T[] {
+  return actions.filter((action) => action.sourceType !== 'safeguarding');
+}

@@ -27,7 +27,7 @@ function effectiveStatus(action: CaseAction, today: string): CaseActionStatus {
 }
 
 export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh, onOpenGirl, onOpenHousehold }) => {
-  const { currentUser, staffProfile, allStaff, role, isAdmin, canViewHealthRecords } = useAuth();
+  const { currentUser, staffProfile, allStaff, role, isAdmin, canViewHealthRecords, canViewSafeguarding } = useAuth();
   const [filter, setFilter] = useState<ActionFilter>('Mine');
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -88,7 +88,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     name: staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff',
   };
   const canAssignTeamTasks = isAdmin || role === 'Manager';
-  const actions = db.caseActions || [];
+  const actions = (db.caseActions || []).filter((action) => action.sourceType !== 'safeguarding' || canViewSafeguarding);
   const today = new Date().toISOString().slice(0, 10);
   const endOfWeek = new Date();
   endOfWeek.setDate(endOfWeek.getDate() + 7);
