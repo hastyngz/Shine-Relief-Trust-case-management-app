@@ -256,7 +256,12 @@ await assert.rejects(
     status: 'completed' as const,
     sourceData: { rows: [{ syntheticLabel: 'new-source' }] },
   }, true, true),
-  /different restricted import source already exists/,
+  /Import audit\/source persistence failed/,
+);
+assert.deepEqual(
+  server.get('restrictedImportSources', preservedSource.id).sourceData,
+  preservedSource.sourceData,
+  'a rejected collision retry must preserve the original restricted source payload',
 );
 assert.deepEqual(server.get('restrictedImportSources', preservedSource.id), preservedSource,
   'a collision must preserve the previously stored source');
