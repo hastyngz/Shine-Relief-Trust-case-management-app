@@ -109,6 +109,11 @@ assert.equal(protectedProjection.healthFollowUps.length, 0);
 assert.deepEqual(protectedProjection.caseActions?.map((item) => item.id), ['visible-action']);
 assert.deepEqual(protectedProjection.attachments?.map((item) => item.id), ['house-photo']);
 assert.deepEqual(protectedProjection.caseReviews, []);
+const adminGeneralProjection = projectManagementDatabase({
+  ...db,
+  caseActions: [{ id: 'restricted-safeguarding', sourceType: 'safeguarding' }, { id: 'visible-action', sourceType: 'manual' }],
+} as any, { canViewHealthRecords: true, canViewSafeguarding: true, canViewCaseReviews: true });
+assert.deepEqual(adminGeneralProjection.caseActions?.map((item) => item.id), ['visible-action']);
 const caseReviewWithoutHealth = projectManagementDatabase({ ...db, caseReviews: [{ id: 'review-1', health: 'restricted', education: 'Progress' }] } as any, { canViewHealthRecords: false, canViewSafeguarding: false, canViewCaseReviews: true });
 assert.equal(caseReviewWithoutHealth.caseReviews?.[0].health, undefined);
 assert.equal(caseReviewWithoutHealth.caseReviews?.[0].education, 'Progress');

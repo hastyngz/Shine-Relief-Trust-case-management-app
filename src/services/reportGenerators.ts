@@ -249,7 +249,7 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
   let workplans = [...(db.workplans || [])];
   let schedules = [...(db.schedules || [])];
   let photos = [...(db.attachments || [])].filter((attachment) => attachment.consent === true && String(attachment.targetType) !== 'safeguardingCase');
-  let caseActions = [...(db.caseActions || [])];
+  let caseActions = [...(db.caseActions || [])].filter((action) => action.sourceType !== 'safeguarding');
   let caseReviews = [...(db.caseReviews || [])];
   let attendance = [...(db.attendanceRecords || [])];
   let educationHistory = [...(db.educationHistory || [])];

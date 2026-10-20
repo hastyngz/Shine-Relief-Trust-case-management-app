@@ -117,7 +117,9 @@ export async function loadAIRecords(
   const caseActionSnapshot = canViewTeamTasks
     ? await caseActionQuery.get()
     : await caseActionQuery.where('assignedStaffId', '==', staffUid).get();
-  const caseActions = caseActionSnapshot.docs.map((record: QueryDocumentSnapshot) => ({ ...record.data(), id: record.id })) as NonNullable<AppDatabase['caseActions']>;
+  const caseActions = caseActionSnapshot.docs
+    .map((record: QueryDocumentSnapshot) => ({ ...record.data(), id: record.id }))
+    .filter((action: Record<string, unknown>) => action.sourceType !== 'safeguarding') as NonNullable<AppDatabase['caseActions']>;
 
   return {
     girls,
