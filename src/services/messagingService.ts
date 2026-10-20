@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { firestore } from '../firebase';
+import { canReceiveFollowUpNotification } from './healthRecordAccess';
 import {
   COLLECTIONS,
   sanitizeForFirestore,
@@ -1039,6 +1040,8 @@ export async function checkAndTriggerFollowUpReminders(
     if (timingKey) {
       // Deterministic notification ID ensures absolute deduplication in Firestore!
       for (const staff of targetStaff) {
+        // Health reminders must only reach staff authorized to view health records.
+        if (!canReceiveFollowUpNotification(staff, item.recordType)) continue;
         // If staff member recorded this follow-up, prioritize them, else notify manager/admin
         const isAuthor = item.recordedBy && staff.fullName.toLowerCase().includes(item.recordedBy.toLowerCase());
         const isManager = staff.role === 'Manager' || staff.role === 'Administrator';

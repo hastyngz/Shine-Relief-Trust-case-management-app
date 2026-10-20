@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Girl, Household, GirlStatus, AppDatabase } from '../types';
 import { formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { getGirlsWithActionRequired } from '../services/healthRecordAccess';
 import { EmptySun } from './ui/EmptySun';
 import {
   Users,
@@ -32,7 +33,7 @@ export const GirlsList: React.FC<GirlsListProps> = ({
   onSelectGirl,
   onRegisterGirl,
 }) => {
-  const { isViewOnly } = useAuth();
+  const { isViewOnly, canViewHealthRecords } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHouseId, setSelectedHouseId] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatusFilter || 'All');
@@ -51,20 +52,11 @@ export const GirlsList: React.FC<GirlsListProps> = ({
     return Array.from(new Set(girls.map((g) => g.classLevel))).filter(Boolean);
   }, [girls]);
 
-  // Map of girlId to boolean indicating if they have any follow-ups requiring action
-  const girlActionMap = useMemo(() => {
-    const map = new Set<string>();
-    db.educationalFollowUps.forEach((e) => {
-      if (e.furtherActionRequired) map.add(e.girlId);
-    });
-    db.healthFollowUps.forEach((h) => {
-      if (h.furtherActionRequired) map.add(h.girlId);
-    });
-    db.familyFollowUps.forEach((f) => {
-      if (f.furtherActionRequired) map.add(f.girlId);
-    });
-    return map;
-  }, [db]);
+  // Do not let a restricted medical follow-up affect the visible action indicator.
+  const girlActionMap = useMemo(
+    () => getGirlsWithActionRequired(db, canViewHealthRecords),
+    [db, canViewHealthRecords]
+  );
 
   const filteredGirls = useMemo(() => {
     return girls.filter((girl) => {

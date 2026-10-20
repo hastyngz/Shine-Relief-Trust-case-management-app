@@ -45,6 +45,9 @@ jobs:
       - name: Test shared UI effects and save feedback
         run: npm run test:ui-effects
 
+      - name: Test health-record access and follow-up notifications
+        run: npm run test:health-access
+
       - name: Test Firestore listener permissions
         run: npm run test:firestore-listener-permissions
 
