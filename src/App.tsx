@@ -63,6 +63,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
+import { filterRestrictedCachedData, hasRestrictedCachedData } from './services/healthRecordAccess';
 import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
@@ -175,21 +176,13 @@ function AppContent() {
   }, [currentUser?.uid, isSuspended, isAdmin, canViewSafeguarding]);
 
   useLayoutEffect(() => {
-    if (currentUser && (
-      (!canViewHealthRecords && db.healthFollowUps.length > 0) ||
-      (!canViewHealthRecords && (db.historicalRecords || []).some((record) => record.recordType === 'medical')) ||
-      (!canViewCaseReviews && (db.caseReviews || []).length > 0)
-    )) {
-      const restrictedDb = {
-        ...db,
-        healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
-        historicalRecords: canViewHealthRecords ? db.historicalRecords : (db.historicalRecords || []).filter((record) => record.recordType !== 'medical'),
-        caseReviews: canViewCaseReviews ? db.caseReviews : [],
-      };
+    const access = { canViewHealthRecords, canViewCaseReviews, canViewSafeguarding };
+    if (currentUser && hasRestrictedCachedData(db, access)) {
+      const restrictedDb = filterRestrictedCachedData(db, access);
       saveDatabase(restrictedDb, false);
       setDb(restrictedDb);
     }
-  }, [currentUser?.uid, canViewHealthRecords, canViewCaseReviews, db]);
+  }, [currentUser?.uid, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, db]);
 
   // Trigger follow-up reminders check automatically (with deduplication)
   useEffect(() => {

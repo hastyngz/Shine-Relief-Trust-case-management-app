@@ -33,3 +33,60 @@ export function getGirlsWithActionRequired(
   });
   return girlIds;
 }
+
+export interface RestrictedRecordAccess {
+  canViewHealthRecords: boolean;
+  canViewCaseReviews: boolean;
+  canViewSafeguarding: boolean;
+}
+
+/**
+ * Remove permission-restricted fields from a local snapshot before rendering it
+ * after login, role changes, or permission revocation on a shared device.
+ */
+export function filterRestrictedCachedData(db: AppDatabase, access: RestrictedRecordAccess): AppDatabase {
+  const caseReviews = !access.canViewCaseReviews
+    ? []
+    : access.canViewHealthRecords
+      ? (db.caseReviews || [])
+      : (db.caseReviews || []).map(({ health: _health, ...review }) => review);
+  const attachments = (db.attachments || []).filter((attachment) => {
+    const targetType = String(attachment.targetType);
+    return (access.canViewHealthRecords || (
+      targetType !== 'healthFollowUp' &&
+      !['Medical Document', 'Prescription'].includes(attachment.category)
+    )) && (access.canViewSafeguarding || targetType !== 'safeguardingCase');
+  });
+  const caseActions = (db.caseActions || []).filter((action) =>
+    access.canViewSafeguarding || action.sourceType !== 'safeguarding'
+  );
+
+  return {
+    ...db,
+    healthFollowUps: access.canViewHealthRecords ? db.healthFollowUps : [],
+    historicalRecords: access.canViewHealthRecords
+      ? (db.historicalRecords || [])
+      : (db.historicalRecords || []).filter((record) => record.recordType !== 'medical'),
+    caseReviews,
+    attachments,
+    caseActions,
+  };
+}
+
+export function hasRestrictedCachedData(db: AppDatabase, access: RestrictedRecordAccess): boolean {
+  if (!access.canViewHealthRecords && (
+    db.healthFollowUps.length > 0 ||
+    (db.historicalRecords || []).some((record) => record.recordType === 'medical') ||
+    (db.caseReviews || []).some((review) => Object.prototype.hasOwnProperty.call(review, 'health')) ||
+    (db.attachments || []).some((attachment) =>
+      String(attachment.targetType) === 'healthFollowUp' ||
+      ['Medical Document', 'Prescription'].includes(attachment.category)
+    )
+  )) return true;
+  if (!access.canViewCaseReviews && (db.caseReviews || []).length > 0) return true;
+  if (!access.canViewSafeguarding && (
+    (db.caseActions || []).some((action) => action.sourceType === 'safeguarding') ||
+    (db.attachments || []).some((attachment) => String(attachment.targetType) === 'safeguardingCase')
+  )) return true;
+  return false;
+}
