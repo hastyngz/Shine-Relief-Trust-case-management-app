@@ -246,11 +246,11 @@ service cloud.firestore {
     }
 
     match /caseActions/{actionId} {
-      allow read: (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+      allow read: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
         (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() ||
           (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
-      allow create: (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+      allow create: if (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
         (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() || (
           isStaffActive() &&
