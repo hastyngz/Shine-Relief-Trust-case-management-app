@@ -111,3 +111,11 @@ Keep production apply and rules deployment blocked until all of the following ar
 ## Review addendum — 2026-10-20
 
 The review continued after the initial report. A further Firestore rules integrity gap was identified and addressed in the two commits listed above: the audit completion marker now requires a non-empty restricted source payload. The current branch head must be checked for CI results; previous run results do not validate these later commits. Production remains untouched and the release gate remains closed.
+
+## Review addendum — follow-up test fixes (2026-10-20)
+
+The first test-fixture adjustment exposed one more mismatch: `persistImportAuditToFirestore` intentionally wraps internal errors in the privacy-safe public message `Import audit/source persistence failed. Source data was not logged.`. The test was corrected in commit `4371c2aca3d9d8e5dae16a7b2f1378908a746c1c` to expect that public error and additionally assert that the previously stored restricted payload remains unchanged. It does not expect the internal collision detail to leak through the service boundary.
+
+The E2E global setup was also updated in commit `2da39cd9d0e27d632144250c681366ee14dc3458` to seed the server-only migration-completion marker in the isolated emulator after seeding synthetic fixtures. This represents the post-migration state expected by ordinary staff screens and should stop unrelated test runs from repeatedly logging expected denied `importAudits` list queries. It does not affect production. This setup change is a hypothesis-driven test-environment correction; only the E2E run result can show whether it resolves the two failures.
+
+The latest observed workflow run for commit `4371c2aca3d9d8e5dae16a7b2f1378908a746c1c` was queued/pending at the time of review, while a preceding E2E run was still in progress. The rules hardening, new rules tests, collision assertion correction, and E2E marker setup therefore remain **unverified by a completed run**. Recheck the exact branch head and its Actions run before considering this work verified.
