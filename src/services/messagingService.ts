@@ -941,7 +941,7 @@ export async function checkAndTriggerFollowUpReminders(
     girlId: string;
     girlName: string;
     typeLabel: string;
-    recordType: StaffNotification['relatedRecordType'];
+    recordType: 'educationalFollowUp' | 'healthFollowUp' | 'familyFollowUp';
     targetDateStr: string;
     recordedBy?: string;
   }
