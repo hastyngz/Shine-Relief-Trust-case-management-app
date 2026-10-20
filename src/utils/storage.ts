@@ -222,7 +222,9 @@ export const resetDatabaseToSeed = clearAllDatabase;
 
 export async function exportDatabaseJSON(): Promise<string> {
   const db = getDatabase();
-  db.attachments = await getAllAttachmentMetadata();
+  db.attachments = (await getAllAttachmentMetadata()).filter(
+    (attachment) => String(attachment.targetType) !== 'safeguardingCase'
+  );
   return JSON.stringify(db, null, 2);
 }
 
