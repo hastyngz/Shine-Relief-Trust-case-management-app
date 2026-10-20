@@ -36,6 +36,10 @@ const otherRecord: PayrollRecord = { ...paidRecord, id: 'pay-former', employeeId
 const staffPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'emp-1', false);
 assert.deepEqual(staffPayroll.employees.map((employee) => employee.id), ['emp-1']);
 assert.deepEqual(staffPayroll.records.map((record) => record.id), ['pay-1']);
+const staffWithoutRoster = filterPayrollDataForViewer([], [paidRecord], 'emp-1', false);
+assert.equal(staffWithoutRoster.employees.length, 1, 'staff can derive a self-only summary from their own payroll record');
+assert.equal(staffWithoutRoster.employees[0].id, 'emp-1');
+assert.equal(staffWithoutRoster.employees[0].salaryMWK, 80000);
 const managerPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'manager-uid', true);
 assert.equal(managerPayroll.employees.length, employees.length);
 assert.equal(managerPayroll.records.length, 2);
