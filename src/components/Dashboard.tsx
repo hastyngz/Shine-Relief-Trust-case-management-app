@@ -57,7 +57,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToProgramme,
   safeguardingCount,
 }) => {
-  const { currentUser, isAdmin, role, canViewHealthRecords, canViewCaseReviews } = useAuth();
+  const { currentUser, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding } = useAuth();
   const { mobileViewMode } = useVisualSettings();
   const isFoundation = mobileViewMode === 'foundation';
   const canBuildSponsorReport = canAccessManagementDashboard(isAdmin, role);
