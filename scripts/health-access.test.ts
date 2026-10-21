@@ -92,6 +92,9 @@ assert.equal(managerProjection.projectProjections?.length, 1);
 assert.equal(managerProjection.restrictedImportSources?.length, 1);
 assert.equal(managerProjection.payrollRecords?.length, 2);
 assert.equal(staleCache.employees.length, 1, 'filtering must not mutate the original cached database');
+assert.equal(staleCache.healthFollowUps.length, 1, 'hidden health rows remain in the raw offline cache');
+assert.equal(staleCache.caseActions.length, 3, 'hidden case actions remain available to the authorized session');
+assert.equal(staleCache.payrollRecords.length, 2, 'other staff payroll is hidden from the view, not deleted from cache');
 assert.equal(staleCache.restrictedImportSources.length, 1, 'manager cache remains available for a later authorized session');
 
 // Cached case actions must be filtered for the active account without
