@@ -490,10 +490,13 @@ assert.equal(procurementUpdate[0].data?.items?.[0]?.quotes?.[0]?.amountMWK, 1200
 
 // --- 11. A successful database reset must not replay pre-reset edits --------
 await persistQueue(procurementCreate);
+const unauthenticatedFlush = await flushPendingOfflineSnapshots();
+assert.equal(unauthenticatedFlush.flushed, false, 'queued changes must not flush without a signed-in actor');
+assert.equal((await loadQueue()).length, 1, 'an unauthenticated flush attempt preserves queued edits');
 values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-OLD', T1)] })]));
 markDatabaseResetRecoveryRequired();
 assert.equal(isDatabaseResetRecoveryRequired(), true, 'a destructive reset sets a local recovery lock');
-const pausedFlush = await flushPendingOfflineSnapshots();
+const pausedFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(pausedFlush.flushed, false, 'pending changes are not replayed while reset recovery is required');
 assert.equal((await loadQueue()).length, 1, 'paused sync preserves queued edits for recovery');
 assert.equal(values.has('shine_relief_trust_pending_sync_v1'), true, 'paused sync does not migrate/delete the legacy snapshot');
@@ -622,7 +625,7 @@ updateGirl('SG-QUEUE-STALE', { name: 'Changed on this device' } as any);
 assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed on another device',
   'editing a girl locally must not bypass the queue and overwrite a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const girlUpdateFlush = await flushPendingOfflineSnapshots();
+const girlUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(girlUpdateFlush.conflicts.length, 1, 'stale girl update is surfaced as a conflict');
 assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed on another device',
   'conflict handling preserves the newer server girl record');
@@ -632,7 +635,7 @@ server.seed('girls', 'SG-QUEUE-STALE', { ...girlBaseline.girls[0], name: 'Change
 assert.equal(deleteGirl('SG-QUEUE-STALE'), true, 'local girl deletion is accepted after local persistence');
 assert.ok(server.get('girls', 'SG-QUEUE-STALE'), 'local delete must not directly erase a newer server girl record');
 await recordOfflineChanges(getStorageDatabase());
-const girlDeleteFlush = await flushPendingOfflineSnapshots();
+const girlDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(girlDeleteFlush.conflicts.length, 1, 'stale girl delete is surfaced as a conflict');
 assert.equal(server.get('girls', 'SG-QUEUE-STALE').name, 'Changed before delete elsewhere',
   'conflict handling preserves the newer server girl record on delete');
@@ -644,7 +647,7 @@ updateHousehold('SH-QUEUE-STALE', { name: 'Changed on this device' } as any);
 assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed on another device',
   'editing a household locally must not bypass the queue and overwrite a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const householdUpdateFlush = await flushPendingOfflineSnapshots();
+const householdUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(householdUpdateFlush.conflicts.length, 1, 'stale household update is surfaced as a conflict');
 assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed on another device',
   'conflict handling preserves the newer server household record');
@@ -655,7 +658,7 @@ server.seed('households', 'SH-QUEUE-STALE', { ...girlBaseline.households[0], nam
 assert.equal(deleteHousehold('SH-QUEUE-STALE'), true, 'local household deletion is accepted after local persistence');
 assert.ok(server.get('households', 'SH-QUEUE-STALE'), 'local household delete must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const householdDeleteFlush = await flushPendingOfflineSnapshots();
+const householdDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(householdDeleteFlush.conflicts.length, 1, 'stale household delete is surfaced as a conflict');
 assert.equal(server.get('households', 'SH-QUEUE-STALE').name, 'Changed before delete elsewhere',
   'conflict handling preserves the newer server household record on delete');
@@ -672,7 +675,7 @@ assert.equal(deleteHealthFollowUp('HLT-QUEUE-STALE'), true, 'local health follow
 assert.equal(server.get('healthFollowUps', 'HLT-QUEUE-STALE').summary, 'Changed on another device',
   'health deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const healthDeleteFlush = await flushPendingOfflineSnapshots();
+const healthDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(healthDeleteFlush.conflicts.length, 1, 'stale health follow-up deletion is surfaced as a conflict');
 assert.equal(server.get('healthFollowUps', 'HLT-QUEUE-STALE').summary, 'Changed on another device',
   'health conflict handling preserves the newer server record');
@@ -682,7 +685,7 @@ const addedHealth = addHealthFollowUp({ girlId: 'SYNTHETIC-GIRL', summary: 'Synt
 assert.equal(server.get('healthFollowUps', addedHealth.id), undefined,
   'health follow-up creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const healthCreateFlush = await flushPendingOfflineSnapshots();
+const healthCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(healthCreateFlush.conflicts.length, 0, 'new health follow-up queues without a conflict');
 assert.equal(server.get('healthFollowUps', addedHealth.id).summary, 'Synthetic health queue test',
   'queued health follow-up creation reaches Firestore');
@@ -698,7 +701,7 @@ assert.equal(deleteExpense('EXP-QUEUE-STALE'), true, 'local expense deletion suc
 assert.equal(server.get('expenses', 'EXP-QUEUE-STALE').totalCost, 125,
   'expense deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const expenseDeleteFlush = await flushPendingOfflineSnapshots();
+const expenseDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(expenseDeleteFlush.conflicts.length, 1, 'stale expense deletion is surfaced as a conflict');
 assert.equal(server.get('expenses', 'EXP-QUEUE-STALE').totalCost, 125,
   'expense conflict handling preserves the newer server record');
@@ -708,7 +711,7 @@ const addedRent = addRentPayment({ householdId: 'SYNTHETIC-HOUSEHOLD', amount: 1
 assert.equal(server.get('rentPayments', addedRent.id), undefined,
   'rent payment creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const rentCreateFlush = await flushPendingOfflineSnapshots();
+const rentCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(rentCreateFlush.conflicts.length, 0, 'new rent payment queues without a conflict');
 assert.equal(server.get('rentPayments', addedRent.id).id, addedRent.id,
   'queued rent payment creation reaches Firestore');
@@ -725,7 +728,7 @@ assert.equal((updateBudgetItem('BDG-QUEUE-STALE', { testValue: 'local-edit' } as
 assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget update must not directly overwrite a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const budgetUpdateFlush = await flushPendingOfflineSnapshots();
+const budgetUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(budgetUpdateFlush.conflicts.length, 1, 'stale budget update is surfaced as a conflict');
 assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget conflict handling preserves the newer server record');
@@ -736,7 +739,7 @@ assert.equal(deleteBudgetItem('BDG-QUEUE-STALE'), true, 'local budget deletion s
 assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const budgetDeleteFlush = await flushPendingOfflineSnapshots();
+const budgetDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(budgetDeleteFlush.conflicts.length, 1, 'stale budget deletion is surfaced as a conflict');
 assert.equal(server.get('budgets', 'BDG-QUEUE-STALE').testValue, 'server-newer',
   'budget delete conflict preserves the newer server record');
@@ -746,7 +749,7 @@ const addedAnnualBudget = addAnnualBudgetPlan({ title: 'Synthetic annual budget 
 assert.equal(server.get('annualBudgets', addedAnnualBudget.id), undefined,
   'annual budget plan creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const annualBudgetFlush = await flushPendingOfflineSnapshots();
+const annualBudgetFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(annualBudgetFlush.conflicts.length, 0, 'new annual budget plan queues without a conflict');
 assert.equal(server.get('annualBudgets', addedAnnualBudget.id).id, addedAnnualBudget.id,
   'queued annual budget plan creation reaches Firestore');
@@ -764,7 +767,7 @@ assert.equal((updateWorkplanItem('WKP-QUEUE-STALE', { title: 'Local edit' } as a
 assert.equal(server.get('workplans', 'WKP-QUEUE-STALE').title, 'Server newer',
   'workplan update must not directly overwrite a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const workplanUpdateFlush = await flushPendingOfflineSnapshots();
+const workplanUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(workplanUpdateFlush.conflicts.length, 1, 'stale workplan update is surfaced as a conflict');
 assert.equal(server.get('workplans', 'WKP-QUEUE-STALE').title, 'Server newer',
   'workplan conflict handling preserves the newer server record');
@@ -775,7 +778,7 @@ assert.equal(deleteMeetingRecord('MTG-QUEUE-STALE'), true, 'local meeting deleti
 assert.equal(server.get('meetings', 'MTG-QUEUE-STALE').title, 'Server newer',
   'meeting deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const meetingDeleteFlush = await flushPendingOfflineSnapshots();
+const meetingDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(meetingDeleteFlush.conflicts.length, 1, 'stale meeting deletion is surfaced as a conflict');
 assert.equal(server.get('meetings', 'MTG-QUEUE-STALE').title, 'Server newer',
   'meeting conflict handling preserves the newer server record');
@@ -785,7 +788,7 @@ const addedWorkplan = addWorkplanItem({ title: 'Synthetic queue-only workplan' }
 assert.equal(server.get('workplans', addedWorkplan.id), undefined,
   'workplan creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const workplanCreateFlush = await flushPendingOfflineSnapshots();
+const workplanCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(workplanCreateFlush.conflicts.length, 0, 'new workplan queues without a conflict');
 assert.equal(server.get('workplans', addedWorkplan.id).title, 'Synthetic queue-only workplan',
   'queued workplan creation reaches Firestore');
@@ -802,7 +805,7 @@ assert.equal(deleteEarlyYearsRecord('ECD-QUEUE-STALE'), true, 'local early-years
 assert.equal(server.get('earlyYearsRecords', 'ECD-QUEUE-STALE').notes, 'Changed elsewhere',
   'early-years deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const earlyYearsDeleteFlush = await flushPendingOfflineSnapshots();
+const earlyYearsDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(earlyYearsDeleteFlush.conflicts.length, 1, 'stale early-years deletion is surfaced as a conflict');
 assert.equal(server.get('earlyYearsRecords', 'ECD-QUEUE-STALE').notes, 'Changed elsewhere',
   'early-years conflict handling preserves the newer server record');
@@ -812,7 +815,7 @@ const addedMarketPrice = addMarketPrice({ item: 'Synthetic market item', price: 
 assert.equal(server.get('marketPrices', addedMarketPrice.id), undefined,
   'market price creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const marketCreateFlush = await flushPendingOfflineSnapshots();
+const marketCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(marketCreateFlush.conflicts.length, 0, 'new market price queues without a conflict');
 assert.equal(server.get('marketPrices', addedMarketPrice.id).id, addedMarketPrice.id,
   'queued market price creation reaches Firestore');
@@ -828,7 +831,7 @@ assert.equal(deleteFeedingProgramLog('FEED-QUEUE-STALE'), true, 'local feeding-l
 assert.equal(server.get('feedingProgramLogs', 'FEED-QUEUE-STALE').estimatedCost, 150,
   'feeding-log deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const feedingDeleteFlush = await flushPendingOfflineSnapshots();
+const feedingDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(feedingDeleteFlush.conflicts.length, 1, 'stale feeding-log deletion is surfaced as a conflict');
 assert.equal(server.get('feedingProgramLogs', 'FEED-QUEUE-STALE').estimatedCost, 150,
   'feeding-log conflict handling preserves the newer server record');
@@ -838,7 +841,7 @@ const addedFeedingLog = addFeedingProgramLog({ date: '2026-01-02', studentsPrese
 assert.equal(server.get('feedingProgramLogs', addedFeedingLog.id), undefined,
   'feeding-log creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const feedingCreateFlush = await flushPendingOfflineSnapshots();
+const feedingCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(feedingCreateFlush.conflicts.length, 0, 'new feeding log queues without a conflict');
 assert.equal(server.get('feedingProgramLogs', addedFeedingLog.id).id, addedFeedingLog.id,
   'queued feeding-log creation reaches Firestore');
@@ -853,7 +856,7 @@ assert.equal(deleteHistoricalCaseRecord('HIST-QUEUE-STALE'), true, 'local histor
 assert.equal(server.get('historicalCaseRecords', 'HIST-QUEUE-STALE').summary, 'Changed elsewhere',
   'historical deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const historicalDeleteFlush = await flushPendingOfflineSnapshots();
+const historicalDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(historicalDeleteFlush.conflicts.length, 1, 'stale historical-record deletion is surfaced as a conflict');
 assert.equal(server.get('historicalCaseRecords', 'HIST-QUEUE-STALE').summary, 'Changed elsewhere',
   'historical conflict handling preserves the newer server record');
@@ -869,7 +872,7 @@ saveForecastSettings({ ...forecastBaseline.forecastSettings![0], inflationPercen
 assert.equal(server.get('forecastSettings', 'FCST-QUEUE-STALE').inflationPercent, 9,
   'forecast settings save must not directly overwrite a newer server value');
 await recordOfflineChanges(getStorageDatabase());
-const forecastFlush = await flushPendingOfflineSnapshots();
+const forecastFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(forecastFlush.conflicts.length, 1, 'stale forecast settings update is surfaced as a conflict');
 assert.equal(server.get('forecastSettings', 'FCST-QUEUE-STALE').inflationPercent, 9,
   'forecast settings conflict preserves the newer server value');
@@ -880,7 +883,7 @@ saveAISettings(aiSettings as any);
 assert.equal(server.get('aiSettings', aiSettings.id), undefined,
   'AI settings save must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const aiSettingsFlush = await flushPendingOfflineSnapshots();
+const aiSettingsFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(aiSettingsFlush.conflicts.length, 0, 'new AI settings queue without a conflict');
 assert.equal(server.get('aiSettings', aiSettings.id).enabled, true,
   'queued AI settings creation reaches Firestore');
@@ -896,7 +899,7 @@ assert.equal(deletePerson('PER-QUEUE-STALE'), true, 'local person deletion succe
 assert.equal(server.get('people', 'PER-QUEUE-STALE').fullName, 'Changed elsewhere',
   'person deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const personDeleteFlush = await flushPendingOfflineSnapshots();
+const personDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(personDeleteFlush.conflicts.length, 1, 'stale person deletion is surfaced as a conflict');
 assert.equal(server.get('people', 'PER-QUEUE-STALE').fullName, 'Changed elsewhere',
   'person conflict handling preserves the newer server record');
@@ -906,7 +909,7 @@ const addedPerson = addPerson({ id: 'PER-QUEUE-NEW', fullName: 'Synthetic new pe
 assert.equal(server.get('people', addedPerson.id), undefined,
   'person creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const personCreateFlush = await flushPendingOfflineSnapshots();
+const personCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(personCreateFlush.conflicts.length, 0, 'new person queues without a conflict');
 assert.equal(server.get('people', addedPerson.id).fullName, 'Synthetic new person',
   'queued person creation reaches Firestore');
@@ -940,7 +943,7 @@ assert.equal(updatePayrollRecord(payrollBaseRecord.id, { expectedAmount: 200 } a
 assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
   'payroll update must not directly overwrite a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const payrollUpdateFlush = await flushPendingOfflineSnapshots();
+const payrollUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(payrollUpdateFlush.conflicts.length, 1, 'stale payroll update is surfaced as a conflict');
 assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
   'payroll conflict preserves the newer server record');
@@ -951,7 +954,7 @@ assert.equal(deletePayrollRecord(payrollBaseRecord.id), true, 'local payroll del
 assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
   'payroll deletion must not directly erase a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const payrollDeleteFlush = await flushPendingOfflineSnapshots();
+const payrollDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(payrollDeleteFlush.conflicts.length, 1, 'stale payroll deletion is surfaced as a conflict');
 assert.equal(server.get('payrollRecords', payrollBaseRecord.id).expectedAmount, 125,
   'payroll delete conflict preserves the newer server record');
@@ -972,7 +975,7 @@ const addedPayroll = addPayrollRecord({
 assert.equal(server.get('payrollRecords', addedPayroll.id), undefined,
   'payroll creation must not issue a parallel direct Firestore write');
 await recordOfflineChanges(getStorageDatabase());
-const payrollCreateFlush = await flushPendingOfflineSnapshots();
+const payrollCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(payrollCreateFlush.conflicts.length, 0, 'new payroll record queues without a conflict');
 assert.equal(server.get('payrollRecords', addedPayroll.id).id, addedPayroll.id,
   'queued payroll creation reaches Firestore');
@@ -987,7 +990,7 @@ assert.equal((await updateEmployeeRecord('EMP-QUEUE-STALE', { salaryMWK: 200 } a
 assert.equal(server.get('employees', 'EMP-QUEUE-STALE').salaryMWK, 150,
   'employee update must not directly overwrite a newer server record');
 await recordOfflineChanges(getStorageDatabase());
-const employeeUpdateFlush = await flushPendingOfflineSnapshots();
+const employeeUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(employeeUpdateFlush.conflicts.length, 1, 'stale employee update is surfaced as a conflict');
 assert.equal(server.get('employees', 'EMP-QUEUE-STALE').salaryMWK, 150,
   'employee conflict preserves the newer server record');

@@ -470,6 +470,11 @@ export async function flushPendingOfflineSnapshots(
   options: { actor?: { uid: string; name: string; canReadImportSourceData?: boolean; canWriteImportAuditMetadata?: boolean } } = {},
 ): Promise<FlushResult> {
   if (typeof window === 'undefined') return { flushed: false, applied: 0, conflicts: [] };
+  // Never replay a device-wide queue without a verified signed-in actor. This
+  // also protects the online event path during sign-out/account transitions.
+  if (!options.actor?.uid || options.actor.uid === 'unknown') {
+    return { flushed: false, applied: 0, conflicts: [] };
+  }
   // A reset that failed after cloud deletion leaves the local queue dangerous:
   // replaying it could recreate records. An administrator must complete recovery.
   if (isDatabaseResetRecoveryRequired()) {
