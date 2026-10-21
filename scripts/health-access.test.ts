@@ -78,6 +78,21 @@ assert.deepEqual(restrictedCache.projectProjections, []);
 assert.deepEqual(restrictedCache.restrictedImportSources, []);
 assert.deepEqual((restrictedCache.payrollRecords || []).map((record: any) => record.id), ['own-payroll']);
 assert.equal(hasRestrictedCachedData(restrictedCache, staleAccess), false);
+const managerProjection = filterRestrictedCachedData(staleCache, {
+  canViewHealthRecords: true,
+  canViewCaseReviews: true,
+  canViewSafeguarding: true,
+  canViewManagementPlanning: true,
+  canReadImportSourceData: true,
+  uid: 'manager-uid',
+});
+assert.equal(managerProjection.employees?.length, 1);
+assert.equal(managerProjection.whatIfScenarios?.length, 1);
+assert.equal(managerProjection.projectProjections?.length, 1);
+assert.equal(managerProjection.restrictedImportSources?.length, 1);
+assert.equal(managerProjection.payrollRecords?.length, 2);
+assert.equal(staleCache.employees.length, 1, 'filtering must not mutate the original cached database');
+assert.equal(staleCache.restrictedImportSources.length, 1, 'manager cache remains available for a later authorized session');
 
 // Cached case actions must be filtered for the active account without
 // mutating the shared offline cache (which may be reused by another authorized user).
