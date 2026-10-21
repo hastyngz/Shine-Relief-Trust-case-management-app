@@ -218,3 +218,32 @@ Follow-up to the 2026-10-21 Firestore list-query fix: the browser stores the who
 ### Candid reflection and next action
 
 The safer immediate move was to filter the user-facing action projections rather than deleting records from a shared offline cache. The test now checks both the visible result and that the original cache array survives unchanged. This reduces the known case-action exposure but is not a substitute for user-scoped local persistence; the next priority is a full inventory of reads/writes of the shared cache, especially HR/planning and restricted import data, with manager-to-staff and offline/reconnect tests before changing cache storage semantics.
+
+
+## 2026-10-21 — Central non-destructive permission-scoped UI projection
+
+### Why this additional change was necessary
+
+Reviewing the previous cache-filtering effect against `src/services/offlineSync.ts:recordOfflineChanges` and `computeChangeEntries` exposed a more serious interaction: the effect wrote a reduced database to localStorage and replaced React's main database state. Since the queue computes removals against the last confirmed baseline, removing permission-hidden rows from that state could be interpreted as record deletions and queued for sync. That is incompatible with SHINE's offline-data preservation requirement.
+
+### Changes on `Replit`
+
+- Replaced the destructive filter-and-save effect in `src/App.tsx` with a memoized `viewDb` projection. The main `db` state remains the full local/sync state used by the offline queue; only UI-facing views and global modals receive the filtered projection. The projection is never written back to localStorage.
+- Expanded `filterRestrictedCachedData` in `src/services/healthRecordAccess.ts` to hide manager/admin-only `employees`, `whatIfScenarios` and `projectProjections` from non-management UI sessions; hide `restrictedImportSources` unless import-source access is granted; and restrict non-management `payrollRecords` to the authenticated UID's `employeeId`.
+- The same projection filters case actions by active staff UID and health/safeguarding permissions. Dedicated case-action display can still respect explicit safeguarding permission, while general search, reports/exports, AI context and operational intelligence continue to exclude safeguarding-linked actions entirely.
+- Extended `scripts/health-access.test.ts` with synthetic HR, planning, restricted import and payroll records. It checks staff visibility, manager visibility, own-payroll-only filtering, and that projecting a staff view does not mutate the original cache used by a later authorized manager session.
+
+### Verification status
+
+- Regression assertions are in the existing `test:health-access` suite. I have not run the suite locally in this environment. GitHub Actions for the final branch head is the verification source; the result must be checked before this is called verified.
+- No production data, rules, or deployment settings were changed. No real Android or weak/no-signal field test was performed.
+
+### Remaining limits
+
+- The UI projection prevents these records from being handed to ordinary view components, but it is **not full per-account local-storage isolation**: the shared raw cache still contains previously cached data at rest, and the app still uses the same localStorage key across accounts. A future storage partitioning design must preserve the per-record queue, conflict state, confirmed snapshot baseline, and pending offline edits.
+- This is client-side display/context scoping, not an authorization boundary. Firestore rules and authenticated server checks remain authoritative. Audit any newly added consumer of raw `db` before using it in UI, search, export, notifications or AI.
+- No production migration/backfill for legacy case actions missing `sourceType` was attempted.
+
+### Candid reflection and next action
+
+The key improvement is keeping permission-filtered display data separate from the full database used to calculate offline changes. That avoids turning a user's lack of permission into an apparent deletion. The remaining difficult part is the shared cache itself: the next phase should map all raw-cache consumers and then design account-scoped persistence without silently discarding another authorized user's offline work. Do not deploy based on a green UI test alone.
