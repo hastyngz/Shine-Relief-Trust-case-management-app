@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions, canStaffReceiveCaseActionNotification } from '../src/services/healthRecordAccess';
+import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions, canStaffReceiveCaseActionNotification, filterCaseActionsForStaff } from '../src/services/healthRecordAccess';
 
 const staff = (role: string, canViewHealthRecords?: boolean) => ({ role, canViewHealthRecords }) as any;
 assert.equal(canStaffViewHealthRecords(staff('Administrator')), true);
@@ -65,5 +65,27 @@ assert.ok(!JSON.stringify(restrictedCache.caseReviews).includes('SYNTHETIC_PRIVA
 assert.deepEqual((restrictedCache.caseActions || []).map((action: any) => action.id), ['normal-action']);
 assert.deepEqual((restrictedCache.attachments || []).map((attachment: any) => attachment.id), ['ordinary-photo']);
 assert.equal(hasRestrictedCachedData(restrictedCache, staleAccess), false);
+
+// Cached case actions must be filtered for the active account without
+// mutating the shared offline cache (which may be reused by another authorized user).
+const sharedCachedActions = [
+  { id: 'own-manual', assignedStaffId: 'viewer-uid', sourceType: 'manual' },
+  { id: 'other-manual', assignedStaffId: 'manager-uid', sourceType: 'manual' },
+  { id: 'own-health', assignedStaffId: 'viewer-uid', sourceType: 'healthFollowUp' },
+  { id: 'own-safeguarding', assignedStaffId: 'viewer-uid', sourceType: 'safeguarding' },
+];
+const cachedActionsBeforeViewFilter = JSON.stringify(sharedCachedActions);
+const viewerActions = filterCaseActionsForStaff(sharedCachedActions, {
+  uid: 'viewer-uid', canViewTeamTasks: false, canViewHealthRecords: false, canViewSafeguarding: false,
+});
+assert.deepEqual(viewerActions.map((action) => action.id), ['own-manual']);
+const managerActions = filterCaseActionsForStaff(sharedCachedActions, {
+  uid: 'manager-uid', canViewTeamTasks: true, canViewHealthRecords: true, canViewSafeguarding: false,
+});
+assert.deepEqual(managerActions.map((action) => action.id), ['own-manual', 'other-manual', 'own-health']);
+assert.deepEqual(filterCaseActionsForStaff(sharedCachedActions, {
+  canViewTeamTasks: false, canViewHealthRecords: false, canViewSafeguarding: false,
+}).length, 0);
+assert.equal(JSON.stringify(sharedCachedActions), cachedActionsBeforeViewFilter, 'view filtering must preserve shared offline cache');
 
 console.log('Health record access and follow-up notification checks passed.');
