@@ -261,3 +261,26 @@ The key improvement is keeping permission-filtered display data separate from th
 - A final consumer audit found that the Case Management Reports table and its standalone “Outstanding actions CSV” still referenced `db.caseActions` directly, and the management report panel received the unfiltered database. These paths now use `visibleCaseActions` / `reportDb`, so staff assignment scoping and the rule excluding safeguarding-linked actions apply to the table, CSV, comprehensive report and management report inputs.
 - Non-manager case-action projections now fail closed for legacy records with a missing `sourceType`. Such records are already omitted by the Firestore `!=`/`not-in` list-query pattern; this prevents a stale manager cache from reintroducing untyped actions into a staff view. Only managers with both health and safeguarding permissions can inspect cached legacy records; managers lacking either sensitive-record permission also fail closed on untyped actions. A production backfill remains a separately approved task.
 - Final verification remains pending until the CI run for the latest exact `Replit` SHA completes. Do not interpret cancelled intermediate runs as failures of the final code or as passes.
+
+
+## 2026-10-21 — Phase 5 intelligence safeguarding boundary
+
+### Additional consumer gap found
+
+A final scan of the operational-intelligence path found that `Phase5OperationsView` uses `filterCaseIntelligenceData` before producing case summaries, suggestions and quality issues, but that helper previously left `caseActions` and medical historical records untouched. The app-level pending-count path was already scoped, but the Phase 5 screen could still derive a suggestion/quality issue from a cached safeguarding-linked action when the current account had safeguarding permission. This conflicted with the rule that safeguarding-linked details stay out of general intelligence and AI-style summaries.
+
+### Changes
+
+- `filterCaseIntelligenceData` now excludes safeguarding-linked actions for every user, excludes health-follow-up actions and medical history when health access is absent, and keeps case-review health fields permission-scoped.
+- `buildIntelligentCaseSummary` excludes safeguarding-linked actions even if called with a raw database.
+- `detectIntelligenceSuggestions` and `scanDataQuality` defensively skip safeguarding-linked actions even if a future caller forgets to pass a filtered projection.
+- `scripts/health-access.test.ts` now checks the Phase 5 projection for health-permission behavior and asserts that direct suggestion generation and quality scans do not emit a synthetic safeguarding action title from raw cached data.
+
+### Verification and remaining risk
+
+- The new regression cases are part of the workflow's `test:health-access` step; exact-head CI still must finish successfully before this change is called verified. Intermediate runs cancelled by branch concurrency are not verification.
+- No production data, Firestore rules or deployment configuration was changed. Shared localStorage remains a residual account-isolation risk; UI filtering does not encrypt or partition cached records at rest.
+
+### Candid reflection
+
+Filtering the app's main view projection was not enough on its own: a secondary service could be called directly with a broader database. The defense-in-depth filter and direct service tests make the policy harder to bypass accidentally in future Phase 5 changes.
