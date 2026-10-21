@@ -247,3 +247,10 @@ Reviewing the previous cache-filtering effect against `src/services/offlineSync.
 ### Candid reflection and next action
 
 The key improvement is keeping permission-filtered display data separate from the full database used to calculate offline changes. That avoids turning a user's lack of permission into an apparent deletion. The remaining difficult part is the shared cache itself: the next phase should map all raw-cache consumers and then design account-scoped persistence without silently discarding another authorized user's offline work. Do not deploy based on a green UI test alone.
+
+
+### 2026-10-21 follow-up — projection coverage and cache-preservation assertions
+
+- The final view projection is now also used for operational-intelligence calculations, with safeguarding-linked actions excluded from that general context. This prevents suggestion counts/content from being derived from cross-staff cached actions or safeguarding tasks.
+- The synthetic access test now asserts that the original cached health rows, case actions, payroll rows, employee records and restricted import-source payload remain unchanged after a filtered view is produced. Manager projection assertions confirm those cached rows remain available to a later authorized session in memory.
+- The final code changes are on `Replit`; no local execution is claimed. Check the GitHub Actions run for the exact final branch SHA before treating the change as verified. The shared localStorage key remains a documented residual risk, and the client projection is not a substitute for server/rules authorization.
