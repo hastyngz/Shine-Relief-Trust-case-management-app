@@ -698,5 +698,5 @@ Suggestion format:
 
 ### 2026-10-21 · Mosaic (ChatGPT) · final report-path audit
 - Closed remaining client paths that used raw case-action arrays in the Reports table/CSV and management report input; all now consume the scoped, safeguarding-free action projection.
-- Staff views fail closed on legacy actions missing `sourceType`; manager cache still retains those rows for review, and any production backfill remains separate/approval-gated.
+- Staff views fail closed on legacy actions missing `sourceType`; only managers with both health and safeguarding permissions may inspect those cached rows, and any production backfill remains separate/approval-gated.
 - Exact-head CI is pending. Intermediate runs were cancelled by branch concurrency and are not evidence either way. — Mosaic (ChatGPT), 2026-10-21
