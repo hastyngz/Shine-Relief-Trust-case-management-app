@@ -4,6 +4,7 @@ import { AppDatabase, CaseAction, CaseActionPriority, CaseActionStatus, CaseActi
 import { addCaseAction, updateCaseAction } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { SwipeRow } from './ui/SwipeRow';
+import { filterCaseActionsForStaff } from '../services/healthRecordAccess';
 
 interface CaseActionsViewProps {
   db: AppDatabase;
@@ -88,10 +89,12 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
     name: staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff',
   };
   const canAssignTeamTasks = isAdmin || role === 'Manager';
-  const actions = (db.caseActions || []).filter((action) =>
-    (action.sourceType !== 'safeguarding' || canViewSafeguarding) &&
-    (action.sourceType !== 'healthFollowUp' || canViewHealthRecords)
-  );
+  const actions = filterCaseActionsForStaff(db.caseActions || [], {
+    uid: currentUser?.uid,
+    canViewTeamTasks: canAssignTeamTasks,
+    canViewHealthRecords,
+    canViewSafeguarding,
+  });
   const today = new Date().toISOString().slice(0, 10);
   const endOfWeek = new Date();
   endOfWeek.setDate(endOfWeek.getDate() + 7);
