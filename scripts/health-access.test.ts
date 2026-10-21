@@ -110,7 +110,7 @@ const healthAuthorizedIntelligence = filterCaseIntelligenceData(staleCache, {
   canViewCaseReviews: true,
 });
 assert.deepEqual((healthAuthorizedIntelligence.caseActions || []).map((action: any) => action.id), ['health-action', 'normal-action']);
-assert.ok(!JSON.stringify(healthAuthorizedIntelligence).includes('SYNTHETIC_PRIVATE_HEALTH') === false || healthAuthorizedIntelligence.caseReviews?.length === 0);
+assert.ok(JSON.stringify(healthAuthorizedIntelligence).includes('SYNTHETIC_PRIVATE_HEALTH'), 'authorized health reviewers retain health details in the intelligence projection');
 
 // Cached case actions must be filtered for the active account without
 // mutating the shared offline cache (which may be reused by another authorized user).
