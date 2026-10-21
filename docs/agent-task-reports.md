@@ -289,3 +289,26 @@ Filtering the app's main view projection was not enough on its own: a secondary 
 ### 2026-10-21 final defense-in-depth note
 
 The shared intelligence service now also fails closed on **untyped legacy case actions**, not only explicitly tagged safeguarding actions. This applies to the filtered Phase 5 projection, intelligent case summaries, suggestion generation and data-quality scans. The regression fixture contains synthetic safeguarding and untyped actions and asserts that neither title appears in general intelligence output. This does not backfill or alter production records; any legacy data repair remains a separately approved operation.
+
+
+## 2026-10-21 — Newly identified high-priority follow-up: offline queue account ownership
+
+### Finding
+
+The cache audit continued into `src/services/offlineSyncDb.ts`, `src/services/offlineSync.ts` and `OfflineChangeEntry` in `src/types.ts`. The per-record queue, conflict list and last-synced baseline currently use global browser keys (`shine_relief_trust_offline_queue_v2`, `shine_relief_trust_sync_conflicts_v1`, `shine_relief_trust_last_synced_v1`). An `OfflineChangeEntry` records collection/record/operation/data/baseline/hash/queued time, but **does not store the UID that queued it**. `recordOfflineChanges` compares against one global baseline, and `flushPendingOfflineSnapshots` flushes the entire queue using whichever authenticated actor is current when the flush happens.
+
+### Risk
+
+On a shared field device, a manager can make offline edits, then a staff member can sign in before the queue flushes. The staff session may attempt the manager's queued edits under the staff actor, causing avoidable authorization failures/conflicts and potentially attributing a conflict to the wrong user. The conflict list and baseline are also global. This is a separate, high-priority account-isolation/data-integrity risk; it was discovered during audit and **has not been changed** in this task.
+
+### Safe next-step design (not implemented)
+
+1. Add explicit owner UID to new queue entries and key queue/baseline/conflicts by authenticated UID.
+2. Flush and resolve only entries owned by the current UID; preserve manager entries when staff logs in, and vice versa.
+3. Design a non-destructive migration/quarantine for legacy entries with no owner UID. Do not guess the owner from the current login, silently discard them, or replay them as another user.
+4. Add regression tests for manager-offline-edit → staff-login → reconnect, staff-offline-edit → manager-login, conflict attribution, browser reload, and weak/no-signal recovery.
+5. Only after queue/baseline/conflict migration is proven should per-account local database persistence be designed; keep the current non-destructive UI projection in place meanwhile.
+
+### Status
+
+No queue entries, baselines, conflicts or production records were modified. This issue is documented as a follow-up because an incomplete migration could lose offline edits or replay them under the wrong identity.
