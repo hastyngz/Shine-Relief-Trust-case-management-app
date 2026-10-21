@@ -110,7 +110,7 @@ export function detectIntelligenceSuggestions(db: AppDatabase, today = new Date(
   (db.healthFollowUps || []).forEach((item) => {
     if (item.furtherActionRequired && (!item.nextFollowUpDate || item.nextFollowUpDate <= today)) add({ type: 'follow_up', title: `Review health follow-up for ${item.girlId}`, explanation: item.nextFollowUpDate ? `The recorded follow-up date ${item.nextFollowUpDate} has passed.` : 'The record requires action but has no next follow-up date.', sourceRecordIds: [item.id, item.girlId], suggestedAction: item.recommendations || item.reasonForVisit, suggestedDueDate: today, confidence: 'high' });
   });
-  (db.caseActions || []).forEach((item) => {
+  (db.caseActions || []).filter((item) => item.sourceType !== 'safeguarding').forEach((item) => {
     const days = daysFromToday(item.dueDate);
     if (!item.assignedStaffId) add({ type: 'missing_information', title: `Assign responsible staff for ${item.title}`, explanation: 'This action has no responsible staff member.', sourceRecordIds: [item.id], suggestedAction: 'Review and assign a responsible staff member.', confidence: 'high' });
     else if (days !== undefined && days < 0 && !['Completed', 'Cancelled'].includes(item.status)) add({ type: 'workplan', title: `Overdue action: ${item.title}`, explanation: `The action was due on ${item.dueDate} and remains ${item.status}.`, sourceRecordIds: [item.id], suggestedAction: 'Review status and next action.', suggestedDueDate: today, assignedStaffId: item.assignedStaffId, confidence: 'high' });
@@ -165,7 +165,7 @@ export function scanDataQuality(db: AppDatabase): DataQualityIssue[] {
     if (!girl.fullName || !girl.dateOfBirth || !girl.householdId) issues.push({ id: `quality-${girl.id}-required`, type: 'missing_required_information', title: `Incomplete girl profile: ${girl.fullName || girl.id}`, detail: 'Name, date of birth, and household are required for a complete profile.', recordType: 'girl', recordId: girl.id, severity: 'high' });
     if (girl.dateOfBirth && !validDate(girl.dateOfBirth)) issues.push({ id: `quality-${girl.id}-dob`, type: 'invalid_value', title: `Invalid date of birth: ${girl.fullName}`, detail: girl.dateOfBirth, recordType: 'girl', recordId: girl.id, severity: 'medium' });
   });
-  (db.caseActions || []).forEach((item) => {
+  (db.caseActions || []).filter((item) => item.sourceType !== 'safeguarding').forEach((item) => {
     if (!item.assignedStaffId) issues.push({ id: `quality-${item.id}-staff`, type: 'missing_required_information', title: `Action has no responsible staff: ${item.title}`, detail: 'Assign a staff member before relying on the deadline.', recordType: 'caseAction', recordId: item.id, severity: 'medium' });
     if (!validDate(item.dueDate)) issues.push({ id: `quality-${item.id}-date`, type: 'invalid_value', title: `Invalid action date: ${item.title}`, detail: item.dueDate, recordType: 'caseAction', recordId: item.id, severity: 'medium' });
   });
