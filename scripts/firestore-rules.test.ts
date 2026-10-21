@@ -5,7 +5,7 @@ import {
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import assert from 'node:assert/strict';
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, orderBy, query, runTransaction, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getDocsFromServer, orderBy, query, runTransaction, setDoc, updateDoc, where } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -51,6 +51,7 @@ async function seedData() {
       title: 'Visit school',
       assignedStaffId: 'viewer',
       assignedStaffName: 'viewer',
+      sourceType: 'manual',
       status: 'Open',
       priority: 'Medium',
       dueDate: '2026-10-01',
@@ -315,8 +316,11 @@ async function run() {
     await assertSucceeds(getDoc(doc(safeguardingWorker, 'caseActions/action-safeguarding-authorized')));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-health')));
     await assertSucceeds(getDoc(doc(manager, 'caseActions/action-health')));
-    await assertSucceeds(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', 'not-in', ['safeguarding', 'healthFollowUp']))));
-    await assertFails(getDocs(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
+    const adminAssignedViewerActions = await assertSucceeds(getDocsFromServer(query(collection(admin, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
+    assert.deepEqual(adminAssignedViewerActions.docs.map((action) => action.id).sort(), ['action-1', 'action-health', 'action-safeguarding']);
+    const visibleViewerActions = await assertSucceeds(getDocsFromServer(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', 'not-in', ['safeguarding', 'healthFollowUp']))));
+    assert.deepEqual(visibleViewerActions.docs.map((action) => action.id), ['action-1']);
+    await assertFails(getDocsFromServer(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));
