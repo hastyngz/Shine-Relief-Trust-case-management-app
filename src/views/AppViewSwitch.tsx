@@ -16,6 +16,7 @@ import { GirlProfile } from '../components/GirlProfile';
 import { HouseholdProfile } from '../components/HouseholdProfile';
 import { canAccessManagementDashboard } from '../services/managementAnalytics';
 import type { QualityIssue } from '../services/qualityRules';
+import { filterCaseActionsForStaff } from '../services/healthRecordAccess';
 import { ProgrammeId } from '../data/programmes';
 import { GirlForm } from '../components/Forms/GirlForm';
 import { HouseholdForm } from '../components/Forms/HouseholdForm';
@@ -48,6 +49,9 @@ export interface AppViewSwitchProps {
   db: AppDatabase;
   role: StaffRole | null;
   isAdmin: boolean;
+  currentUserUid?: string;
+  canViewHealthRecords: boolean;
+  canViewSafeguarding: boolean;
   isViewOnly: boolean;
   auditActor: string;
   allStaff: AppDatabase extends { staff?: infer S } ? S : any[];
@@ -140,7 +144,7 @@ export interface AppViewSwitchProps {
 
 export function AppViewSwitch(props: AppViewSwitchProps) {
   const {
-    view, db, role, isAdmin, isViewOnly, auditActor, allStaff, safeguardingCount,
+    view, db, role, isAdmin, currentUserUid, canViewHealthRecords, canViewSafeguarding, isViewOnly, auditActor, allStaff, safeguardingCount,
     girlsStatusFilter, selectedProgrammeId, qualityRecordFocus, programmePlanningRequest,
     importWizardKey, pendingImportFile, previousImportLocation, editingGirl, editingHouse,
     aiFocusGirlId, aiFocusHouseId, currentGirl, currentGirlHouse, currentGirlEdu,
@@ -161,6 +165,13 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
     handleSaveFamilyFollowUp, handleSaveRentPayment, handleSaveExpense, handleSaveActivity,
     reloadData, notifyDataChange, showToast, openImportFilePicker,
   } = props;
+
+  const visibleCaseActions = filterCaseActionsForStaff(db.caseActions || [], {
+    uid: currentUserUid,
+    canViewTeamTasks: isAdmin || role === 'Manager',
+    canViewHealthRecords,
+    canViewSafeguarding,
+  });
 
   return (
     <>
@@ -330,7 +341,7 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       {/* VIEW: SHINE AI ASSISTANT */}
       {view === 'ai-assistant' && (
         <AIAssistantView
-          db={db}
+          db={{ ...db, caseActions: visibleCaseActions }}
           initialGirlId={aiFocusGirlId}
           initialHouseId={aiFocusHouseId}
           onNavigateToGirl={handleOpenGirlProfile}
@@ -426,7 +437,7 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
           healthFollowUps={currentGirlHealth}
           familyFollowUps={currentGirlFamily}
           historicalRecords={db.historicalRecords?.filter((h) => h.girlId === currentGirl.id) || []}
-          caseActions={(db.caseActions || []).filter((item) => item.girlId === currentGirl.id)}
+          caseActions={visibleCaseActions.filter((item) => item.girlId === currentGirl.id)}
           educationHistory={(db.educationHistory || []).filter((item) => item.girlId === currentGirl.id)}
           academicSupports={(db.academicSupports || []).filter((item) => item.girlId === currentGirl.id)}
           examinationRecords={(db.examinationRecords || []).filter((item) => item.girlId === currentGirl.id)}
