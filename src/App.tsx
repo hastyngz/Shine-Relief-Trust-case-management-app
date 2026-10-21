@@ -171,15 +171,8 @@ function AppContent() {
   const [safeguardingCount, setSafeguardingCount] = useState<number>();
   const pendingOperationsReviewCount = useMemo(() => {
     const reviewDb = {
-      ...db,
-      healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
-      caseReviews: canViewCaseReviews ? db.caseReviews : [],
-      caseActions: excludeSafeguardingCaseActions(filterCaseActionsForStaff(db.caseActions || [], {
-        uid: currentUser?.uid,
-        canViewTeamTasks: isAdmin || role === 'Manager',
-        canViewHealthRecords,
-        canViewSafeguarding,
-      })),
+      ...viewDb,
+      caseActions: excludeSafeguardingCaseActions(viewDb.caseActions || []),
     };
     const savedSuggestions = reviewDb.intelligenceSuggestions || [];
     const pendingSuggestions = detectIntelligenceSuggestions(reviewDb).filter((suggestion) =>
@@ -188,7 +181,7 @@ function AppContent() {
     const duplicateCount = findPotentialDuplicates(reviewDb).length;
     const qualityCount = scanDataQuality(reviewDb).filter((issue) => issue.type !== 'duplicate_candidate').length;
     return pendingSuggestions + duplicateCount + qualityCount;
-  }, [db, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
+  }, [viewDb]);
 
   useEffect(() => {
     if (!currentUser || isSuspended || (!isAdmin && !canViewSafeguarding)) {
