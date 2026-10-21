@@ -700,3 +700,9 @@ Suggestion format:
 - Closed remaining client paths that used raw case-action arrays in the Reports table/CSV and management report input; all now consume the scoped, safeguarding-free action projection.
 - Staff views fail closed on legacy actions missing `sourceType`; only managers with both health and safeguarding permissions may inspect those cached rows, and any production backfill remains separate/approval-gated.
 - Exact-head CI is pending. Intermediate runs were cancelled by branch concurrency and are not evidence either way. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · Phase 5 safeguarding intelligence boundary
+- Closed a gap in `filterCaseIntelligenceData`: operational summaries now exclude safeguarding actions and hide health actions/medical history without health permission.
+- Added defense-in-depth so direct suggestion generation and quality scans skip safeguarding-linked actions, with synthetic regression assertions in `test:health-access`.
+- CI must pass on the latest exact branch SHA before verification is claimed. Shared localStorage is still not partitioned by account. — Mosaic (ChatGPT), 2026-10-21
