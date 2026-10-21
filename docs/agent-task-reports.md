@@ -254,3 +254,10 @@ The key improvement is keeping permission-filtered display data separate from th
 - The final view projection is now also used for operational-intelligence calculations, with safeguarding-linked actions excluded from that general context. This prevents suggestion counts/content from being derived from cross-staff cached actions or safeguarding tasks.
 - The synthetic access test now asserts that the original cached health rows, case actions, payroll rows, employee records and restricted import-source payload remain unchanged after a filtered view is produced. Manager projection assertions confirm those cached rows remain available to a later authorized session in memory.
 - The final code changes are on `Replit`; no local execution is claimed. Check the GitHub Actions run for the exact final branch SHA before treating the change as verified. The shared localStorage key remains a documented residual risk, and the client projection is not a substitute for server/rules authorization.
+
+
+### 2026-10-21 final review note — report CSV and legacy action records
+
+- A final consumer audit found that the Case Management Reports table and its standalone “Outstanding actions CSV” still referenced `db.caseActions` directly, and the management report panel received the unfiltered database. These paths now use `visibleCaseActions` / `reportDb`, so staff assignment scoping and the rule excluding safeguarding-linked actions apply to the table, CSV, comprehensive report and management report inputs.
+- Non-manager case-action projections now fail closed for legacy records with a missing `sourceType`. Such records are already omitted by the Firestore `!=`/`not-in` list-query pattern; this prevents a stale manager cache from reintroducing untyped actions into a staff view. Managers can still inspect cached legacy records, but a production backfill remains a separately approved task.
+- Final verification remains pending until the CI run for the latest exact `Replit` SHA completes. Do not interpret cancelled intermediate runs as failures of the final code or as passes.
