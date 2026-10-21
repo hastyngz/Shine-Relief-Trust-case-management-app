@@ -63,7 +63,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { filterCaseActionsForStaff, filterRestrictedCachedData, hasRestrictedCachedData } from './services/healthRecordAccess';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff, filterRestrictedCachedData, hasRestrictedCachedData } from './services/healthRecordAccess';
 import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
@@ -150,12 +150,12 @@ function AppContent() {
       ...db,
       healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
       caseReviews: canViewCaseReviews ? db.caseReviews : [],
-      caseActions: filterCaseActionsForStaff(db.caseActions || [], {
+      caseActions: excludeSafeguardingCaseActions(filterCaseActionsForStaff(db.caseActions || [], {
         uid: currentUser?.uid,
         canViewTeamTasks: isAdmin || role === 'Manager',
         canViewHealthRecords,
         canViewSafeguarding,
-      }),
+      })),
     };
     const savedSuggestions = reviewDb.intelligenceSuggestions || [];
     const pendingSuggestions = detectIntelligenceSuggestions(reviewDb).filter((suggestion) =>
