@@ -165,7 +165,7 @@ export function scanDataQuality(db: AppDatabase): DataQualityIssue[] {
     if (!girl.fullName || !girl.dateOfBirth || !girl.householdId) issues.push({ id: `quality-${girl.id}-required`, type: 'missing_required_information', title: `Incomplete girl profile: ${girl.fullName || girl.id}`, detail: 'Name, date of birth, and household are required for a complete profile.', recordType: 'girl', recordId: girl.id, severity: 'high' });
     if (girl.dateOfBirth && !validDate(girl.dateOfBirth)) issues.push({ id: `quality-${girl.id}-dob`, type: 'invalid_value', title: `Invalid date of birth: ${girl.fullName}`, detail: girl.dateOfBirth, recordType: 'girl', recordId: girl.id, severity: 'medium' });
   });
-  (db.caseActions || []).filter((item) => item.sourceType !== 'safeguarding').forEach((item) => {
+  (db.caseActions || []).filter((item) => Boolean(item.sourceType) && item.sourceType !== 'safeguarding').forEach((item) => {
     if (!item.assignedStaffId) issues.push({ id: `quality-${item.id}-staff`, type: 'missing_required_information', title: `Action has no responsible staff: ${item.title}`, detail: 'Assign a staff member before relying on the deadline.', recordType: 'caseAction', recordId: item.id, severity: 'medium' });
     if (!validDate(item.dueDate)) issues.push({ id: `quality-${item.id}-date`, type: 'invalid_value', title: `Invalid action date: ${item.title}`, detail: item.dueDate, recordType: 'caseAction', recordId: item.id, severity: 'medium' });
   });
