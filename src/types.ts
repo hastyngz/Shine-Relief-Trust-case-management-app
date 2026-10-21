@@ -407,6 +407,7 @@ export interface GirlLeaveRecord {
 
 export type ProgrammeLogType = 'Production' | 'Sale' | 'Expense' | 'Input' | 'Distribution' | 'Family support' | 'Activity' | 'Note';
 export type ProgrammePaymentStatus = 'paid' | 'partial' | 'credit';
+export type FishProductionStage = 'fingerlings' | 'table-size';
 
 export interface ProgrammeLogRecord {
   id: string;
@@ -422,6 +423,14 @@ export interface ProgrammeLogRecord {
   counterpartyContactId?: string;
   counterpartyName?: string;
   beneficiaries?: number;
+  /** Fish farm record sheet fields (Fish Farming production entries only). */
+  fishStage?: FishProductionStage;
+  pondNo?: string;
+  numberStocked?: number;
+  feedGivenKg?: number;
+  waterChange?: string;
+  averageWeightG?: number;
+  dayExpenseMWK?: number;
   notes?: string;
   createdAt: string;
   updatedAt: string;

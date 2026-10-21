@@ -1,6 +1,6 @@
 import React, { FormEvent, useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Sprout } from 'lucide-react';
-import { AppDatabase, ContactCategory, ContactRecord, ProgrammeLogRecord, ProgrammeLogType, ProgrammePaymentStatus } from '../../types';
+import { AppDatabase, ContactCategory, ContactRecord, FishProductionStage, ProgrammeLogRecord, ProgrammeLogType, ProgrammePaymentStatus } from '../../types';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeDefinition, ProgrammeId } from '../../data/programmes';
 import { addProgrammeLog } from '../../utils/storage';
 import { formatMWK } from '../../utils/export';
@@ -397,6 +397,14 @@ function RecordsSection({
   const [newCounterpartyName, setNewCounterpartyName] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<ProgrammePaymentStatus>('paid');
   const [cashAmountMWK, setCashAmountMWK] = useState('');
+  const [fishStage, setFishStage] = useState<FishProductionStage>('fingerlings');
+  const [pondNo, setPondNo] = useState('');
+  const [numberStocked, setNumberStocked] = useState('');
+  const [feedGivenKg, setFeedGivenKg] = useState('');
+  const [waterChange, setWaterChange] = useState('');
+  const [averageWeightG, setAverageWeightG] = useState('');
+  const [dayExpenseMWK, setDayExpenseMWK] = useState('');
+  const isFishProduction = programme.id === 'fish-farming' && entryType === 'Production';
   const showQuantity = ['Production', 'Sale', 'Input', 'Distribution'].includes(entryType);
   const showAmount = ['Sale', 'Expense', 'Input', 'Distribution'].includes(entryType);
   const showBeneficiaries = entryType === 'Distribution' || entryType === 'Family support';
@@ -406,8 +414,11 @@ function RecordsSection({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const optionalNumbers = [quantity, amountMWK, beneficiaries].filter((value) => value.trim() !== '');
-    if (!date || !description.trim() || optionalNumbers.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+    const fishNumbers = isFishProduction ? [numberStocked, feedGivenKg, averageWeightG, dayExpenseMWK] : [];
+    const optionalNumbers = [quantity, amountMWK, beneficiaries, ...fishNumbers].filter((value) => value.trim() !== '');
+    const fishLabel = fishStage === 'fingerlings' ? 'Fingerlings production' : 'Table-size production';
+    const finalDescription = description.trim() || (isFishProduction ? `${fishLabel}${pondNo.trim() ? ` – Pond ${pondNo.trim()}` : ''}` : '');
+    if (!date || !finalDescription || optionalNumbers.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
       setFormError('Enter a date and description, and use zero or a positive number for each numeric field.');
       return;
     }
@@ -454,7 +465,16 @@ function RecordsSection({
       programmeId: programme.id,
       date,
       entryType,
-      description: description.trim(),
+      description: finalDescription,
+      ...(isFishProduction ? {
+        fishStage,
+        ...(pondNo.trim() ? { pondNo: pondNo.trim() } : {}),
+        ...(numberStocked !== '' ? { numberStocked: Number(numberStocked) } : {}),
+        ...(feedGivenKg !== '' ? { feedGivenKg: Number(feedGivenKg) } : {}),
+        ...(waterChange.trim() ? { waterChange: waterChange.trim() } : {}),
+        ...(fishStage === 'fingerlings' && averageWeightG !== '' ? { averageWeightG: Number(averageWeightG) } : {}),
+        ...(fishStage === 'table-size' && dayExpenseMWK !== '' ? { dayExpenseMWK: Number(dayExpenseMWK) } : {}),
+      } : {}),
       ...(showQuantity && quantity !== '' ? { quantity: Number(quantity) } : {}),
       ...(showQuantity && unit.trim() ? { unit: unit.trim() } : {}),
       ...(showAmount && amountMWK !== '' ? { amountMWK: Number(amountMWK) } : {}),
@@ -474,6 +494,12 @@ function RecordsSection({
     setNewCounterpartyName('');
     setPaymentStatus('paid');
     setCashAmountMWK('');
+    setPondNo('');
+    setNumberStocked('');
+    setFeedGivenKg('');
+    setWaterChange('');
+    setAverageWeightG('');
+    setDayExpenseMWK('');
     setFormError('');
     onRefresh();
   };
@@ -499,9 +525,38 @@ function RecordsSection({
                 {programme.logTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </label>
-            <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">Description
-              <input required value={description} onChange={(event) => setDescription(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">{programme.id === 'fish-farming' && entryType === 'Expense' ? 'Item' : isFishProduction ? 'Description (optional)' : 'Description'}
+              <input required={!isFishProduction} value={description} onChange={(event) => setDescription(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>
+            {isFishProduction && <>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Production stage
+                <select value={fishStage} onChange={(event) => setFishStage(event.currentTarget.value as FishProductionStage)} className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+                  <option value="fingerlings">Fingerlings production</option>
+                  <option value="table-size">Table-size production</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Pond no.
+                <input value={pondNo} onChange={(event) => setPondNo(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Number stocked
+                <input type="number" min="0" step="1" value={numberStocked} onChange={(event) => setNumberStocked(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Feed given (kg)
+                <input type="number" min="0" step="any" value={feedGivenKg} onChange={(event) => setFeedGivenKg(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">{fishStage === 'fingerlings' ? 'Water change / treatment' : 'Water change done'}
+                <input value={waterChange} onChange={(event) => setWaterChange(event.currentTarget.value)} placeholder={fishStage === 'fingerlings' ? 'e.g. Half changed, salt treatment' : 'e.g. Yes, half changed'} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              {fishStage === 'fingerlings' ? (
+                <label className="space-y-1 text-xs font-semibold text-stone-700">Average weight (g)
+                  <input type="number" min="0" step="any" value={averageWeightG} onChange={(event) => setAverageWeightG(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+                </label>
+              ) : (
+                <label className="space-y-1 text-xs font-semibold text-stone-700">Expense for the day (MWK)
+                  <input type="number" min="0" step="any" value={dayExpenseMWK} onChange={(event) => setDayExpenseMWK(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+                </label>
+              )}
+            </>}
             {showQuantity && <label className="space-y-1 text-xs font-semibold text-stone-700">Quantity
               <input type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>}
@@ -559,6 +614,13 @@ function RecordsSection({
               <time className="text-xs text-stone-500">{log.date}</time>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
+              {log.fishStage && <span className="font-semibold">{log.fishStage === 'fingerlings' ? 'Fingerlings' : 'Table-size'}</span>}
+              {log.pondNo && <span>Pond {log.pondNo}</span>}
+              {log.numberStocked !== undefined && <span>{log.numberStocked} stocked</span>}
+              {log.feedGivenKg !== undefined && <span>Feed {log.feedGivenKg} kg</span>}
+              {log.waterChange && <span>Water: {log.waterChange}</span>}
+              {log.averageWeightG !== undefined && <span>Avg weight {log.averageWeightG} g</span>}
+              {log.dayExpenseMWK !== undefined && <span>Day expense {formatMWK(log.dayExpenseMWK)}</span>}
               {log.quantity !== undefined && <span>{log.quantity}{log.unit ? ` ${log.unit}` : ''}</span>}
               {log.amountMWK !== undefined && <span>{formatMWK(log.amountMWK)}</span>}
               {log.counterpartyName && <span>{log.entryType === 'Sale' ? 'Customer' : 'Supplier'}: {log.counterpartyName}</span>}
