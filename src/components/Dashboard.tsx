@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useVisualSettings } from '../contexts/VisualSettingsContext';
 import { canAccessManagementDashboard } from '../services/managementAnalytics';
 import { outstandingExpenseSummary } from '../services/financialCalculations';
+import { filterCaseActionsForStaff } from '../services/healthRecordAccess';
 import { PROGRAMMES, ProgrammeId } from '../data/programmes';
 import { startBadge, summariseProgramme } from '../services/programmeSummary';
 import { PROGRAMME_ICONS } from './Programmes/programmeIcons';
@@ -175,7 +176,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const todayStr = new Date().toISOString().slice(0, 10);
   const taskItems = db.caseActions || [];
   const teamTaskAccess = isAdmin || role === 'Manager';
-  const visibleTasks = teamTaskAccess ? taskItems : taskItems.filter((task) => task.assignedStaffId === currentUser?.uid);
+  const visibleTasks = filterCaseActionsForStaff(taskItems, {
+    uid: currentUser?.uid,
+    canViewTeamTasks: teamTaskAccess,
+    canViewHealthRecords,
+    canViewSafeguarding,
+  });
   const openActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status)).length;
   const overdueActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status) && task.dueDate < todayStr).length;
   const highPriorityActionCount = visibleTasks.filter((task) => !['Completed', 'Cancelled'].includes(task.status) && ['High', 'Urgent'].includes(task.priority)).length;
