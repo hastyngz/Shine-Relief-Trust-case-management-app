@@ -650,15 +650,15 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
               <div className="overflow-x-auto border-y border-stone-200">
                 <table className="w-full text-left text-xs">
                   <thead><tr className="text-stone-600"><th className="py-2 pr-3">Action</th><th className="py-2 pr-3">Assigned staff</th><th className="py-2 pr-3">Priority</th><th className="py-2 pr-3">Due</th><th className="py-2">Status</th></tr></thead>
-                  <tbody className="divide-y divide-stone-100">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
+                  <tbody className="divide-y divide-stone-100">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
                 </table>
-                {(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
+                {visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
               </div>
             </div>
           )}
 
           {activeTab === 'management' && canViewManagementReports && (
-            <ManagementReportsPanel db={db} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
+            <ManagementReportsPanel db={reportDb} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
           )}
 
           {/* TAB 7: CSV EXPORTS CENTRE */}
