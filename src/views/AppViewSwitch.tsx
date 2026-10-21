@@ -16,7 +16,7 @@ import { GirlProfile } from '../components/GirlProfile';
 import { HouseholdProfile } from '../components/HouseholdProfile';
 import { canAccessManagementDashboard } from '../services/managementAnalytics';
 import type { QualityIssue } from '../services/qualityRules';
-import { filterCaseActionsForStaff } from '../services/healthRecordAccess';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 import { ProgrammeId } from '../data/programmes';
 import { GirlForm } from '../components/Forms/GirlForm';
 import { HouseholdForm } from '../components/Forms/HouseholdForm';
@@ -341,7 +341,7 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       {/* VIEW: SHINE AI ASSISTANT */}
       {view === 'ai-assistant' && (
         <AIAssistantView
-          db={{ ...db, caseActions: visibleCaseActions }}
+          db={{ ...db, caseActions: excludeSafeguardingCaseActions(visibleCaseActions) }}
           initialGirlId={aiFocusGirlId}
           initialHouseId={aiFocusHouseId}
           onNavigateToGirl={handleOpenGirlProfile}
