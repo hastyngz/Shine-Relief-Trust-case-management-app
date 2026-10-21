@@ -706,3 +706,8 @@ Suggestion format:
 - Closed a gap in `filterCaseIntelligenceData`: operational summaries now exclude safeguarding actions and hide health actions/medical history without health permission.
 - Added defense-in-depth so direct suggestion generation and quality scans skip safeguarding-linked actions, with synthetic regression assertions in `test:health-access`.
 - CI must pass on the latest exact branch SHA before verification is claimed. Shared localStorage is still not partitioned by account. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · intelligence legacy-action follow-up
+- Intelligence summaries, suggestions and quality scans now exclude untyped legacy actions as well as safeguarding-linked actions. Regression fixtures verify neither synthetic title leaks into general intelligence output.
+- No production backfill was performed; CI on the final branch SHA is required before this is marked verified. — Mosaic (ChatGPT), 2026-10-21
