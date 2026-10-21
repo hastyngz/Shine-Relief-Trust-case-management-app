@@ -730,3 +730,9 @@ Suggestion format:
 - Added a regression assertion that an unauthenticated flush attempt preserves the queued entry. Existing sync-test flushes now pass an explicit synthetic actor.
 - GitHub Actions run 39551971808 passed both `checks` and `e2e` on SHA `665bd8d7e1c00c1bd52a1782a8ac6ba7f3a572a3` (9 E2E tests passed).
 - This is a narrow safety guard, **not** the full account-ownership fix. Queue/baseline/conflict state is still shared across UIDs; per-user isolation and safe quarantine of unowned legacy entries remain next. No production data/rules were changed. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · testable baseline and isolation plan
+- Rechecked exact branch head `bf8540d164df53b66c95ec3bd58bf61908b99295`: CI run 39552221577 passed both `checks` and `e2e`, including emulator rules, offline/storage tests, production build and the offline E2E suite.
+- Added `docs/offline-sync-account-isolation-design.md` as the implementation contract before touching shared persistence. The current green build is suitable only for controlled synthetic-data testing; shared-device account switching is not yet safe for real sensitive data.
+- Next: implement account-scoped workspace persistence and tests in small verified stages. Keep legacy unowned data preserved/quarantined, never auto-replay it. No production operations or Android field test. — Mosaic (ChatGPT), 2026-10-21

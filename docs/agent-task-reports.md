@@ -348,3 +348,32 @@ The offline queue, sync baseline and conflict list still use global browser keys
 ### Candid reflection
 
 This guard closes one clear unsafe path without pretending to solve the broader issue. The full ownership migration is higher risk because a mistaken rewrite could silently lose legitimate offline edits, so it needs a cohesive implementation and targeted tests rather than a queue-only change.
+
+
+# Offline account isolation — readiness checkpoint and design
+
+**Report date:** 2026-10-21  
+**Branch:** `Replit`  
+**Reviewed head:** `bf8540d164df53b66c95ec3bd58bf61908b99295`  
+**Status:** Existing automated checks green; account isolation still incomplete; design recorded before implementation.
+
+## Current verified baseline
+
+The branch head was re-read from GitHub. Workflow run [39552221577](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39552221577) completed successfully on the exact head SHA `bf8540d164df53b66c95ec3bd58bf61908b99295`. Both `checks` and `e2e` jobs passed. The checks job completed TypeScript, health-access, Firestore listener/rules emulator, quality, import/AI, Phase 5, migration safeguards, procurement, payroll, offline queue/performance/keying, storage failures, app-shell, routing, access audit and production build steps. The E2E job's offline end-to-end tests also passed.
+
+## Confirmed remaining risk
+
+This green run does not prove account isolation. Code review reconfirmed that the local database, sync baseline, queue and conflict list use shared browser keys; queued entries have no owner UID; and conflict resolution does not currently enforce an actor/owner match. The current authenticated-actor flush guard blocks unauthenticated replay but does not prevent a different signed-in account from acting on a shared queue. The app also initializes its in-memory database before auth has resolved. Do not use shared-device account switching with real sensitive records as a release acceptance test yet.
+
+## Design and next work
+
+Added `docs/offline-sync-account-isolation-design.md` with the staged design, safety invariants, legacy quarantine trade-off, implementation stages and acceptance tests. Implementation is to proceed in small stages: UID-scoped local workspace; UID-scoped queue/baseline/conflicts with owner checks; safe handling of unowned legacy state; then full regression/E2E verification.
+
+Legacy unowned bytes must be preserved, not automatically attributed, rendered, replayed or deleted. Normal online snapshots may repopulate the signed-in user's scoped workspace after authorization and durable local persistence. No new dependencies are planned.
+
+## Boundaries and checks
+
+- No code, Firestore rules, Storage rules or production data changed in this checkpoint.
+- No production deployment, migration, live-service smoke test, or Android/weak-signal device test was performed.
+- Automated checks are green on the reviewed head; the account-isolation feature is not yet implemented.
+- The app can be explored in a controlled test environment with synthetic data, but it is not yet safe to certify shared-device account switching for real sensitive records.
