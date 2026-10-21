@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Sprout } from 'lucide-react';
 import { AppDatabase, ContactCategory, ContactRecord, FishProductionStage, ProgrammeLogRecord, ProgrammeLogType, ProgrammePaymentStatus } from '../../types';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeDefinition, ProgrammeId } from '../../data/programmes';
@@ -138,6 +138,8 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
   const Icon = PROGRAMME_ICONS[programme.id];
   const logs = logsForProgramme(db, programme.id);
   const summary = summariseProgramme(db, programme.id);
+  const [expenseRequest, setExpenseRequest] = useState(0);
+  const canRecordExpense = programme.logTypes.includes('Expense') && programme.id !== 'fish-chicken';
   const isIncomeProgramme = ['fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(programme.id);
 
   return (
@@ -181,17 +183,11 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
           <button type="button" onClick={() => props.onCreateProgrammePlan('workplan', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
             <Plus className="h-4 w-4" />New workplan
           </button>
-        </div>
-      )}
-
-      {!props.isViewOnly && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => props.onCreateProgrammePlan('budget', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
-            <Plus className="h-4 w-4" />New budget line
-          </button>
-          <button type="button" onClick={() => props.onCreateProgrammePlan('workplan', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
-            <Plus className="h-4 w-4" />New workplan
-          </button>
+          {canRecordExpense && (
+            <button type="button" onClick={() => setExpenseRequest((count) => count + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
+              <Plus className="h-4 w-4" />New expense
+            </button>
+          )}
         </div>
       )}
 
@@ -210,6 +206,7 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
           auditActor={props.auditActor}
           isViewOnly={props.isViewOnly}
           allowAdd={programme.id !== 'fish-chicken'}
+          expenseRequest={expenseRequest}
           onRefresh={props.onRefresh}
           onProgrammeLogAdded={props.onProgrammeLogAdded}
         />
@@ -371,6 +368,7 @@ function RecordsSection({
   auditActor,
   isViewOnly,
   allowAdd,
+  expenseRequest,
   onRefresh,
   onProgrammeLogAdded,
 }: {
@@ -380,6 +378,7 @@ function RecordsSection({
   auditActor: string;
   isViewOnly: boolean;
   allowAdd: boolean;
+  expenseRequest: number;
   onRefresh: () => void;
   onProgrammeLogAdded: (record: ProgrammeLogRecord, programmeName: string) => void;
 }) {
@@ -404,6 +403,17 @@ function RecordsSection({
   const [waterChange, setWaterChange] = useState('');
   const [averageWeightG, setAverageWeightG] = useState('');
   const [dayExpenseMWK, setDayExpenseMWK] = useState('');
+  useEffect(() => {
+    if (expenseRequest === 0) return;
+    setEntryType('Expense');
+    setCounterpartyContactId('');
+    setNewCounterpartyName('');
+    setPaymentStatus('paid');
+    setCashAmountMWK('');
+    const form = document.getElementById('programme-record-form');
+    form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form?.querySelector<HTMLInputElement>('input[name="record-description"]')?.focus({ preventScroll: true });
+  }, [expenseRequest]);
   const isFishProduction = programme.id === 'fish-farming' && entryType === 'Production';
   const showQuantity = ['Production', 'Sale', 'Input', 'Distribution'].includes(entryType);
   const showAmount = ['Sale', 'Expense', 'Input', 'Distribution'].includes(entryType);
@@ -508,7 +518,7 @@ function RecordsSection({
     <Section title="Records">
       {!allowAdd && <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">These combined records are kept for reference. New entries should be recorded under Fish Farming or Chicken Farming.</p>}
       {!isViewOnly && allowAdd && (
-        <form onSubmit={submit} className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
+        <form id="programme-record-form" onSubmit={submit} className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
           <h3 className="flex items-center gap-2 text-sm font-bold text-stone-900"><Plus className="h-4 w-4 text-teal-800" />Add record</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs font-semibold text-stone-700">Date
@@ -526,7 +536,7 @@ function RecordsSection({
               </select>
             </label>
             <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">{programme.id === 'fish-farming' && entryType === 'Expense' ? 'Item' : isFishProduction ? 'Description (optional)' : 'Description'}
-              <input required={!isFishProduction} value={description} onChange={(event) => setDescription(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <input name="record-description" required={!isFishProduction} value={description} onChange={(event) => setDescription(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>
             {isFishProduction && <>
               <label className="space-y-1 text-xs font-semibold text-stone-700">Production stage
