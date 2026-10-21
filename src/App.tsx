@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   AppDatabase,
   Girl,
@@ -63,7 +63,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { excludeSafeguardingCaseActions, filterCaseActionsForStaff, filterRestrictedCachedData, hasRestrictedCachedData } from './services/healthRecordAccess';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff, filterRestrictedCachedData } from './services/healthRecordAccess';
 import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
@@ -144,6 +144,27 @@ function AppContent() {
     logout,
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
+  // Keep the authoritative local database intact for offline diffing and queued
+  // edits. Build a permission-scoped projection for UI consumers instead of
+  // persisting a filtered view back into the shared cache (which can look like
+  // deletions to the per-record offline queue).
+  const viewDb = useMemo(() => {
+    if (!currentUser) return db;
+    const restrictedDb = filterRestrictedCachedData(db, {
+      canViewHealthRecords,
+      canViewCaseReviews,
+      canViewSafeguarding,
+    });
+    return {
+      ...restrictedDb,
+      caseActions: filterCaseActionsForStaff(restrictedDb.caseActions || [], {
+        uid: currentUser.uid,
+        canViewTeamTasks: isAdmin || role === 'Manager',
+        canViewHealthRecords,
+        canViewSafeguarding,
+      }),
+    };
+  }, [db, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
   const [safeguardingCount, setSafeguardingCount] = useState<number>();
   const pendingOperationsReviewCount = useMemo(() => {
     const reviewDb = {
@@ -181,22 +202,13 @@ function AppContent() {
       });
   }, [currentUser?.uid, isSuspended, isAdmin, canViewSafeguarding]);
 
-  useLayoutEffect(() => {
-    const access = { canViewHealthRecords, canViewCaseReviews, canViewSafeguarding };
-    if (currentUser && hasRestrictedCachedData(db, access)) {
-      const restrictedDb = filterRestrictedCachedData(db, access);
-      saveDatabase(restrictedDb, false);
-      setDb(restrictedDb);
-    }
-  }, [currentUser?.uid, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, db]);
-
   // Trigger follow-up reminders check automatically (with deduplication)
   useEffect(() => {
     if (!currentUser || isSuspended || !isRegisteredStaff || allStaff.length === 0) return;
-    checkAndTriggerFollowUpReminders(db, allStaff, currentUser.uid).catch((err) => {
+    checkAndTriggerFollowUpReminders(viewDb, allStaff, currentUser.uid).catch((err) => {
       console.warn('Follow-up reminder check failed:', err);
     });
-  }, [currentUser?.uid, isSuspended, isRegisteredStaff, allStaff.length, db.educationalFollowUps.length, db.healthFollowUps.length, db.familyFollowUps.length]);
+  }, [currentUser?.uid, isSuspended, isRegisteredStaff, allStaff.length, viewDb.educationalFollowUps.length, viewDb.healthFollowUps.length, viewDb.familyFollowUps.length]);
 
   // Initialize view from hash to preserve view across browser refreshes
   const initialRoute = parseHash();
@@ -1132,35 +1144,35 @@ function AppContent() {
 
   // Lookup helpers for active profiles
   const currentGirl = selectedGirlId
-    ? db.girls.find((g) => g.id === selectedGirlId)
+    ? viewDb.girls.find((g) => g.id === selectedGirlId)
     : null;
   const currentGirlHouse = currentGirl?.householdId
-    ? db.households.find((h) => h.id === currentGirl.householdId)
+    ? viewDb.households.find((h) => h.id === currentGirl.householdId)
     : undefined;
   const currentGirlEdu = selectedGirlId
-    ? db.educationalFollowUps.filter((e) => e.girlId === selectedGirlId)
+    ? viewDb.educationalFollowUps.filter((e) => e.girlId === selectedGirlId)
     : [];
   const currentGirlHealth = selectedGirlId
-    ? db.healthFollowUps.filter((h) => h.girlId === selectedGirlId)
+    ? viewDb.healthFollowUps.filter((h) => h.girlId === selectedGirlId)
     : [];
   const currentGirlFamily = selectedGirlId
-    ? db.familyFollowUps.filter((f) => f.girlId === selectedGirlId)
+    ? viewDb.familyFollowUps.filter((f) => f.girlId === selectedGirlId)
     : [];
 
   const currentHouse = selectedHouseId
-    ? db.households.find((h) => h.id === selectedHouseId)
+    ? viewDb.households.find((h) => h.id === selectedHouseId)
     : null;
   const currentHouseResidents = selectedHouseId
-    ? db.girls.filter((g) => g.householdId === selectedHouseId)
+    ? viewDb.girls.filter((g) => g.householdId === selectedHouseId)
     : [];
   const currentHouseRent = selectedHouseId
-    ? db.rentPayments.filter((r) => r.householdId === selectedHouseId)
+    ? viewDb.rentPayments.filter((r) => r.householdId === selectedHouseId)
     : [];
   const currentHouseExpenses = selectedHouseId
-    ? db.expenses.filter((e) => e.householdId === selectedHouseId)
+    ? viewDb.expenses.filter((e) => e.householdId === selectedHouseId)
     : [];
   const currentHouseActivities = selectedHouseId
-    ? db.householdActivities.filter((a) => a.householdId === selectedHouseId)
+    ? viewDb.householdActivities.filter((a) => a.householdId === selectedHouseId)
     : [];
 
   // Authentication Loading Screen
@@ -1333,7 +1345,7 @@ function AppContent() {
           <Suspense fallback={<ViewSkeleton />}>
             <AppViewSwitch
               view={view}
-              db={db}
+              db={viewDb}
               role={role}
               isAdmin={isAdmin}
               currentUserUid={currentUser?.uid}
@@ -1428,7 +1440,7 @@ function AppContent() {
 
       {/* Global Modals */}
       <AppModals
-        db={db}
+        db={viewDb}
         isSearchOpen={isSearchOpen}
         isDataModalOpen={isDataModalOpen}
         isQuickAddOpen={isQuickAddOpen}
