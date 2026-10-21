@@ -31,6 +31,7 @@ import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
 import { ManagementReportsPanel } from './Reports/ManagementReportsPanel';
 import { useAuth } from '../contexts/AuthContext';
 import type { QualityIssue } from '../services/qualityRules';
+import { filterCaseActionsForStaff } from '../services/healthRecordAccess';
 
 interface ReportsProps {
   db: AppDatabase;
@@ -51,8 +52,15 @@ type ReportTab =
   | 'exports';
 
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse, onOpenQualityRecord }) => {
-  const { canViewHealthRecords, canViewCaseReviews, isAdmin, role, allStaff } = useAuth();
+  const { currentUser, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, isAdmin, role, allStaff } = useAuth();
   const canViewManagementReports = isAdmin || role === 'Manager';
+  const visibleCaseActions = filterCaseActionsForStaff(db.caseActions || [], {
+    uid: currentUser?.uid,
+    canViewTeamTasks: isAdmin || role === 'Manager',
+    canViewHealthRecords,
+    canViewSafeguarding,
+  });
+  const reportDb = { ...db, caseActions: visibleCaseActions };
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
   const [sourceImportAuditId, setSourceImportAuditId] = useState(() => {
@@ -616,8 +624,8 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                 <p className="text-xs text-stone-500">Counts and exports are derived only from records available to your account.</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
-                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
+                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
                 <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Education history</span><div className="text-lg font-black">{(db.educationHistory || []).length}</div></div>
                 <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Academic support</span><div className="text-lg font-black">{(db.academicSupports || []).length}</div></div>
                 {canViewHealthRecords && <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Health follow-ups</span><div className="text-lg font-black">{db.healthFollowUps.length}</div></div>}
@@ -815,7 +823,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
       {/* Comprehensive Report Modal */}
       {isComprehensiveModalOpen && (
         <ComprehensiveReportModal
-          db={db}
+          db={reportDb}
           onClose={() => setIsComprehensiveModalOpen(false)}
           onOpenQualityRecord={onOpenQualityRecord}
         />
