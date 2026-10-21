@@ -246,8 +246,16 @@ service cloud.firestore {
     }
 
     match /caseActions/{actionId} {
-      allow read: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+      // Single-record reads retain the legacy missing-sourceType default.
+      allow get: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
         (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() ||
+          (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
+      // Use direct field access for list queries so Firestore can prove that a
+      // query excludes restricted action types. The app's not-in / != listeners
+      // already exclude legacy records that lack sourceType.
+      allow list: if (resource.data.sourceType != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.sourceType != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() ||
           (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
       allow create: if (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
@@ -275,13 +283,17 @@ service cloud.firestore {
     }
 
     match /caseActionAuditLogs/{eventId} {
-      allow read: if (
+      allow get: if (
         (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
         (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords())
       ) && (isManagerOrAdmin() || (
         isStaffActive() &&
         get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.assignedStaffId == request.auth.uid
       ));
+      // This collection mixes action types and the query cannot constrain the
+      // referenced action's sourceType. Restrict listing to roles allowed to
+      // inspect safeguarding records; direct get remains action-scoped above.
+      allow list: if isManagerOrAdmin() && canViewSafeguardingRecords();
       allow create: if isStaffActive() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }

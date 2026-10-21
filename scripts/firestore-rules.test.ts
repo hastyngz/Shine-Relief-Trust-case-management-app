@@ -63,6 +63,7 @@ async function seedData() {
       title: 'Visit household',
       assignedStaffId: 'worker',
       assignedStaffName: 'worker',
+      sourceType: 'manual',
       status: 'Open',
       priority: 'Medium',
       dueDate: '2026-10-01',
@@ -107,6 +108,15 @@ async function seedData() {
       dueDate: '2026-10-01',
       createdByUid: 'manager',
       updatedByUid: 'manager',
+    });
+    await setDoc(doc(firestore, 'caseActionAuditLogs/audit-action-1'), {
+      id: 'audit-action-1', recordId: 'action-1', userId: 'viewer', eventType: 'updated', timestamp: '2026-10-01T00:00:00.000Z',
+    });
+    await setDoc(doc(firestore, 'caseActionAuditLogs/audit-action-health'), {
+      id: 'audit-action-health', recordId: 'action-health', userId: 'viewer', eventType: 'updated', timestamp: '2026-10-01T00:00:00.000Z',
+    });
+    await setDoc(doc(firestore, 'caseActionAuditLogs/audit-action-safeguarding'), {
+      id: 'audit-action-safeguarding', recordId: 'action-safeguarding', userId: 'viewer', eventType: 'updated', timestamp: '2026-10-01T00:00:00.000Z',
     });
     await setDoc(doc(firestore, 'healthFollowUps/health-1'), {
       id: 'health-1',
@@ -320,9 +330,14 @@ async function run() {
     assert.deepEqual(adminAssignedViewerActions.docs.map((action) => action.id).sort(), ['action-1', 'action-health', 'action-safeguarding']);
     const visibleViewerActions = await assertSucceeds(getDocsFromServer(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', 'not-in', ['safeguarding', 'healthFollowUp']))));
     assert.deepEqual(visibleViewerActions.docs.map((action) => action.id), ['action-1']);
-    const unfilteredViewerActions = await getDocsFromServer(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer')));
-    console.log('[rules diagnostic] unfiltered viewer caseActions result IDs:', unfilteredViewerActions.docs.map((action) => action.id).sort());
-    await assertFails(Promise.resolve(unfilteredViewerActions));
+    await assertFails(getDocsFromServer(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
+    await assertSucceeds(getDoc(doc(viewer, 'caseActionAuditLogs/audit-action-1')));
+    await assertFails(getDoc(doc(viewer, 'caseActionAuditLogs/audit-action-health')));
+    await assertFails(getDoc(doc(viewer, 'caseActionAuditLogs/audit-action-safeguarding')));
+    await assertFails(getDocsFromServer(query(collection(viewer, 'caseActionAuditLogs'), where('userId', '==', 'viewer'))));
+    await assertFails(getDocsFromServer(query(collection(manager, 'caseActionAuditLogs'), where('userId', '==', 'viewer'))));
+    const adminCaseActionAuditLogs = await assertSucceeds(getDocsFromServer(collection(admin, 'caseActionAuditLogs')));
+    assert.equal(adminCaseActionAuditLogs.size, 3);
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));
