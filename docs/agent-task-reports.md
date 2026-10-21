@@ -284,3 +284,8 @@ A final scan of the operational-intelligence path found that `Phase5OperationsVi
 ### Candid reflection
 
 Filtering the app's main view projection was not enough on its own: a secondary service could be called directly with a broader database. The defense-in-depth filter and direct service tests make the policy harder to bypass accidentally in future Phase 5 changes.
+
+
+### 2026-10-21 final defense-in-depth note
+
+The shared intelligence service now also fails closed on **untyped legacy case actions**, not only explicitly tagged safeguarding actions. This applies to the filtered Phase 5 projection, intelligent case summaries, suggestion generation and data-quality scans. The regression fixture contains synthetic safeguarding and untyped actions and asserts that neither title appears in general intelligence output. This does not backfill or alter production records; any legacy data repair remains a separately approved operation.
