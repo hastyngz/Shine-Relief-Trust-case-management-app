@@ -675,3 +675,9 @@ Suggestion format:
 - Verification: [CI run 39539762174](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39539762174) passed both checks and E2E at code SHA `b465462e53f2818a8bc9dd346819a4cf3c3e6020`.
 - Next: investigate shared-device cached case actions/manager-only data on account switches, add offline-safe role-scope tests, and assess legacy case actions missing `sourceType` before any approved production backfill.
 - Scope: no production data access/mutation, rules deployment, or live-service smoke test. Candid reflection: the first cache hypothesis was disproved by a server-backed query; explicit returned IDs made the permission gap reproducible and guided the list-rule correction. — Mosaic (ChatGPT), 2026-10-21
+
+### 2026-10-21 · Mosaic (ChatGPT) · non-destructive case-action cache scoping
+- Added a pure, non-mutating case-action visibility filter and applied it to action lists, search, dashboard summaries, report exports, girl-profile history, AI context and operational intelligence.
+- Synthetic regression cases cover staff UID scoping, manager team visibility, restricted source types, missing UID fail-closed behaviour and preservation of the original cache.
+- Commit-level verification is pending; see `docs/agent-task-reports.md` for scope and caveats. No production changes or device tests.
+- Handoff: shared browser cache still needs a broader account-isolation audit for HR/planning and restricted import-source records. Do not solve it by destructively filtering the cache while offline edits may exist. — Mosaic (ChatGPT), 2026-10-21
