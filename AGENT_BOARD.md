@@ -717,3 +717,9 @@ Suggestion format:
 - Audit found queue, conflict list and last-synced baseline are global browser keys; `OfflineChangeEntry` has no owner UID, and flush uses the currently signed-in actor for the whole queue.
 - Risk: manager offline edits can be replayed under a staff login and conflicts may be attributed to the wrong user. Not changed; do not guess owners or drop legacy entries.
 - Next: per-user queue/baseline/conflict namespaces, explicit owner UID, safe quarantine for legacy unowned entries, and role-switch/reconnect regression tests before changing local DB persistence. Full details in `docs/agent-task-reports.md`. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · CI follow-up and offline queue design checkpoint
+- Corrected the Phase 5 test fixture to mark ordinary synthetic case actions as `manual`; did not weaken the fail-closed handling of legacy untyped records.
+- CI run 39547948977 passed `checks` and `e2e` on code SHA `976090063f5b4746aba52e27a71107d57cfbe94d`.
+- Offline queue, baseline and conflict ownership remain a high-priority open issue. No queue migration or replay behavior was changed in this checkpoint; next implementation must preserve unowned legacy entries and block cross-account replay. — Mosaic (ChatGPT), 2026-10-21

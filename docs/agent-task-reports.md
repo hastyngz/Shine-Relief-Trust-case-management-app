@@ -312,3 +312,10 @@ On a shared field device, a manager can make offline edits, then a staff member 
 ### Status
 
 No queue entries, baselines, conflicts or production records were modified. This issue is documented as a follow-up because an incomplete migration could lose offline edits or replay them under the wrong identity.
+
+
+### 2026-10-21 — CI result after Phase 5 regression fixture correction
+
+- The earlier run failed in `scripts/phase5-case-intelligence.test.ts` because two synthetic ordinary actions omitted `sourceType`, while the new production guard intentionally excludes untyped legacy actions from general intelligence. The fixture now labels those synthetic ordinary actions as `sourceType: 'manual'`; the fail-closed behavior remains intact.
+- GitHub Actions run **39547948977** passed both `checks` and `e2e` on code SHA `976090063f5b4746aba52e27a71107d57cfbe94d`. This confirms the code and regression fix at that SHA; it does not verify subsequent commits until their own runs finish.
+- The offline queue/baseline/conflict account-ownership issue remains open and unchanged. The safe follow-up still requires owner-scoped queue entries, per-user baselines and conflict lists, a non-destructive quarantine for unowned legacy entries, and account-switch/reconnect tests. No legacy entries were migrated or replayed from this review.
