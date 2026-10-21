@@ -154,6 +154,9 @@ function AppContent() {
       canViewHealthRecords,
       canViewCaseReviews,
       canViewSafeguarding,
+      canViewManagementPlanning: isAdmin || role === 'Manager',
+      canReadImportSourceData: isAdmin || role === 'Manager',
+      uid: currentUser.uid,
     });
     return {
       ...restrictedDb,
