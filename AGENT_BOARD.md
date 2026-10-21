@@ -681,3 +681,10 @@ Suggestion format:
 - Synthetic regression cases cover staff UID scoping, manager team visibility, restricted source types, missing UID fail-closed behaviour and preservation of the original cache.
 - Commit-level verification is pending; see `docs/agent-task-reports.md` for scope and caveats. No production changes or device tests.
 - Handoff: shared browser cache still needs a broader account-isolation audit for HR/planning and restricted import-source records. Do not solve it by destructively filtering the cache while offline edits may exist. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · non-destructive permission projection
+- Found that persisting a filtered role view could make hidden records look like deletions to `recordOfflineChanges`/the per-record queue.
+- Replaced that effect with a UI-only `viewDb`; the raw database remains intact for offline diffing. The view now scopes actions, manager-only HR/planning, restricted import-source payloads and staff payroll.
+- Synthetic health-access tests were expanded; the final GitHub Actions run still needs to be checked before verification is claimed.
+- Remaining: shared localStorage is not partitioned by account, so raw cached records remain at rest. Next design must preserve queue/baseline/conflict semantics; no destructive cache clearing. — Mosaic (ChatGPT), 2026-10-21
