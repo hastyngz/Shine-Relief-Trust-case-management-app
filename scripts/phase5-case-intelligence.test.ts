@@ -8,7 +8,7 @@ const db: any = {
   ],
   households: [{ id: 'h1', name: 'Shine House', location: 'Zomba', houseMum: 'Grace' }],
   educationalFollowUps: [{ id: 'edu1', girlId: 'g1', date: '2026-09-01', school: 'Zomba Primary', classLevel: 'Standard 5', academicIssue: 'Attendance', furtherActionRequired: true, recommendations: 'School visit' }],
-  healthFollowUps: [], familyFollowUps: [], caseActions: [{ id: 'action1', girlId: 'g1', title: 'School visit', dueDate: '2026-08-01', status: 'Open', assignedStaffId: 'staff-1' }, { id: 'action2', girlId: 'g1', title: 'Assign owner', dueDate: '2026-08-01', status: 'Open', assignedStaffId: '' }], caseReviews: [], householdActivities: [], attachments: [], people: [],
+  healthFollowUps: [], familyFollowUps: [], caseActions: [{ id: 'action1', girlId: 'g1', title: 'School visit', dueDate: '2026-08-01', status: 'Open', assignedStaffId: 'staff-1', sourceType: 'manual' }, { id: 'action2', girlId: 'g1', title: 'Assign owner', dueDate: '2026-08-01', status: 'Open', assignedStaffId: '', sourceType: 'manual' }], caseReviews: [], householdActivities: [], attachments: [], people: [],
 };
 
 const sensitiveDb: any = {
