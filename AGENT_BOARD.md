@@ -723,3 +723,10 @@ Suggestion format:
 - Corrected the Phase 5 test fixture to mark ordinary synthetic case actions as `manual`; did not weaken the fail-closed handling of legacy untyped records.
 - CI run 39547948977 passed `checks` and `e2e` on code SHA `976090063f5b4746aba52e27a71107d57cfbe94d`.
 - Offline queue, baseline and conflict ownership remain a high-priority open issue. No queue migration or replay behavior was changed in this checkpoint; next implementation must preserve unowned legacy entries and block cross-account replay. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · authenticated flush guard
+- Added a fail-closed guard to `flushPendingOfflineSnapshots`: it will not replay the shared offline queue without a signed-in actor UID, including the temporary `unknown` actor used by the sync panel.
+- Added a regression assertion that an unauthenticated flush attempt preserves the queued entry. Existing sync-test flushes now pass an explicit synthetic actor.
+- GitHub Actions run 39551971808 passed both `checks` and `e2e` on SHA `665bd8d7e1c00c1bd52a1782a8ac6ba7f3a572a3` (9 E2E tests passed).
+- This is a narrow safety guard, **not** the full account-ownership fix. Queue/baseline/conflict state is still shared across UIDs; per-user isolation and safe quarantine of unowned legacy entries remain next. No production data/rules were changed. — Mosaic (ChatGPT), 2026-10-21

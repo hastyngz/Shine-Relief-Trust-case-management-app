@@ -319,3 +319,32 @@ No queue entries, baselines, conflicts or production records were modified. This
 - The earlier run failed in `scripts/phase5-case-intelligence.test.ts` because two synthetic ordinary actions omitted `sourceType`, while the new production guard intentionally excludes untyped legacy actions from general intelligence. The fixture now labels those synthetic ordinary actions as `sourceType: 'manual'`; the fail-closed behavior remains intact.
 - GitHub Actions run **39547948977** passed both `checks` and `e2e` on code SHA `976090063f5b4746aba52e27a71107d57cfbe94d`. This confirms the code and regression fix at that SHA; it does not verify subsequent commits until their own runs finish.
 - The offline queue/baseline/conflict account-ownership issue remains open and unchanged. The safe follow-up still requires owner-scoped queue entries, per-user baselines and conflict lists, a non-destructive quarantine for unowned legacy entries, and account-switch/reconnect tests. No legacy entries were migrated or replayed from this review.
+
+
+## 2026-10-21 — Prevent offline queue replay without an authenticated actor
+
+### Why this change was made
+
+The online/reconnect event can run during sign-out or an account transition. Before this change, `flushPendingOfflineSnapshots` accepted a missing actor and still attempted to flush the device-wide queue. That is unsafe for a queue that is not yet partitioned by owner UID.
+
+### Changes
+
+- `src/services/offlineSync.ts`: fail closed before migration or cloud writes when no actor UID is supplied, or when the panel's placeholder UID `unknown` is supplied.
+- `scripts/offline-sync.test.ts`: added a regression assertion that a flush without an authenticated actor reports no flush and preserves queued edits. Existing tests that intentionally exercise authenticated queue flushing now provide a synthetic actor.
+- No new dependencies, production migration, Firestore rule changes, deploy, or production-data operations.
+
+### Verification
+
+GitHub Actions run **39551971808** completed successfully on exact code SHA `665bd8d7e1c00c1bd52a1782a8ac6ba7f3a572a3`:
+
+- `checks`: passed, including TypeScript, offline queue tests, security-rule emulator tests and production build.
+- `e2e`: passed; all 9 Playwright E2E tests passed, including offline app-shell, conflict handling, offline write durability, and sensitive-data access.
+- Run: https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39551971808
+
+### Remaining risk — not solved by this guard
+
+The offline queue, sync baseline and conflict list still use global browser keys. A signed-in user B could still attempt to flush entries queued during user A's session because queue entries do not yet carry owner UIDs. This commit prevents **unauthenticated** replay only; it does not claim account isolation is complete. Next work must implement owner-scoped queue/baseline/conflict state, preserve/quarantine legacy unowned entries without guessing ownership, and test manager/staff account switches and reconnect behavior before any local DB migration.
+
+### Candid reflection
+
+This guard closes one clear unsafe path without pretending to solve the broader issue. The full ownership migration is higher risk because a mistaken rewrite could silently lose legitimate offline edits, so it needs a cohesive implementation and targeted tests rather than a queue-only change.
