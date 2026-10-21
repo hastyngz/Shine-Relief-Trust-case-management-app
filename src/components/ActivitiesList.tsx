@@ -66,7 +66,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
 
         <button
           onClick={onAddActivity}
-          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95 self-start sm:self-center"
+          className="fx-press fx-btn-main px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform min-h-11 self-start sm:self-center"
         >
           <Plus className="w-4 h-4" />
           <span>Record Group Activity</span>
@@ -137,12 +137,13 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredActivities.map((act) => {
+          {filteredActivities.map((act, index) => {
             const houseName = act.householdId ? houseMap.get(act.householdId) || 'Unknown House' : '';
             return (
               <div
                 key={act.id}
-                className={`p-5 rounded-xl border bg-white shadow-xs ${
+                style={{ "--i": index } as React.CSSProperties}
+                className={`fx-rise fx-card p-5 rounded-xl border bg-white shadow-xs ${
                   act.furtherActionRequired ? 'border-amber-300' : 'border-stone-200'
                 }`}
               >

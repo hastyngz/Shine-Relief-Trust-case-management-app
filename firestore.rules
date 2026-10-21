@@ -58,6 +58,13 @@ service cloud.firestore {
       );
     }
 
+    function canViewSafeguardingRecords() {
+      return isAdmin() || (
+        isStaffActive() &&
+        getStaffDoc(request.auth.uid).data.get('safeguardingPermissions', {}).get('canView', false) == true
+      );
+    }
+
     function canViewCaseReviews() {
       return isManagerOrAdmin() || (
         isStaffActive() &&
@@ -77,6 +84,23 @@ service cloud.firestore {
         isManagerOrStaff() &&
         getStaffDoc(request.auth.uid).data.canEditHealthRecords == true
       );
+    }
+
+    function importAuditMigrationComplete() {
+      return exists(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary) &&
+        get(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary).data.status == 'complete';
+    }
+
+    function hasMatchingRestrictedImportSource(auditId, auditData) {
+      let sourcePath = /databases/$(database)/documents/restrictedImportSources/$(auditId);
+      return existsAfter(sourcePath) &&
+        getAfter(sourcePath).data.id == auditId &&
+        getAfter(sourcePath).data.auditId == auditId &&
+        getAfter(sourcePath).data.fileName == auditData.get('fileName', '') &&
+        getAfter(sourcePath).data.importedAt == auditData.get('importedAt', '') &&
+        getAfter(sourcePath).data.keys().hasAll(['sourceData']) &&
+        getAfter(sourcePath).data.sourceData is map &&
+        getAfter(sourcePath).data.sourceData.keys().size() > 0;
     }
 
     function canReadSafeguarding(caseId) {
@@ -222,29 +246,54 @@ service cloud.firestore {
     }
 
     match /caseActions/{actionId} {
-      allow read: if isManagerOrAdmin() ||
-        (isStaffActive() && resource.data.assignedStaffId == request.auth.uid);
-      allow create: if isManagerOrAdmin() || (
-        isStaffActive() &&
-        resource == null &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.assignedStaffId == request.auth.uid
-      );
-      allow update: if isManagerOrAdmin() || (
-        isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
-        request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
-        ])
-      );
-      allow delete: if isAdmin();
+      // Single-record reads retain the legacy missing-sourceType default.
+      allow get: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() ||
+          (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
+      // Use direct field access for list queries so Firestore can prove that a
+      // query excludes restricted action types. The app's not-in / != listeners
+      // already exclude legacy records that lack sourceType.
+      allow list: if (resource.data.sourceType != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.sourceType != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() ||
+          (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
+      allow create: if (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() || (
+          isStaffActive() &&
+          resource == null &&
+          request.resource.data.createdByUid == request.auth.uid &&
+          request.resource.data.assignedStaffId == request.auth.uid
+        ));
+      allow update: if
+        (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() || (
+          isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
+          request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
+          ])
+        ));
+      allow delete: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) && isAdmin();
     }
 
     match /caseActionAuditLogs/{eventId} {
-      allow read: if isManagerOrAdmin() || (
+      allow get: if (
+        (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords())
+      ) && (isManagerOrAdmin() || (
         isStaffActive() &&
         get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.assignedStaffId == request.auth.uid
-      );
+      ));
+      // This collection mixes action types and the query cannot constrain the
+      // referenced action's sourceType. Restrict listing to roles allowed to
+      // inspect safeguarding records; direct get remains action-scoped above.
+      allow list: if isManagerOrAdmin() && canViewSafeguardingRecords();
       allow create: if isStaffActive() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
@@ -289,6 +338,34 @@ service cloud.firestore {
       allow read: if canViewCaseReviews();
       allow create, update: if canEditCaseReviews();
       allow delete: if isAdmin();
+    }
+
+    match /caseGoals/{goalId} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.status in ['Not started', 'In progress', 'Achieved', 'Not achieved', 'On hold'] &&
+        request.resource.data.title is string && request.resource.data.title.size() > 0 &&
+        request.resource.data.targetOutcome is string &&
+        request.resource.data.measureOfSuccess is string &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true);
+      allow update: if isManagerOrStaff() &&
+        request.resource.data.girlId == resource.data.girlId &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'baseline', 'targetOutcome', 'measureOfSuccess', 'targetDate', 'status',
+          'progressNotes', 'outcome', 'outcomeRecordedAt', 'updatedByUid', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isManagerOrAdmin();
     }
 
     // Salary and gratuity inputs are restricted to Administrators and Managers.
@@ -344,22 +421,6 @@ service cloud.firestore {
           'generatedAt', 'draft', 'finalLocked'
         ]);
       allow update, delete: if false;
-    }
-
-    // Contact details are private staff data. Edits remain attributable and contacts are archived, never deleted.
-    match /contacts/{contactId} {
-      allow read: if isStaffActive();
-      allow create: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == contactId &&
-        request.resource.data.type in ['person', 'organisation'] &&
-        request.resource.data.name is string &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow update: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == resource.data.id &&
-        request.resource.data.createdByUid == resource.data.createdByUid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow delete: if false;
     }
 
     // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
@@ -420,6 +481,46 @@ service cloud.firestore {
     }
 
     match /procurementLists/{id} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.status == 'draft' &&
+        !request.resource.data.keys().hasAny([
+          'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
+          'receivedAt', 'receivedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]);
+      allow update: if isManagerOrStaff() &&
+        (resource.data.status == 'draft' || isManagerOrAdmin() ||
+          (request.resource.data.status == resource.data.status &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy', 'updatedAt', 'updatedBy']))) &&
+        (request.resource.data.status == resource.data.status ||
+          (isManagerOrAdmin() && (
+            (resource.data.status == 'draft' && request.resource.data.status == 'approved' &&
+             request.resource.data.items.size() > 0 && request.resource.data.approvedAt is string && request.resource.data.approvedBy is string) ||
+            (resource.data.status == 'approved' && request.resource.data.status == 'purchased' &&
+             request.resource.data.purchaseOrderReference is string && request.resource.data.purchaseOrderReference.size() > 0 &&
+             request.resource.data.orderedAt is string && request.resource.data.orderedBy is string)
+          ))) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
+          'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]) || isManagerOrAdmin()) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['receivedAt', 'receivedBy']) ||
+          resource.data.status == 'purchased') &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]) || (resource.data.status == 'purchased' && resource.data.receivedAt is string &&
+          request.resource.data.financeHandedOverAt is string &&
+          request.resource.data.financeReference is string && request.resource.data.financeReference.size() > 0));
+      allow delete: if isAdmin();
+    }
+
+    match /inventoryItems/{id} {
+      allow read: if isStaffActive();
+      allow create, update: if isManagerOrStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /assets/{id} {
       allow read: if isStaffActive();
       allow create, update: if isManagerOrStaff();
       allow delete: if isAdmin();
@@ -488,11 +589,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Import Audits - Document parsing audit trails
+    // Import audit metadata is staff-readable; original source rows belong only in
+    // restrictedImportSources. Legacy audit docs containing sourceData stay hidden from
+    // ordinary staff until the repair migration removes that field. Ordinary collection
+    // queries remain disabled until the Admin-SDK migration verifies the full collection.
     match /importAudits/{id} {
-      allow read: if isStaffActive();
-      allow create: if isManagerOrStaff();
-      allow update, delete: if isAdmin();
+      allow get: if isStaffActive() &&
+        (!exists(/databases/$(database)/documents/importAudits/$(id)) ||
+          !resource.data.keys().hasAny(['sourceData']) || isManagerOrAdmin());
+      allow list: if isManagerOrAdmin() || (isStaffActive() && importAuditMigrationComplete());
+      allow create: if isManagerOrStaff() &&
+        !request.resource.data.keys().hasAny(['sourceData']) &&
+        (!request.resource.data.keys().hasAny(['sourceDataStoredInRestrictedCollection']) ||
+          request.resource.data.sourceDataStoredInRestrictedCollection == false ||
+          (request.resource.data.sourceDataStoredInRestrictedCollection == true &&
+            hasMatchingRestrictedImportSource(id, request.resource.data)));
+      allow update: if isAdmin() &&
+        !request.resource.data.keys().hasAny(['sourceData']);
+      allow delete: if isAdmin();
+    }
+
+    match /importAuditMigrationStatus/{id} {
+      allow read, write: if false;
     }
 
     match /restrictedImportSources/{id} {
@@ -520,9 +638,21 @@ service cloud.firestore {
     match /contacts/{contactId} {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() &&
+        request.resource.data.id == contactId &&
+        request.resource.data.type in ['person', 'organisation'] &&
+        request.resource.data.name is string &&
+        request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdByUid == request.auth.uid &&
         request.resource.data.updatedByUid == request.auth.uid &&
-        request.resource.data.archived == false;
+        request.resource.data.updatedByName is string &&
+        request.resource.data.archived == false &&
+        request.resource.data.keys().hasOnly([
+          'id', 'type', 'name', 'aliases', 'organisationId', 'affiliation',
+          'roleTitle', 'category', 'phone', 'email', 'address', 'district',
+          'notes', 'programmes', 'firstSeen', 'lastSeen', 'createdBy',
+          'createdByUid', 'createdAt', 'updatedAt', 'updatedByUid',
+          'updatedByName', 'source', 'archived', 'interactions', 'mergedInto'
+        ]);
       allow update: if isManagerOrStaff() &&
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.updatedByUid == request.auth.uid &&

@@ -6,6 +6,7 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
+  runTransaction,
   getDocs,
   query,
   where,
@@ -14,8 +15,11 @@ import {
   Unsubscribe,
   Query,
 } from 'firebase/firestore';
-import { deleteObject, ref } from 'firebase/storage';
-import { firestore, storage } from '../firebase';
+import { firestore } from '../firebase';
+import { deleteStoredFile } from './r2StorageClient';
+import { shouldSubscribeToCollection } from './firestoreListenerPermissions';
+import { planImportAuditWrites, type ImportAuditSourceShape } from './importAuditPersistence';
+import { BACKUP_RESTORE_COLLECTIONS, OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
 import {
   AppDatabase,
   Girl,
@@ -45,6 +49,7 @@ import {
   GirlLeaveRecord,
   ProgrammeLogRecord,
   CaseReview,
+  CaseGoal,
   ReportHistoryRecord,
   ReportExportRecord,
   MeetingRecord,
@@ -59,6 +64,10 @@ import {
   RestrictedImportSourceData,
   ContactRecord,
   EmployeeRecord,
+  AssetRecord,
+  OfflineChangeEntry,
+  SyncConflict,
+  SyncConflictResolution,
 } from '../types';
 
 export type SyncStatus = 'connecting' | 'connected' | 'saving' | 'synced' | 'error';
@@ -148,6 +157,7 @@ export const COLLECTIONS = {
   GIRL_LEAVES: 'girlLeaves',
   PROGRAMME_LOGS: 'programmeLogs',
   CASE_REVIEWS: 'caseReviews',
+  CASE_GOALS: 'caseGoals',
   SAFEGUARDING_CASES: 'safeguardingCases',
   SAFEGUARDING_AUDIT_LOGS: 'safeguardingAuditLogs',
   EMPLOYEE_SALARY_HISTORY: 'employeeSalaryHistory',
@@ -156,6 +166,8 @@ export const COLLECTIONS = {
   REPORT_EXPORTS: 'reportExports',
   PROCUREMENT_LISTS: 'procurementLists',
   PROJECT_PROJECTIONS: 'projectProjections',
+  INVENTORY_ITEMS: 'inventoryItems',
+  ASSETS: 'assets',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -189,30 +201,78 @@ export async function persistStaffUserToFirestore(staff: StaffUser): Promise<voi
   }
 }
 
-export async function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHistoryRecord[]> {
-  const salaryQuery = query(
-    collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
-    where('employeeId', '==', employeeId)
-  );
-  const snapshot = await getDocs(salaryQuery);
-  return snapshot.docs
-    .map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
-    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
-}
+// Coalesce overlapping reads only while they are in flight. Salary history is
+// sensitive and can change after an edit, so these maps are deliberately not a
+// persistent or time-based cache.
+const salaryHistoryByEmployeeInFlight = new Map<string, Promise<SalaryHistoryRecord[]>>();
+const salaryHistoryForStaffInFlight = new Map<string, Promise<SalaryHistoryRecord[]>>();
 
-export async function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
-  const uniqueIds = Array.from(new Set(employeeIds));
-  const records: SalaryHistoryRecord[] = [];
-  for (let index = 0; index < uniqueIds.length; index += 30) {
-    const batch = uniqueIds.slice(index, index + 30);
+export function getEmployeeSalaryHistory(employeeId: string): Promise<SalaryHistoryRecord[]> {
+  if (!employeeId.trim()) return Promise.resolve([]);
+  const existing = salaryHistoryByEmployeeInFlight.get(employeeId);
+  if (existing) return existing;
+
+  const request = (async () => {
     const salaryQuery = query(
       collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
-      where('employeeId', 'in', batch)
+      where('employeeId', '==', employeeId)
     );
     const snapshot = await getDocs(salaryQuery);
-    records.push(...snapshot.docs.map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord));
-  }
-  return records;
+    return snapshot.docs
+      .map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
+      .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  })();
+
+  salaryHistoryByEmployeeInFlight.set(employeeId, request);
+  void request.finally(() => {
+    if (salaryHistoryByEmployeeInFlight.get(employeeId) === request) {
+      salaryHistoryByEmployeeInFlight.delete(employeeId);
+    }
+  }).catch(() => {
+    // The original caller handles the read error; avoid a second unhandled rejection.
+  });
+  return request;
+}
+
+export function getEmployeeSalaryHistoryForStaff(employeeIds: string[]): Promise<SalaryHistoryRecord[]> {
+  const uniqueIds = Array.from(new Set(employeeIds.filter((employeeId) => employeeId.trim()))).sort();
+  if (uniqueIds.length === 0) return Promise.resolve([]);
+
+  // Sorting gives callers with the same employee set the same in-flight key,
+  // even if their roster arrays arrive in a different order.
+  const requestKey = uniqueIds.join('\u001f');
+  const existing = salaryHistoryForStaffInFlight.get(requestKey);
+  if (existing) return existing;
+
+  const request = (async () => {
+    const batches: string[][] = [];
+    for (let index = 0; index < uniqueIds.length; index += 30) {
+      batches.push(uniqueIds.slice(index, index + 30));
+    }
+
+    // Each bounded "in" query is independent, so fetch batches concurrently
+    // rather than waiting for one network round-trip before starting the next.
+    const snapshots = await Promise.all(batches.map((batch) => getDocs(query(
+      collection(firestore, COLLECTIONS.EMPLOYEE_SALARY_HISTORY),
+      where('employeeId', 'in', batch)
+    ))));
+    return snapshots.flatMap((snapshot) =>
+      snapshot.docs.map((salaryDoc) => salaryDoc.data() as SalaryHistoryRecord)
+    ).sort((a, b) => {
+      const byDate = a.effectiveDate.localeCompare(b.effectiveDate);
+      return byDate || a.employeeId.localeCompare(b.employeeId);
+    });
+  })();
+
+  salaryHistoryForStaffInFlight.set(requestKey, request);
+  void request.finally(() => {
+    if (salaryHistoryForStaffInFlight.get(requestKey) === request) {
+      salaryHistoryForStaffInFlight.delete(requestKey);
+    }
+  }).catch(() => {
+    // The original caller handles the read error; avoid a second unhandled rejection.
+  });
+  return request;
 }
 
 export async function persistEmployeeSalaryHistoryToFirestore(record: SalaryHistoryRecord): Promise<void> {
@@ -304,6 +364,22 @@ export async function deleteStaffUserFromFirestore(staffId: string): Promise<voi
     console.error('Firestore deleteStaffUser error:', err);
     throw err;
   }
+}
+
+export function subscribeStaffUserDoc(
+  uid: string,
+  onUpdated: (staffUser: StaffUser | null) => void,
+): Unsubscribe {
+  const ref = doc(firestore, COLLECTIONS.STAFF_USERS, uid);
+  return onSnapshot(
+    ref,
+    (snapshot) => {
+      onUpdated(snapshot.exists() ? snapshot.data() as StaffUser : null);
+    },
+    (error) => {
+      console.error('Firestore staff user document snapshot error:', error);
+    },
+  );
 }
 
 export function subscribeStaffUsers(onUpdated: (staffList: StaffUser[]) => void): () => void {
@@ -789,25 +865,62 @@ export async function deleteHistoricalCaseRecordFromFirestore(id: string): Promi
 }
 
 // Import Audits persistence
-export async function persistImportAuditToFirestore(item: ImportAuditRecord): Promise<void> {
+export async function persistImportAuditToFirestore(
+  item: ImportAuditRecord,
+  canReadImportSourceData = false,
+  canWriteImportAuditMetadata = false,
+): Promise<void> {
+  updateSyncStatus('saving');
   try {
-    updateSyncStatus('saving');
     const { sourceData, ...auditMetadata } = item;
-    await setDoc(doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id), sanitizeForFirestore(auditMetadata));
-    if (sourceData) {
-      const sourceRecord: RestrictedImportSourceData = {
-        id: item.id,
-        auditId: item.id,
-        fileName: item.fileName,
-        importedAt: item.importedAt,
-        sourceData,
-      };
-      await setDoc(doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id), sanitizeForFirestore(sourceRecord));
-    }
+    const auditRef = doc(firestore, COLLECTIONS.IMPORT_AUDITS, item.id);
+    const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, item.id);
+    const sourceRecord: RestrictedImportSourceData | undefined = sourceData
+      ? {
+          id: item.id,
+          auditId: item.id,
+          fileName: item.fileName,
+          importedAt: item.importedAt,
+          sourceData,
+        }
+      : undefined;
+
+    const persistedAuditMetadata = sanitizeForFirestore(sourceRecord
+      ? { ...auditMetadata, sourceDataStoredInRestrictedCollection: true }
+      : auditMetadata);
+    const persistedSourceRecord = sourceRecord ? sanitizeForFirestore(sourceRecord) : undefined;
+    const normalizedSourceRecord: ImportAuditSourceShape | undefined = persistedSourceRecord
+      ? (persistedSourceRecord as ImportAuditSourceShape)
+      : undefined;
+
+    // Exact retries can safely write the same source without reading it. Rules
+    // allow this for staff but reject any attempted source overwrite.
+    await runTransaction(firestore, async (transaction) => {
+      const existingAudit = await transaction.get(auditRef);
+      const existingSource = sourceRecord && canReadImportSourceData
+        ? await transaction.get(sourceRef)
+        : undefined;
+      const writePlan = planImportAuditWrites(
+        persistedAuditMetadata,
+        normalizedSourceRecord,
+        existingAudit.exists() ? existingAudit.data() : undefined,
+        existingSource?.exists() ? existingSource.data() : undefined,
+        canReadImportSourceData,
+        canWriteImportAuditMetadata,
+      );
+      if (writePlan.writeRestrictedSource && persistedSourceRecord) {
+        transaction.set(sourceRef, persistedSourceRecord);
+      }
+      if (writePlan.writeAudit) {
+        transaction.set(auditRef, persistedAuditMetadata);
+      }
+    });
     updateSyncStatus('synced');
   } catch (err) {
-    console.error('Firestore persistImportAudit error:', err);
+    console.error('Firestore persistImportAudit failed; source data and document IDs were not logged.');
     updateSyncStatus('error');
+    // The import caller must not report success if its audit/source write failed.
+    throw new Error('Import audit/source persistence failed. Source data was not logged.');
   }
 }
 
@@ -997,6 +1110,24 @@ export async function syncEntireDatabaseToFirestore(
       });
     }
 
+    // Keep every cloud-backed AppDatabase module included in a backup restore.
+    const additionalBackupCollections: Array<[keyof AppDatabase, string]> = [
+      ['meetings', COLLECTIONS.MEETINGS],
+      ['feedingProgramLogs', COLLECTIONS.FEEDING_LOGS],
+      ['marketPrices', COLLECTIONS.MARKET_PRICES],
+      ['forecastSettings', COLLECTIONS.FORECAST_SETTINGS],
+      ['whatIfScenarios', COLLECTIONS.WHAT_IF_SCENARIOS],
+      ['intelligenceSuggestions', COLLECTIONS.INTELLIGENCE_SUGGESTIONS],
+      ['aiSettings', COLLECTIONS.AI_SETTINGS],
+    ];
+    for (const [field, collectionName] of additionalBackupCollections) {
+      const records = db[field] as Array<{ id: string }> | undefined;
+      records?.forEach((record) => operations.push({
+        ref: doc(firestore, collectionName, record.id),
+        data: sanitizeForFirestore(record),
+      }));
+    }
+
     if (db.historicalRecords) {
       db.historicalRecords.forEach((hr) => {
         operations.push({
@@ -1028,6 +1159,19 @@ export async function syncEntireDatabaseToFirestore(
         }
       });
     }
+
+    // Backups may contain restricted source rows independently of import-audit
+    // metadata. Restore those rows too, without writing the same document twice
+    // when the audit record already carried its sourceData payload.
+    const sourceIdsIncludedWithAudits = new Set(
+      (db.importAudits || []).filter((audit) => Boolean(audit.sourceData)).map((audit) => audit.id)
+    );
+    (db.restrictedImportSources || [])
+      .filter((source) => !sourceIdsIncludedWithAudits.has(source.id))
+      .forEach((source) => operations.push({
+        ref: doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, source.id),
+        data: sanitizeForFirestore(source),
+      }));
 
     if (db.earlyYearsRecords) {
       db.earlyYearsRecords.forEach((ey) => {
@@ -1072,8 +1216,11 @@ export async function syncEntireDatabaseToFirestore(
       ['girlLeaves', COLLECTIONS.GIRL_LEAVES],
       ['programmeLogs', COLLECTIONS.PROGRAMME_LOGS],
       ['caseReviews', COLLECTIONS.CASE_REVIEWS],
+      ['caseGoals', COLLECTIONS.CASE_GOALS],
       ['procurementLists', COLLECTIONS.PROCUREMENT_LISTS],
       ['projectProjections', COLLECTIONS.PROJECT_PROJECTIONS],
+      ['inventoryItems', COLLECTIONS.INVENTORY_ITEMS],
+      ['assets', COLLECTIONS.ASSETS],
     ];
     for (const [field, collectionName] of phase2Collections) {
       const records = db[field] as Array<{ id: string }> | undefined;
@@ -1086,38 +1233,7 @@ export async function syncEntireDatabaseToFirestore(
     await commitInBatches(operations);
 
     if (replaceExisting) {
-      const collectionNames = [
-        COLLECTIONS.GIRLS,
-        COLLECTIONS.HOUSEHOLDS,
-        COLLECTIONS.EDU_FOLLOW_UPS,
-        COLLECTIONS.HEALTH_FOLLOW_UPS,
-        COLLECTIONS.FAMILY_FOLLOW_UPS,
-        COLLECTIONS.RENT_PAYMENTS,
-        COLLECTIONS.EXPENSES,
-        COLLECTIONS.ACTIVITIES,
-        COLLECTIONS.BUDGETS,
-        COLLECTIONS.ANNUAL_BUDGETS,
-        COLLECTIONS.PAYROLL_RECORDS,
-        COLLECTIONS.WORKPLANS,
-        COLLECTIONS.SCHEDULES,
-        COLLECTIONS.HISTORICAL_RECORDS,
-        COLLECTIONS.IMPORT_AUDITS,
-        COLLECTIONS.RESTRICTED_IMPORT_SOURCES,
-        COLLECTIONS.EARLY_YEARS,
-        COLLECTIONS.PEOPLE,
-        COLLECTIONS.CONTACTS,
-        COLLECTIONS.ATTACHMENTS,
-        COLLECTIONS.CASE_ACTIONS,
-        COLLECTIONS.EDUCATION_HISTORY,
-        COLLECTIONS.ACADEMIC_SUPPORTS,
-        COLLECTIONS.EXAMINATION_RECORDS,
-        COLLECTIONS.ATTENDANCE_RECORDS,
-        COLLECTIONS.GIRL_LEAVES,
-        COLLECTIONS.PROGRAMME_LOGS,
-        COLLECTIONS.CASE_REVIEWS,
-        COLLECTIONS.PROCUREMENT_LISTS,
-        COLLECTIONS.PROJECT_PROJECTIONS,
-      ];
+      const collectionNames: readonly string[] = BACKUP_RESTORE_COLLECTIONS;
       const restoredIds = new Map<string, Set<string>>();
       operations.forEach(({ ref }) => {
         const ids = restoredIds.get(ref.parent.id) || new Set<string>();
@@ -1135,7 +1251,7 @@ export async function syncEntireDatabaseToFirestore(
             const storagePath = record.data().storagePath;
             if (typeof storagePath === 'string' && storagePath) {
               try {
-                await deleteObject(ref(storage, storagePath));
+                await deleteStoredFile(storagePath);
               } catch (err: any) {
                 if (err?.code !== 'storage/object-not-found') throw err;
               }
@@ -1159,52 +1275,271 @@ export async function syncEntireDatabaseToFirestore(
   }
 }
 
+export type SyncChangeResult = {
+  applied: number;
+  conflicts: Array<{
+    collection: string;
+    recordId: string;
+    data: Record<string, any> | null;
+    updatedAt: string | null;
+    updatedBy: string | null;
+  }>;
+};
+
+/**
+ * Applies queued per-record changes to Firestore in a transaction each.
+ * A change is only written when the server copy is not newer than the version
+ * this device based its edit on (baseUpdatedAt). Otherwise it is returned as a
+ * conflict so the caller can store it for manual resolution instead of
+ * silently overwriting a newer edit.
+ */
+function stableContentHash(value: unknown): string {
+  const stable = (input: unknown): string => {
+    if (Array.isArray(input)) return `[${input.map(stable).join(',')}]`;
+    if (input && typeof input === 'object') {
+      return `{${Object.keys(input as Record<string, unknown>).sort()
+        .map((key) => `${JSON.stringify(key)}:${stable((input as Record<string, unknown>)[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(input) ?? 'null';
+  };
+  const text = stable(value);
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export async function syncChangeEntriesToFirestore(
+  entries: OfflineChangeEntry[],
+  actor?: { uid: string; name: string; canReadImportSourceData?: boolean; canWriteImportAuditMetadata?: boolean },
+): Promise<SyncChangeResult> {
+  const result: SyncChangeResult = { applied: 0, conflicts: [] };
+  if (!entries.length) return result;
+  updateSyncStatus('saving');
+  const committedImportSources = new Map<string, string>();
+
+  for (const entry of entries) {
+    const isImportAudit = entry.collection === COLLECTIONS.IMPORT_AUDITS &&
+      entry.operation !== 'delete' && Boolean(entry.data);
+    const sourceData = isImportAudit && entry.data?.sourceData &&
+      typeof entry.data.sourceData === 'object' && !Array.isArray(entry.data.sourceData)
+      ? entry.data.sourceData as Record<string, unknown>
+      : undefined;
+    // Import audit metadata is readable by all active staff. Source rows must only
+    // be stored in the separately permissioned restrictedImportSources collection.
+    const auditData = isImportAudit && entry.data
+      ? {
+          ...Object.fromEntries(Object.entries(entry.data).filter(([key]) => key !== 'sourceData')),
+          ...(sourceData ? { sourceDataStoredInRestrictedCollection: true } : {}),
+        }
+      : entry.data;
+    const isRestrictedImportSource = entry.collection === COLLECTIONS.RESTRICTED_IMPORT_SOURCES &&
+      entry.operation !== 'delete' && Boolean(entry.data);
+    const ref = doc(firestore, entry.collection, entry.recordId);
+    try {
+      if (isImportAudit && entry.data) {
+        const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId);
+        const sourceRecord: RestrictedImportSourceData | undefined = sourceData
+          ? {
+              id: entry.recordId,
+              auditId: entry.recordId,
+              fileName: typeof entry.data.fileName === 'string' ? entry.data.fileName : '',
+              importedAt: typeof entry.data.importedAt === 'string' ? entry.data.importedAt : '',
+              sourceData,
+            }
+          : undefined;
+          const sanitizedSourceRecord = sourceRecord ? sanitizeForFirestore(sourceRecord) : undefined;
+          const normalizedSourceRecord: ImportAuditSourceShape | undefined = sanitizedSourceRecord
+            ? (sanitizedSourceRecord as ImportAuditSourceShape)
+            : undefined;
+        await runTransaction(firestore, async (transaction) => {
+          const existingAudit = await transaction.get(ref);
+          const existingSource = sourceRecord && actor?.canReadImportSourceData
+            ? await transaction.get(sourceRef)
+            : undefined;
+          const writePlan = planImportAuditWrites(
+            sanitizeForFirestore(auditData || {}),
+            normalizedSourceRecord,
+            existingAudit.exists() ? existingAudit.data() : undefined,
+            existingSource?.exists() ? existingSource.data() : undefined,
+            actor?.canReadImportSourceData === true,
+            actor?.canWriteImportAuditMetadata === true,
+          );
+          if (writePlan.writeRestrictedSource && sourceRecord) {
+            transaction.set(sourceRef, sanitizedSourceRecord!);
+          }
+          if (writePlan.writeAudit) transaction.set(ref, sanitizeForFirestore(auditData || {}));
+        });
+        if (sanitizedSourceRecord) committedImportSources.set(entry.recordId, stableContentHash(sanitizedSourceRecord));
+        result.applied += 1;
+        continue;
+      }
+
+      if (
+        isRestrictedImportSource &&
+        entry.data &&
+        committedImportSources.get(entry.recordId) === stableContentHash(sanitizeForFirestore(entry.data))
+      ) {
+        result.applied += 1;
+        continue;
+      }
+
+      if (isRestrictedImportSource && !actor?.canReadImportSourceData && entry.data) {
+        // This collection is not readable by ordinary staff. A create-only write
+        // succeeds when absent; an existing document is denied rather than read
+        // or overwritten, keeping the queued entry available for privileged review.
+        await runTransaction(firestore, async (transaction) => {
+          transaction.set(ref, sanitizeForFirestore(entry.data || {}));
+        });
+        result.applied += 1;
+        continue;
+      }
+
+      const conflict = await runTransaction(firestore, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        const serverData = snapshot.exists() ? (snapshot.data() as Record<string, any>) : null;
+        const serverUpdatedAt = typeof serverData?.updatedAt === 'string' ? serverData.updatedAt : null;
+        const localUpdatedAt = typeof entry.data?.updatedAt === 'string' ? entry.data.updatedAt : null;
+
+        // Restricted source documents are create-only for ordinary staff. Treat
+        // an identical retry as success, but never overwrite a different source.
+        if (isRestrictedImportSource && serverData) {
+          if (stableContentHash(serverData) === stableContentHash(entry.data || {})) return null;
+          return {
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: serverData,
+            updatedAt: serverUpdatedAt,
+            updatedBy: typeof serverData.updatedBy === 'string' ? serverData.updatedBy : null,
+          };
+        }
+
+        // Compare only the public audit metadata. Legacy queued entries may still
+        // carry sourceData locally, but it must never be written to importAudits.
+        if (isImportAudit && serverData) {
+          const comparableServer = Object.fromEntries(Object.entries(serverData).filter(([key]) => key !== 'sourceData'));
+          if (stableContentHash(comparableServer) !== stableContentHash(auditData || {})) {
+            return {
+              collection: entry.collection,
+              recordId: entry.recordId,
+              data: serverData,
+              updatedAt: serverUpdatedAt,
+              updatedBy: typeof serverData.updatedBy === 'string' ? serverData.updatedBy : null,
+            };
+          }
+        } else {
+          // Already applied by this device (its own online write): not a conflict.
+          if (serverUpdatedAt && localUpdatedAt && serverUpdatedAt === localUpdatedAt) return null;
+
+          // Records without reliable timestamps use a content fingerprint. A
+          // different server copy means another device changed it since our baseline.
+          if (serverData && entry.baseHash && stableContentHash(serverData) !== entry.baseHash) {
+            // If the server already contains this exact local payload, treat it as
+            // an idempotent retry rather than reporting our own write as a conflict.
+            if (!entry.data || stableContentHash(serverData) !== stableContentHash(entry.data)) {
+              return {
+                collection: entry.collection,
+                recordId: entry.recordId,
+                data: serverData,
+                updatedAt: serverUpdatedAt,
+                updatedBy: typeof serverData?.updatedBy === 'string' ? serverData.updatedBy : null,
+              };
+            }
+          }
+
+          // The server changed the record after this device last saw it.
+          if (serverUpdatedAt && entry.baseUpdatedAt && serverUpdatedAt > entry.baseUpdatedAt) {
+            return {
+              collection: entry.collection,
+              recordId: entry.recordId,
+              data: serverData,
+              updatedAt: serverUpdatedAt,
+              updatedBy: typeof serverData?.updatedBy === 'string' ? serverData.updatedBy : null,
+            };
+          }
+        }
+
+        if (entry.operation === 'delete') {
+          if (snapshot.exists()) transaction.delete(ref);
+        } else if (!isImportAudit || !serverData) {
+          transaction.set(ref, sanitizeForFirestore(isImportAudit ? (auditData || {}) : (entry.data || {})), { merge: true });
+        }
+        return null;
+      });
+
+      if (conflict) {
+        result.conflicts.push(conflict);
+      } else {
+        result.applied += 1;
+
+        if (entry.operation === 'delete' && entry.collection === COLLECTIONS.IMPORT_AUDITS) {
+          await deleteDoc(doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId));
+        }
+
+      }
+    } catch (err) {
+      // Network or permission failure: keep the entry queued for a later flush.
+      if (isImportAudit || isRestrictedImportSource) {
+        console.error('Offline import source sync failed; source data and document IDs were not logged.');
+      } else {
+        console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);
+      }
+      updateSyncStatus('error');
+      throw err;
+    }
+  }
+
+  if (!result.conflicts.length) updateSyncStatus('synced');
+  return result;
+}
+/** Writes an audit entry for a detected or resolved sync conflict. */
+export async function appendSyncConflictAudit(event: {
+  action: 'conflict_detected' | 'conflict_resolved';
+  resolution?: SyncConflictResolution;
+  collection: string;
+  recordId: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  localUpdatedAt?: string | null;
+  serverUpdatedAt?: string | null;
+  serverUpdatedBy?: string | null;
+}): Promise<void> {
+  const auditId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await setDoc(doc(firestore, COLLECTIONS.CASE_ACTION_AUDIT_LOGS, auditId), {
+      ...sanitizeForFirestore(event),
+      id: auditId,
+    });
+  } catch (err) {
+    console.warn('Could not write sync conflict audit entry:', err);
+  }
+}
+
+export type { SyncConflict };
+
 // Clear operational records without deleting staff access or message history.
 export async function clearAllFirestoreCollections(): Promise<void> {
   try {
     updateSyncStatus('saving');
+
+    // Capture attachment paths before changing anything. Keep attachment metadata
+    // until every file deletion succeeds, so a failed cleanup can be retried:
+    // already-deleted objects are treated as not-found on the next attempt.
     const attachmentSnapshot = await getDocs(collection(firestore, COLLECTIONS.ATTACHMENTS));
-    for (const attachmentDoc of attachmentSnapshot.docs) {
-      const storagePath = attachmentDoc.data().storagePath;
-      if (typeof storagePath === 'string' && storagePath) {
-        try {
-          await deleteObject(ref(storage, storagePath));
-        } catch (err: any) {
-          if (err?.code !== 'storage/object-not-found') throw err;
-        }
-      }
-    }
+    const storagePaths = Array.from(new Set(
+      attachmentSnapshot.docs
+        .map((attachmentDoc) => attachmentDoc.data().storagePath)
+        .filter((storagePath): storagePath is string => typeof storagePath === 'string' && Boolean(storagePath)),
+    ));
 
-    const collectionNames = [
-      COLLECTIONS.GIRLS,
-      COLLECTIONS.HOUSEHOLDS,
-      COLLECTIONS.EDU_FOLLOW_UPS,
-      COLLECTIONS.HEALTH_FOLLOW_UPS,
-      COLLECTIONS.FAMILY_FOLLOW_UPS,
-      COLLECTIONS.RENT_PAYMENTS,
-      COLLECTIONS.EXPENSES,
-      COLLECTIONS.ACTIVITIES,
-      COLLECTIONS.BUDGETS,
-      COLLECTIONS.ANNUAL_BUDGETS,
-      COLLECTIONS.PAYROLL_RECORDS,
-      COLLECTIONS.WORKPLANS,
-      COLLECTIONS.SCHEDULES,
-      COLLECTIONS.HISTORICAL_RECORDS,
-      COLLECTIONS.IMPORT_AUDITS,
-      COLLECTIONS.RESTRICTED_IMPORT_SOURCES,
-      COLLECTIONS.EARLY_YEARS,
-      COLLECTIONS.PEOPLE,
-      COLLECTIONS.ATTACHMENTS,
-      COLLECTIONS.CASE_ACTIONS,
-      COLLECTIONS.EDUCATION_HISTORY,
-      COLLECTIONS.ACADEMIC_SUPPORTS,
-      COLLECTIONS.EXAMINATION_RECORDS,
-      COLLECTIONS.ATTENDANCE_RECORDS,
-      COLLECTIONS.GIRL_LEAVES,
-      COLLECTIONS.PROGRAMME_LOGS,
-      COLLECTIONS.CASE_REVIEWS,
-    ];
-
+    // Clear ordinary operational records first. Do not delete attachment metadata
+    // in this pass: it is the recovery list if R2 cleanup fails part-way through.
+    const collectionNames: readonly string[] = OPERATIONAL_COLLECTIONS_TO_CLEAR.filter(
+      (name) => name !== COLLECTIONS.ATTACHMENTS,
+    );
     for (const colName of collectionNames) {
       const snap = await getDocs(collection(firestore, colName));
       for (let i = 0; i < snap.docs.length; i += 400) {
@@ -1213,6 +1548,24 @@ export async function clearAllFirestoreCollections(): Promise<void> {
         await batch.commit();
       }
     }
+
+    // Only remove metadata after all referenced files are deleted (or already
+    // absent). If a deletion fails, metadata remains so an administrator can retry.
+    for (const storagePath of storagePaths) {
+      try {
+        await deleteStoredFile(storagePath);
+      } catch (err: any) {
+        if (err?.code !== 'storage/object-not-found') throw err;
+      }
+    }
+
+    const attachmentDocs = await getDocs(collection(firestore, COLLECTIONS.ATTACHMENTS));
+    for (let i = 0; i < attachmentDocs.docs.length; i += 400) {
+      const batch = writeBatch(firestore);
+      attachmentDocs.docs.slice(i, i + 400).forEach((attachmentDoc) => batch.delete(attachmentDoc.ref));
+      await batch.commit();
+    }
+
     updateSyncStatus('synced');
   } catch (err) {
     console.error('clearAllFirestoreCollections error:', err);
@@ -1229,13 +1582,15 @@ let activeUnsubscribers: Unsubscribe[] = [];
  * Dispatches 'shine_db_updated' whenever Firestore records are loaded or changed.
  */
 export function initFirestoreListeners(
-  onDatabaseSynced: (updatedDb: AppDatabase) => void,
+  onDatabaseSynced: (updatedDb: AppDatabase, meta?: { fromCache: boolean; hasPendingWrites: boolean }) => void,
   options: {
     uid?: string;
     canViewTeamTasks?: boolean;
+    canViewSafeguarding?: boolean;
     canReadHealthRecords?: boolean;
     canReadCaseReviews?: boolean;
     canReadImportSourceData?: boolean;
+    canReadManagementPlanning?: boolean;
   } = {}
 ): () => void {
   // Teardown previous listeners if any
@@ -1281,15 +1636,39 @@ export function initFirestoreListeners(
     girlLeaves: [],
     programmeLogs: [],
     caseReviews: [],
+    caseGoals: [],
     procurementLists: [],
     projectProjections: [],
+    inventoryItems: [],
+    assets: [],
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 37;
+  const TOTAL_COLLECTIONS = 40;
 
+  // Firestore emits a snapshot with `fromCache === true` for optimistic local
+  // writes that the server has not confirmed yet (and when the client is
+  // offline). The caller must not treat such a snapshot as a confirmed server
+  // copy — doing so advances the sync baseline past an unsynced edit and loses
+  // it. A snapshot is only reported as server-confirmed when every collection
+  // that contributed to it came from the server and carried no pending writes.
+  let allContributingFromServer = true;
+  let anyPendingWrites = false;
+
+  // Coalesce bursts of independent collection snapshots into one app-state
+  // update. This does not change Firestore reads or realtime subscription
+  // semantics; it prevents a burst of callbacks from repeatedly rebuilding
+  // and persisting the same aggregate database state.
+  let notifyTimer: ReturnType<typeof setTimeout> | null = null;
   const notifyChange = () => {
-    onDatabaseSynced({
+    if (notifyTimer !== null) clearTimeout(notifyTimer);
+    notifyTimer = setTimeout(() => {
+      notifyTimer = null;
+      const fromCache = !allContributingFromServer;
+      const hasPendingWrites = anyPendingWrites;
+      allContributingFromServer = true;
+      anyPendingWrites = false;
+      onDatabaseSynced({
       girls: [...liveState.girls],
       households: [...liveState.households],
       educationalFollowUps: [...liveState.educationalFollowUps],
@@ -1328,38 +1707,56 @@ export function initFirestoreListeners(
       girlLeaves: [...(liveState.girlLeaves || [])],
       programmeLogs: [...(liveState.programmeLogs || [])],
       caseReviews: [...(liveState.caseReviews || [])],
+      caseGoals: [...(liveState.caseGoals || [])],
       procurementLists: [...(liveState.procurementLists || [])],
       projectProjections: [...(liveState.projectProjections || [])],
-    });
+      inventoryItems: [...(liveState.inventoryItems || [])],
+      assets: [...(liveState.assets || [])],
+      }, { fromCache, hasPendingWrites });
+    }, 50);
   };
 
   const handleCollection = <T>(
     colName: string,
     stateField: keyof AppDatabase
   ) => {
-    if (colName === COLLECTIONS.RESTRICTED_IMPORT_SOURCES && options.canReadImportSourceData !== true) {
-      initialLoadedCollections.add(colName);
-      return;
-    }
-    if (colName === COLLECTIONS.HEALTH_FOLLOW_UPS && options.canReadHealthRecords === false) {
-      initialLoadedCollections.add(colName);
-      return;
-    }
-    if (colName === COLLECTIONS.CASE_REVIEWS && options.canReadCaseReviews === false) {
+    if (!shouldSubscribeToCollection(colName, options)) {
       initialLoadedCollections.add(colName);
       return;
     }
     const colRef = collection(firestore, colName);
-    const source: Query = colName === COLLECTIONS.CASE_ACTIONS && options.uid && !options.canViewTeamTasks
-      ? query(colRef, where('assignedStaffId', '==', options.uid))
-      : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
-        ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
+    const restrictedCaseActionTypes = [
+      ...(options.canViewSafeguarding === true ? [] : ['safeguarding']),
+      ...(options.canReadHealthRecords === true ? [] : ['healthFollowUp']),
+    ];
+    const caseActionBase: Query = options.canViewTeamTasks
+      ? colRef
+      : options.uid
+        ? query(colRef, where('assignedStaffId', '==', options.uid))
         : colRef;
+    const caseActionSource: Query = restrictedCaseActionTypes.length === 2
+      ? query(caseActionBase, where('sourceType', 'not-in', restrictedCaseActionTypes))
+      : restrictedCaseActionTypes.length === 1
+        ? query(caseActionBase, where('sourceType', '!=', restrictedCaseActionTypes[0]))
+        : caseActionBase;
+    const source: Query = colName === COLLECTIONS.PAYROLL_RECORDS && options.canReadManagementPlanning !== true
+      ? query(colRef, where('employeeId', '==', options.uid))
+      : colName === COLLECTIONS.CASE_ACTIONS
+        ? caseActionSource
+        : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false
+          ? query(colRef, where('recordType', 'in', ['school_class', 'education', 'family', 'household', 'support_intervention', 'general']))
+          : colRef;
     const unsub = onSnapshot(
       source,
+      { includeMetadataChanges: true },
       (snapshot) => {
         const records = snapshot.docs.map((d) => d.data() as T);
         (liveState[stateField] as unknown as T[]) = records;
+
+        // Remember whether this snapshot is server-confirmed before the
+        // coalesced callback reads the flags.
+        if (snapshot.metadata.fromCache) allContributingFromServer = false;
+        if (snapshot.metadata.hasPendingWrites) anyPendingWrites = true;
 
         const firstSnapshot = !initialLoadedCollections.has(colName);
         initialLoadedCollections.add(colName);
@@ -1414,11 +1811,18 @@ export function initFirestoreListeners(
   handleCollection<GirlLeaveRecord>(COLLECTIONS.GIRL_LEAVES, 'girlLeaves');
   handleCollection<ProgrammeLogRecord>(COLLECTIONS.PROGRAMME_LOGS, 'programmeLogs');
   handleCollection<CaseReview>(COLLECTIONS.CASE_REVIEWS, 'caseReviews');
+  handleCollection<CaseGoal>(COLLECTIONS.CASE_GOALS, 'caseGoals');
   handleCollection<ProcurementList>(COLLECTIONS.PROCUREMENT_LISTS, 'procurementLists');
   handleCollection<ProjectProjection>(COLLECTIONS.PROJECT_PROJECTIONS, 'projectProjections');
+  handleCollection<import('../types').InventoryItem>(COLLECTIONS.INVENTORY_ITEMS, 'inventoryItems');
+  handleCollection<AssetRecord>(COLLECTIONS.ASSETS, 'assets');
 
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());
     activeUnsubscribers = [];
+    if (notifyTimer !== null) {
+      clearTimeout(notifyTimer);
+      notifyTimer = null;
+    }
   };
 }

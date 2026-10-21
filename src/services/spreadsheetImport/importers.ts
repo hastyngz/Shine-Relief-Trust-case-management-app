@@ -1,5 +1,5 @@
-import * as XLSX from 'xlsx';
-import { BudgetCategory, BudgetPeriodType, EmployeeRecord, StaffUser, WorkplanPeriodType } from '../../types';
+import type * as XLSX from 'xlsx';
+import { BudgetCategory, BudgetPeriodType, ContractStatus, EmployeeCategory, EmployeeContractFields, EmployeeRecord, EmploymentStatus, WorkplanPeriodType } from '../../types';
 import { ProgrammeId, PROGRAMMES } from '../../data/programmes';
 import { SpreadsheetAnalysis, SpreadsheetCell, SpreadsheetKind } from './detector';
 import { matchNameCandidates } from './nameMatcher';
@@ -115,6 +115,7 @@ export interface ImportedEmployeeLine {
   latestSourcePeriod?: string;
   latestWorkbookPaymentPeriod?: string;
   employmentStatus: 'Active' | 'Completed';
+  contractFields?: Partial<EmployeeContractFields>;
   matchCandidates: Array<{ id: string; name: string }>;
   matchedEmployeeId?: string;
   status: 'matched' | 'unmatched' | 'ambiguous';
@@ -221,25 +222,43 @@ function categoryFrom(value: string): BudgetCategory {
 }
 
 function monthColumn(header: unknown): number | undefined {
-  const value = normalized(header).replace(/\s+20\d{2}$/, '');
-  if (!/^[a-z]+$/.test(value)) return undefined;
-  if (/^septmb?er$/.test(value)) return 9;
-  return MONTHS.find(({ label }) => label.test(value))?.month;
+  const tokens = normalized(header).split(' ').filter(Boolean);
+  const monthTokens = tokens.map((token) => ({
+    token,
+    month: /^sept(?:ember|mber|mb?er)?$/.test(token)
+      ? 9
+      : MONTHS.find(({ label }) => label.test(token))?.month,
+  })).filter((entry): entry is { token: string; month: number } => entry.month !== undefined);
+  if (monthTokens.length !== 1) return undefined;
+
+  const monthDescriptors = new Set([
+    'salary', 'salaries', 'wage', 'wages', 'pay', 'payroll', 'payment', 'payments',
+    'amount', 'amounts', 'gross', 'net', 'monthly', 'total', 'remuneration', 'earning', 'earnings',
+    'mwk', 'kwacha', 'currency',
+  ]);
+  const hasUnexpectedToken = tokens.some((token) =>
+    token !== monthTokens[0].token && !/^20\d{2}$/.test(token) && !monthDescriptors.has(token)
+  );
+  return hasUnexpectedToken ? undefined : monthTokens[0].month;
 }
 
 function nonEmptyRow(row: unknown[]): boolean {
   return row.some((value) => text(value) !== '');
 }
 
-function worksheetRows(sheet: XLSX.WorkSheet): unknown[][] {
+function worksheetRows(XLSX: typeof import('xlsx'), sheet: XLSX.WorkSheet): unknown[][] {
   return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1, raw: true, defval: '', blankrows: false,
   });
 }
 
-function inferYear(sheetName: string, rows: unknown[][]): number {
+function inferYear(sheetName: string, rows: unknown[][], fallbackLabel = ''): number {
+  // Prefer the sheet and its own header/data year over the filename. A file may
+  // be named for the current payroll year while containing historical rows.
   const content = `${sheetName} ${rows.slice(0, 8).flat().map(text).join(' ')}`;
-  return Number(content.match(/\b20\d{2}\b/)?.[0] || new Date().getFullYear());
+  const explicitYear = content.match(/\b20\d{2}\b/)?.[0];
+  const fallbackYear = fallbackLabel.match(/\b20\d{2}\b/)?.[0];
+  return Number(explicitYear || fallbackYear || new Date().getFullYear());
 }
 
 function headerRowIndex(rows: unknown[][], kind: SpreadsheetKind): number {
@@ -268,6 +287,145 @@ function findMonthColumns(headers: unknown[]): Array<{ index: number; month: num
     const month = monthColumn(header);
     return month ? [{ index, month }] : [];
   });
+}
+
+function employeeContractColumns(headers: unknown[]) {
+  return {
+    name: columnIndex(headers, [/employee name/, /staff name/, /worker name/, /personnel name/, /^name$/, /^employee$/]),
+    department: columnIndex(headers, [/^department$/, /^team$/, /^division$/]),
+    position: columnIndex(headers, [/^position$/, /^job title$/, /^designation$/, /^title$/]),
+    category: columnIndex(headers, [/employee category/, /employment category/, /staff category/, /^category$/]),
+    contractStart: columnIndex(headers, [/contract start/, /^start date$/]),
+    contractEnd: columnIndex(headers, [/contract end/, /^end date$/]),
+    contractType: columnIndex(headers, [/contract type/, /agreement type/]),
+    contractDuration: columnIndex(headers, [/contract duration/, /^duration$/]),
+    contractStatus: columnIndex(headers, [/contract status/]),
+    employmentStatus: columnIndex(headers, [/employment status/, /employee status/]),
+    renewalInformation: columnIndex(headers, [/renewal information/, /renewal info/, /renewal notes/]),
+    salary: columnIndex(headers, [/current salary/, /^salary$/]),
+  };
+}
+
+function importedDate(value: unknown): string | undefined {
+  const valueText = text(value);
+  if (!valueText) return undefined;
+  const serial = typeof value === 'number' ? value : Number.NaN;
+  if (Number.isFinite(serial) && serial > 0 && serial < 100000) {
+    return new Date(Date.UTC(1899, 11, 30) + serial * 86400000).toISOString().slice(0, 10);
+  }
+  const parts = valueText.match(/^(\d{1,4})[./-](\d{1,2})[./-](\d{1,4})$/);
+  if (parts) {
+    const first = Number(parts[1]);
+    const second = Number(parts[2]);
+    const third = Number(parts[3]);
+    const year = parts[1].length === 4 ? first : third;
+    const month = second;
+    const day = parts[1].length === 4 ? third : first;
+    if (year >= 1900 && year <= 2200 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day) {
+        return date.toISOString().slice(0, 10);
+      }
+    }
+  }
+  const parsed = new Date(valueText);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString().slice(0, 10);
+}
+
+function parseEmployeeContractFields(row: unknown[], columns: ReturnType<typeof employeeContractColumns>): Partial<EmployeeContractFields> {
+  const fields: Partial<EmployeeContractFields> = {};
+  const position = text(row[columns.position]);
+  if (position) fields.position = position;
+  const category = normalized(row[columns.category]);
+  if (/ground worker|gardener/.test(category)) fields.employeeCategory = 'Ground Worker/Gardener' as EmployeeCategory;
+  else if (/other staff/.test(category)) fields.employeeCategory = 'Other Staff' as EmployeeCategory;
+  const contractStartDate = importedDate(row[columns.contractStart]);
+  const contractEndDate = importedDate(row[columns.contractEnd]);
+  if (contractStartDate) fields.contractStartDate = contractStartDate;
+  if (contractEndDate) fields.contractEndDate = contractEndDate;
+  const contractType = text(row[columns.contractType]);
+  const contractDuration = text(row[columns.contractDuration]);
+  const renewalInformation = text(row[columns.renewalInformation]);
+  if (contractType) fields.contractType = contractType;
+  if (contractDuration) fields.contractDuration = contractDuration;
+  if (renewalInformation) fields.renewalInformation = renewalInformation;
+  const contractStatusMap: Record<string, ContractStatus> = {
+    active: 'Active', current: 'Active', 'expiring soon': 'Expiring Soon', expired: 'Expired',
+    renewed: 'Renewed', completed: 'Completed', terminated: 'Terminated', resigned: 'Resigned',
+  };
+  const contractStatus = contractStatusMap[normalized(row[columns.contractStatus])];
+  if (contractStatus) fields.contractStatus = contractStatus;
+  const employmentStatusMap: Record<string, EmploymentStatus> = {
+    active: 'Active', 'on leave': 'On Leave', completed: 'Completed', terminated: 'Terminated', resigned: 'Resigned',
+  };
+  const employmentStatus = employmentStatusMap[normalized(row[columns.employmentStatus])];
+  if (employmentStatus) fields.employmentStatus = employmentStatus;
+  return fields;
+}
+
+function parseContractRows(
+  sheetName: string,
+  rows: unknown[][],
+  headerIndex: number,
+  employees: EmployeeRecord[],
+  sourceName: string,
+): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
+  const headers = rows[headerIndex] || [];
+  const columns = employeeContractColumns(headers);
+  const employeeNames = employees.map((employee) => ({ id: employee.id, name: employee.fullName }));
+  const output: ImportedEmployeeLine[] = [];
+  const employeesByName = new Map<string, ImportedEmployeeLine>();
+  const sourceYear = inferYear(sheetName, rows, sourceName);
+  let skipped = 0;
+  for (const [offset, row] of rows.slice(headerIndex + 1).entries()) {
+    if (!nonEmptyRow(row)) continue;
+    const employeeName = text(row[columns.name]).trim();
+    if (!isValidPayrollEmployeeName(employeeName)) {
+      skipped += 1;
+      continue;
+    }
+    const contractFields = parseEmployeeContractFields(row, columns);
+    const gratuityIndex = columnIndex(headers, [/^total gratuity$/, /^gratuity amount$/, /^gratuity$/]);
+    const gratuity = gratuityIndex >= 0 ? number(row[gratuityIndex]) : undefined;
+    const otherPayrollAmounts: ImportedEmployeeLine['otherPayrollAmounts'] = gratuity && gratuity > 0
+      ? [{ type: 'gratuity', amount: gratuity, sourceReference: `${sourceName || sheetName}/${sheetName}/${headerIndex + offset + 2}/gratuity` }]
+      : [];
+    if (Object.keys(contractFields).length === 0 && otherPayrollAmounts.length === 0) {
+      skipped += 1;
+      continue;
+    }
+    const existingLine = employeesByName.get(normalized(employeeName));
+    if (existingLine) {
+      existingLine.contractFields = { ...existingLine.contractFields, ...contractFields };
+      existingLine.otherPayrollAmounts.push(...otherPayrollAmounts);
+      continue;
+    }
+    const nameMatches = matchNameCandidates(employeeName, employeeNames);
+    const candidates = nameMatches.exact.length === 1 ? nameMatches.exact : nameMatches.possible.slice(0, 5);
+    const status: ImportedEmployeeLine['status'] = nameMatches.exact.length === 1
+      ? 'matched'
+      : candidates.length > 1 ? 'ambiguous' : 'unmatched';
+    const line: ImportedEmployeeLine = {
+      kind: 'employee',
+      sheet: sheetName,
+      row: headerIndex + offset + 2,
+      employeeName,
+      department: columns.department >= 0 ? text(row[columns.department]) : '',
+      positionTitle: contractFields.position,
+      sourceYear,
+      currentSalary: number(row[columns.salary]) || 0,
+      salaryHistory: [],
+      otherPayrollAmounts,
+      employmentStatus: contractFields.employmentStatus === 'Completed' ? 'Completed' : 'Active',
+      contractFields,
+      matchCandidates: candidates,
+      matchedEmployeeId: nameMatches.exact.length === 1 ? nameMatches.exact[0].id : undefined,
+      status,
+    };
+    employeesByName.set(normalized(employeeName), line);
+    output.push(line);
+  }
+  return { lines: output, imported: output.length, skipped };
 }
 
 function parseBudgetRows(
@@ -536,11 +694,19 @@ function parseProjectionRows(sheetName: string, rows: unknown[][]): ImportedProj
 function parsePayrollRows(
   sheetName: string,
   rows: unknown[][],
-  staff: StaffUser[],
   employees: EmployeeRecord[],
   sourceName: string,
 ): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
   const headerIndex = rows.slice(0, 10).findIndex((row) => row.some((value) => monthColumn(value)));
+  const contractHeaderIndex = rows.slice(0, 15).findIndex((row) => {
+    const columns = employeeContractColumns(row);
+    return columns.name >= 0 && [columns.position, columns.category, columns.contractStart, columns.contractEnd,
+      columns.contractType, columns.contractDuration, columns.contractStatus, columns.employmentStatus,
+      columns.renewalInformation].some((index) => index >= 0);
+  });
+  if (headerIndex < 0 && contractHeaderIndex >= 0) {
+    return parseContractRows(sheetName, rows, contractHeaderIndex, employees, sourceName);
+  }
   if (headerIndex < 0) {
     const gratuityHeaderIndex = rows.slice(0, 15).findIndex((row) =>
       columnIndex(row, [/name/, /employee/, /staff/, /worker/]) >= 0 &&
@@ -554,11 +720,8 @@ function parsePayrollRows(
       /gratuity/.test(normalized(value)) && !/(?:salary|rate|percent|month)/.test(normalized(value))
     );
     const departmentIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
-    const year = inferYear(sourceName || sheetName, rows);
-    const staffNames = [
-      ...staff.map((person) => ({ id: person.id, name: person.fullName })),
-      ...employees.map((person) => ({ id: person.id, name: person.fullName })),
-    ].filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
+    const year = inferYear(sheetName, rows, sourceName);
+    const employeeNames = employees.map((person) => ({ id: person.id, name: person.fullName }));
     const output: ImportedEmployeeLine[] = [];
     const employeesByName = new Map<string, ImportedEmployeeLine>();
     let currentDepartment = '';
@@ -585,7 +748,7 @@ function parsePayrollRows(
         return;
       }
 
-      const nameMatches = matchNameCandidates(employeeName, staffNames);
+      const nameMatches = matchNameCandidates(employeeName, employeeNames);
       const exact = nameMatches.exact;
       const candidates = exact.length === 1 ? exact : nameMatches.possible.slice(0, 5);
       const status: ImportedEmployeeLine['status'] = exact.length === 1
@@ -617,7 +780,8 @@ function parsePayrollRows(
   const headers = rows[headerIndex];
   const labelledNameIndex = columnIndex(headers, [/employee/, /staff/, /name/, /personnel/]);
   const monthColumns = findMonthColumns(headers);
-  const labelledGroupIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
+  const contractColumns = employeeContractColumns(headers);
+  const labelledGroupIndex = columnIndex(headers, [/department/, /group/, /team/, /division/]);
   const isCredibleName = (value: unknown) => isValidPayrollEmployeeName(value)
     && !/^(?:bank credit|salary|wages?|farm|mill|house mums?|driver|watchmen?|administration|admistration|teachers?|ministry|grad?uity)$/i.test(text(value));
   const nameScores = (labelledNameIndex >= 0 ? [labelledNameIndex] : [1, 2, 0]).map((index) => ({
@@ -639,10 +803,7 @@ function parsePayrollRows(
   let department = '';
   const output: ImportedSpreadsheetLine[] = [];
   let skipped = 0;
-  const staffNames = [
-    ...staff.map((person) => ({ id: person.id, name: person.fullName })),
-    ...employees.map((person) => ({ id: person.id, name: person.fullName })),
-  ].filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
+  const employeeNames = employees.map((person) => ({ id: person.id, name: person.fullName }));
   const employeesSeen = new Set<string>();
   const groupDetails = (group: string) => {
     const category = normalized(group);
@@ -654,7 +815,7 @@ function parsePayrollRows(
     if (/^ministry$/.test(category)) return { department: 'Ministry' };
     return { department: group };
   };
-  const year = inferYear(sourceName || sheetName, rows);
+  const year = inferYear(sheetName, rows, sourceName);
   const isGratuitySection = (group: string) => /^grad?uity$/i.test(normalized(group));
   const sourceRows = rows.slice(headerIndex + 1);
   const isGroupHeading = (value: string, row: unknown[]) => {
@@ -694,7 +855,10 @@ function parsePayrollRows(
     })).filter((entry): entry is { month: number; amount: number } => entry.amount !== undefined && entry.amount > 0);
     const specialAmounts = specialColumns.map(({ index, type }) => ({ type, amount: number(row[index]) }))
       .filter((entry): entry is { type: 'loan' | 'arrears'; amount: number } => entry.amount !== undefined && entry.amount !== 0);
-    if (isGroupHeading(groupLabel, row)) {
+    const contractFields = parseEmployeeContractFields(row, contractColumns);
+    if (labelledGroupColumn !== undefined && groupLabel) {
+      department = groupLabel;
+    } else if (isGroupHeading(groupLabel, row)) {
       department = groupLabel;
       if (!rowName) {
         if (monthlyAmounts.length || specialAmounts.length) skipped += 1;
@@ -702,7 +866,7 @@ function parsePayrollRows(
       }
     }
     const employeeSourceName = rowName;
-    if (monthlyAmounts.length === 0 && specialAmounts.length === 0) {
+    if (monthlyAmounts.length === 0 && specialAmounts.length === 0 && Object.keys(contractFields).length === 0) {
       return;
     }
     if (!isValidPayrollEmployeeName(employeeSourceName)
@@ -710,7 +874,7 @@ function parsePayrollRows(
       skipped += 1;
       return;
     }
-    if (!employeeSourceName || monthlyAmounts.length === 0 && specialAmounts.length === 0) {
+    if (!employeeSourceName || monthlyAmounts.length === 0 && specialAmounts.length === 0 && Object.keys(contractFields).length === 0) {
       skipped += 1;
       return;
     }
@@ -758,6 +922,8 @@ function parsePayrollRows(
       existingEmployeeLine.currentSalary = existingEmployeeLine.salaryHistory.at(-1)?.amount || existingEmployeeLine.currentSalary;
       existingEmployeeLine.latestSourcePeriod = existingEmployeeLine.salaryHistory.at(-1)?.payPeriod || existingEmployeeLine.latestSourcePeriod;
       existingEmployeeLine.otherPayrollAmounts.push(...otherPayrollAmounts);
+      existingEmployeeLine.contractFields = { ...existingEmployeeLine.contractFields, ...contractFields };
+      existingEmployeeLine.positionTitle = contractFields.position || existingEmployeeLine.positionTitle;
       existingEmployeeLine.employmentStatus = existingEmployeeLine.salaryHistory.some((entry) =>
         entry.payPeriod === `${year}-${String(workbookLatestMonth).padStart(2, '0')}`)
         ? 'Active'
@@ -775,7 +941,7 @@ function parsePayrollRows(
       return;
     }
     employeesSeen.add(employeeKey);
-    const nameMatches = matchNameCandidates(employeeName, staffNames);
+    const nameMatches = matchNameCandidates(employeeName, employeeNames);
     const exact = nameMatches.exact;
     const candidates = exact.length === 1 ? exact : nameMatches.possible.slice(0, 5);
     const status: ImportedEmployeeLine['status'] = exact.length === 1
@@ -795,7 +961,7 @@ function parsePayrollRows(
       row: sourceRow,
       employeeName,
       department: employeeDetails.department,
-      positionTitle: employeeDetails.positionTitle,
+      positionTitle: contractFields.position || employeeDetails.positionTitle,
       sourceYear: year,
       currentSalary: salaryHistory.at(-1)?.amount || 0,
       salaryHistory,
@@ -805,6 +971,7 @@ function parsePayrollRows(
         ? `${year}-${String(workbookLatestMonth).padStart(2, '0')}`
         : undefined,
       employmentStatus: hasLatestSalary ? 'Active' : 'Completed',
+      contractFields,
       matchCandidates: candidates,
       matchedEmployeeId: exact.length === 1 ? exact[0].id : undefined,
       status,
@@ -856,18 +1023,18 @@ function formulaDisagreements(analysis: SpreadsheetAnalysis): SpreadsheetImportP
   }));
 }
 
-export function createSpreadsheetImportPreview(
+export async function createSpreadsheetImportPreview(
   workbook: XLSX.WorkBook,
   analysis: SpreadsheetAnalysis,
   kind: SpreadsheetKind,
-  staff: StaffUser[] = [],
   employees: EmployeeRecord[] = [],
   sourceName = '',
-): SpreadsheetImportPreview {
+): Promise<SpreadsheetImportPreview> {
+  const XLSX = await import('xlsx');
   const lines: ImportedSpreadsheetLine[] = [];
   const procurementGroups: ImportedProcurementLine[] = [];
   const sheetStats = analysis.sheets.map((sheet) => {
-    const rawRows = worksheetRows(workbook.Sheets[sheet.name]);
+    const rawRows = worksheetRows(XLSX, workbook.Sheets[sheet.name]);
     let result: { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number };
     if (kind === 'budget-monthly') {
       result = parseBudgetRows(sheet.name, rawRows);
@@ -885,7 +1052,7 @@ export function createSpreadsheetImportPreview(
       const projection = parseProjectionRows(sheet.name, rawRows);
       result = { lines: projection ? [projection] : [], imported: projection ? 1 : 0, skipped: projection ? 0 : 1 };
     } else if (kind === 'payroll-grid') {
-      result = parsePayrollRows(sheet.name, rawRows, staff, employees, sourceName);
+      result = parsePayrollRows(sheet.name, rawRows, employees, sourceName);
     } else {
       result = { lines: rawRows.slice(1).filter(nonEmptyRow).map((values, index) => ({
         kind: 'unmapped', sheet: sheet.name, row: index + 2,

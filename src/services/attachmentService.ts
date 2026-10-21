@@ -1,11 +1,4 @@
 import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  getBlob,
-  deleteObject,
-} from 'firebase/storage';
-import {
   collection,
   doc,
   setDoc,
@@ -16,7 +9,7 @@ import {
   onSnapshot,
   updateDoc,
 } from 'firebase/firestore';
-import { storage, firestore } from '../firebase';
+import { firestore } from '../firebase';
 import {
   PhotoAttachment,
   AttachmentTargetType,
@@ -25,8 +18,18 @@ import {
 } from '../types';
 import { compressImage } from '../utils/imageOptimizer';
 import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
+import { deleteStoredFile, getStoredFile, getStoredFileDownloadUrl, uploadStoredFile } from './r2StorageClient';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
+
+async function withDownloadUrl(attachment: PhotoAttachment): Promise<PhotoAttachment> {
+  try {
+    return { ...attachment, downloadUrl: await getStoredFileDownloadUrl(attachment.storagePath) };
+  } catch (error) {
+    console.warn('Could not create secure attachment URL:', error);
+    return { ...attachment, downloadUrl: '' };
+  }
+}
 
 export async function archiveGeneratedReport(
   blob: Blob,
@@ -37,42 +40,80 @@ export async function archiveGeneratedReport(
 ): Promise<string> {
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `reports/${ownerUid}/${reportId}/${safeFileName}`;
-  await uploadBytes(ref(storage, storagePath), blob, {
-    contentType: fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
+  await uploadStoredFile(storagePath, blob, fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : fileType === 'xlsx'
         ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv',
-    customMetadata: { ownerUid, reportId, fileType },
+        : 'text/csv', {
+    'Owner-Uid': ownerUid,
+    'Report-Id': reportId,
+    'File-Type': fileType,
   });
   return storagePath;
 }
 
 export async function getArchivedReport(storagePath: string): Promise<Blob> {
-  return getBlob(ref(storage, storagePath), 50 * 1024 * 1024);
+  return getStoredFile(storagePath);
 }
 
-export async function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+// Share only concurrent report-metadata requests. This is deliberately not
+// a persistent cache: attachment permissions and records must be rechecked on
+// later opens, and health-authorized and non-authorized results stay separate.
+const reportAttachmentRequests = new Map<boolean, Promise<PhotoAttachment[]>>();
+
+export function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  const existing = reportAttachmentRequests.get(canViewHealthRecords);
+  if (existing) return existing;
+
+  const request = fetchReportAttachmentMetadata(canViewHealthRecords);
+  reportAttachmentRequests.set(canViewHealthRecords, request);
+  void request.finally(() => {
+    if (reportAttachmentRequests.get(canViewHealthRecords) === request) {
+      reportAttachmentRequests.delete(canViewHealthRecords);
+    }
+  }).catch(() => {
+    // The caller handles the original failure; don't create an unhandled cleanup rejection.
+  });
+  return request;
+}
+
+async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean, includeDownloadUrls = true): Promise<PhotoAttachment[]> {
   const targetTypes: AttachmentTargetType[] = [
     'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
     'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
   ];
   if (canViewHealthRecords) targetTypes.push('healthFollowUp');
-  const snapshots = await Promise.all(targetTypes.map((targetType) => {
-    const constraints = [
-      where('targetType', '==', targetType),
-      ...(!canViewHealthRecords ? [where('category', 'not-in', ['Medical Document', 'Prescription'])] : []),
-    ];
-    return getDocs(query(collection(firestore, ATTACHMENTS_COLLECTION), ...constraints));
-  }));
+  // When the user can view health records, a single bounded `in` query can
+  // retrieve all report-eligible target types. Without health permission, keep
+  // the per-type queries because Firestore cannot combine `in` and `not-in`
+  // in the same query; those queries exclude medical attachments at the server.
+  const snapshots = canViewHealthRecords
+    ? [await getDocs(query(
+        collection(firestore, ATTACHMENTS_COLLECTION),
+        where('targetType', 'in', targetTypes),
+      ))]
+    : await Promise.all(targetTypes.map((targetType) => getDocs(query(
+        collection(firestore, ATTACHMENTS_COLLECTION),
+        where('targetType', '==', targetType),
+        where('category', 'not-in', ['Medical Document', 'Prescription']),
+      ))));
 
-  return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
+  const attachments = snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
     .filter((attachment) => canViewHealthRecords || (
       attachment.targetType !== 'healthFollowUp' &&
       attachment.category !== 'Medical Document' &&
       attachment.category !== 'Prescription'
     ))
     .sort((a, b) => b.date.localeCompare(a.date));
+  // Filing search only needs metadata. Create a short-lived signed URL only
+  // after the user chooses a file, rather than signing every result up front.
+  return includeDownloadUrls ? Promise.all(attachments.map(withDownloadUrl)) : attachments;
+}
+
+export function getFilingAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  // Reuse the report's bounded, role-aware query scope. Safeguarding attachments
+  // are intentionally excluded; health documents remain permission-filtered.
+  return fetchReportAttachmentMetadata(canViewHealthRecords, false);
 }
 
 export async function getAuthorizedReportImage(
@@ -90,13 +131,13 @@ export async function getAuthorizedReportImage(
     throw new Error('Your account cannot include this health attachment in a report.');
   }
 
-  const image = await getBlob(ref(storage, attachment.storagePath), 15 * 1024 * 1024);
+  const image = await getStoredFile(attachment.storagePath);
   return new Uint8Array(await image.arrayBuffer());
 }
 
 export async function getAllAttachmentMetadata(): Promise<PhotoAttachment[]> {
   const snapshot = await getDocs(collection(firestore, ATTACHMENTS_COLLECTION));
-  return snapshot.docs.map((document) => document.data() as PhotoAttachment);
+  return Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
 }
 
 export interface UploadAttachmentParams {
@@ -118,7 +159,7 @@ export interface UploadAttachmentParams {
 }
 
 /**
- * Uploads an image or document to Firebase Storage, compresses it on mobile,
+ * Uploads an image or document to private Cloudflare R2 storage, compresses it on mobile,
  * and saves metadata securely in Firestore.
  */
 export async function uploadPhotoAttachment(
@@ -141,23 +182,12 @@ export async function uploadPhotoAttachment(
   const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `attachments/${targetType}/${targetId}/${attachmentId}_${cleanName}`;
 
-  // 3. Upload to Firebase Storage
-  const storageRef = ref(storage, storagePath);
-  const metadata = {
-    contentType: optimizedFile.type || 'image/jpeg',
-    customMetadata: {
-      targetType,
-      targetId,
-      uploadedByUid: user.uid,
-      uploadedByEmail: user.email,
-      category,
-    },
-  };
-
-  await uploadBytes(storageRef, optimizedFile, metadata);
-
-  // 4. Retrieve secure download URL
-  const downloadUrl = await getDownloadURL(storageRef);
+  // 3. Upload to private R2 storage. The server validates the target and user role.
+  await uploadStoredFile(storagePath, optimizedFile, optimizedFile.type || 'image/jpeg', {
+    'Target-Type': targetType,
+    'Target-Id': targetId,
+    Category: category,
+  });
 
   // 5. Construct PhotoAttachment record
   const attachment: PhotoAttachment = {
@@ -168,7 +198,7 @@ export async function uploadPhotoAttachment(
     fileSize: optimizedFile.size,
     contentType: optimizedFile.type || 'image/jpeg',
     storagePath,
-    downloadUrl,
+    downloadUrl: '',
     caption: caption?.trim() || undefined,
     ...(file.type.startsWith('image/') ? {
       consent: consent === true,
@@ -187,10 +217,12 @@ export async function uploadPhotoAttachment(
     },
     createdAt: new Date().toISOString(),
   };
+  const downloadUrl = attachment.downloadUrl;
 
   // 6. Save metadata record to Firestore
   const firestoreDocRef = doc(firestore, ATTACHMENTS_COLLECTION, attachmentId);
   await setDoc(firestoreDocRef, sanitizeForFirestore(attachment));
+  attachment.downloadUrl = await getStoredFileDownloadUrl(storagePath);
 
   // 7. If this is a primary profile photo, update the parent entity's photoUrl
   if (category === 'Profile Photo') {
@@ -217,15 +249,14 @@ export async function uploadPhotoAttachment(
 }
 
 /**
- * Deletes an attachment from both Firebase Storage and Firestore.
+ * Deletes an attachment from both R2 and Firestore.
  */
 export async function deletePhotoAttachment(
   attachment: PhotoAttachment
 ): Promise<void> {
-  // 1. Delete file from Firebase Storage
+  // 1. Delete file from R2
   try {
-    const storageRef = ref(storage, attachment.storagePath);
-    await deleteObject(storageRef);
+    await deleteStoredFile(attachment.storagePath);
   } catch (err: any) {
     // If already missing from storage, proceed to delete Firestore metadata
     console.warn('Storage delete notice (file may not exist):', err.message || err);
@@ -258,8 +289,8 @@ export function subscribeAttachmentsForTarget(
 
     return onSnapshot(
       q,
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => d.data() as PhotoAttachment);
+      async (snapshot) => {
+        const list = await Promise.all(snapshot.docs.map((d) => withDownloadUrl(d.data() as PhotoAttachment)));
         // Sort descending by date / createdAt
         list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         onUpdate(list);
@@ -278,6 +309,11 @@ export function subscribeAttachmentsForTarget(
 /**
  * Subscribes in real-time to all attachments linked to a specific girl (profile, edu, health, family).
  */
+// Firestore supports up to 30 values in an `in` query. Grouping target IDs
+// reduces the number of simultaneous listeners on profiles with many linked
+// follow-up records. This does not promise fewer billed document reads: every
+// matching attachment is still returned, and each batch remains real-time.
+
 export function subscribeAllGirlAttachments(
   girlId: string,
   followUpIds: string[],
@@ -294,8 +330,8 @@ export function subscribeAllGirlAttachments(
     const unsubscribers = Array.from(new Set([girlId, ...followUpIds])).map((targetId) =>
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
-        (snapshot) => {
-          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
           emit();
         },
         (err) => {
@@ -331,8 +367,8 @@ export function subscribeAllHouseholdAttachments(
     const unsubscribers = Array.from(new Set([householdId, ...linkedRecordIds])).map((targetId) =>
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
-        (snapshot) => {
-          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
           emit();
         },
         (err) => {
@@ -348,6 +384,7 @@ export function subscribeAllHouseholdAttachments(
     return () => {};
   }
 }
+
 
 /**
  * Role-based permission checks for attachments

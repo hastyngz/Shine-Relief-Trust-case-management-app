@@ -107,6 +107,9 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const [expenseEditError, setExpenseEditError] = useState('');
   const [householdAttachments, setHouseholdAttachments] = useState<PhotoAttachment[]>([]);
   const [isHousePhotoModalOpen, setIsHousePhotoModalOpen] = useState(false);
+  const housePhotoUrl = householdAttachments.find((attachment) =>
+    attachment.targetType === 'household' && attachment.targetId === household.id && attachment.category === 'Profile Photo'
+  )?.downloadUrl || household.photoUrl;
 
   // Subscribe to all attachments linked to this household or its activities/expenses/rent
   useEffect(() => {
@@ -255,9 +258,9 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-4">
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-teal-950 flex items-center justify-center font-black text-xl sm:text-2xl shadow-md shrink-0 overflow-hidden group border-2 border-white/20">
-                {household.photoUrl ? (
+                {housePhotoUrl ? (
                   <img
-                    src={household.photoUrl}
+                    src={housePhotoUrl}
                     alt={household.name}
                     className="w-full h-full object-cover"
                   />
@@ -1022,7 +1025,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
               targetId={household.id}
               targetTitle={household.name}
               title={`Photos & Documentation for ${household.name}`}
-              subtitle="Household physical condition, maintenance repairs, communal activities, grocery receipts, and utility bills stored in Firebase Storage"
+              subtitle="Household physical condition, maintenance repairs, communal activities, grocery receipts, and utility bills stored in Cloudflare R2"
               defaultCategory="Household Condition"
             />
           </div>

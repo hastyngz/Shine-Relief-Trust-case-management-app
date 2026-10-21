@@ -31,6 +31,7 @@ import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
 import { ManagementReportsPanel } from './Reports/ManagementReportsPanel';
 import { useAuth } from '../contexts/AuthContext';
 import type { QualityIssue } from '../services/qualityRules';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 
 interface ReportsProps {
   db: AppDatabase;
@@ -51,8 +52,15 @@ type ReportTab =
   | 'exports';
 
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse, onOpenQualityRecord }) => {
-  const { canViewHealthRecords, canViewCaseReviews, isAdmin, role, allStaff } = useAuth();
+  const { currentUser, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, isAdmin, role, allStaff } = useAuth();
   const canViewManagementReports = isAdmin || role === 'Manager';
+  const visibleCaseActions = excludeSafeguardingCaseActions(filterCaseActionsForStaff(db.caseActions || [], {
+    uid: currentUser?.uid,
+    canViewTeamTasks: isAdmin || role === 'Manager',
+    canViewHealthRecords,
+    canViewSafeguarding,
+  }));
+  const reportDb = { ...db, caseActions: visibleCaseActions };
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
   const [sourceImportAuditId, setSourceImportAuditId] = useState(() => {
@@ -616,8 +624,8 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                 <p className="text-xs text-stone-500">Counts and exports are derived only from records available to your account.</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
-                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
+                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
                 <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Education history</span><div className="text-lg font-black">{(db.educationHistory || []).length}</div></div>
                 <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Academic support</span><div className="text-lg font-black">{(db.academicSupports || []).length}</div></div>
                 {canViewHealthRecords && <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Health follow-ups</span><div className="text-lg font-black">{db.healthFollowUps.length}</div></div>}
@@ -629,7 +637,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-stone-700">Export records</h4>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => downloadCSV('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...(db.caseActions || []).map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions CSV</button>
+                  <button onClick={() => downloadCSV('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...visibleCaseActions.map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions CSV</button>
                   <button onClick={() => downloadCSV('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education history CSV</button>
                   <button onClick={() => downloadCSV('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education support CSV</button>
                   {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups CSV</button>}
@@ -642,15 +650,15 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
               <div className="overflow-x-auto border-y border-stone-200">
                 <table className="w-full text-left text-xs">
                   <thead><tr className="text-stone-600"><th className="py-2 pr-3">Action</th><th className="py-2 pr-3">Assigned staff</th><th className="py-2 pr-3">Priority</th><th className="py-2 pr-3">Due</th><th className="py-2">Status</th></tr></thead>
-                  <tbody className="divide-y divide-stone-100">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
+                  <tbody className="divide-y divide-stone-100">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
                 </table>
-                {(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
+                {visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
               </div>
             </div>
           )}
 
           {activeTab === 'management' && canViewManagementReports && (
-            <ManagementReportsPanel db={db} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
+            <ManagementReportsPanel db={reportDb} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
           )}
 
           {/* TAB 7: CSV EXPORTS CENTRE */}
@@ -718,8 +726,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   </button>
                 </div>
 
-                {/* 4. Health Follow-ups */}
-                <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
+                {canViewHealthRecords && <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
                   <div className="flex items-center gap-2">
                     <HeartPulse className="w-5 h-5 text-rose-800" />
                     <div>
@@ -734,7 +741,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Medical CSV</span>
                   </button>
-                </div>
+                </div>}
 
                 {/* 5. Family Follow-ups */}
                 <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
@@ -816,7 +823,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
       {/* Comprehensive Report Modal */}
       {isComprehensiveModalOpen && (
         <ComprehensiveReportModal
-          db={db}
+          db={reportDb}
           onClose={() => setIsComprehensiveModalOpen(false)}
           onOpenQualityRecord={onOpenQualityRecord}
         />

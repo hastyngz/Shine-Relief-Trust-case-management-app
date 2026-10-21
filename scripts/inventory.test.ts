@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../src/utils/inventory';
+
+assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
+
+const generatedInventoryIds = new Set(Array.from({ length: 1000 }, () => createInventoryId('inv')));
+assert.equal(generatedInventoryIds.size, 1000, 'inventory IDs should be unique across a batch');
+assert.ok([...generatedInventoryIds].every((id) => id.startsWith('inv_')), 'inventory IDs should retain their type prefix');
+assert.deepEqual(getInventoryExpiryStatus(undefined, '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
+assert.deepEqual(getInventoryExpiryStatus('not-a-date', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
+assert.deepEqual(getInventoryExpiryStatus('2026-02-31', '2026-10-15'), { status: 'not-tracked', daysRemaining: null });
+assert.deepEqual(getInventoryExpiryStatus('2026-10-14', '2026-10-15'), { status: 'expired', daysRemaining: -1 });
+assert.deepEqual(getInventoryExpiryStatus('2026-10-15', '2026-10-15'), { status: 'expiring-soon', daysRemaining: 0 });
+assert.deepEqual(getInventoryExpiryStatus('2026-11-14', '2026-10-15'), { status: 'expiring-soon', daysRemaining: 30 });
+assert.deepEqual(getInventoryExpiryStatus('2026-11-15', '2026-10-15'), { status: 'ok', daysRemaining: 31 });
+
+assert.deepEqual(getInventoryStocktakeAdjustment(10, 13), { previousQuantity: 10, countedQuantity: 13, variance: 3, quantity: 3 });
+assert.deepEqual(getInventoryStocktakeAdjustment(10, 7), { previousQuantity: 10, countedQuantity: 7, variance: -3, quantity: 3 });
+assert.deepEqual(getInventoryStocktakeAdjustment(10, 10), { previousQuantity: 10, countedQuantity: 10, variance: 0, quantity: 0 });
+assert.throws(() => getInventoryStocktakeAdjustment(10, -1), RangeError);
+assert.throws(() => getInventoryStocktakeAdjustment(Number.NaN, 1), RangeError);
+
+console.log('Inventory helper tests passed.');
+
+assert.equal(resolveInventoryLocationForSave('Main Office', 'Farm', true), 'Main Office', 'editing details must not silently move stock');
+assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', true), 'Farm', 'legacy records without a location can be repaired');
+assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', false), 'Farm', 'new stock items retain their requested opening location');

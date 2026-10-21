@@ -3,6 +3,7 @@ import { AppDatabase, Girl, Household } from '../types';
 import { formatDate } from '../utils/export';
 import { Search, X, Users, Home, GraduationCap, HeartPulse, Sparkles, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { filterCaseActionsForStaff, isCaseActionAllowedInGeneralSearch } from '../services/healthRecordAccess';
 
 interface SearchModalProps {
   db: AppDatabase;
@@ -32,10 +33,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [safeguardingResults, setSafeguardingResults] = useState<Array<{ id: string; girlId: string; category: string; dateReported: string; status: string }>>([]);
-  const { currentUser } = useAuth();
+  const { currentUser, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, role, isAdmin } = useAuth();
 
   const girlMap = useMemo(() => new Map(db.girls.map((g) => [g.id, g.fullName])), [db.girls]);
   const houseMap = useMemo(() => new Map(db.households.map((h) => [h.id, h.name])), [db.households]);
+  const accessibleCaseActions = useMemo(() => filterCaseActionsForStaff(db.caseActions || [], {
+    uid: currentUser?.uid,
+    canViewTeamTasks: isAdmin || role === 'Manager',
+    canViewHealthRecords,
+    canViewSafeguarding,
+  }), [db.caseActions, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewSafeguarding]);
 
   const results = useMemo(() => {
     if (!query.trim() || query.trim().length < 2) {
@@ -67,13 +74,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         (e.supportProvided && e.supportProvided.toLowerCase().includes(q))
     );
 
-    const matchedHlt = db.healthFollowUps.filter(
+    const matchedHlt = canViewHealthRecords ? db.healthFollowUps.filter(
       (h) =>
         h.reasonForVisit.toLowerCase().includes(q) ||
         h.healthIssueComplaint.toLowerCase().includes(q) ||
         h.medicalFacility.toLowerCase().includes(q) ||
         (h.treatmentProvided && h.treatmentProvided.toLowerCase().includes(q))
-    );
+    ) : [];
 
     const matchedFam = db.familyFollowUps.filter(
       (f) =>
@@ -89,13 +96,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     );
 
     const advanced: AdvancedSearchResult[] = [
-      ...(db.caseActions || []).filter((item) => `${item.title} ${item.description} ${item.status}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Case action', title: item.title, details: `${item.status} · ${item.priority} · Due ${item.dueDate}`, girlId: item.girlId, householdId: item.householdId })),
+      ...accessibleCaseActions.filter((item) => isCaseActionAllowedInGeneralSearch(item, canViewHealthRecords) && `${item.title} ${item.description} ${item.status}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Case action', title: item.title, details: `${item.status} · ${item.priority} · Due ${item.dueDate}`, girlId: item.girlId, householdId: item.householdId })),
       ...(db.educationHistory || []).filter((item) => `${item.school} ${item.classLevel} ${item.academicYear} ${item.reasonForChange || ''}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Education history', title: `${item.school} · ${item.classLevel}`, details: `${item.academicYear || 'Year not recorded'} · ${item.status}`, girlId: item.girlId })),
       ...(db.academicSupports || []).filter((item) => `${item.subject} ${item.areaOfConcern} ${item.problemIdentified} ${item.supportProvided}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Academic support', title: item.subject || item.areaOfConcern, details: item.areaOfConcern, girlId: item.girlId })),
       ...(db.examinationRecords || []).filter((item) => `${item.examinationType} ${item.examinationYear} ${item.overallOutcome || ''}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Examination', title: `${item.examinationType} · ${item.examinationYear}`, details: item.overallOutcome || 'Outcome not recorded', girlId: item.girlId })),
       ...(db.attendanceRecords || []).filter((item) => `${item.activityName} ${item.activityType} ${item.status} ${item.location || ''}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Attendance', title: item.activityName, details: `${item.status} · ${item.date}`, girlId: item.girlId })),
       ...(db.girlLeaves || []).filter((item) => `${item.leaveType} ${item.reason} ${item.status}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Leave', title: item.leaveType, details: `${item.status} · ${item.startDate} – ${item.expectedReturnDate}`, girlId: item.girlId })),
-      ...(db.caseReviews || []).filter((item) => `${item.currentSituation || ''} ${item.progress || ''} ${item.actionPlan || ''}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Case review', title: `Review · ${item.reviewDate}`, details: item.currentSituation || item.progress || '', girlId: item.girlId })),
+      ...(canViewCaseReviews ? (db.caseReviews || []).filter((item) => `${item.currentSituation || ''} ${item.progress || ''} ${item.actionPlan || ''}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Case review', title: `Review · ${item.reviewDate}`, details: item.currentSituation || item.progress || '', girlId: item.girlId })) : []),
       ...(db.people || []).filter((item) => `${item.fullName} ${item.personType} ${item.phoneNumber || ''} ${item.organisation || ''}`.toLowerCase().includes(q)).map((item) => ({ id: item.id, type: 'Contact', title: item.fullName, details: `${item.personType}${item.phoneNumber ? ` · ${item.phoneNumber}` : ''}` })),
     ];
 
@@ -108,7 +115,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       act: matchedAct,
       advanced,
     };
-  }, [query, db]);
+  }, [query, db, canViewHealthRecords, canViewCaseReviews, accessibleCaseActions]);
 
   useEffect(() => {
     if (!isOpen || query.trim().length < 2 || !currentUser) {

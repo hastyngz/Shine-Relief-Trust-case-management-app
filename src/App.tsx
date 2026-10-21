@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   AppDatabase,
   Girl,
@@ -12,7 +12,7 @@ import {
 } from './types';
 import {
   getDatabase,
-  saveDatabase,
+  saveIncomingCloudSnapshot,
   addGirl,
   updateGirl,
   deleteGirl,
@@ -34,6 +34,8 @@ import {
   deleteHouseholdActivity,
   addEducationHistoryRecord,
   updateEducationHistoryRecord,
+  STORAGE_WARNING_EVENT,
+  STORAGE_RECOVERED_EVENT,
 } from './utils/storage';
 import {
   initFirestoreListeners,
@@ -46,144 +48,79 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { MessagingProvider } from './contexts/MessagingContext';
 import { useVisualSettings, VisualSettingsProvider } from './contexts/VisualSettingsContext';
 import { StaffLoginView } from './components/StaffLoginView';
-import { StaffManagement } from './components/StaffManagement';
 import { ShineLogo } from './components/ShineLogo';
 
 import { Header } from './components/Header';
+import { UpdateAvailableBanner } from './components/Update/UpdateAvailableBanner';
+import { markUnsavedChanges, clearUnsavedChanges } from './pwa/unsavedChanges';
 import { Navigation, NavTab } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
-import { ManagementDashboard } from './components/ManagementDashboard';
-import { canAccessManagementDashboard } from './services/managementAnalytics';
 import { detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from './services/caseIntelligenceService';
-import { GirlsList } from './components/GirlsList';
-import { HouseholdsList } from './components/HouseholdsList';
-import { ActivitiesList } from './components/ActivitiesList';
-import { Reports } from './components/Reports';
-import { ReportBuilder } from './components/Reports/ReportBuilder';
-import { GirlProfile } from './components/GirlProfile';
-import { HouseholdProfile } from './components/HouseholdProfile';
-import { AIAssistantView } from './components/AIAssistant/AIAssistantView';
-import { MessagingView } from './components/Messaging/MessagingView';
-import { BudgetsAndWorkplansView } from './components/Planning/BudgetsAndWorkplansView';
-import { PayrollDashboard } from './components/PayrollDashboard';
-import { CaseManagementView } from './components/CaseManagementView';
-import { DataImportWizard } from './components/Import/DataImportWizard';
-import { ContactsView } from './components/Contacts/ContactsView';
-import { Phase5OperationsView } from './components/Intelligence/Phase5OperationsView';
-import { ProgrammesView } from './components/Programmes/ProgrammesView';
-import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from './data/programmes';
+import { ProgrammeId } from './data/programmes';
 import type { QualityIssue } from './services/qualityRules';
 import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { flushPendingOfflineSnapshots, queueOfflineSnapshotIfNeeded, isBrowserOnline } from './services/offlineSync';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff, filterRestrictedCachedData } from './services/healthRecordAccess';
+import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
-// Forms
-import { GirlForm } from './components/Forms/GirlForm';
-import { HouseholdForm } from './components/Forms/HouseholdForm';
-import { EducationalFollowUpForm } from './components/Forms/EducationalFollowUpForm';
-import { HealthFollowUpForm } from './components/Forms/HealthFollowUpForm';
-import { FamilyFollowUpForm } from './components/Forms/FamilyFollowUpForm';
-import { RentPaymentForm } from './components/Forms/RentPaymentForm';
-import { HouseholdExpenseForm } from './components/Forms/HouseholdExpenseForm';
-import { HouseholdActivityForm } from './components/Forms/HouseholdActivityForm';
-
-// Modals
-import { SearchModal } from './components/SearchModal';
-import { DataModal } from './components/DataModal';
-import { QuickAddModal, ActionType } from './components/QuickAddModal';
-import { CheckCircle2, ShieldAlert } from 'lucide-react';
+import { ErrorBoundary } from './components/Error/ErrorBoundary';
+import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { uploadPhotoAttachment } from './services/attachmentService';
 import { PendingPhoto } from './components/Attachments/FormPhotoSection';
-import { AttachmentTargetType, StaffRole } from './types';
+import { AttachmentTargetType } from './types';
+import type { ActionType } from './components/QuickAddModal';
+import { AppView, parseHash, buildHash, qualityTargetHash } from './routing/appRoutes';
+import { AppViewSwitch } from './views/AppViewSwitch';
+import { useAppModals } from './hooks/useAppModals';
+import { AppModals } from './views/AppModals';
+import { Skeleton } from './components/ui/Skeleton';
 
-type AppView =
-  | 'dashboard'
-  | 'girls'
-  | 'houses'
-  | 'activities'
-  | 'programmes'
-  | 'contacts'
-  | 'messages'
-  | 'planning'
-  | 'import'
-  | 'management'
-  | 'reports'
-  | 'report-builder'
-  | 'payroll'
-  | 'staff'
-  | 'ai-assistant'
-  | 'case-management'
-  | 'operations'
-  | 'girl-profile'
-  | 'house-profile'
-  | 'form-girl'
-  | 'form-house'
-  | 'form-edu'
-  | 'form-health'
-  | 'form-family'
-  | 'form-rent'
-  | 'form-expense'
-  | 'form-activity';
+// Heavy views are split out of the first download so the dashboard and
+// navigation load quickly on a weak connection. Each is fetched on first use.
+const ManagementDashboard = lazy(() =>
+  import('./components/ManagementDashboard').then((module) => ({ default: module.ManagementDashboard })));
+const Reports = lazy(() =>
+  import('./components/Reports').then((module) => ({ default: module.Reports })));
+const ReportBuilder = lazy(() =>
+  import('./components/Reports/ReportBuilder').then((module) => ({ default: module.ReportBuilder })));
+const AIAssistantView = lazy(() =>
+  import('./components/AIAssistant/AIAssistantView').then((module) => ({ default: module.AIAssistantView })));
+const MessagingView = lazy(() =>
+  import('./components/Messaging/MessagingView').then((module) => ({ default: module.MessagingView })));
+const BudgetsAndWorkplansView = lazy(() =>
+  import('./components/Planning/BudgetsAndWorkplansView').then((module) => ({ default: module.BudgetsAndWorkplansView })));
+const PayrollDashboard = lazy(() =>
+  import('./components/PayrollDashboard').then((module) => ({ default: module.PayrollDashboard })));
+const ContractsDashboard = lazy(() =>
+  import('./components/ContractsDashboard').then((module) => ({ default: module.ContractsDashboard })));
+const CaseManagementView = lazy(() =>
+  import('./components/CaseManagementView').then((module) => ({ default: module.CaseManagementView })));
+const DataImportWizard = lazy(() =>
+  import('./components/Import/DataImportWizard').then((module) => ({ default: module.DataImportWizard })));
+const ContactsView = lazy(() =>
+  import('./components/Contacts/ContactsView').then((module) => ({ default: module.ContactsView })));
+const Phase5OperationsView = lazy(() =>
+  import('./components/Intelligence/Phase5OperationsView').then((module) => ({ default: module.Phase5OperationsView })));
+const ProgrammesView = lazy(() =>
+  import('./components/Programmes/ProgrammesView').then((module) => ({ default: module.ProgrammesView })));
+const StaffManagement = lazy(() =>
+  import('./components/StaffManagement').then((module) => ({ default: module.StaffManagement })));
 
-// Helper to parse route from URL hash
-function parseHash(): {
-  view: AppView;
-  activeTab: NavTab;
-  girlId?: string;
-  houseId?: string;
-  programmeId?: ProgrammeId | null;
-  qualityTarget?: { kind: 'budget-item' | 'workplan-item'; id: string };
-} {
-  const [hash, query = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
-  if (!hash) return { view: 'dashboard', activeTab: 'dashboard' };
-  if (hash === 'planning') {
-    const params = new URLSearchParams(query);
-    const kind = params.get('qualityKind');
-    const id = params.get('qualityId');
-    const qualityTarget: { kind: 'budget-item' | 'workplan-item'; id: string } | undefined =
-      id && (kind === 'budget-item' || kind === 'workplan-item')
-        ? { kind, id }
-      : undefined;
-    return { view: 'planning', activeTab: 'planning', qualityTarget };
-  }
-
-  if (hash === 'programmes' || hash.startsWith('programmes/')) {
-    const routeId = hash.slice('programmes/'.length);
-    const programmeId = routeId && [...PROGRAMMES, ...LEGACY_PROGRAMMES].some((programme) => programme.id === routeId)
-      ? routeId as ProgrammeId
-      : null;
-    return { view: 'programmes', activeTab: 'programmes', programmeId };
-  }
-
-  if (hash.startsWith('girl/')) {
-    const girlId = hash.slice(5);
-    return { view: 'girl-profile', activeTab: 'girls', girlId };
-  }
-  if (hash.startsWith('house/')) {
-    const houseId = hash.slice(6);
-    return { view: 'house-profile', activeTab: 'houses', houseId };
-  }
-  if (hash === 'girls') return { view: 'girls', activeTab: 'girls' };
-  if (hash === 'houses') return { view: 'houses', activeTab: 'houses' };
-  if (hash === 'activities') return { view: 'activities', activeTab: 'activities' };
-  if (hash === 'contacts') return { view: 'contacts', activeTab: 'contacts' };
-  if (hash === 'case-management') return { view: 'case-management', activeTab: 'case-management' };
-  if (hash === 'operations' || hash === 'intelligence' || hash === 'calendar') return { view: 'operations', activeTab: 'operations' };
-  if (hash === 'messages' || hash === 'inbox') return { view: 'messages', activeTab: 'messages' };
-  if (hash === 'planning' || hash === 'budgets' || hash === 'workplans') return { view: 'planning', activeTab: 'planning' };
-  if (hash === 'management' || hash === 'executive-overview') return { view: 'management', activeTab: 'management' };
-  if (hash === 'import' || hash === 'ingestion') return { view: 'import', activeTab: 'import' };
-  if (hash === 'reports') return { view: 'reports', activeTab: 'reports' };
-  if (hash === 'report-builder') return { view: 'report-builder', activeTab: 'reports' };
-  if (hash === 'payroll') return { view: 'payroll', activeTab: 'payroll' };
-  if (hash === 'staff' || hash === 'staff-management') return { view: 'staff', activeTab: 'staff' };
-  if (hash === 'ai-assistant' || hash === 'ai') return { view: 'ai-assistant', activeTab: 'ai-assistant' };
-  if (hash === 'register-girl') return { view: 'form-girl', activeTab: 'girls' };
-  if (hash === 'add-house') return { view: 'form-house', activeTab: 'houses' };
-
-  return { view: 'dashboard', activeTab: 'dashboard' };
+/** Lightweight placeholder shown while a split view is downloading. */
+function ViewSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="w-48" label="Loading view" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+        <div className="fx-skeleton h-28 rounded-2xl" />
+        <div className="fx-skeleton h-28 rounded-2xl" />
+        <div className="fx-skeleton h-28 rounded-2xl" />
+      </div>
+      <div className="fx-skeleton h-64 rounded-2xl" aria-hidden="true" />
+    </div>
+  );
 }
 
 function AppContent() {
@@ -206,12 +143,35 @@ function AppContent() {
     logout,
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
+  // Keep the authoritative local database intact for offline diffing and queued
+  // edits. Build a permission-scoped projection for UI consumers instead of
+  // persisting a filtered view back into the shared cache (which can look like
+  // deletions to the per-record offline queue).
+  const viewDb = useMemo(() => {
+    if (!currentUser) return db;
+    const restrictedDb = filterRestrictedCachedData(db, {
+      canViewHealthRecords,
+      canViewCaseReviews,
+      canViewSafeguarding,
+      canViewManagementPlanning: isAdmin || role === 'Manager',
+      canReadImportSourceData: isAdmin || role === 'Manager',
+      uid: currentUser.uid,
+    });
+    return {
+      ...restrictedDb,
+      caseActions: filterCaseActionsForStaff(restrictedDb.caseActions || [], {
+        uid: currentUser.uid,
+        canViewTeamTasks: isAdmin || role === 'Manager',
+        canViewHealthRecords,
+        canViewSafeguarding,
+      }),
+    };
+  }, [db, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
   const [safeguardingCount, setSafeguardingCount] = useState<number>();
   const pendingOperationsReviewCount = useMemo(() => {
     const reviewDb = {
-      ...db,
-      healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
-      caseReviews: canViewCaseReviews ? db.caseReviews : [],
+      ...viewDb,
+      caseActions: excludeSafeguardingCaseActions(viewDb.caseActions || []),
     };
     const savedSuggestions = reviewDb.intelligenceSuggestions || [];
     const pendingSuggestions = detectIntelligenceSuggestions(reviewDb).filter((suggestion) =>
@@ -220,7 +180,7 @@ function AppContent() {
     const duplicateCount = findPotentialDuplicates(reviewDb).length;
     const qualityCount = scanDataQuality(reviewDb).filter((issue) => issue.type !== 'duplicate_candidate').length;
     return pendingSuggestions + duplicateCount + qualityCount;
-  }, [db, canViewHealthRecords, canViewCaseReviews]);
+  }, [viewDb]);
 
   useEffect(() => {
     if (!currentUser || isSuspended || (!isAdmin && !canViewSafeguarding)) {
@@ -237,30 +197,13 @@ function AppContent() {
       });
   }, [currentUser?.uid, isSuspended, isAdmin, canViewSafeguarding]);
 
-  useLayoutEffect(() => {
-    if (currentUser && (
-      (!canViewHealthRecords && db.healthFollowUps.length > 0) ||
-      (!canViewHealthRecords && (db.historicalRecords || []).some((record) => record.recordType === 'medical')) ||
-      (!canViewCaseReviews && (db.caseReviews || []).length > 0)
-    )) {
-      const restrictedDb = {
-        ...db,
-        healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
-        historicalRecords: canViewHealthRecords ? db.historicalRecords : (db.historicalRecords || []).filter((record) => record.recordType !== 'medical'),
-        caseReviews: canViewCaseReviews ? db.caseReviews : [],
-      };
-      saveDatabase(restrictedDb, false);
-      setDb(restrictedDb);
-    }
-  }, [currentUser?.uid, canViewHealthRecords, canViewCaseReviews, db]);
-
   // Trigger follow-up reminders check automatically (with deduplication)
   useEffect(() => {
     if (!currentUser || isSuspended || !isRegisteredStaff || allStaff.length === 0) return;
-    checkAndTriggerFollowUpReminders(db, allStaff, currentUser.uid).catch((err) => {
+    checkAndTriggerFollowUpReminders(viewDb, allStaff, currentUser.uid).catch((err) => {
       console.warn('Follow-up reminder check failed:', err);
     });
-  }, [currentUser?.uid, isSuspended, isRegisteredStaff, allStaff.length, db.educationalFollowUps.length, db.healthFollowUps.length, db.familyFollowUps.length]);
+  }, [currentUser?.uid, isSuspended, isRegisteredStaff, allStaff.length, viewDb.educationalFollowUps.length, viewDb.healthFollowUps.length, viewDb.familyFollowUps.length]);
 
   // Initialize view from hash to preserve view across browser refreshes
   const initialRoute = parseHash();
@@ -298,12 +241,15 @@ function AppContent() {
   const [girlsStatusFilter, setGirlsStatusFilter] = useState<string | undefined>(undefined);
 
   // Modals state
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isDataModalOpen, setIsDataModalOpen] = useState(false);
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const {
+    isSearchOpen, setIsSearchOpen,
+    isDataModalOpen, setIsDataModalOpen,
+    isQuickAddOpen, setIsQuickAddOpen,
+  } = useAppModals();
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState(false);
 
   // Firestore sync status
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus());
@@ -312,24 +258,67 @@ function AppContent() {
     return subscribeSyncStatus(setSyncStatus);
   }, []);
 
+  // Surface local storage failures (for example a full quota) instead of
+  // silently losing offline edits.
+  useEffect(() => {
+    const handleWarning = () => setStorageWarning(true);
+    const handleRecovered = () => setStorageWarning(false);
+    window.addEventListener(STORAGE_WARNING_EVENT, handleWarning);
+    window.addEventListener(STORAGE_RECOVERED_EVENT, handleRecovered);
+    return () => {
+      window.removeEventListener(STORAGE_WARNING_EVENT, handleWarning);
+      window.removeEventListener(STORAGE_RECOVERED_EVENT, handleRecovered);
+    };
+  }, []);
+
+  // While a data-entry form is open the app is treated as holding unsaved
+  // work, so a pending app update never reloads over it.
+  const isFormView = view.startsWith('form-');
+  useEffect(() => {
+    if (isFormView) markUnsavedChanges();
+    else clearUnsavedChanges();
+    return () => clearUnsavedChanges();
+  }, [isFormView]);
+
   // Real-time bidirectional Firebase Firestore persistence synchronization
   useEffect(() => {
     if (!currentUser || isSuspended) {
       return;
     }
-
-    const unsub = initFirestoreListeners((cloudDb) => {
-      saveDatabase(cloudDb, false);
+    const unsub = initFirestoreListeners((cloudDb, meta) => {
+      // Do not replace the live UI state or advance the baseline unless the
+      // snapshot was durably saved on this device. saveIncomingCloudSnapshot
+      // emits the persistent storage warning when local persistence fails.
+      if (!saveIncomingCloudSnapshot(cloudDb, isConfirmedServerSnapshot(meta))) return;
       setDb(cloudDb);
     }, {
       uid: currentUser.uid,
       canViewTeamTasks: isAdmin || role === 'Manager',
+      canViewSafeguarding,
       canReadHealthRecords: canViewHealthRecords,
       canReadCaseReviews: canViewCaseReviews,
       canReadImportSourceData: isAdmin || role === 'Manager',
+      canReadManagementPlanning: isAdmin || role === 'Manager',
     });
     return () => unsub();
-  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews]);
+  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
+
+  // On load, drain any queue left by a previous offline session. Without this a
+  // phone that was closed while offline and reopened already-online would keep
+  // the edits queued until the next connectivity change. The queue is only
+  // flushed when online; conflicts are surfaced instead of overwritten.
+  useEffect(() => {
+    if (!currentUser || isSuspended) return;
+    if (!isBrowserOnline()) return;
+    void flushPendingOfflineSnapshots({
+      actor: {
+        uid: currentUser.uid,
+        name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff',
+        canReadImportSourceData: isAdmin || role === 'Manager',
+        canWriteImportAuditMetadata: isAdmin,
+      },
+    });
+  }, [currentUser?.uid, currentUser?.displayName, isSuspended, staffProfile?.fullName, isAdmin, role]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -365,27 +354,42 @@ function AppContent() {
     };
   }, []);
 
+  // Debounce expensive full-database diffing, but flush at lifecycle and
+  // connectivity boundaries so a phone going offline or closing still queues edits.
   useEffect(() => {
-    const handleOffline = () => queueOfflineSnapshotIfNeeded(db);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flushLocalChanges = () => {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      void recordOfflineChanges(db);
+    };
     const handleConnectivityChange = () => {
-      if (isBrowserOnline()) {
-        void flushPendingOfflineSnapshots();
-      }
+      if (isBrowserOnline()) void flushPendingOfflineSnapshots({
+        actor: currentUser ? {
+          uid: currentUser.uid,
+          name: staffProfile?.fullName || currentUser.displayName || 'SHINE Staff',
+          canReadImportSourceData: isAdmin || role === 'Manager',
+          canWriteImportAuditMetadata: isAdmin,
+        } : undefined,
+      });
+      else flushLocalChanges();
     };
-
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') flushLocalChanges();
+    };
+    timer = setTimeout(flushLocalChanges, 1000);
     window.addEventListener('online', handleConnectivityChange);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener('offline', handleConnectivityChange);
+    window.addEventListener('pagehide', flushLocalChanges);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
+      if (timer) clearTimeout(timer);
       window.removeEventListener('online', handleConnectivityChange);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('offline', handleConnectivityChange);
+      window.removeEventListener('pagehide', flushLocalChanges);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [db]);
-
-  useEffect(() => {
-    if (!isBrowserOnline()) {
-      queueOfflineSnapshotIfNeeded(db);
-    }
-  }, [db]);
+  }, [db, currentUser, staffProfile?.fullName, isAdmin, role]);
 
   // Listen for browser Back/Forward navigation via hashchange
   useEffect(() => {
@@ -417,71 +421,7 @@ function AppContent() {
     if (houseId !== undefined) setSelectedHouseId(houseId);
     if (newView !== 'programmes' || programmeId !== undefined) setSelectedProgrammeId(programmeId || null);
 
-    let targetHash = '';
-    switch (newView) {
-      case 'dashboard':
-        targetHash = '#/';
-        break;
-      case 'girls':
-        targetHash = '#/girls';
-        break;
-      case 'girl-profile':
-        targetHash = girlId ? `#/girl/${girlId}` : '#/girls';
-        break;
-      case 'houses':
-        targetHash = '#/houses';
-        break;
-      case 'house-profile':
-        targetHash = houseId ? `#/house/${houseId}` : '#/houses';
-        break;
-      case 'activities':
-        targetHash = '#/activities';
-        break;
-      case 'programmes':
-        targetHash = programmeId ? `#/programmes/${programmeId}` : '#/programmes';
-        break;
-      case 'contacts':
-        targetHash = '#/contacts';
-        break;
-      case 'case-management':
-        targetHash = '#/case-management';
-        break;
-      case 'messages':
-        targetHash = '#/messages';
-        break;
-      case 'planning':
-        targetHash = '#/planning';
-        break;
-      case 'management':
-        targetHash = '#/management';
-        break;
-      case 'import':
-        targetHash = '#/import';
-        break;
-      case 'reports':
-        targetHash = '#/reports';
-        break;
-      case 'report-builder':
-        targetHash = '#/report-builder';
-        break;
-      case 'payroll':
-        targetHash = '#/payroll';
-        break;
-      case 'staff':
-        targetHash = '#/staff';
-        break;
-      case 'ai-assistant':
-        targetHash = '#/ai-assistant';
-        break;
-      case 'form-girl':
-        targetHash = '#/register-girl';
-        break;
-      case 'form-house':
-        targetHash = '#/add-house';
-        break;
-      default:
-        targetHash = '';
-    }
+    let targetHash = buildHash(newView, girlId, houseId, programmeId);
     if (targetHash && window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -504,7 +444,7 @@ function AppContent() {
     const qualityTarget = { kind, id: target.id };
     setQualityRecordFocus(qualityTarget);
     navigateTo('planning', 'planning');
-    const targetHash = `#/planning?qualityKind=${kind}&qualityId=${encodeURIComponent(target.id)}`;
+    const targetHash = qualityTargetHash(kind, target.id);
     if (window.location.hash !== targetHash) window.location.hash = targetHash;
   };
 
@@ -775,69 +715,75 @@ function AppContent() {
   const handleSaveGirl = (
     girlData: Omit<Girl, 'createdAt' | 'updatedAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
+  ): boolean => {
     if (isViewOnly) {
       showToast('View-only accounts cannot save changes.');
-      return;
+      return false;
     }
-    let targetId = '';
-    if (editingGirl) {
-      targetId = editingGirl.id;
-      const schoolChanged = editingGirl.school !== girlData.school || editingGirl.classLevel !== girlData.classLevel;
-      if (schoolChanged) {
-        const changeDate = new Date().toISOString().slice(0, 10);
-        const currentEntries = (db.educationHistory || []).filter(
-          (entry) => entry.girlId === editingGirl.id && entry.status === 'Current'
-        );
-        if (currentEntries.length > 0) {
-          currentEntries.forEach((entry) => updateEducationHistoryRecord(entry.id, {
-            status: 'Transferred',
-            endDate: entry.endDate || changeDate,
-            reasonForChange: entry.reasonForChange || 'School or class updated in girl profile',
-          }, auditActor));
-        } else if (editingGirl.school || editingGirl.classLevel) {
+    try {
+      let targetId = '';
+      if (editingGirl) {
+        targetId = editingGirl.id;
+        const schoolChanged = editingGirl.school !== girlData.school || editingGirl.classLevel !== girlData.classLevel;
+        if (schoolChanged) {
+          const changeDate = new Date().toISOString().slice(0, 10);
+          const currentEntries = (db.educationHistory || []).filter(
+            (entry) => entry.girlId === editingGirl.id && entry.status === 'Current'
+          );
+          if (currentEntries.length > 0) {
+            currentEntries.forEach((entry) => updateEducationHistoryRecord(entry.id, {
+              status: 'Transferred',
+              endDate: entry.endDate || changeDate,
+              reasonForChange: entry.reasonForChange || 'School or class updated in girl profile',
+            }, auditActor));
+          } else if (editingGirl.school || editingGirl.classLevel) {
+            addEducationHistoryRecord({
+              girlId: editingGirl.id,
+              academicYear: '',
+              school: editingGirl.school,
+              classLevel: editingGirl.classLevel,
+              endDate: changeDate,
+              status: 'Transferred',
+              reasonForChange: 'School or class updated in girl profile',
+              source: 'Girl profile before edit',
+            }, auditActor);
+          }
           addEducationHistoryRecord({
             girlId: editingGirl.id,
             academicYear: '',
-            school: editingGirl.school,
-            classLevel: editingGirl.classLevel,
-            endDate: changeDate,
-            status: 'Transferred',
-            reasonForChange: 'School or class updated in girl profile',
-            source: 'Girl profile before edit',
+            school: girlData.school,
+            classLevel: girlData.classLevel,
+            startDate: changeDate,
+            status: 'Current',
+            source: 'Girl profile update',
           }, auditActor);
         }
-        addEducationHistoryRecord({
-          girlId: editingGirl.id,
-          academicYear: '',
-          school: girlData.school,
-          classLevel: girlData.classLevel,
-          startDate: changeDate,
-          status: 'Current',
-          source: 'Girl profile update',
-        }, auditActor);
+        updateGirl(editingGirl.id, girlData, auditActor);
+        notifyDataChange({ type: 'record_updated', entityId: editingGirl.id, entityTitle: girlData.fullName, girlId: editingGirl.id, detail: 'girl profile' });
+        showToast(`Saved on this phone. Profile updated for ${girlData.fullName}`);
+        navigateTo('girl-profile', 'girls', editingGirl.id);
+      } else {
+        const newGirl = addGirl(girlData, auditActor);
+        targetId = newGirl.id;
+        showToast(`Saved on this phone. Successfully registered ${newGirl.fullName} (ID: ${newGirl.id})`);
+        navigateTo('girl-profile', 'girls', newGirl.id);
+
+        // Notify staff of new registration
+        notifyDataChange({ type: 'new_girl', entityId: newGirl.id, entityTitle: newGirl.fullName, girlId: newGirl.id });
       }
-      updateGirl(editingGirl.id, girlData, auditActor);
-      notifyDataChange({ type: 'record_updated', entityId: editingGirl.id, entityTitle: girlData.fullName, girlId: editingGirl.id, detail: 'girl profile' });
-      showToast(`Profile updated for ${girlData.fullName}`);
-      navigateTo('girl-profile', 'girls', editingGirl.id);
-    } else {
-      const newGirl = addGirl(girlData, auditActor);
-      targetId = newGirl.id;
-      showToast(`Successfully registered ${newGirl.fullName} (ID: ${newGirl.id})`);
-      navigateTo('girl-profile', 'girls', newGirl.id);
 
-      // Notify staff of new registration
-      notifyDataChange({ type: 'new_girl', entityId: newGirl.id, entityTitle: newGirl.fullName, girlId: newGirl.id });
-    }
-
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('girl', targetId, pendingPhotos, (url) => {
-        if (!girlData.photoUrl) {
-          updateGirl(targetId, { photoUrl: url }, auditActor);
-          setDb(getDatabase());
-        }
-      });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('girl', targetId, pendingPhotos, (url) => {
+          if (!girlData.photoUrl) {
+            updateGirl(targetId, { photoUrl: url }, auditActor);
+            setDb(getDatabase());
+          }
+        });
+      }
+      return true;
+    } catch (error) {
+      showToast(`Girl profile save did not complete: ${error instanceof Error ? error.message : 'Check device storage and retry.'} If you changed school or class, review education history before retrying.`);
+      return false;
     }
   };
 
@@ -849,52 +795,63 @@ function AppContent() {
       showToast('View-only accounts cannot save changes.');
       return;
     }
-    let targetId = '';
-    if (editingHouse) {
-      targetId = editingHouse.id;
-      updateHousehold(editingHouse.id, houseData, auditActor);
-      showToast(`House updated for ${houseData.name}`);
-      navigateTo('house-profile', 'houses', undefined, editingHouse.id);
-    } else {
-      const newHouse = addHousehold(houseData, auditActor);
-      targetId = newHouse.id;
-      showToast(`Added household ${newHouse.name}`);
-      navigateTo('house-profile', 'houses', undefined, newHouse.id);
-    }
-    notifyDataChange({ type: 'house_updated', entityId: targetId, entityTitle: houseData.name, houseId: targetId });
+    try {
+      let targetId = '';
+      if (editingHouse) {
+        targetId = editingHouse.id;
+        updateHousehold(editingHouse.id, houseData, auditActor);
+        showToast(`House updated for ${houseData.name}`);
+        navigateTo('house-profile', 'houses', undefined, editingHouse.id);
+      } else {
+        const newHouse = addHousehold(houseData, auditActor);
+        targetId = newHouse.id;
+        showToast(`Added household ${newHouse.name}`);
+        navigateTo('house-profile', 'houses', undefined, newHouse.id);
+      }
+      notifyDataChange({ type: 'house_updated', entityId: targetId, entityTitle: houseData.name, houseId: targetId });
 
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('household', targetId, pendingPhotos, (url) => {
-        if (!houseData.photoUrl) {
-          updateHousehold(targetId, { photoUrl: url }, auditActor);
-          setDb(getDatabase());
-        }
-      });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('household', targetId, pendingPhotos, (url) => {
+          if (!houseData.photoUrl) {
+            updateHousehold(targetId, { photoUrl: url }, auditActor);
+            setDb(getDatabase());
+          }
+        });
+      }
+    } catch (error) {
+      showToast(`Household changes were not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+      return;
     }
   };
 
   const handleSaveEduFollowUp = (
     data: Omit<EducationalFollowUp, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
-    if (isViewOnly) return;
-    const created = addEducationalFollowUp(data, auditActor);
-    // Sync current school & class in girl profile if altered in follow up
-    const girl = db.girls.find((g) => g.id === data.girlId);
-    if (girl && (girl.school !== data.school || girl.classLevel !== data.classLevel)) {
-      updateGirl(data.girlId, {
-        school: data.school || girl.school,
-        classLevel: data.classLevel || girl.classLevel,
-      }, auditActor);
-    }
-    showToast('Educational follow-up recorded successfully.');
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('educationalFollowUp', created.id, pendingPhotos);
-    }
+  ): boolean => {
+    if (isViewOnly) return false;
+    try {
+      const created = addEducationalFollowUp(data, auditActor);
+      // Sync current school & class in girl profile if altered in follow up
+      const girl = db.girls.find((g) => g.id === data.girlId);
+      if (girl && (girl.school !== data.school || girl.classLevel !== data.classLevel)) {
+        updateGirl(data.girlId, {
+          school: data.school || girl.school,
+          classLevel: data.classLevel || girl.classLevel,
+        }, auditActor);
+      }
+      showToast('Saved on this phone. Educational follow-up recorded successfully.');
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('educationalFollowUp', created.id, pendingPhotos);
+      }
 
-    notifyDataChange({ type: 'edu_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
+      notifyDataChange({ type: 'edu_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
 
-    navigateTo('girl-profile', 'girls', data.girlId);
+      navigateTo('girl-profile', 'girls', data.girlId);
+      return true;
+    } catch (error) {
+      showToast(`Education follow-up save did not fully complete: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Review the follow-up and school history before retrying.`);
+      return false;
+    }
   };
 
   const handleSaveHealthFollowUp = (
@@ -905,16 +862,21 @@ function AppContent() {
       showToast('Your account does not have permission to save health records.');
       return;
     }
-    const created = addHealthFollowUp(data, auditActor);
-    const girl = db.girls.find((g) => g.id === data.girlId);
-    showToast('Health / medical visit recorded successfully.');
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('healthFollowUp', created.id, pendingPhotos);
+    try {
+      const created = addHealthFollowUp(data, auditActor);
+      const girl = db.girls.find((g) => g.id === data.girlId);
+      showToast('Health / medical visit recorded successfully.');
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('healthFollowUp', created.id, pendingPhotos);
+      }
+
+      notifyDataChange({ type: 'health_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
+
+      navigateTo('girl-profile', 'girls', data.girlId);
+    } catch (error) {
+      showToast(`Health record was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return;
     }
-
-    notifyDataChange({ type: 'health_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
-
-    navigateTo('girl-profile', 'girls', data.girlId);
   };
 
   const handleSaveFamilyFollowUp = (
@@ -922,14 +884,19 @@ function AppContent() {
     pendingPhotos?: PendingPhoto[]
   ) => {
     if (isViewOnly) return;
-    const created = addFamilyFollowUp(data, auditActor);
-    const girl = db.girls.find((item) => item.id === data.girlId);
-    showToast('Family / guardian follow-up recorded successfully.');
-    notifyDataChange({ type: 'family_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('familyFollowUp', created.id, pendingPhotos);
+    try {
+      const created = addFamilyFollowUp(data, auditActor);
+      const girl = db.girls.find((item) => item.id === data.girlId);
+      showToast('Family / guardian follow-up recorded successfully.');
+      notifyDataChange({ type: 'family_followup', entityId: created.id, entityTitle: girl?.fullName || 'SHINE Girl', girlId: data.girlId });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('familyFollowUp', created.id, pendingPhotos);
+      }
+      navigateTo('girl-profile', 'girls', data.girlId);
+    } catch (error) {
+      showToast(`Family follow-up was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return;
     }
-    navigateTo('girl-profile', 'girls', data.girlId);
   };
 
   const handleSaveRentPayment = (
@@ -937,44 +904,62 @@ function AppContent() {
     pendingPhotos?: PendingPhoto[]
   ) => {
     if (isViewOnly) return;
-    const created = addRentPayment(data, auditActor);
-    showToast('Rent payment record saved.');
-    const household = db.households.find((item) => item.id === data.householdId);
-    notifyDataChange({ type: 'rent_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('rentPayment', created.id, pendingPhotos);
+    try {
+      const created = addRentPayment(data, auditActor);
+      showToast('Rent payment record saved.');
+      const household = db.households.find((item) => item.id === data.householdId);
+      notifyDataChange({ type: 'rent_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('rentPayment', created.id, pendingPhotos);
+      }
+      navigateTo('house-profile', 'houses', undefined, data.householdId);
+    } catch (error) {
+      showToast(`Rent payment was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return;
     }
-    navigateTo('house-profile', 'houses', undefined, data.householdId);
   };
 
   const handleSaveExpense = (
     data: Omit<HouseholdExpense, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
-    if (isViewOnly) return;
-    const created = addExpense(data, auditActor);
-    showToast('Household expense recorded.');
+  ): boolean => {
+    if (isViewOnly) return false;
+    let created: HouseholdExpense;
+    try {
+      created = addExpense(data, auditActor);
+    } catch (error) {
+      showToast(`Expense was not saved: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+      return false;
+    }
+    showToast('Saved on this phone. Household expense recorded.');
     const household = db.households.find((item) => item.id === data.householdId);
     notifyDataChange({ type: 'expense_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
     if (pendingPhotos && pendingPhotos.length > 0) {
       processPendingPhotos('expense', created.id, pendingPhotos);
     }
     navigateTo('house-profile', 'houses', undefined, data.householdId);
+    return true;
   };
 
   const handleSaveActivity = (
     data: Omit<HouseholdActivity, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => {
-    if (isViewOnly) return;
-    const created = addHouseholdActivity(data, auditActor);
-    showToast('Household group activity recorded.');
-    const household = db.households.find((item) => item.id === data.householdId);
-    notifyDataChange({ type: 'activity_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
-    if (pendingPhotos && pendingPhotos.length > 0) {
-      processPendingPhotos('householdActivity', created.id, pendingPhotos);
+  ): boolean => {
+    if (isViewOnly) return false;
+    try {
+      const created = addHouseholdActivity(data, auditActor);
+      showToast('Saved on this phone. Household group activity recorded.');
+      const household = db.households.find((item) => item.id === data.householdId);
+      notifyDataChange({ type: 'activity_added', entityId: created.id, entityTitle: household?.name || 'Household', houseId: data.householdId });
+      if (pendingPhotos && pendingPhotos.length > 0) {
+        processPendingPhotos('householdActivity', created.id, pendingPhotos);
+      }
+      navigateTo('house-profile', 'houses', undefined, data.householdId);
+      return true;
+    } catch (error) {
+      showToast(`Household activity was not fully saved: ${error instanceof Error ? error.message : 'Check device storage and retry.'} Refresh the record before trying again.`);
+      return false;
     }
-    navigateTo('house-profile', 'houses', undefined, data.householdId);
   };
 
   // Deletion Handlers
@@ -988,9 +973,16 @@ function AppContent() {
       `Are you sure you want to delete profile for ${girl?.fullName || 'this girl'}?\nAll linked educational, health, and family follow-up records will also be deleted.`
     );
     if (confirmed) {
-      deleteGirl(girlId);
-      showToast('Girl profile and follow-ups deleted.');
-      navigateTo('girls', 'girls');
+      try {
+        if (!deleteGirl(girlId)) {
+          showToast('Girl profile was not deleted on this device. Check the storage warning, then retry.');
+          return;
+        }
+        showToast('Girl profile and follow-ups deleted.');
+        navigateTo('girls', 'girls');
+      } catch (error) {
+        showToast(`Girl profile was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+      }
     }
   };
 
@@ -1004,9 +996,16 @@ function AppContent() {
       `Are you sure you want to delete household "${house?.name || 'this house'}"?\nResident girls will be preserved and marked unassigned.`
     );
     if (confirmed) {
-      deleteHousehold(houseId);
-      showToast('Household deleted.');
-      navigateTo('houses', 'houses');
+      try {
+        if (!deleteHousehold(houseId)) {
+          showToast('Household was not deleted on this device. Check the storage warning, then retry.');
+          return;
+        }
+        showToast('Household deleted.');
+        navigateTo('houses', 'houses');
+      } catch (error) {
+        showToast(`Household was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+      }
     }
   };
 
@@ -1023,10 +1022,20 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Are you sure you want to delete this follow-up record?')) return;
-    if (type === 'educational') deleteEducationalFollowUp(id);
-    else if (type === 'health') deleteHealthFollowUp(id);
-    else if (type === 'family') deleteFamilyFollowUp(id);
-    showToast('Follow-up record removed.');
+    try {
+      const deleted = type === 'educational'
+        ? deleteEducationalFollowUp(id)
+        : type === 'health'
+          ? deleteHealthFollowUp(id)
+          : deleteFamilyFollowUp(id);
+      if (!deleted) {
+        showToast('Follow-up was not deleted. Refresh the record and check the storage warning before retrying.');
+        return;
+      }
+      showToast('Follow-up record removed.');
+    } catch (error) {
+      showToast(`Follow-up was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+    }
   };
 
   const handleDeleteRentPayment = (id: string) => {
@@ -1035,8 +1044,15 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Delete this rent payment entry?')) return;
-    deleteRentPayment(id);
-    showToast('Rent payment record deleted.');
+    try {
+      if (!deleteRentPayment(id)) {
+        showToast('Rent payment was not deleted. Refresh the record and check the storage warning before retrying.');
+        return;
+      }
+      showToast('Rent payment record deleted.');
+    } catch (error) {
+      showToast(`Rent payment was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+    }
   };
 
   const handleDeleteExpense = (id: string) => {
@@ -1045,8 +1061,15 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Delete this expense entry?')) return;
-    deleteExpense(id);
-    showToast('Expense entry deleted.');
+    try {
+      if (!deleteExpense(id)) {
+        showToast('Expense was not deleted. It may no longer exist, or device storage may be unavailable. Refresh and retry.');
+        return;
+      }
+      showToast('Expense entry deleted.');
+    } catch (error) {
+      showToast(`Expense was not deleted: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+    }
   };
 
   const handleMarkExpensePaid = (
@@ -1066,8 +1089,15 @@ function AppContent() {
       showToast('This expense is already marked as paid.');
       return;
     }
-    updateExpense(id, { ...payment, paymentStatus: 'Paid' }, auditActor);
-    showToast('Payment recorded. The original expense has been updated.');
+    try {
+      if (!updateExpense(id, { ...payment, paymentStatus: 'Paid' }, auditActor)) {
+        showToast('This expense could not be found. Refresh and try again.');
+        return;
+      }
+      showToast('Payment recorded. The original expense has been updated.');
+    } catch (error) {
+      showToast(`Payment was not recorded: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
+    }
   };
 
   const handleUpdateExpense = (
@@ -1078,12 +1108,16 @@ function AppContent() {
       showToast('View-only accounts cannot edit expenses.');
       return;
     }
-    if (!updateExpense(id, changes, auditActor)) {
-      showToast('This expense could not be found. Refresh and try again.');
-      return;
+    try {
+      if (!updateExpense(id, changes, auditActor)) {
+        showToast('This expense could not be found. Refresh and try again.');
+        return;
+      }
+      reloadData();
+      showToast('Expense details updated and recorded in the audit history.');
+    } catch (error) {
+      showToast(`Expense was not updated: ${error instanceof Error ? error.message : 'device storage is unavailable. Free storage and retry.'}`);
     }
-    reloadData();
-    showToast('Expense details updated and recorded in the audit history.');
   };
 
   const handleDeleteActivity = (id: string) => {
@@ -1092,41 +1126,48 @@ function AppContent() {
       return;
     }
     if (!window.confirm('Delete this activity entry?')) return;
-    deleteHouseholdActivity(id);
-    showToast('Activity record deleted.');
+    try {
+      if (!deleteHouseholdActivity(id)) {
+        showToast('Activity was not deleted. Refresh the record and check the storage warning before retrying.');
+        return;
+      }
+      showToast('Activity record deleted.');
+    } catch (error) {
+      showToast(`Activity was not deleted: ${error instanceof Error ? error.message : 'Check device storage and retry.'}`);
+    }
   };
 
   // Lookup helpers for active profiles
   const currentGirl = selectedGirlId
-    ? db.girls.find((g) => g.id === selectedGirlId)
+    ? viewDb.girls.find((g) => g.id === selectedGirlId)
     : null;
   const currentGirlHouse = currentGirl?.householdId
-    ? db.households.find((h) => h.id === currentGirl.householdId)
+    ? viewDb.households.find((h) => h.id === currentGirl.householdId)
     : undefined;
   const currentGirlEdu = selectedGirlId
-    ? db.educationalFollowUps.filter((e) => e.girlId === selectedGirlId)
+    ? viewDb.educationalFollowUps.filter((e) => e.girlId === selectedGirlId)
     : [];
   const currentGirlHealth = selectedGirlId
-    ? db.healthFollowUps.filter((h) => h.girlId === selectedGirlId)
+    ? viewDb.healthFollowUps.filter((h) => h.girlId === selectedGirlId)
     : [];
   const currentGirlFamily = selectedGirlId
-    ? db.familyFollowUps.filter((f) => f.girlId === selectedGirlId)
+    ? viewDb.familyFollowUps.filter((f) => f.girlId === selectedGirlId)
     : [];
 
   const currentHouse = selectedHouseId
-    ? db.households.find((h) => h.id === selectedHouseId)
+    ? viewDb.households.find((h) => h.id === selectedHouseId)
     : null;
   const currentHouseResidents = selectedHouseId
-    ? db.girls.filter((g) => g.householdId === selectedHouseId)
+    ? viewDb.girls.filter((g) => g.householdId === selectedHouseId)
     : [];
   const currentHouseRent = selectedHouseId
-    ? db.rentPayments.filter((r) => r.householdId === selectedHouseId)
+    ? viewDb.rentPayments.filter((r) => r.householdId === selectedHouseId)
     : [];
   const currentHouseExpenses = selectedHouseId
-    ? db.expenses.filter((e) => e.householdId === selectedHouseId)
+    ? viewDb.expenses.filter((e) => e.householdId === selectedHouseId)
     : [];
   const currentHouseActivities = selectedHouseId
-    ? db.householdActivities.filter((a) => a.householdId === selectedHouseId)
+    ? viewDb.householdActivities.filter((a) => a.householdId === selectedHouseId)
     : [];
 
   // Authentication Loading Screen
@@ -1247,6 +1288,7 @@ function AppContent() {
         }}
         onOpenNotificationSettings={() => navigateTo('messages', 'messages')}
         syncStatus={syncStatus}
+        storageWarning={storageWarning}
       />
 
       {/* Main Navigation Bar */}
@@ -1260,7 +1302,7 @@ function AppContent() {
 
       {/* Toast Notification Alert */}
       {toastMessage && (
-        <div className="fixed bottom-18 md:bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div data-fx-toast role="status" aria-live="polite" aria-atomic="true" className="fixed bottom-18 md:bottom-6 right-6 z-50 fx-toast-enter">
           <div className="bg-teal-950 text-white px-4 py-3 rounded-xl shadow-2xl border border-teal-800 flex items-center gap-3 text-xs font-semibold max-w-md">
             <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0" />
             <span>{toastMessage}</span>
@@ -1275,428 +1317,137 @@ function AppContent() {
         </div>
       )}
 
+      {/* Local Storage Warning Banner */}
+      {storageWarning && (
+        <div
+          className="bg-rose-100 border-b border-rose-300 px-4 py-2 text-center text-xs text-rose-900 font-semibold flex items-center justify-center gap-2"
+          role="alert"
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>
+            This phone is out of storage. Changes may not be saved offline. Connect to the internet to sync, then free space.
+          </span>
+        </div>
+      )}
+
+      {/* New version available */}
+      <UpdateAvailableBanner />
+
       {/* Primary Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* VIEW 1: DASHBOARD */}
-        {view === 'dashboard' && (
-          <Dashboard
-            db={db}
-            onNavigateToGirl={handleOpenGirlProfile}
-            onNavigateToHouse={handleOpenHouseProfile}
-            onNavigateToGirlsList={(status?: string) => {
-              setGirlsStatusFilter(status);
-              navigateTo('girls', 'girls');
-            }}
-            onNavigateToHousesList={() => navigateTo('houses', 'houses')}
-            onNavigateToReports={() => navigateTo('reports', 'reports')}
-            onOpenSponsorReport={() => navigateTo('report-builder', 'reports')}
-            onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-            onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
-            onNavigateToProgramme={openProgramme}
-            safeguardingCount={safeguardingCount}
-          />
-        )}
-
-        {/* VIEW 2: GIRLS DIRECTORY */}
-        {view === 'girls' && (
-          <GirlsList
-            girls={db.girls}
-            households={db.households}
-            db={db}
-            initialStatusFilter={girlsStatusFilter}
-            onSelectGirl={handleOpenGirlProfile}
-            onRegisterGirl={handleStartRegisterGirl}
-          />
-        )}
-
-        {/* VIEW 3: HOUSEHOLDS DIRECTORY */}
-        {view === 'houses' && (
-          <HouseholdsList
-            households={db.households}
-            girls={db.girls}
-            db={db}
-            onSelectHouse={handleOpenHouseProfile}
-            onAddHouse={handleStartAddHouse}
-            onAddRent={handleStartRentPayment}
-            onAddExpense={handleStartExpense}
-            onAddActivity={handleStartActivity}
-          />
-        )}
-
-        {/* VIEW 4: GROUP ACTIVITIES */}
-        {view === 'activities' && (
-          <ActivitiesList
-            activities={db.householdActivities}
-            households={db.households}
-            girls={db.girls}
-            onSelectHouse={handleOpenHouseProfile}
-            onAddActivity={() => handleStartActivity()}
-          />
-        )}
-
-        {view === 'programmes' && (
-          <ProgrammesView
-            db={db}
-            selectedProgrammeId={selectedProgrammeId}
-            auditActor={auditActor}
-            isViewOnly={isViewOnly}
-            onOpenProgramme={openProgramme}
-            onNavigateToGirls={() => navigateTo('girls', 'girls')}
-            onNavigateToHouses={() => navigateTo('houses', 'houses')}
-            onNavigateToOperations={() => navigateTo('operations', 'operations')}
-            onRefresh={reloadData}
-            onProgrammeLogAdded={(record, programmeName) => notifyDataChange({
-              type: 'programme_record_added',
-              entityId: record.id,
-              entityTitle: `${programmeName}: ${record.description}`,
-            })}
-            onCreateProgrammePlan={(type, programmeId) => {
-              setProgrammePlanningRequest({ requestId: Date.now(), type, programmeId });
-              navigateTo('planning', 'planning');
-            }}
-          />
-        )}
-
-        {view === 'contacts' && (
-          <ContactsView db={db} />
-        )}
-
-        {view === 'case-management' && (
-          <CaseManagementView
-            db={db}
-            onRefresh={reloadData}
-            onOpenGirl={handleOpenGirlProfile}
-            onOpenHousehold={handleOpenHouseProfile}
-          />
-        )}
-
-        {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} onNavigateToProgramme={openProgramme} />}
-
-        {/* VIEW 5: REPORTS */}
-        {view === 'reports' && (
-          <Reports
-            db={db}
-            onSelectGirl={handleOpenGirlProfile}
-            onSelectHouse={handleOpenHouseProfile}
-            onOpenQualityRecord={openQualityRecord}
-          />
-        )}
-
-        {view === 'report-builder' && (
-          <ReportBuilder db={db} onClose={() => navigateTo('dashboard', 'dashboard')} onOpenQualityRecord={openQualityRecord} />
-        )}
-
-        {view === 'payroll' && (
-          <PayrollDashboard db={db} onRefresh={reloadData} />
-        )}
-
-        {/* VIEW: STAFF MANAGEMENT (ADMINISTRATORS ONLY) */}
-        {view === 'staff' && (
-          <StaffManagement />
-        )}
-
-        {/* VIEW: SHINE AI ASSISTANT */}
-        {view === 'ai-assistant' && (
-          <AIAssistantView
-            db={db}
-            initialGirlId={aiFocusGirlId}
-            initialHouseId={aiFocusHouseId}
-            onNavigateToGirl={handleOpenGirlProfile}
-            onNavigateToHouse={handleOpenHouseProfile}
-          />
-        )}
-
-        {/* VIEW: STAFF MESSAGING & NOTIFICATIONS HUB */}
-        {view === 'messages' && (
-          <MessagingView
-            appDb={db}
-            onOpenRecord={(type, id) => {
-              if (type === 'girl') {
-                handleOpenGirlProfile(id);
-              } else if (type === 'household') {
-                handleOpenHouseProfile(id);
-              } else if (type === 'educationalFollowUp' || type === 'healthFollowUp' || type === 'familyFollowUp') {
-                const edu = db.educationalFollowUps.find((e) => e.id === id);
-                const hlth = db.healthFollowUps.find((h) => h.id === id);
-                const fam = db.familyFollowUps.find((f) => f.id === id);
-                const gId = edu?.girlId || hlth?.girlId || fam?.girlId;
-                if (gId) handleOpenGirlProfile(gId);
-              } else if (type === 'rentPayment' || type === 'expense' || type === 'householdActivity') {
-                const rent = db.rentPayments.find((r) => r.id === id);
-                const exp = db.expenses.find((e) => e.id === id);
-                const act = db.householdActivities.find((a) => a.id === id);
-                const hId = rent?.householdId || exp?.householdId || act?.householdId;
-                if (hId) handleOpenHouseProfile(hId);
-              } else if (type === 'programmeLog') {
-                const record = (db.programmeLogs || []).find((item) => item.id === id);
-                if (record) openProgramme(record.programmeId as ProgrammeId);
-              } else if (type === 'programme') {
-                openProgramme(id as ProgrammeId);
-              } else if (type === 'importBatch') {
-                navigateTo('reports', 'reports');
-                window.location.hash = `#/reports?importAudit=${encodeURIComponent(id)}`;
-              }
-            }}
-          />
-        )}
-
-        {/* VIEW: PLANNING (BUDGETS, WORKPLANS & FIELD SCHEDULES) */}
-        {view === 'planning' && (
-          <BudgetsAndWorkplansView
-            db={db}
-            onRefresh={reloadData}
-            qualityRecordFocus={qualityRecordFocus}
-            initialProgrammeCreate={programmePlanningRequest}
-            onProgrammeCreateHandled={() => setProgrammePlanningRequest(null)}
-          />
-        )}
-
-        {view === 'management' && (canAccessManagementDashboard(isAdmin, role) ? (
-          <ManagementDashboard
-            db={db}
-            staff={allStaff}
-            onNavigateReports={() => navigateTo('reports', 'reports')}
-            onOpenReportBuilder={() => navigateTo('report-builder', 'reports')}
-          />
-        ) : (
-          <div className="rounded-xl border border-rose-200 bg-white p-8 text-center">
-            <h1 className="text-lg font-bold text-stone-900">Management access restricted</h1>
-            <p className="mt-2 text-sm text-stone-600">Only Administrators and Managers can view this dashboard.</p>
-          </div>
-        ))}
-
-        {/* VIEW: DOCUMENT INGESTION WIZARD */}
-        {view === 'import' && (
-          <DataImportWizard
-            key={importWizardKey}
-            db={db}
-            initialFile={pendingImportFile}
-            onInitialFileConsumed={() => setPendingImportFile(null)}
-            onOpenFilePicker={openImportFilePicker}
-            onImportComplete={(audit) => {
-              notifyDataChange({ type: 'import_completed', entityId: audit.id, entityTitle: audit.fileName });
-              reloadData();
-              showToast('Data ingestion completed and saved to Firestore!');
-            }}
-            onCancel={() => {
-              setPendingImportFile(null);
-              navigateTo(previousImportLocation.view, previousImportLocation.tab, previousImportLocation.girlId, previousImportLocation.houseId);
-            }}
-          />
-        )}
-
-        {/* VIEW 6: GIRL PROFILE */}
-        {view === 'girl-profile' && currentGirl && (
-          <GirlProfile
-            girl={currentGirl}
-            household={currentGirlHouse}
-            educationalFollowUps={currentGirlEdu}
-            healthFollowUps={currentGirlHealth}
-            familyFollowUps={currentGirlFamily}
-            historicalRecords={db.historicalRecords?.filter((h) => h.girlId === currentGirl.id) || []}
-            caseActions={(db.caseActions || []).filter((item) => item.girlId === currentGirl.id)}
-            educationHistory={(db.educationHistory || []).filter((item) => item.girlId === currentGirl.id)}
-            academicSupports={(db.academicSupports || []).filter((item) => item.girlId === currentGirl.id)}
-            examinationRecords={(db.examinationRecords || []).filter((item) => item.girlId === currentGirl.id)}
-            attendanceRecords={(db.attendanceRecords || []).filter((item) => item.girlId === currentGirl.id)}
-            girlLeaves={(db.girlLeaves || []).filter((item) => item.girlId === currentGirl.id)}
-            caseReviews={(db.caseReviews || []).filter((item) => item.girlId === currentGirl.id)}
-            onBack={() => navigateTo('girls', 'girls')}
-            onNavigateToHouse={handleOpenHouseProfile}
-            onEditGirl={handleStartEditGirl}
-            onDeleteGirl={handleDeleteGirl}
-            onDeleteFollowUp={handleDeleteFollowUp}
-            onAddEducationalFollowUp={handleStartEduFollowUp}
-            onAddHealthFollowUp={handleStartHealthFollowUp}
-            onAddFamilyFollowUp={handleStartFamilyFollowUp}
-            onAskAI={handleAskAIAboutGirl}
-          />
-        )}
-
-        {/* Fallback if girl not found */}
-        {view === 'girl-profile' && !currentGirl && (
-          <div className="bg-white p-8 rounded-xl border border-stone-200 text-center space-y-3">
-            <h2 className="text-lg font-bold text-stone-800">Girl Profile Not Found</h2>
-            <p className="text-xs text-stone-500">
-              The requested girl record does not exist or has been removed.
-            </p>
-            <button
-              onClick={() => navigateTo('girls', 'girls')}
-              className="px-4 py-2 bg-teal-800 text-white text-xs font-bold rounded-lg"
-            >
-              Return to Girls Directory
-            </button>
-          </div>
-        )}
-
-        {/* VIEW 7: HOUSEHOLD PROFILE */}
-        {view === 'house-profile' && currentHouse && (
-          <HouseholdProfile
-            household={currentHouse}
-            residentGirls={currentHouseResidents}
-            rentPayments={currentHouseRent}
-            expenses={currentHouseExpenses}
-            activities={currentHouseActivities}
-            onBack={() => navigateTo('houses', 'houses')}
-            onNavigateToGirl={handleOpenGirlProfile}
-            onEditHousehold={handleStartEditHouse}
-            onDeleteHousehold={handleDeleteHousehold}
-            onDeleteRentPayment={handleDeleteRentPayment}
-            onDeleteExpense={handleDeleteExpense}
-            onMarkExpensePaid={handleMarkExpensePaid}
-            onUpdateExpense={handleUpdateExpense}
-            onDeleteActivity={handleDeleteActivity}
-            onAddRentPayment={handleStartRentPayment}
-            onAddExpense={handleStartExpense}
-            onAddActivity={handleStartActivity}
-            onAskAI={handleAskAIAboutHouse}
-          />
-        )}
-
-        {/* Fallback if house not found */}
-        {view === 'house-profile' && !currentHouse && (
-          <div className="bg-white p-8 rounded-xl border border-stone-200 text-center space-y-3">
-            <h2 className="text-lg font-bold text-stone-800">Household Not Found</h2>
-            <p className="text-xs text-stone-500">
-              The requested household record does not exist or has been removed.
-            </p>
-            <button
-              onClick={() => navigateTo('houses', 'houses')}
-              className="px-4 py-2 bg-teal-800 text-white text-xs font-bold rounded-lg"
-            >
-              Return to Households Directory
-            </button>
-          </div>
-        )}
-
-        {/* FORM 1: GIRL REGISTRATION / EDIT */}
-        {view === 'form-girl' && (
-          <div className="max-w-3xl mx-auto">
-            <GirlForm
-              initialData={editingGirl || undefined}
-              existingGirls={db.girls}
-              households={db.households}
-              onSave={handleSaveGirl}
-              onCancel={() => {
-                if (editingGirl) {
-                  navigateTo('girl-profile', 'girls', editingGirl.id);
-                } else {
-                  navigateTo('girls', 'girls');
-                }
-              }}
+        {/* Keyed by view so a crash in one view clears when the user navigates. */}
+        <ErrorBoundary key={view} label={view}>
+          <Suspense fallback={<ViewSkeleton />}>
+            <AppViewSwitch
+              view={view}
+              db={viewDb}
+              role={role}
+              isAdmin={isAdmin}
+              currentUserUid={currentUser?.uid}
+              canViewHealthRecords={canViewHealthRecords}
+              canViewSafeguarding={canViewSafeguarding}
+              isViewOnly={isViewOnly}
+              auditActor={auditActor}
+              allStaff={allStaff}
+              safeguardingCount={safeguardingCount}
+              girlsStatusFilter={girlsStatusFilter}
+              selectedProgrammeId={selectedProgrammeId}
+              qualityRecordFocus={qualityRecordFocus}
+              programmePlanningRequest={programmePlanningRequest}
+              importWizardKey={importWizardKey}
+              pendingImportFile={pendingImportFile}
+              previousImportLocation={previousImportLocation}
+              editingGirl={editingGirl}
+              editingHouse={editingHouse}
+              aiFocusGirlId={aiFocusGirlId}
+              aiFocusHouseId={aiFocusHouseId}
+              currentGirl={currentGirl}
+              currentGirlHouse={currentGirlHouse}
+              currentGirlEdu={currentGirlEdu}
+              currentGirlHealth={currentGirlHealth}
+              currentGirlFamily={currentGirlFamily}
+              currentHouse={currentHouse}
+              currentHouseResidents={currentHouseResidents}
+              currentHouseRent={currentHouseRent}
+              currentHouseExpenses={currentHouseExpenses}
+              currentHouseActivities={currentHouseActivities}
+              ManagementDashboard={ManagementDashboard}
+              Reports={Reports}
+              ReportBuilder={ReportBuilder}
+              AIAssistantView={AIAssistantView}
+              MessagingView={MessagingView}
+              BudgetsAndWorkplansView={BudgetsAndWorkplansView}
+              PayrollDashboard={PayrollDashboard}
+              ContractsDashboard={ContractsDashboard}
+              CaseManagementView={CaseManagementView}
+              DataImportWizard={DataImportWizard}
+              ContactsView={ContactsView}
+              Phase5OperationsView={Phase5OperationsView}
+              ProgrammesView={ProgrammesView}
+              StaffManagement={StaffManagement}
+              Dashboard={Dashboard}
+              navigateTo={navigateTo}
+              openProgramme={openProgramme}
+              openQualityRecord={openQualityRecord}
+              setGirlsStatusFilter={setGirlsStatusFilter}
+              onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+              onInitialFileConsumed={() => setPendingImportFile(null)}
+              onProgrammeCreateHandled={() => setProgrammePlanningRequest(null)}
+              onCreateProgrammePlan={(type, programmeId) => setProgrammePlanningRequest({ requestId: Date.now(), type, programmeId })}
+              handleOpenGirlProfile={handleOpenGirlProfile}
+              handleOpenHouseProfile={handleOpenHouseProfile}
+              handleStartRegisterGirl={handleStartRegisterGirl}
+              handleStartAddHouse={handleStartAddHouse}
+              handleStartRentPayment={handleStartRentPayment}
+              handleStartExpense={handleStartExpense}
+              handleStartActivity={handleStartActivity}
+              handleStartEditGirl={handleStartEditGirl}
+              handleStartEditHouse={handleStartEditHouse}
+              handleStartEduFollowUp={handleStartEduFollowUp}
+              handleStartHealthFollowUp={handleStartHealthFollowUp}
+              handleStartFamilyFollowUp={handleStartFamilyFollowUp}
+              handleAskAIAboutGirl={handleAskAIAboutGirl}
+              handleAskAIAboutHouse={handleAskAIAboutHouse}
+              handleDeleteGirl={handleDeleteGirl}
+              handleDeleteHousehold={handleDeleteHousehold}
+              handleDeleteFollowUp={handleDeleteFollowUp}
+              handleDeleteRentPayment={handleDeleteRentPayment}
+              handleDeleteExpense={handleDeleteExpense}
+              handleMarkExpensePaid={handleMarkExpensePaid}
+              handleUpdateExpense={handleUpdateExpense}
+              handleDeleteActivity={handleDeleteActivity}
+              handleSaveGirl={handleSaveGirl}
+              handleSaveHouse={handleSaveHouse}
+              handleSaveEduFollowUp={handleSaveEduFollowUp}
+              handleSaveHealthFollowUp={handleSaveHealthFollowUp}
+              handleSaveFamilyFollowUp={handleSaveFamilyFollowUp}
+              handleSaveRentPayment={handleSaveRentPayment}
+              handleSaveExpense={handleSaveExpense}
+              handleSaveActivity={handleSaveActivity}
+              reloadData={reloadData}
+              notifyDataChange={notifyDataChange}
+              showToast={showToast}
+              openImportFilePicker={openImportFilePicker}
             />
-          </div>
-        )}
-
-        {/* FORM 2: HOUSEHOLD REGISTRATION / EDIT */}
-        {view === 'form-house' && (
-          <div className="max-w-2xl mx-auto">
-            <HouseholdForm
-              initialData={editingHouse || undefined}
-              existingHouses={db.households}
-              onSave={handleSaveHouse}
-              onCancel={() => {
-                if (editingHouse) {
-                  navigateTo('house-profile', 'houses', undefined, editingHouse.id);
-                } else {
-                  navigateTo('houses', 'houses');
-                }
-              }}
-            />
-          </div>
-        )}
-
-        {/* FORM 3: EDUCATIONAL FOLLOW-UP */}
-        {view === 'form-edu' && currentGirl && (
-          <div className="max-w-3xl mx-auto">
-            <EducationalFollowUpForm
-              girl={currentGirl}
-              onSave={handleSaveEduFollowUp}
-              onCancel={() => navigateTo('girl-profile', 'girls', currentGirl.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 4: HEALTH / MEDICAL FOLLOW-UP */}
-        {view === 'form-health' && currentGirl && (
-          <div className="max-w-3xl mx-auto">
-            <HealthFollowUpForm
-              girl={currentGirl}
-              onSave={handleSaveHealthFollowUp}
-              onCancel={() => navigateTo('girl-profile', 'girls', currentGirl.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 5: FAMILY FOLLOW-UP */}
-        {view === 'form-family' && currentGirl && (
-          <div className="max-w-3xl mx-auto">
-            <FamilyFollowUpForm
-              girl={currentGirl}
-              onSave={handleSaveFamilyFollowUp}
-              onCancel={() => navigateTo('girl-profile', 'girls', currentGirl.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 6: RENT PAYMENT */}
-        {view === 'form-rent' && currentHouse && (
-          <div className="max-w-2xl mx-auto">
-            <RentPaymentForm
-              household={currentHouse}
-              onSave={handleSaveRentPayment}
-              onCancel={() => navigateTo('house-profile', 'houses', undefined, currentHouse.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 7: HOUSEHOLD EXPENSE */}
-        {view === 'form-expense' && currentHouse && (
-          <div className="max-w-2xl mx-auto">
-            <HouseholdExpenseForm
-              household={currentHouse}
-              onSave={handleSaveExpense}
-              onCancel={() => navigateTo('house-profile', 'houses', undefined, currentHouse.id)}
-            />
-          </div>
-        )}
-
-        {/* FORM 8: HOUSEHOLD ACTIVITY */}
-        {view === 'form-activity' && currentHouse && (
-          <div className="max-w-3xl mx-auto">
-            <HouseholdActivityForm
-              household={currentHouse}
-              houseGirls={currentHouseResidents}
-              onSave={handleSaveActivity}
-              onCancel={() => navigateTo('house-profile', 'houses', undefined, currentHouse.id)}
-            />
-          </div>
-        )}
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Global Modals */}
-      <SearchModal
-        db={db}
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onSelectGirl={handleOpenGirlProfile}
-        onSelectHouse={handleOpenHouseProfile}
-        onNavigateToCaseManagement={() => navigateTo('case-management', 'case-management')}
-      />
-
-      <DataModal
-        db={db}
-        isOpen={isDataModalOpen}
-        onClose={() => setIsDataModalOpen(false)}
-        onDataChanged={reloadData}
-      />
-
-      <QuickAddModal
-        db={db}
-        isOpen={isQuickAddOpen}
-        onClose={() => setIsQuickAddOpen(false)}
-        onSelectAction={handleQuickAction}
-        onOpenProgramme={openProgramme}
+      <AppModals
+        db={viewDb}
+        isSearchOpen={isSearchOpen}
+        isDataModalOpen={isDataModalOpen}
+        isQuickAddOpen={isQuickAddOpen}
+        setIsSearchOpen={setIsSearchOpen}
+        setIsDataModalOpen={setIsDataModalOpen}
+        setIsQuickAddOpen={setIsQuickAddOpen}
+        handleOpenGirlProfile={handleOpenGirlProfile}
+        handleOpenHouseProfile={handleOpenHouseProfile}
+        navigateTo={navigateTo}
+        reloadData={reloadData}
+        handleQuickAction={handleQuickAction}
+        openProgramme={openProgramme}
       />
     </div>
   );

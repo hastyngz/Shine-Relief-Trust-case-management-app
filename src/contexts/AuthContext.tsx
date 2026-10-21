@@ -20,6 +20,7 @@ import {
   persistStaffUserToFirestore,
   deleteStaffUserFromFirestore,
   subscribeStaffUsers,
+  subscribeStaffUserDoc,
 } from '../services/firestoreSync';
 
 export const PRIMARY_ADMIN_EMAIL = 'hastingszidanamot@gmail.com';
@@ -115,12 +116,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (profile) {
-        // Update last login
+        // Update lastLoginAt at most once per calendar day. Every write to
+        // staffUsers can fan out to the roster onSnapshot listener for every
+        // active session, so writing on every login creates avoidable reads.
         if (profile.status === 'Active') {
-          profile.lastLoginAt = new Date().toISOString();
-          persistStaffUserToFirestore(profile).catch((e) =>
-            console.warn('Non-fatal: could not update lastLoginAt', e)
-          );
+          const now = new Date().toISOString();
+          if (profile.lastLoginAt?.slice(0, 10) !== now.slice(0, 10)) {
+            profile.lastLoginAt = now;
+            persistStaffUserToFirestore(profile).catch((e) =>
+              console.warn('Non-fatal: could not update lastLoginAt', e)
+            );
+          }
         }
         setStaffProfile(profile);
       } else {
@@ -155,28 +161,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  // Subscribe to staff roster ONLY when an authenticated user is signed in
+  // Load the full staff roster only after the signed-in user is confirmed active.
+  // Suspended registered users keep a listener on their own profile so an
+  // administrator can reactivate them without requiring a fresh login. Unknown
+  // accounts do not start a collection-wide listener that rules will reject.
   useEffect(() => {
     if (!currentUser) {
       setAllStaff([]);
       return;
     }
 
-    const unsubStaff = subscribeStaffUsers((list) => {
-      setAllStaff(list);
-      // Also update current user's profile in real time if admin changes their role
-      if (auth.currentUser) {
-        const matching = list.find((s) => s.uid === auth.currentUser?.uid || s.id === auth.currentUser?.uid);
+    const isPrimaryAdmin = currentUser.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL;
+    const profileBelongsToUser = staffProfile?.uid === currentUser.uid || staffProfile?.id === currentUser.uid;
+    const profileResolved = profileBelongsToUser && staffProfile !== null;
+    const isRegisteredProfile = profileResolved && staffProfile.createdBy !== 'Unregistered User';
+    const canReadRoster = isPrimaryAdmin || (isRegisteredProfile && staffProfile.status === 'Active');
+
+    if (canReadRoster) {
+      const unsubStaff = subscribeStaffUsers((list) => {
+        setAllStaff(list);
+        // Keep role/status changes live while the user has roster access.
+        const matching = list.find((staff) =>
+          staff.uid === currentUser.uid || staff.id === currentUser.uid
+        );
         if (matching) {
           setStaffProfile(matching);
+        } else if (!isPrimaryAdmin) {
+          setStaffProfile((previous) => previous && (
+            previous.uid === currentUser.uid || previous.id === currentUser.uid
+          ) ? { ...previous, status: 'Suspended', createdBy: 'Unregistered User' } : previous);
         }
-      }
-    });
+      });
+      return () => {
+        unsubStaff();
+      };
+    }
 
-    return () => {
-      unsubStaff();
-    };
-  }, [currentUser]);
+    setAllStaff([]);
+    // Only listen to a single profile document when a known staff member is
+    // suspended. This keeps status/reactivation changes live without exposing
+    // or repeatedly attempting to read the full roster.
+    if (profileResolved && isRegisteredProfile) {
+      const unsubOwnProfile = subscribeStaffUserDoc(currentUser.uid, (profile) => {
+        if (profile) {
+          setStaffProfile(profile);
+        } else {
+          setStaffProfile((previous) => previous && (
+            previous.uid === currentUser.uid || previous.id === currentUser.uid
+          ) ? { ...previous, status: 'Suspended', createdBy: 'Unregistered User' } : previous);
+        }
+      });
+      return () => {
+        unsubOwnProfile();
+      };
+    }
+  }, [currentUser, staffProfile?.uid, staffProfile?.id, staffProfile?.status, staffProfile?.createdBy]);
 
   const refreshStaffProfile = async () => {
     if (auth.currentUser) {

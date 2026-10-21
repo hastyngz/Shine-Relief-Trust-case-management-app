@@ -1,5 +1,3 @@
-import mammoth from 'mammoth';
-import JSZip from 'jszip';
 import {
   AppDatabase,
   DocxClassification,
@@ -171,6 +169,7 @@ async function extractDocumentFromZip(buffer: ArrayBuffer): Promise<{
   rawHtml: string;
   extractedImages: ExtractedImageItem[];
 }> {
+  const { default: JSZip } = await import('jszip');
   const zip = await JSZip.loadAsync(buffer);
   const documentXml = await zip.file('word/document.xml')?.async('string') ?? '';
   const relsXml = await zip.file('word/_rels/document.xml.rels')?.async('string') ?? '';
@@ -633,6 +632,7 @@ export async function parseDocxProgressReport(
 
   let rawHtml = '';
   let rawText = '';
+  const mammoth = (await import('mammoth')).default;
   const mammothBuffer = typeof Buffer !== 'undefined' ? Buffer.from(buffer) : new Uint8Array(buffer);
   const mammothInput = { arrayBuffer: buffer, buffer: mammothBuffer };
 

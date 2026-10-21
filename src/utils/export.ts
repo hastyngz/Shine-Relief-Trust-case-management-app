@@ -10,7 +10,8 @@ import {
   HouseholdActivity,
 } from '../types';
 
-export function formatMWK(amount: number): string {
+export function formatMWK(amount: number | null | undefined): string {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) return 'Not recorded';
   return `MWK ${amount.toLocaleString('en-US')}`;
 }
 

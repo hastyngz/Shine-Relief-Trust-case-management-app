@@ -193,7 +193,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
         setProgressText(
           files.length > 1
             ? `Optimizing & uploading ${i + 1} of ${files.length}...`
-            : 'Compressing and uploading photo to Firebase Storage...'
+            : 'Compressing and uploading photo to Cloudflare R2...'
         );
 
         try {
@@ -482,7 +482,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
                 <>
                   <Upload className="w-4 h-4 text-amber-400" />
                   <span>
-                    Upload {files.length > 0 ? `(${files.length})` : ''} to Firebase Storage
+                    Upload {files.length > 0 ? `(${files.length})` : ''} to Cloudflare R2
                   </span>
                 </>
               )}
