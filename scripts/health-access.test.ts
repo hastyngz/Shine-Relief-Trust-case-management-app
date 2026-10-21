@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions, canStaffReceiveCaseActionNotification, filterCaseActionsForStaff } from '../src/services/healthRecordAccess';
-import { filterCaseIntelligenceData } from '../src/services/caseIntelligenceService';
+import { detectIntelligenceSuggestions, filterCaseIntelligenceData, scanDataQuality } from '../src/services/caseIntelligenceService';
 
 const staff = (role: string, canViewHealthRecords?: boolean) => ({ role, canViewHealthRecords }) as any;
 assert.equal(canStaffViewHealthRecords(staff('Administrator')), true);
@@ -49,7 +49,7 @@ const staleCache: any = {
   healthFollowUps: [{ id: 'health-cache', girlId: 'girl-health', furtherActionRequired: true }],
   historicalRecords: [{ id: 'medical-history', recordType: 'medical' }, { id: 'school-history', recordType: 'education' }],
   caseReviews: [{ id: 'review-cache', health: 'SYNTHETIC_PRIVATE_HEALTH', progress: 'School attendance improved' }],
-  caseActions: [{ id: 'safe-action', sourceType: 'safeguarding' }, { id: 'health-action', sourceType: 'healthFollowUp' }, { id: 'normal-action', sourceType: 'manual' }],
+  caseActions: [{ id: 'safe-action', sourceType: 'safeguarding', title: 'SYNTHETIC_SAFEGUARDING_ACTION', dueDate: '2020-01-01', status: 'Open' }, { id: 'health-action', sourceType: 'healthFollowUp' }, { id: 'normal-action', sourceType: 'manual' }],
   employees: [{ id: 'private-employee', salaryMWK: 200000 }],
   whatIfScenarios: [{ id: 'private-scenario' }],
   projectProjections: [{ id: 'private-projection' }],
@@ -111,6 +111,8 @@ const healthAuthorizedIntelligence = filterCaseIntelligenceData(staleCache, {
 });
 assert.deepEqual((healthAuthorizedIntelligence.caseActions || []).map((action: any) => action.id), ['health-action', 'normal-action']);
 assert.ok(JSON.stringify(healthAuthorizedIntelligence).includes('SYNTHETIC_PRIVATE_HEALTH'), 'authorized health reviewers retain health details in the intelligence projection');
+assert.ok(!JSON.stringify(detectIntelligenceSuggestions(staleCache)).includes('SYNTHETIC_SAFEGUARDING_ACTION'), 'suggestion generation never includes safeguarding-linked actions');
+assert.ok(!JSON.stringify(scanDataQuality(staleCache)).includes('SYNTHETIC_SAFEGUARDING_ACTION'), 'general quality scans never expose safeguarding-linked action titles');
 
 // Cached case actions must be filtered for the active account without
 // mutating the shared offline cache (which may be reused by another authorized user).
