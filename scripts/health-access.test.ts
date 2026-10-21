@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { canReceiveFollowUpNotification, canStaffViewHealthRecords, getGirlsWithActionRequired, filterRestrictedCachedData, hasRestrictedCachedData, filterNotificationsByHealthPermission, isAttachmentAllowedInGeneralReport, isCaseActionAllowedInGeneralSearch, excludeSafeguardingCaseActions, canStaffReceiveCaseActionNotification, filterCaseActionsForStaff } from '../src/services/healthRecordAccess';
+import { filterCaseIntelligenceData } from '../src/services/caseIntelligenceService';
 
 const staff = (role: string, canViewHealthRecords?: boolean) => ({ role, canViewHealthRecords }) as any;
 assert.equal(canStaffViewHealthRecords(staff('Administrator')), true);
@@ -96,6 +97,20 @@ assert.equal(staleCache.healthFollowUps.length, 1, 'hidden health rows remain in
 assert.equal(staleCache.caseActions.length, 3, 'hidden case actions remain available to the authorized session');
 assert.equal(staleCache.payrollRecords.length, 2, 'other staff payroll is hidden from the view, not deleted from cache');
 assert.equal(staleCache.restrictedImportSources.length, 1, 'manager cache remains available for a later authorized session');
+const restrictedIntelligence = filterCaseIntelligenceData(staleCache, {
+  canViewHealthRecords: false,
+  canViewCaseReviews: false,
+});
+assert.deepEqual((restrictedIntelligence.caseActions || []).map((action: any) => action.id), ['normal-action']);
+assert.deepEqual((restrictedIntelligence.historicalRecords || []).map((record: any) => record.id), ['school-history']);
+assert.deepEqual(restrictedIntelligence.healthFollowUps, []);
+assert.deepEqual(restrictedIntelligence.caseReviews, []);
+const healthAuthorizedIntelligence = filterCaseIntelligenceData(staleCache, {
+  canViewHealthRecords: true,
+  canViewCaseReviews: true,
+});
+assert.deepEqual((healthAuthorizedIntelligence.caseActions || []).map((action: any) => action.id), ['health-action', 'normal-action']);
+assert.ok(!JSON.stringify(healthAuthorizedIntelligence).includes('SYNTHETIC_PRIVATE_HEALTH') === false || healthAuthorizedIntelligence.caseReviews?.length === 0);
 
 // Cached case actions must be filtered for the active account without
 // mutating the shared offline cache (which may be reused by another authorized user).
