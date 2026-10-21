@@ -99,7 +99,16 @@ assert.equal(staleCache.healthFollowUps.length, 1, 'hidden health rows remain in
 assert.equal(staleCache.caseActions.length, 3, 'hidden case actions remain available to the authorized session');
 assert.equal(staleCache.payrollRecords.length, 2, 'other staff payroll is hidden from the view, not deleted from cache');
 assert.equal(staleCache.restrictedImportSources.length, 1, 'manager cache remains available for a later authorized session');
-const restrictedIntelligence = filterCaseIntelligenceData(staleCache, {
+const intelligenceFixture: any = {
+  ...staleCache,
+  caseActions: [...staleCache.caseActions, {
+    id: 'legacy-intelligence-action',
+    title: 'SYNTHETIC_LEGACY_ACTION',
+    dueDate: '2020-01-01',
+    status: 'Open',
+  }],
+};
+const restrictedIntelligence = filterCaseIntelligenceData(intelligenceFixture, {
   canViewHealthRecords: false,
   canViewCaseReviews: false,
 });
@@ -107,14 +116,16 @@ assert.deepEqual((restrictedIntelligence.caseActions || []).map((action: any) =>
 assert.deepEqual((restrictedIntelligence.historicalRecords || []).map((record: any) => record.id), ['school-history']);
 assert.deepEqual(restrictedIntelligence.healthFollowUps, []);
 assert.deepEqual(restrictedIntelligence.caseReviews, []);
-const healthAuthorizedIntelligence = filterCaseIntelligenceData(staleCache, {
+const healthAuthorizedIntelligence = filterCaseIntelligenceData(intelligenceFixture, {
   canViewHealthRecords: true,
   canViewCaseReviews: true,
 });
 assert.deepEqual((healthAuthorizedIntelligence.caseActions || []).map((action: any) => action.id), ['health-action', 'normal-action']);
 assert.ok(JSON.stringify(healthAuthorizedIntelligence).includes('SYNTHETIC_PRIVATE_HEALTH'), 'authorized health reviewers retain health details in the intelligence projection');
-assert.ok(!JSON.stringify(detectIntelligenceSuggestions(staleCache)).includes('SYNTHETIC_SAFEGUARDING_ACTION'), 'suggestion generation never includes safeguarding-linked actions');
-assert.ok(!JSON.stringify(scanDataQuality(staleCache)).includes('SYNTHETIC_SAFEGUARDING_ACTION'), 'general quality scans never expose safeguarding-linked action titles');
+assert.ok(!JSON.stringify(detectIntelligenceSuggestions(intelligenceFixture)).includes('SYNTHETIC_SAFEGUARDING_ACTION'), 'suggestion generation never includes safeguarding-linked actions');
+assert.ok(!JSON.stringify(scanDataQuality(intelligenceFixture)).includes('SYNTHETIC_SAFEGUARDING_ACTION'), 'general quality scans never expose safeguarding-linked action titles');
+assert.ok(!JSON.stringify(detectIntelligenceSuggestions(intelligenceFixture)).includes('SYNTHETIC_LEGACY_ACTION'), 'untyped legacy actions are excluded from general intelligence');
+assert.ok(!JSON.stringify(scanDataQuality(intelligenceFixture)).includes('SYNTHETIC_LEGACY_ACTION'), 'untyped legacy actions are excluded from quality scans');
 
 // Cached case actions must be filtered for the active account without
 // mutating the shared offline cache (which may be reused by another authorized user).
