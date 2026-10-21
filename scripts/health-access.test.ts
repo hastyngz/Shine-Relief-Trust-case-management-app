@@ -101,6 +101,7 @@ assert.equal(staleCache.restrictedImportSources.length, 1, 'manager cache remain
 // mutating the shared offline cache (which may be reused by another authorized user).
 const sharedCachedActions = [
   { id: 'own-manual', assignedStaffId: 'viewer-uid', sourceType: 'manual' },
+  { id: 'legacy-untyped', assignedStaffId: 'viewer-uid' },
   { id: 'other-manual', assignedStaffId: 'manager-uid', sourceType: 'manual' },
   { id: 'own-health', assignedStaffId: 'viewer-uid', sourceType: 'healthFollowUp' },
   { id: 'own-safeguarding', assignedStaffId: 'viewer-uid', sourceType: 'safeguarding' },
@@ -113,10 +114,11 @@ assert.deepEqual(viewerActions.map((action) => action.id), ['own-manual']);
 const managerActions = filterCaseActionsForStaff(sharedCachedActions, {
   uid: 'manager-uid', canViewTeamTasks: true, canViewHealthRecords: true, canViewSafeguarding: false,
 });
-assert.deepEqual(managerActions.map((action) => action.id), ['own-manual', 'other-manual', 'own-health']);
+assert.deepEqual(managerActions.map((action) => action.id), ['own-manual', 'legacy-untyped', 'other-manual', 'own-health']);
 assert.deepEqual(filterCaseActionsForStaff(sharedCachedActions, {
   canViewTeamTasks: false, canViewHealthRecords: false, canViewSafeguarding: false,
 }).length, 0);
 assert.equal(JSON.stringify(sharedCachedActions), cachedActionsBeforeViewFilter, 'view filtering must preserve shared offline cache');
+assert.ok(!viewerActions.some((action) => action.id === 'legacy-untyped'), 'non-manager views fail closed on legacy actions missing sourceType');
 
 console.log('Health record access and follow-up notification checks passed.');
