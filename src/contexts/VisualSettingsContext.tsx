@@ -12,7 +12,7 @@ export type ThemeId =
   | 'fire-violet'
   | 'vibrant-shine';
 
-export type AppViewMode = 'classic' | 'ios' | 'foundation' | 'sunrise';
+export type AppViewMode = 'classic' | 'ios' | 'foundation' | 'sunrise' | 'navy';
 export type MobileViewMode = AppViewMode;
 export type FoundationLook = 'editorial-ink' | 'civic-navy' | 'warm-paper';
 
@@ -41,6 +41,7 @@ export const appViews: { id: AppViewMode; name: string }[] = [
   { id: 'ios', name: 'iOS' },
   { id: 'foundation', name: 'Foundation' },
   { id: 'sunrise', name: 'Sunrise' },
+  { id: 'navy', name: 'Navy' },
 ];
 
 export const themes: ThemeOption[] = [

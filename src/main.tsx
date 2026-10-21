@@ -6,6 +6,7 @@ import { registerAppShellServiceWorker } from './pwa/registerServiceWorker.ts';
 import './index.css';
 import './styles/effects.css';
 import './styles/sunrise.css';
+import './styles/navy.css';
 import './styles/ai-assistant-viewport.css';
 import { EffectsRuntime } from './effects/EffectsRuntime.tsx';
 
