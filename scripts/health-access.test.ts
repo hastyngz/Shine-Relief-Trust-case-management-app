@@ -49,6 +49,14 @@ const staleCache: any = {
   historicalRecords: [{ id: 'medical-history', recordType: 'medical' }, { id: 'school-history', recordType: 'education' }],
   caseReviews: [{ id: 'review-cache', health: 'SYNTHETIC_PRIVATE_HEALTH', progress: 'School attendance improved' }],
   caseActions: [{ id: 'safe-action', sourceType: 'safeguarding' }, { id: 'health-action', sourceType: 'healthFollowUp' }, { id: 'normal-action', sourceType: 'manual' }],
+  employees: [{ id: 'private-employee', salaryMWK: 200000 }],
+  whatIfScenarios: [{ id: 'private-scenario' }],
+  projectProjections: [{ id: 'private-projection' }],
+  restrictedImportSources: [{ id: 'private-source', sourceData: { confidential: true } }],
+  payrollRecords: [
+    { id: 'own-payroll', employeeId: 'staff-uid' },
+    { id: 'other-payroll', employeeId: 'manager-uid' },
+  ],
   attachments: [
     { id: 'health-attachment', targetType: 'healthFollowUp', category: 'Other' },
     { id: 'medical-doc', targetType: 'girl', category: 'Medical Document' },
@@ -56,7 +64,7 @@ const staleCache: any = {
     { id: 'ordinary-photo', targetType: 'girl', category: 'Photo' },
   ],
 };
-const staleAccess = { canViewHealthRecords: false, canViewCaseReviews: true, canViewSafeguarding: false };
+const staleAccess = { canViewHealthRecords: false, canViewCaseReviews: true, canViewSafeguarding: false, canViewManagementPlanning: false, canReadImportSourceData: false, uid: 'staff-uid' };
 const restrictedCache = filterRestrictedCachedData(staleCache, staleAccess);
 assert.equal(hasRestrictedCachedData(staleCache, staleAccess), true);
 assert.deepEqual(restrictedCache.healthFollowUps, []);
@@ -64,6 +72,11 @@ assert.deepEqual((restrictedCache.historicalRecords || []).map((record: any) => 
 assert.ok(!JSON.stringify(restrictedCache.caseReviews).includes('SYNTHETIC_PRIVATE_HEALTH'));
 assert.deepEqual((restrictedCache.caseActions || []).map((action: any) => action.id), ['normal-action']);
 assert.deepEqual((restrictedCache.attachments || []).map((attachment: any) => attachment.id), ['ordinary-photo']);
+assert.deepEqual(restrictedCache.employees, []);
+assert.deepEqual(restrictedCache.whatIfScenarios, []);
+assert.deepEqual(restrictedCache.projectProjections, []);
+assert.deepEqual(restrictedCache.restrictedImportSources, []);
+assert.deepEqual((restrictedCache.payrollRecords || []).map((record: any) => record.id), ['own-payroll']);
 assert.equal(hasRestrictedCachedData(restrictedCache, staleAccess), false);
 
 // Cached case actions must be filtered for the active account without
