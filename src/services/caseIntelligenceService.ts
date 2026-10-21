@@ -42,6 +42,12 @@ export function filterCaseIntelligenceData(db: AppDatabase, access: CaseIntellig
   return {
     ...db,
     healthFollowUps: access.canViewHealthRecords ? (db.healthFollowUps || []) : [],
+    historicalRecords: access.canViewHealthRecords
+      ? (db.historicalRecords || [])
+      : (db.historicalRecords || []).filter((record) => record.recordType !== 'medical'),
+    caseActions: (db.caseActions || []).filter((action) =>
+      action.sourceType !== 'safeguarding' && (access.canViewHealthRecords || action.sourceType !== 'healthFollowUp')
+    ),
     caseReviews,
     attachments,
   };
@@ -64,7 +70,7 @@ export function buildIntelligentCaseSummary(db: AppDatabase, girlId: string): In
   const education = (db.educationalFollowUps || []).filter((item) => item.girlId === girlId).sort((a, b) => b.date.localeCompare(a.date));
   const health = (db.healthFollowUps || []).filter((item) => item.girlId === girlId).sort((a, b) => b.date.localeCompare(a.date));
   const family = (db.familyFollowUps || []).filter((item) => item.girlId === girlId).sort((a, b) => b.date.localeCompare(a.date));
-  const actions = (db.caseActions || []).filter((item) => item.girlId === girlId);
+  const actions = (db.caseActions || []).filter((item) => item.girlId === girlId && item.sourceType !== 'safeguarding');
   const reviews = (db.caseReviews || []).filter((item) => item.girlId === girlId);
   const household = db.households.find((item) => item.id === girl.householdId);
   const activities = (db.householdActivities || []).filter((item) => item.householdId === girl.householdId).sort((a, b) => b.date.localeCompare(a.date));
