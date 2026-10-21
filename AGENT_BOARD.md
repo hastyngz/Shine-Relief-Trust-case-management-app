@@ -688,3 +688,9 @@ Suggestion format:
 - Replaced that effect with a UI-only `viewDb`; the raw database remains intact for offline diffing. The view now scopes actions, manager-only HR/planning, restricted import-source payloads and staff payroll.
 - Synthetic health-access tests were expanded; the final GitHub Actions run still needs to be checked before verification is claimed.
 - Remaining: shared localStorage is not partitioned by account, so raw cached records remain at rest. Next design must preserve queue/baseline/conflict semantics; no destructive cache clearing. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · projection review follow-up
+- Operational intelligence now consumes the scoped UI projection and excludes safeguarding-linked actions; tests assert the raw cached health, action, payroll, employee and restricted-import rows remain intact after projection.
+- The full UI projection is non-destructive and the main offline diff still uses raw state. Exact-head CI verification remains outstanding; see the latest section in `docs/agent-task-reports.md`.
+- Residual risk: one shared localStorage key still means data is not partitioned at rest by account. — Mosaic (ChatGPT), 2026-10-21
