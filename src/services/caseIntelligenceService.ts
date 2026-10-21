@@ -46,7 +46,7 @@ export function filterCaseIntelligenceData(db: AppDatabase, access: CaseIntellig
       ? (db.historicalRecords || [])
       : (db.historicalRecords || []).filter((record) => record.recordType !== 'medical'),
     caseActions: (db.caseActions || []).filter((action) =>
-      action.sourceType !== 'safeguarding' && (access.canViewHealthRecords || action.sourceType !== 'healthFollowUp')
+      Boolean(action.sourceType) && action.sourceType !== 'safeguarding' && (access.canViewHealthRecords || action.sourceType !== 'healthFollowUp')
     ),
     caseReviews,
     attachments,
@@ -70,7 +70,7 @@ export function buildIntelligentCaseSummary(db: AppDatabase, girlId: string): In
   const education = (db.educationalFollowUps || []).filter((item) => item.girlId === girlId).sort((a, b) => b.date.localeCompare(a.date));
   const health = (db.healthFollowUps || []).filter((item) => item.girlId === girlId).sort((a, b) => b.date.localeCompare(a.date));
   const family = (db.familyFollowUps || []).filter((item) => item.girlId === girlId).sort((a, b) => b.date.localeCompare(a.date));
-  const actions = (db.caseActions || []).filter((item) => item.girlId === girlId && item.sourceType !== 'safeguarding');
+  const actions = (db.caseActions || []).filter((item) => item.girlId === girlId && Boolean(item.sourceType) && item.sourceType !== 'safeguarding');
   const reviews = (db.caseReviews || []).filter((item) => item.girlId === girlId);
   const household = db.households.find((item) => item.id === girl.householdId);
   const activities = (db.householdActivities || []).filter((item) => item.householdId === girl.householdId).sort((a, b) => b.date.localeCompare(a.date));
@@ -110,7 +110,7 @@ export function detectIntelligenceSuggestions(db: AppDatabase, today = new Date(
   (db.healthFollowUps || []).forEach((item) => {
     if (item.furtherActionRequired && (!item.nextFollowUpDate || item.nextFollowUpDate <= today)) add({ type: 'follow_up', title: `Review health follow-up for ${item.girlId}`, explanation: item.nextFollowUpDate ? `The recorded follow-up date ${item.nextFollowUpDate} has passed.` : 'The record requires action but has no next follow-up date.', sourceRecordIds: [item.id, item.girlId], suggestedAction: item.recommendations || item.reasonForVisit, suggestedDueDate: today, confidence: 'high' });
   });
-  (db.caseActions || []).filter((item) => item.sourceType !== 'safeguarding').forEach((item) => {
+  (db.caseActions || []).filter((item) => Boolean(item.sourceType) && item.sourceType !== 'safeguarding').forEach((item) => {
     const days = daysFromToday(item.dueDate);
     if (!item.assignedStaffId) add({ type: 'missing_information', title: `Assign responsible staff for ${item.title}`, explanation: 'This action has no responsible staff member.', sourceRecordIds: [item.id], suggestedAction: 'Review and assign a responsible staff member.', confidence: 'high' });
     else if (days !== undefined && days < 0 && !['Completed', 'Cancelled'].includes(item.status)) add({ type: 'workplan', title: `Overdue action: ${item.title}`, explanation: `The action was due on ${item.dueDate} and remains ${item.status}.`, sourceRecordIds: [item.id], suggestedAction: 'Review status and next action.', suggestedDueDate: today, assignedStaffId: item.assignedStaffId, confidence: 'high' });
