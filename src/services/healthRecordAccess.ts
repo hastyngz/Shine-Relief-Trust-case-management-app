@@ -38,6 +38,12 @@ export interface RestrictedRecordAccess {
   canViewHealthRecords: boolean;
   canViewCaseReviews: boolean;
   canViewSafeguarding: boolean;
+  /** Manager/admin-only planning and HR data. Omitted means no access. */
+  canViewManagementPlanning?: boolean;
+  /** Full source payloads from imported files are manager/admin-only. */
+  canReadImportSourceData?: boolean;
+  /** Authenticated UID used to retain only that staff member's payroll rows. */
+  uid?: string;
 }
 
 /**
@@ -71,6 +77,13 @@ export function filterRestrictedCachedData(db: AppDatabase, access: RestrictedRe
     caseReviews,
     attachments,
     caseActions,
+    employees: access.canViewManagementPlanning ? (db.employees || []) : [],
+    whatIfScenarios: access.canViewManagementPlanning ? (db.whatIfScenarios || []) : [],
+    projectProjections: access.canViewManagementPlanning ? (db.projectProjections || []) : [],
+    restrictedImportSources: access.canReadImportSourceData ? (db.restrictedImportSources || []) : [],
+    payrollRecords: access.canViewManagementPlanning
+      ? (db.payrollRecords || [])
+      : (db.payrollRecords || []).filter((record) => Boolean(access.uid) && record.employeeId === access.uid),
   };
 }
 
@@ -90,6 +103,13 @@ export function hasRestrictedCachedData(db: AppDatabase, access: RestrictedRecor
     (db.caseActions || []).some((action) => action.sourceType === 'safeguarding') ||
     (db.attachments || []).some((attachment) => String(attachment.targetType) === 'safeguardingCase')
   )) return true;
+  if (!access.canViewManagementPlanning && (
+    (db.employees || []).length > 0 ||
+    (db.whatIfScenarios || []).length > 0 ||
+    (db.projectProjections || []).length > 0 ||
+    (db.payrollRecords || []).some((record) => !access.uid || record.employeeId !== access.uid)
+  )) return true;
+  if (!access.canReadImportSourceData && (db.restrictedImportSources || []).length > 0) return true;
   return false;
 }
 
