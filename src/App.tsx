@@ -63,7 +63,7 @@ import {
   triggerDataChangeNotification,
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
-import { filterRestrictedCachedData, hasRestrictedCachedData } from './services/healthRecordAccess';
+import { filterCaseActionsForStaff, filterRestrictedCachedData, hasRestrictedCachedData } from './services/healthRecordAccess';
 import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
@@ -150,6 +150,12 @@ function AppContent() {
       ...db,
       healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
       caseReviews: canViewCaseReviews ? db.caseReviews : [],
+      caseActions: filterCaseActionsForStaff(db.caseActions || [], {
+        uid: currentUser?.uid,
+        canViewTeamTasks: isAdmin || role === 'Manager',
+        canViewHealthRecords,
+        canViewSafeguarding,
+      }),
     };
     const savedSuggestions = reviewDb.intelligenceSuggestions || [];
     const pendingSuggestions = detectIntelligenceSuggestions(reviewDb).filter((suggestion) =>
@@ -158,7 +164,7 @@ function AppContent() {
     const duplicateCount = findPotentialDuplicates(reviewDb).length;
     const qualityCount = scanDataQuality(reviewDb).filter((issue) => issue.type !== 'duplicate_candidate').length;
     return pendingSuggestions + duplicateCount + qualityCount;
-  }, [db, canViewHealthRecords, canViewCaseReviews]);
+  }, [db, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
 
   useEffect(() => {
     if (!currentUser || isSuspended || (!isAdmin && !canViewSafeguarding)) {
