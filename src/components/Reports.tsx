@@ -31,7 +31,7 @@ import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
 import { ManagementReportsPanel } from './Reports/ManagementReportsPanel';
 import { useAuth } from '../contexts/AuthContext';
 import type { QualityIssue } from '../services/qualityRules';
-import { filterCaseActionsForStaff } from '../services/healthRecordAccess';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 
 interface ReportsProps {
   db: AppDatabase;
@@ -54,12 +54,12 @@ type ReportTab =
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse, onOpenQualityRecord }) => {
   const { currentUser, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, isAdmin, role, allStaff } = useAuth();
   const canViewManagementReports = isAdmin || role === 'Manager';
-  const visibleCaseActions = filterCaseActionsForStaff(db.caseActions || [], {
+  const visibleCaseActions = excludeSafeguardingCaseActions(filterCaseActionsForStaff(db.caseActions || [], {
     uid: currentUser?.uid,
     canViewTeamTasks: isAdmin || role === 'Manager',
     canViewHealthRecords,
     canViewSafeguarding,
-  });
+  }));
   const reportDb = { ...db, caseActions: visibleCaseActions };
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
