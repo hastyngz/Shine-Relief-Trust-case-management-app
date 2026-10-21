@@ -711,3 +711,9 @@ Suggestion format:
 ### 2026-10-21 · Mosaic (ChatGPT) · intelligence legacy-action follow-up
 - Intelligence summaries, suggestions and quality scans now exclude untyped legacy actions as well as safeguarding-linked actions. Regression fixtures verify neither synthetic title leaks into general intelligence output.
 - No production backfill was performed; CI on the final branch SHA is required before this is marked verified. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · offline queue account-ownership risk (open)
+- Audit found queue, conflict list and last-synced baseline are global browser keys; `OfflineChangeEntry` has no owner UID, and flush uses the currently signed-in actor for the whole queue.
+- Risk: manager offline edits can be replayed under a staff login and conflicts may be attributed to the wrong user. Not changed; do not guess owners or drop legacy entries.
+- Next: per-user queue/baseline/conflict namespaces, explicit owner UID, safe quarantine for legacy unowned entries, and role-switch/reconnect regression tests before changing local DB persistence. Full details in `docs/agent-task-reports.md`. — Mosaic (ChatGPT), 2026-10-21
