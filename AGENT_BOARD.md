@@ -694,3 +694,9 @@ Suggestion format:
 - Operational intelligence now consumes the scoped UI projection and excludes safeguarding-linked actions; tests assert the raw cached health, action, payroll, employee and restricted-import rows remain intact after projection.
 - The full UI projection is non-destructive and the main offline diff still uses raw state. Exact-head CI verification remains outstanding; see the latest section in `docs/agent-task-reports.md`.
 - Residual risk: one shared localStorage key still means data is not partitioned at rest by account. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · final report-path audit
+- Closed remaining client paths that used raw case-action arrays in the Reports table/CSV and management report input; all now consume the scoped, safeguarding-free action projection.
+- Staff views fail closed on legacy actions missing `sourceType`; manager cache still retains those rows for review, and any production backfill remains separate/approval-gated.
+- Exact-head CI is pending. Intermediate runs were cancelled by branch concurrency and are not evidence either way. — Mosaic (ChatGPT), 2026-10-21
