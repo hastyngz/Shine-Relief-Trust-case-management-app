@@ -46,6 +46,8 @@ assert.deepEqual([...getGirlsWithActionRequired(actionDb, true)].sort(), ['girl-
 
 const staleCache: any = {
   ...actionDb,
+  girls: [],
+  households: [],
   healthFollowUps: [{ id: 'health-cache', girlId: 'girl-health', furtherActionRequired: true }],
   historicalRecords: [{ id: 'medical-history', recordType: 'medical' }, { id: 'school-history', recordType: 'education' }],
   caseReviews: [{ id: 'review-cache', health: 'SYNTHETIC_PRIVATE_HEALTH', progress: 'School attendance improved' }],
