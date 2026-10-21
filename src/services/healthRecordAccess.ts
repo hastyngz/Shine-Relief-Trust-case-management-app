@@ -119,6 +119,29 @@ export function isCaseActionAllowedInGeneralSearch(action: { sourceType?: string
   return action.sourceType !== 'safeguarding' && (canViewHealthRecords || action.sourceType !== 'healthFollowUp');
 }
 
+/**
+ * Scope cached case actions to the current staff session before any display,
+ * search, report, or AI-context use. This is deliberately a view filter: it
+ * must not overwrite the shared offline cache, because that cache may contain
+ * queued edits or useful data for another authorized account on this device.
+ */
+export function filterCaseActionsForStaff<T extends { assignedStaffId?: string; sourceType?: string }>(
+  actions: T[],
+  access: {
+    uid?: string;
+    canViewTeamTasks: boolean;
+    canViewHealthRecords: boolean;
+    canViewSafeguarding: boolean;
+  },
+): T[] {
+  if (!access.canViewTeamTasks && !access.uid) return [];
+  return actions.filter((action) =>
+    (access.canViewTeamTasks || action.assignedStaffId === access.uid) &&
+    (access.canViewHealthRecords || action.sourceType !== 'healthFollowUp') &&
+    (access.canViewSafeguarding || action.sourceType !== 'safeguarding')
+  );
+}
+
 /** Remove safeguarding-linked actions from general exports, even for administrators. */
 export function excludeSafeguardingCaseActions<T extends { sourceType?: string }>(actions: T[]): T[] {
   return actions.filter((action) => action.sourceType !== 'safeguarding');
