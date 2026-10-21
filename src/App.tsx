@@ -12,7 +12,6 @@ import {
 } from './types';
 import {
   getDatabase,
-  saveDatabase,
   saveIncomingCloudSnapshot,
   addGirl,
   updateGirl,
