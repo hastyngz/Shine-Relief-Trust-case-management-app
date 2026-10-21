@@ -93,12 +93,9 @@ Keep production apply and rules deployment blocked until all of the following ar
 8. Successful CI for the current branch head, including migration, Firestore rules and E2E checks; investigate and resolve the two E2E failures.
 9. No deployment or production data change is inferred from passing emulator tests.
 
-## Next actions
+## Next actions (historical migration review; verification superseded 2026-10-20)
 
-1. Check GitHub Actions for follow-up commit `72ad42b68de1ec1e1a1fa2d4b78125d7c472c2c8`; do not mark the test correction verified until its run finishes.
-2. If the offline test now passes, investigate the two E2E failures using their Playwright error contexts and setup. Check whether the E2E Firestore fixture creates `importAuditMigrationStatus/sourceDataBoundary` when staff audit-list behaviour is expected.
-3. Update this report with exact follow-up CI results and the final branch SHA.
-4. Keep production untouched until all release-gate steps and owner approval are complete.
+The migration-specific offline/E2E failures described in the original handoff were resolved by the completed migration verification runs recorded below. The production migration/release gate remains closed until the owner approves the confirmed Firebase project, backup/restore evidence, read-only dry run, apply, and post-apply role checks.
 
 ## Instructions for ChatGPT review
 
@@ -163,3 +160,33 @@ The migration, security, offline, Phase 5, payroll and backup-restore CI checks 
 - Scope covered by the permission review: administrator-only database backup/bulk-sync controls and handler guards; safeguarding attachment metadata exclusion from general backup/intelligence paths; health/case-review permission filters in dashboard, search, reports and Phase 5 summaries; staff-scoped payroll records and modal state cleanup after payroll-processing permission is revoked.
 - This confirms automated checks on the branch, not exhaustive security certification. No local device test, production rules deployment, production data migration, or production deployment-smoke request was performed. The deployment smoke script remains intentionally excluded from CI because its defaults target live services.
 - Remaining owner-controlled release work: review and approve any production migration separately; confirm backup/restore and dry-run evidence; and conduct controlled Android/shared-device and weak-signal checks before relying on those behaviours in the field.
+
+
+## 2026-10-21 — Case-action list-query authorization hardening
+
+### Confirmed defect
+
+The Firestore rules syntax correction from 2026-10-20 compiled, but the emulator exposed a separate query-level access defect. In diagnostic run [39539524203](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39539524203), a server-backed query authenticated as the synthetic View Only user and constrained only by `assignedStaffId == viewer` returned all three seeded IDs: `action-1`, `action-health`, and `action-safeguarding`. Direct reads of the restricted health and safeguarding documents were denied in the same test. This was a real emulator-observed list-query exposure, not a cache-only false alarm. The test fixtures contained synthetic data only.
+
+### Changes committed on `Replit`
+
+- Commit `b465462e53f2818a8bc9dd346819a4cf3c3e6020` splits `caseActions` single-document `get` from collection `list` authorization. Single-document reads retain the legacy missing-`sourceType` default. List rules use direct `resource.data.sourceType` field access so Firestore can enforce that list queries exclude health-follow-up and safeguarding actions unless the requester has the corresponding permission.
+- The existing listener query pattern (`sourceType not-in` for users missing both permissions, or `sourceType !=` for users missing one) remains unchanged. No UI, authentication, offline-sync, or production configuration was altered in this fix.
+- `caseActionAuditLogs` mixes action types and its query cannot constrain the referenced action's `sourceType`. Listing is therefore limited to managers/administrators who also have safeguarding-view permission; direct `get` remains scoped to the referenced action and the requester's permission/assignment.
+- The rules tests now use `getDocsFromServer`, assert that the allowed normal-action query returns the seeded manual action, and assert that an unfiltered staff list query fails. Synthetic audit-log fixtures cover permitted normal-action reads, denied health/safeguarding reads, and restricted list access. The ordinary action fixtures now include the required `sourceType: 'manual'`, avoiding a vacuous `not-in` test (Firestore excludes documents missing that field).
+
+### Verification
+
+- [GitHub Actions run 39539762174](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39539762174) completed **successfully** on code SHA `b465462e53f2818a8bc9dd346819a4cf3c3e6020`. Both `checks` and Playwright `e2e` jobs passed, including the Firestore rules emulator tests and production build.
+- The diagnostic run above intentionally failed after printing the restricted synthetic document IDs; that failure established the pre-fix behaviour. The succeeding run is the evidence for the fix.
+- This validates the current rules against the emulator. It does **not** mean rules were deployed to production or production records were inspected or changed.
+
+### Additional high-priority follow-up found during the broader review
+
+The local app database is stored under a shared browser key (`shine_relief_trust_prod_v1`) and is initially loaded before the authenticated user's Firestore snapshot replaces it. The current `filterRestrictedCachedData` helper removes health/safeguarding records, but does not scope cached case actions by `assignedStaffId`. Some client paths (including case-action view/search/report exports and girl-profile action history) rely on the listener having already replaced stale data. A manager-to-staff account switch or long offline session therefore deserves a dedicated shared-device regression test and a non-destructive, offline-safe view/cache isolation fix. Manager-only employee/planning records and restricted import-source payloads also warrant review in that same work. This is a finding, **not a change claimed complete in this commit**; I have not cleared those caches because a destructive filter could remove useful manager cache during offline account switching.
+
+A related data-availability risk remains: Firestore `!=`/`not-in` queries exclude legacy case-action documents that lack `sourceType`. The application model now requires this field for new actions, but any production backfill must be assessed and approved separately. No production dry run, data mutation, rules deployment, or live-service test was performed.
+
+### Candid reflection and next actions
+
+The initial cache explanation for the failed query was incorrect; forcing server reads still returned restricted documents. The useful correction was to reproduce the actual returned IDs, then make the list rule explicitly query-compatible and add tests for the mixed audit-log collection. Next, address role-scoped stale-cache display/export paths with synthetic manager-to-staff and offline/reconnect tests, and plan a separately approved legacy `sourceType` backfill if needed.

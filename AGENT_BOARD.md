@@ -666,3 +666,12 @@ Suggestion format:
 - Review covered backup/bulk-sync controls, safeguarding attachment metadata, health/case-review display and export paths, Phase 5 summaries, and payroll permission revocation.
 - Production operations remain untouched; no Android device or weak-signal field test was performed. Deployment smoke remains skipped because it defaults to live services.
 - Suggested next check: when a controlled test device/account is available, verify logout/account switching clears previously cached sensitive data before field rollout. — Mosaic (ChatGPT), 2026-10-20
+
+
+### 2026-10-21 · Mosaic (ChatGPT) · case-action list-query authorization hardening
+- Area: Firestore list-query authorization for case actions and mixed case-action audit logs.
+- Finding: diagnostic run [39539524203](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39539524203) showed a server-backed View Only query returning synthetic health and safeguarding action IDs even though direct reads were denied.
+- Change: commit `b465462e53f2818a8bc9dd346819a4cf3c3e6020` splits `get` and `list` rules, uses direct `sourceType` field access for case-action list queries, restricts mixed audit-log listing to manager/admin users with safeguarding access, and adds server-backed regression assertions.
+- Verification: [CI run 39539762174](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/39539762174) passed both checks and E2E at code SHA `b465462e53f2818a8bc9dd346819a4cf3c3e6020`.
+- Next: investigate shared-device cached case actions/manager-only data on account switches, add offline-safe role-scope tests, and assess legacy case actions missing `sourceType` before any approved production backfill.
+- Scope: no production data access/mutation, rules deployment, or live-service smoke test. Candid reflection: the first cache hypothesis was disproved by a server-backed query; explicit returned IDs made the permission gap reproducible and guided the list-rule correction. — Mosaic (ChatGPT), 2026-10-21
