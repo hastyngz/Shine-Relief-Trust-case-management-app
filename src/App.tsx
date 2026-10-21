@@ -1330,6 +1330,9 @@ function AppContent() {
               db={db}
               role={role}
               isAdmin={isAdmin}
+              currentUserUid={currentUser?.uid}
+              canViewHealthRecords={canViewHealthRecords}
+              canViewSafeguarding={canViewSafeguarding}
               isViewOnly={isViewOnly}
               auditActor={auditActor}
               allStaff={allStaff}
