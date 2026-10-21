@@ -190,3 +190,31 @@ A related data-availability risk remains: Firestore `!=`/`not-in` queries exclud
 ### Candid reflection and next actions
 
 The initial cache explanation for the failed query was incorrect; forcing server reads still returned restricted documents. The useful correction was to reproduce the actual returned IDs, then make the list rule explicitly query-compatible and add tests for the mixed audit-log collection. Next, address role-scoped stale-cache display/export paths with synthetic manager-to-staff and offline/reconnect tests, and plan a separately approved legacy `sourceType` backfill if needed.
+
+## 2026-10-21 — Non-destructive cached case-action visibility scoping
+
+### Goal and findings
+
+Follow-up to the 2026-10-21 Firestore list-query fix: the browser stores the whole local database under the shared key `shine_relief_trust_prod_v1`, and the initial React state is created from that cache before the active account's Firestore listeners have replaced it. The earlier review correctly avoided clearing this shared cache because doing so could discard offline work or another authorized user's useful cached data. However, client views must not treat the cache as if it were already scoped to the newly authenticated account.
+
+### Changes on `Replit`
+
+- Added `filterCaseActionsForStaff` in `src/services/healthRecordAccess.ts`. It scopes non-manager/admin case actions to the active UID, hides health and safeguarding actions when the corresponding permission is absent, and returns a filtered view without mutating the input array or shared offline cache.
+- Applied the helper to `CaseActionsView.tsx`, `SearchModal.tsx`, `Dashboard.tsx`, and `Reports.tsx`. The comprehensive report modal now receives the filtered action list, so cached tasks assigned to a different staff member do not enter its report preview/export path through this prop.
+- Updated `AppViewSwitch.tsx` and `App.tsx` to scope girl-profile action history, the AI assistant's case-action context, and operational intelligence analysis to the current user's action visibility. The app passes only the UID and permissions needed for that view filter.
+- Extended `scripts/health-access.test.ts` with synthetic cross-account fixtures. Assertions cover a staff member seeing only their assigned ordinary action, a manager seeing team actions while still respecting safeguarding permission, a missing UID failing closed for non-managers, and the source array remaining unchanged.
+
+### Verification status
+
+- Focused automated regression coverage was added to the existing `test:health-access` script. I did not run the test locally in this environment; GitHub Actions on the final commit is the required verification source. Do not treat a pending run as a pass.
+- No production Firestore rules were deployed and no production records were read or changed. No Android handset or weak-signal test was performed.
+
+### Remaining risks — deliberately not claimed fixed
+
+- This is a **non-destructive UI/context filter for case actions**, not complete browser-cache isolation. The shared localStorage key still contains a merged cache, including potentially manager-only employee/planning records and restricted import-source payloads. Their complete account-switch/offline visibility lifecycle still needs a separate audit and regression-tested solution.
+- The helper does not replace Firestore authorization; rules remain the authoritative boundary. Every new view, export, AI input, or background analysis that consumes cached records must use the same scope or consume already-authorized server data.
+- The existing `filterRestrictedCachedData` path still persists a reduced cache for health/safeguarding restrictions. This change did not redesign that persistence path because doing so safely requires accounting for the per-record offline queue and server snapshot baseline.
+
+### Candid reflection and next action
+
+The safer immediate move was to filter the user-facing action projections rather than deleting records from a shared offline cache. The test now checks both the visible result and that the original cache array survives unchanged. This reduces the known case-action exposure but is not a substitute for user-scoped local persistence; the next priority is a full inventory of reads/writes of the shared cache, especially HR/planning and restricted import data, with manager-to-staff and offline/reconnect tests before changing cache storage semantics.
