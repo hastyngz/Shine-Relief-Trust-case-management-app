@@ -114,11 +114,16 @@ assert.deepEqual(viewerActions.map((action) => action.id), ['own-manual']);
 const managerActions = filterCaseActionsForStaff(sharedCachedActions, {
   uid: 'manager-uid', canViewTeamTasks: true, canViewHealthRecords: true, canViewSafeguarding: false,
 });
-assert.deepEqual(managerActions.map((action) => action.id), ['own-manual', 'legacy-untyped', 'other-manual', 'own-health']);
+assert.deepEqual(managerActions.map((action) => action.id), ['own-manual', 'other-manual', 'own-health']);
+const fullyAuthorizedManagerActions = filterCaseActionsForStaff(sharedCachedActions, {
+  uid: 'manager-uid', canViewTeamTasks: true, canViewHealthRecords: true, canViewSafeguarding: true,
+});
+assert.ok(fullyAuthorizedManagerActions.some((action) => action.id === 'legacy-untyped'), 'fully authorized managers can inspect cached legacy actions');
 assert.deepEqual(filterCaseActionsForStaff(sharedCachedActions, {
   canViewTeamTasks: false, canViewHealthRecords: false, canViewSafeguarding: false,
 }).length, 0);
 assert.equal(JSON.stringify(sharedCachedActions), cachedActionsBeforeViewFilter, 'view filtering must preserve shared offline cache');
 assert.ok(!viewerActions.some((action) => action.id === 'legacy-untyped'), 'non-manager views fail closed on legacy actions missing sourceType');
+assert.ok(!managerActions.some((action) => action.id === 'legacy-untyped'), 'managers lacking a sensitive-record permission also fail closed on untyped actions');
 
 console.log('Health record access and follow-up notification checks passed.');
