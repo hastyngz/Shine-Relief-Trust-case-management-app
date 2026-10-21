@@ -156,7 +156,7 @@ export function filterCaseActionsForStaff<T extends { assignedStaffId?: string; 
 ): T[] {
   if (!access.canViewTeamTasks && !access.uid) return [];
   return actions.filter((action) =>
-    (access.canViewTeamTasks || action.assignedStaffId === access.uid) &&
+    (access.canViewTeamTasks || (Boolean(action.sourceType) && action.assignedStaffId === access.uid)) &&
     (access.canViewHealthRecords || action.sourceType !== 'healthFollowUp') &&
     (access.canViewSafeguarding || action.sourceType !== 'safeguarding')
   );
