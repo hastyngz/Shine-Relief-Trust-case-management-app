@@ -758,3 +758,8 @@ Suggestion format:
 - Added owner UID to new conflicts; conflict resolution/UI fail closed for missing or mismatched ownership, and audit is written only after local resolution succeeds.
 - Restore inspection now checks the former unscoped IndexedDB queue without opening/creating it when absent; unowned legacy entries block destructive restore. Added synthetic regression coverage and made the E2E UID helper read Firebase IndexedDB persistence too.
 - Exact-head CI is pending after the latest changes. No production data/rules/deployment changed; no Android device test. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · reset account-switch guard
+- Follow-up review found destructive reset could resume after an account switch and save the reset database under the new UID. Reset now captures the initiating UID, checks it after the awaited cloud-clear step, and pins local queue/baseline cleanup to that UID.
+- A successful explicit reset also clears the pre-workspace recovery lock only after queue and baseline persistence. Added a synthetic account-switch regression. CI is pending on the current code; no production reset was run. — Mosaic (ChatGPT), 2026-10-26

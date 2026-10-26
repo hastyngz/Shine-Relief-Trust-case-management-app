@@ -204,6 +204,8 @@ function saveDatabaseOrThrow(db: AppDatabase, recordType: string): void {
 }
 
 export async function clearAllDatabase(): Promise<AppDatabase> {
+  const resetUid = getActiveWorkspaceUid();
+  if (!resetUid) throw new Error('An authenticated workspace is required to reset the SHINE database.');
   // Use a private seed copy so the app never exposes the shared seed singleton
   // as mutable state after a reset.
   const initial = cloneInitialDatabase();
@@ -211,6 +213,9 @@ export async function clearAllDatabase(): Promise<AppDatabase> {
   // later step fails, queued edits stay paused instead of recreating deleted data.
   markDatabaseResetRecoveryRequired();
   await clearAllFirestoreCollections();
+  if (getActiveWorkspaceUid() !== resetUid) {
+    throw new Error('The signed-in account changed during reset. Offline recovery remains paused; sign back in as the original administrator to complete recovery.');
+  }
   const localSave = saveDatabase(initial);
   if (!localSave.ok) {
     throw new Error(
@@ -219,7 +224,7 @@ export async function clearAllDatabase(): Promise<AppDatabase> {
   }
   // Clears pending edits and removes the recovery lock only after cloud and local
   // reset succeeded. If queue cleanup fails, the lock remains in place.
-  await clearOfflineChangesAfterDatabaseReset(initial);
+  await clearOfflineChangesAfterDatabaseReset(initial, resetUid);
   return initial;
 }
 

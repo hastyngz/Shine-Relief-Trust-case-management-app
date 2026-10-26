@@ -439,3 +439,8 @@ New conflicts now carry `ownerUid`. The resolver refuses a conflict with missing
 A second legacy-state gap was addressed: the old unscoped IndexedDB database (`shine_relief_trust_offline`) is now inspected before destructive restore. It is not opened when absent, and it is never migrated or replayed. Non-empty or unreadable legacy state blocks restore. The IndexedDB regression test creates a synthetic unowned legacy queue, verifies it is classified as pending, then deletes only that test fixture and verifies absence.
 
 The current CI run must be checked on the final SHA. The last completed exact code run before these fixes had a passing checks job (including TypeScript and production build) but failed E2E because three tests could not discover the signed-in emulator UID; that failure is not counted as a pass. No local test execution, live-service smoke test, production migration/deployment or physical Android test is claimed.
+
+
+## 2026-10-26 reset lifecycle guard
+
+Review of the full destructive-reset path found an account-switch race: the cloud clear is asynchronous, so a new account could become active before the reset writes its local seed database. The reset flow now captures the initiating UID, checks it immediately after the cloud-clear await, and passes that UID through the queue/baseline cleanup so it cannot clear another account's workspace. The prior global recovery marker is cleared only after the explicit reset, empty queue and new scoped baseline all persist. Added a synthetic test that rejects cleanup if the active UID changes. No reset was run against production; exact-head CI is required.

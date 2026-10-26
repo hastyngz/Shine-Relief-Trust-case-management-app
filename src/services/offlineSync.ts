@@ -302,14 +302,19 @@ export function isDatabaseResetRecoveryRequired(): boolean {
   }
 }
 
-export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Promise<void> {
-  const uid = getActiveWorkspaceUid();
-  if (!uid) throw new Error('Cannot finish reset recovery without an authenticated SHINE workspace.');
+export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase, expectedUid?: string): Promise<void> {
+  const uid = expectedUid ?? getActiveWorkspaceUid();
+  if (!uid || getActiveWorkspaceUid() !== uid) throw new Error('Account changed before reset recovery; the reset lock remains in place.');
   await persistQueue([], uid);
   if (getActiveWorkspaceUid() !== uid) throw new Error('Account changed during reset recovery; the remaining recovery steps were paused.');
   clearPendingOfflineSnapshots();
   setLastSyncedSnapshotOrThrow(db);
-  if (typeof window !== 'undefined') window.localStorage.removeItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE));
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE));
+    // Clear the pre-workspace lock only after the explicit reset, empty queue,
+    // and new scoped baseline have all persisted successfully.
+    window.localStorage.removeItem('shine_relief_trust_reset_recovery_required_v1');
+  }
 }
 
 export function getPendingOfflineSnapshotCount(): number {

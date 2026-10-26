@@ -560,6 +560,10 @@ values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [gi
 assert.equal(await inspectPendingOfflineChanges(), 'pending', 'unowned legacy snapshots remain quarantined and block destructive restore');
 values.delete('shine_relief_trust_pending_sync_v1');
 assert.equal(await inspectPendingOfflineChanges(), 'clear', 'restore is allowed after the synthetic legacy quarantine fixture is removed');
+setActiveWorkspaceUid('uid-b');
+await assert.rejects(() => clearOfflineChangesAfterDatabaseReset(resetDb, 'uid-a'), /Account changed before reset recovery/,
+  'a reset started under one UID cannot clear another UID workspace');
+setActiveWorkspaceUid('uid-a');
 
 values.set('shine_relief_trust_offline_queue_v3::uid:uid-a', JSON.stringify(procurementCreate));
 assert.equal(await inspectPendingOfflineChanges(), 'pending', 'persisted localStorage edits block restore');
