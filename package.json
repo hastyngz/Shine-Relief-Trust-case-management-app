@@ -33,6 +33,7 @@
     "test:storage-upload-validation": "tsx scripts/storage-upload-validation.test.ts",
     "test:r2-worker-upload-validation": "tsx scripts/r2-worker-upload-validation.test.mjs",
     "test:inventory-movement-worker": "tsx scripts/inventory-movement-worker.test.mjs",
+    "test:inventory-pending-retry": "tsx scripts/inventory-pending-retry.test.ts",
     "test:inventory-rules": "firebase emulators:exec --project demo-shine-inventory-transaction-rules --only firestore \"tsx scripts/inventory-transaction-rules.test.ts\"",
     "test:error-boundary": "tsx scripts/error-boundary.test.tsx",
     "test:code-splitting": "tsx scripts/code-splitting.test.ts",
