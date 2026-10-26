@@ -35,7 +35,7 @@ async function serverFullName(recordId: string): Promise<string | undefined> {
 }
 
 function readQueue(page: import('@playwright/test').Page, uid: string) {
-  return page.evaluate(async () => {
+  return page.evaluate(async (uid) => {
     return await new Promise<Array<{ recordId: string; fullName?: string }>>((resolve) => {
       const request = indexedDB.open('shine_relief_trust_offline_v3::uid:' + encodeURIComponent(uid), 2);
       request.onsuccess = () => {
@@ -50,7 +50,7 @@ function readQueue(page: import('@playwright/test').Page, uid: string) {
       };
       request.onerror = () => resolve([]);
     });
-  });
+  }, uid);
 }
 
 test('an edit made while offline is queued, not lost to the local-write echo', async ({ browser }) => {
