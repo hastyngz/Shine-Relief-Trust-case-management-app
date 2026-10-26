@@ -738,6 +738,14 @@ export async function resolveSyncConflict(
   if (getActiveWorkspaceUid() !== actor.uid) return false;
   const conflict = conflicts.find((candidate) => candidate.id === conflictId);
   if (!conflict || conflict.ownerUid !== actor.uid) return false;
+  // Append-only HR records cannot safely be overwritten under Firestore rules.
+  // Keep-theirs may discard the queued duplicate; a legitimate change must be
+  // entered as a new record with a fresh ID.
+  if (
+    resolution === 'keep-mine' &&
+    (conflict.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
+      conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS)
+  ) return false;
 
   const remaining = conflicts.filter((candidate) => candidate.id !== conflictId);
 
