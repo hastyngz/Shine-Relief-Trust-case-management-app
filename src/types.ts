@@ -1424,6 +1424,8 @@ export type InventoryMovementType = 'Received' | 'Issued' | 'Returned' | 'Damage
 export interface InventoryMovement {
   id: string; type: InventoryMovementType; quantity: number; date: string; location: string;
   destination?: string; reference?: string; reason: string; recordedBy: string; recordedByUid?: string; createdAt: string;
+  /** Server-validated stock balance before and after this immutable movement. */
+  previousQuantity?: number; newQuantity?: number;
 }
 
 export interface InventoryItem {
@@ -1431,6 +1433,8 @@ export interface InventoryItem {
   quantityOnHand: number; minimumStockLevel: number; location: string; supplier?: string; unitCostMWK?: number;
   expiryDate?: string; condition?: 'Good' | 'Fair' | 'Damaged' | 'Expired'; notes?: string; movements: InventoryMovement[];
   createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; createdByUid?: string; updatedByUid?: string;
+  /** ID of the last movement atomically committed with this balance. */
+  lastMovementId?: string;
 }
 
 export type AssetCondition = 'Good' | 'Fair' | 'Damaged' | 'Needs Repair' | 'Written Off';
