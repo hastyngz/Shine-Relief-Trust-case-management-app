@@ -69,6 +69,10 @@ async function main() {
     await seed();
 
     const staffDb = env.authenticatedContext('staff').firestore();
+    await assertFails(setDoc(doc(staffDb, 'inventoryItems/item-with-unverified-opening-balance'), {
+      ...itemFixture(), id: 'item-with-unverified-opening-balance', quantityOnHand: 5,
+      movements: [{ id: 'opening-movement', type: 'Received', quantity: 5 }],
+    }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
     await assertSucceeds(applyMovement('staff'));
 
