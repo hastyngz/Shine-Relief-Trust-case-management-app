@@ -55,7 +55,6 @@ import {
 
 const STORAGE_KEY_BASE = 'shine_relief_trust_prod_v1';
 const scopedStorageKey = (): string | null => getWorkspaceStorageKey(STORAGE_KEY_BASE);
-const LEGACY_STORAGE_KEY = 'shine_relief_trust_db_v1';
 
 /** Dispatched when a local save fails so the UI can show a persistent banner. */
 export const STORAGE_WARNING_EVENT = 'shine_storage_warning';
