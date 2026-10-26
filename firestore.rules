@@ -86,6 +86,78 @@ service cloud.firestore {
       );
     }
 
+    function inventoryMovementMatchesItem(itemId, movementId) {
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let movement = getAfter(movementPath).data;
+      return existsAfter(movementPath) &&
+        movement.inventoryItemId == itemId &&
+        movement.id == movementId &&
+        movement.recordedByUid == request.auth.uid &&
+        movement.previousQuantity == resource.data.quantityOnHand &&
+        movement.newQuantity == request.resource.data.quantityOnHand &&
+        movement.quantity is number &&
+        movement.quantity >= 0 &&
+        (
+          (movement.type == 'Received' &&
+            movement.quantity > 0 &&
+            movement.newQuantity == movement.previousQuantity + movement.quantity) ||
+          (movement.type == 'Issued' &&
+            movement.quantity > 0 &&
+            movement.quantity <= movement.previousQuantity &&
+            movement.newQuantity == movement.previousQuantity - movement.quantity) ||
+          (movement.type == 'Adjustment' &&
+            movement.newQuantity >= 0 &&
+            movement.quantity == (movement.newQuantity >= movement.previousQuantity
+              ? movement.newQuantity - movement.previousQuantity
+              : movement.previousQuantity - movement.newQuantity))
+        );
+    }
+
+    function isValidInventoryMovementUpdate(itemId) {
+      let movementId = request.resource.data.lastMovementId;
+      return movementId is string &&
+        request.resource.data.quantityOnHand is number &&
+        request.resource.data.quantityOnHand >= 0 &&
+        request.resource.data.movements is list &&
+        resource.data.movements is list &&
+        request.resource.data.movements.size() == resource.data.movements.size() + 1 &&
+        request.resource.data.movements.hasAll(resource.data.movements) &&
+        request.resource.data.movements[request.resource.data.movements.size() - 1].id == movementId &&
+        inventoryMovementMatchesItem(itemId, movementId);
+    }
+
+    function isValidInventoryMovementCreate(movementId) {
+      let itemId = request.resource.data.inventoryItemId;
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let itemAfter = getAfter(itemPath).data;
+      return isManagerOrStaff() &&
+        request.resource.data.id == movementId &&
+        request.resource.data.recordedByUid == request.auth.uid &&
+        request.resource.data.previousQuantity is number &&
+        request.resource.data.newQuantity is number &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity >= 0 &&
+        exists(itemPath) &&
+        existsAfter(itemPath) &&
+        itemAfter.lastMovementId == movementId &&
+        itemAfter.quantityOnHand == request.resource.data.newQuantity &&
+        get(itemPath).data.quantityOnHand == request.resource.data.previousQuantity &&
+        (
+          (request.resource.data.type == 'Received' &&
+            request.resource.data.quantity > 0 &&
+            request.resource.data.newQuantity == request.resource.data.previousQuantity + request.resource.data.quantity) ||
+          (request.resource.data.type == 'Issued' &&
+            request.resource.data.quantity > 0 &&
+            request.resource.data.quantity <= request.resource.data.previousQuantity &&
+            request.resource.data.newQuantity == request.resource.data.previousQuantity - request.resource.data.quantity) ||
+          (request.resource.data.type == 'Adjustment' &&
+            request.resource.data.newQuantity >= 0 &&
+            request.resource.data.quantity == (request.resource.data.newQuantity >= request.resource.data.previousQuantity
+              ? request.resource.data.newQuantity - request.resource.data.previousQuantity
+              : request.resource.data.previousQuantity - request.resource.data.newQuantity))
+        );
+    }
+
     function importAuditMigrationComplete() {
       return exists(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary) &&
         get(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary).data.status == 'complete';
@@ -519,8 +591,21 @@ service cloud.firestore {
 
     match /inventoryItems/{id} {
       allow read: if isStaffActive();
-      allow create, update: if isManagerOrStaff();
+      allow create: if isManagerOrStaff();
+      allow update: if isManagerOrStaff() &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'quantityOnHand', 'movements', 'lastMovementId'
+          ]) ||
+          isValidInventoryMovementUpdate(id)
+        );
       allow delete: if isAdmin();
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isStaffActive();
+      allow create: if isValidInventoryMovementCreate(movementId);
+      allow update, delete: if false;
     }
 
     match /assets/{id} {
