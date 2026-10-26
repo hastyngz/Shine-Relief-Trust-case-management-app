@@ -144,7 +144,7 @@ export async function inspectUnownedLegacyIndexedDbState(): Promise<'clear' | 'p
   try {
     db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open('shine_relief_trust_offline');
-      request.onupgradeneeded = () => { if (request.oldVersion === 0) request.transaction?.abort(); };
+      request.onupgradeneeded = (event) => { if (event.oldVersion === 0) request.transaction?.abort(); };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error('Legacy offline database is blocked.'));
