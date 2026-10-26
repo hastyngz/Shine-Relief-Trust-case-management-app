@@ -245,6 +245,24 @@ export function markDatabaseResetRecoveryRequired(): void {
 export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending' | 'unavailable'> {
   if (typeof window === 'undefined') return 'unavailable';
 
+  // Older versions stored queue/conflict/snapshot state without an owner UID.
+  // Preserve and quarantine it: never guess an owner, replay it, or call restore safe.
+  for (const legacyKey of [
+    'shine_relief_trust_offline_queue_v2',
+    'shine_relief_trust_sync_conflicts_v1',
+    'shine_relief_trust_pending_sync_v1',
+  ]) {
+    try {
+      const raw = window.localStorage.getItem(legacyKey);
+      if (!raw) continue;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return 'unavailable';
+      if (parsed.length) return 'pending';
+    } catch {
+      return 'unavailable';
+    }
+  }
+
   // A recovery lock blocks automatic queue replay, but it must not make an
   // administrator unable to retry a backup restore after an interrupted
   // restore/reset. Permit an explicit restore retry only when persisted queue
