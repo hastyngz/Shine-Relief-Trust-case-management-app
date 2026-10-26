@@ -416,3 +416,15 @@ The former unscoped cache and legacy localStorage queue/snapshot/conflict keys a
 A second review traced async operations across account changes. Queue persistence now pins the UID that started the operation instead of looking up a potentially different active UID after an await. Recording offline diffs and migrating scoped snapshots stop if the active account changes; a flush leaves its original queue intact if the account changes while Firestore is processing; reset recovery stops before subsequent writes when the account changes; and the UI avoids showing a stale account's cached queue count. The App also prevents a late Firestore listener callback from persisting a snapshot after the active UID changes.
 
 The code head before this documentation-only update is `7c4430c2c6b5f966953f907d7ebad0582e447402`. GitHub Actions has been repeatedly cancelled by subsequent pushes during implementation; the workflow on the final report-updated head must complete before this is called verified. Do not treat the older cancelled runs as passes. No local test execution is claimed from this environment.
+
+
+## 2026-10-26 final implementation checkpoint before CI
+
+Final code hardening after the previous report addendum:
+- Queue reads/writes pin the UID that initiated the operation. Async queue persistence cannot redirect an old user's entries into a new user's IndexedDB/localStorage store if auth changes during an await.
+- Snapshot migration checks that the original UID is still active before clearing its scoped snapshot. Reset recovery pauses if the active UID changes between steps.
+- Flush leaves the original queue intact if account identity changes during Firestore processing, rather than writing queue state under the new account.
+- The UI resets selected records, in-progress forms, import state, modal/search state and navigation on UID change. The app guards the cache projection, listener callback and offline diff effect while the database owner does not match the active user.
+- Latest code SHA before this documentation-only update: `c9ac80368bf57b4664918819125d406bf7080629`.
+
+The code changes are complete enough for automated verification, but are **not yet declared verified**. The workflow on the final documentation-updated SHA must pass TypeScript, offline/storage regressions, the remaining check suite, production build and E2E. No local execution is claimed. Use only synthetic records until CI and real-device acceptance are complete. The unowned legacy IndexedDB queue remains preserved and unreplayed; its explicit recovery workflow remains open.

@@ -747,3 +747,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · async account-switch hardening
 - Follow-up review identified an in-flight sync race: a save started under UID A must never switch to UID B's queue store if auth changes during an await. Queue I/O now pins the originating UID, stale callbacks/diffs are guarded, and queue counts are UID-aware.
 - Latest code SHA before this documentation-only update: `7c4430c2c6b5f966953f907d7ebad0582e447402`. CI is still pending/queued for the final code; no pass is claimed yet. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · final code review checkpoint
+- Further guarded asynchronous queue writes and reset/snapshot migration against UID changes, and reset in-progress forms/navigation on account switch so one user's form cannot carry into the next session.
+- Latest code SHA before this documentation-only update: `c9ac80368bf57b4664918819125d406bf7080629`. Exact-head CI still needs to complete; cancelled runs are not passes. — Mosaic (ChatGPT), 2026-10-26
