@@ -1500,8 +1500,11 @@ export async function syncChangeEntriesToFirestore(
       }
     } catch (err) {
       // Network or permission failure: keep the entry queued for a later flush.
-      if (isImportAudit || isRestrictedImportSource) {
-        console.error('Offline import source sync failed; source data and document IDs were not logged.');
+      const isSensitiveEmployeeRecord =
+        entry.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
+        entry.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS;
+      if (isImportAudit || isRestrictedImportSource || isSensitiveEmployeeRecord) {
+        console.error('Offline sync failed for a restricted record; contents and document IDs were not logged.');
       } else {
         console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);
       }
