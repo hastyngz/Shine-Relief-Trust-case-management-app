@@ -485,3 +485,6 @@ CI follow-up: the run on SHA 93598024dc61907f8797e5299952844cd3374fc8 passed E2E
 ## 2026-10-26 Firestore cache isolation
 
 A critical shared-device edge case was found: the Firestore SDK's in-memory cache is not partitioned by the app's Firebase UID. After account A signs out, a cached snapshot could be delivered to account B's listener; if it were copied into B's UID-scoped localStorage, B could see A's records when B already had a baseline. The App now ignores snapshots that are from cache or have pending writes, and saveIncomingCloudSnapshot rejects them defensively. Only a durable, server-confirmed snapshot can update the active local database and baseline. Offline use continues from the current UID's own local database; a new account without a confirmed baseline stays on the safe loading screen. Added synthetic regression coverage for unconfirmed snapshots not changing the cache or baseline.
+
+
+Snapshot confirmation is now fail-closed for missing metadata too. Only explicit Firestore metadata with fromCache=false and hasPendingWrites=false can be accepted as a confirmed baseline; absent/incomplete metadata no longer defaults to trusted. The regression test reflects this stricter rule.

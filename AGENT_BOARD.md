@@ -807,3 +807,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · Firestore cache account boundary
 - Closed a further shared-device risk: Firestore's in-memory cache is not UID-partitioned. Unconfirmed/cache/optimistic snapshots are now rejected before they can be saved into or rendered from another UID's workspace; the app waits for a server-confirmed snapshot.
 - Added a synthetic regression that an unconfirmed snapshot cannot alter local database or baseline. Exact-head CI still required. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · fail-closed snapshot metadata
+- Tightened server-confirmation detection: missing or incomplete Firestore snapshot metadata no longer defaults to trusted. Only explicit fromCache=false and hasPendingWrites=false can advance the baseline or replace the scoped local database.
+- Regression assertions updated; exact-head CI still required. — Mosaic (ChatGPT), 2026-10-26

@@ -401,7 +401,7 @@ export function setLastSyncedSnapshot(db: AppDatabase): void {
 export function isConfirmedServerSnapshot(
   meta: { fromCache?: boolean; hasPendingWrites?: boolean } | undefined,
 ): boolean {
-  return !meta?.fromCache && !meta?.hasPendingWrites;
+  return meta?.fromCache === false && meta?.hasPendingWrites === false;
 }
 
 /**

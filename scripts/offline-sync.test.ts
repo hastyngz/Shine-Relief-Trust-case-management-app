@@ -434,7 +434,8 @@ assert.equal((await readSyncConflicts()).length, 0);
 // writes, is an optimistic echo rather than a confirmed server copy. Adopting it
 // as the baseline makes the next diff see "no change" and silently loses the
 // edit (the offline data-loss bug this guards against).
-assert.equal(isConfirmedServerSnapshot(undefined), true, 'missing metadata is treated as confirmed');
+assert.equal(isConfirmedServerSnapshot(undefined), false, 'missing metadata is not treated as server-confirmed');
+assert.equal(isConfirmedServerSnapshot({}), false, 'incomplete metadata fails closed');
 assert.equal(isConfirmedServerSnapshot({ fromCache: false, hasPendingWrites: false }), true);
 assert.equal(isConfirmedServerSnapshot({ fromCache: true, hasPendingWrites: false }), false, 'cache reads are not confirmed');
 assert.equal(isConfirmedServerSnapshot({ fromCache: false, hasPendingWrites: true }), false, 'pending local writes are not confirmed');
