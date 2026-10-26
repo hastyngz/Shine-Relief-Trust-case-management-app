@@ -736,3 +736,9 @@ Suggestion format:
 - Rechecked exact branch head `bf8540d164df53b66c95ec3bd58bf61908b99295`: CI run 39552221577 passed both `checks` and `e2e`, including emulator rules, offline/storage tests, production build and the offline E2E suite.
 - Added `docs/offline-sync-account-isolation-design.md` as the implementation contract before touching shared persistence. The current green build is suitable only for controlled synthetic-data testing; shared-device account switching is not yet safe for real sensitive data.
 - Next: implement account-scoped workspace persistence and tests in small verified stages. Keep legacy unowned data preserved/quarantined, never auto-replay it. No production operations or Android field test. — Mosaic (ChatGPT), 2026-10-21
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · account-scoped local workspace implementation
+- Implemented UID-scoped local database keys, IndexedDB queues, sync baselines, pending snapshots, and conflicts; added an auth-switch render guard and owner checks before queue flush/conflict resolution.
+- Old unowned localStorage queue/conflict/snapshot entries are left untouched and block destructive restore inspection rather than being guessed, replayed or deleted. Added synthetic UID-switch regression coverage.
+- Verification is pending for the exact final SHA. Do not treat cancelled intermediate Actions runs as passes. No Firestore/Storage rules, production data or deployment changed; no Android weak-signal test. — Mosaic (ChatGPT), 2026-10-26

@@ -377,3 +377,35 @@ Legacy unowned bytes must be preserved, not automatically attributed, rendered, 
 - No production deployment, migration, live-service smoke test, or Android/weak-signal device test was performed.
 - Automated checks are green on the reviewed head; the account-isolation feature is not yet implemented.
 - The app can be explored in a controlled test environment with synthetic data, but it is not yet safe to certify shared-device account switching for real sensitive records.
+
+
+# 2026-10-26 — Account-scoped local workspace implementation
+
+## Goal and code changes
+
+Started the previously documented account-isolation fix on branch `Replit`. The intent is to prevent one signed-in account on a shared field device from reading another account's cached database or replaying its queued edits.
+
+- Added `src/services/accountWorkspace.ts` to track the active authenticated UID and derive UID-scoped localStorage and IndexedDB names.
+- `src/utils/storage.ts` now reads and writes the local database using a UID-scoped key. It no longer deletes or adopts the old unscoped legacy cache. Without an authenticated workspace, browser writes fail closed and reads return a fresh initial database.
+- `src/services/offlineSyncDb.ts` now uses per-UID IndexedDB databases and localStorage fallback keys for the per-record queue and conflicts.
+- `src/services/offlineSync.ts` now scopes baselines, pending snapshot state and reset-recovery locks by UID, stamps new queue entries with `ownerUid`, rejects a flush whose actor UID differs from the active workspace, and refuses to flush entries with missing/mismatched ownership. Conflict resolution also requires the active UID to match the actor.
+- `src/contexts/AuthContext.tsx` switches the active workspace before publishing the new authenticated user. `src/App.tsx` reloads the scoped database and guards the rendered view, cached projection, Firestore listener callback and offline diffing against stale in-memory state during account switches.
+- Updated the offline queue and sync regression tests with synthetic UIDs and account-switch assertions.
+
+## Legacy-data handling
+
+The former unscoped cache and legacy localStorage queue/snapshot/conflict keys are not assigned to the next account. The legacy bytes are preserved. Restore inspection now treats non-empty or unreadable unowned legacy queue/snapshot/conflict state as pending/unavailable, blocking destructive restore instead of pretending the state is empty. The old unscoped IndexedDB database is not migrated or replayed by the new code. A reviewed recovery workflow for unowned legacy edits remains a follow-up; do not manually test recovery using real beneficiary records.
+
+## Verification status and limits
+
+- The current implementation was committed directly to `Replit`; `main` was not changed. The latest workflow was still pending when this report was prepared; only the run matching the final SHA can verify the changes. Report any failing checks and fix them before calling this implementation verified.
+- Added automated coverage for separate IndexedDB queues across synthetic UIDs, separate sync baselines, mismatched actor rejection, and preservation/quarantine of unowned legacy localStorage state. The exact-head CI result must be checked.
+- No new dependencies were added. No Firestore/Storage rules were loosened. No production migration, live deployment, production data operation, live-service smoke test, or physical Android/weak/no-signal test was performed.
+- **Not yet a release certification:** the account-scoped local cache/queue implementation is a substantial safety step, but the end-to-end workflow still needs exact-SHA CI success and manual Android testing. In particular, legacy unowned IndexedDB state requires a safe recovery process, and a shared-device account switch should not be declared fully field-verified until tested with synthetic data on the actual target device.
+
+## Next steps
+
+1. Wait for the workflow on the final SHA; inspect and fix failures rather than relying on earlier cancelled runs.
+2. Finish review of all consumers of raw cached `db`, especially asynchronous callbacks and non-UI operations, to ensure none can use stale data during account transitions.
+3. Verify restore/reset semantics and legacy quarantine tests.
+4. Build and provide a controlled test version after CI passes; ask the owner to test using synthetic records first. Then perform Android/weak-signal acceptance checks.
