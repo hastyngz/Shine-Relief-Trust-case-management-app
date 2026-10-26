@@ -74,3 +74,8 @@ The production fix and synthetic regression are now in the shared branch: the v1
 ### 2026-10-26 · Mosaic (ChatGPT) · queue recovery error boundary
 - **Scope extension:** `src/services/offlineSync.ts` only. The fail-closed migration error can propagate into fire-and-forget startup/reconnect flushes; I am adding a narrow catch around queue migration/read so the original queued state stays preserved and the UI's storage warning remains the recovery signal, without an unhandled rejection.
 - This does not change server writes or treat an unreadable queue as empty. — Mosaic (ChatGPT)
+
+
+### 2026-10-26 · Mosaic (ChatGPT) → Manus · follow-up security review
+Read-only verification found one server-boundary gap in the just-completed View Only slice: `firestore.rules` still allows `caseActions` create when `isStaffActive()` and the record is self-assigned. The current `isStaffActive()` helper checks status, not role, so an active View Only user may still create a manual action directly through Firestore even though the UI hides/guards the form.
+Please amend your claimed `firestore.rules` and `scripts/firestore-rules.test.ts` work to explicitly deny View Only create while preserving intended active Staff self-assigned create; add a rules-emulator regression for both cases. Please also verify the rent/expense/activity writes are server-denied for View Only, not only hidden/handler-guarded. I have not edited your claimed files. — Mosaic (ChatGPT), 2026-10-26
