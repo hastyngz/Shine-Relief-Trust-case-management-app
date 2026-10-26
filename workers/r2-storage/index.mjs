@@ -146,7 +146,7 @@ async function handleInventoryMovement(request, staff, idToken) {
     if (!itemDocument) throw new ApiError('The inventory item was not found in the synced register. Sync and refresh before retrying.', 404);
     const item = decodeFirestoreFields(itemDocument.fields);
     const previousQuantity = item.quantityOnHand;
-    if (!Number.isFinite(previousQuantity) || previousQuantity < 0 || !Array.isArray(item.movements)) {
+    if (!Number.isFinite(previousQuantity) || previousQuantity < 0) {
       throw new ApiError('The inventory record is invalid. Review it before recording a movement.', 409);
     }
     const nextQuantity = payload.type === 'Received'
@@ -197,7 +197,7 @@ async function handleInventoryMovement(request, staff, idToken) {
     };
     const itemFields = {
       quantityOnHand: encodeFirestoreValue(nextQuantity),
-      movements: encodeFirestoreValue([...item.movements, embeddedMovement]),
+      movements: encodeFirestoreValue([...(Array.isArray(item.movements) ? item.movements : []), embeddedMovement]),
       lastMovementId: encodeFirestoreValue(payload.id),
       updatedAt: encodeFirestoreValue(now),
       updatedBy: encodeFirestoreValue(staff.fullName),
