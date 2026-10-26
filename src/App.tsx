@@ -145,10 +145,23 @@ function AppContent() {
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
   const [dbOwnerUid, setDbOwnerUid] = useState<string | null>(() => getActiveWorkspaceUid());
+
+  // AuthContext may publish a login result just before Firebase's auth-state
+  // observer updates the workspace UID. Listen for that authoritative workspace
+  // event and never label a cache with currentUser.uid unless it really belongs
+  // to the active workspace.
   useEffect(() => {
-    const uid = currentUser?.uid ?? null;
+    const reloadActiveWorkspace = () => {
+      setDb(getDatabase());
+      setDbOwnerUid(getActiveWorkspaceUid());
+    };
+    window.addEventListener('shine_workspace_changed', reloadActiveWorkspace);
+    return () => window.removeEventListener('shine_workspace_changed', reloadActiveWorkspace);
+  }, []);
+
+  useEffect(() => {
     setDb(getDatabase());
-    setDbOwnerUid(uid);
+    setDbOwnerUid(getActiveWorkspaceUid());
   }, [currentUser?.uid]);
   // Keep the authoritative local database intact for offline diffing and queued
   // edits. Build a permission-scoped projection for UI consumers instead of

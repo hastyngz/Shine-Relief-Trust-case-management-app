@@ -444,3 +444,8 @@ The current CI run must be checked on the final SHA. The last completed exact co
 ## 2026-10-26 reset lifecycle guard
 
 Review of the full destructive-reset path found an account-switch race: the cloud clear is asynchronous, so a new account could become active before the reset writes its local seed database. The reset flow now captures the initiating UID, checks it immediately after the cloud-clear await, and passes that UID through the queue/baseline cleanup so it cannot clear another account's workspace. The prior global recovery marker is cleared only after the explicit reset, empty queue and new scoped baseline all persist. Added a synthetic test that rejects cleanup if the active UID changes. No reset was run against production; exact-head CI is required.
+
+
+## 2026-10-26 auth observer ordering
+
+Hardened App startup for the possible ordering where the login action updates React's currentUser before Firebase's onAuthStateChanged callback has set the active workspace UID. The app now listens to shine_workspace_changed, reloads the database from the actual active UID, and records the actual workspace owner instead of assuming it equals currentUser.uid. Until they match, the render guard continues to hold. This avoids a seed/empty cache being mislabeled as an authenticated workspace or the first scoped Firestore snapshot being missed.

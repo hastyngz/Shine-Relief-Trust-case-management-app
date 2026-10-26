@@ -763,3 +763,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · reset account-switch guard
 - Follow-up review found destructive reset could resume after an account switch and save the reset database under the new UID. Reset now captures the initiating UID, checks it after the awaited cloud-clear step, and pins local queue/baseline cleanup to that UID.
 - A successful explicit reset also clears the pre-workspace recovery lock only after queue and baseline persistence. Added a synthetic account-switch regression. CI is pending on the current code; no production reset was run. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · auth observer ordering review
+- Found a login-order race: the login form can publish currentUser just before Firebase's auth observer updates the workspace UID. The App could label a seed cache with the user's UID and miss the later cache reload. It now listens to the explicit workspace-change event and labels the DB with the actual active UID only.
+- This is defensive startup hardening; exact-head CI and Android acceptance remain pending. — Mosaic (ChatGPT), 2026-10-26
