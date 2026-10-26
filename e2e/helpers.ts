@@ -20,9 +20,11 @@ export function logPageErrors(page: Page): void {
   });
 }
 
-/** Reads the UID from Firebase's browser-local auth persistence in the emulator. */
+/** Reads the UID from Firebase's browser auth persistence in the emulator. */
 export async function getSignedInUid(page: Page): Promise<string> {
-  const uid = await page.evaluate(() => {
+  const uid = await page.evaluate(async () => {
+    // Firebase may use localStorage or its IndexedDB persistence, depending on
+    // browser capabilities and the auth SDK's selected persistence.
     for (const key of Object.keys(window.localStorage)) {
       if (!key.startsWith('firebase:authUser:')) continue;
       try {
@@ -30,8 +32,39 @@ export async function getSignedInUid(page: Page): Promise<string> {
         if (typeof parsed?.uid === 'string' && parsed.uid) return parsed.uid;
       } catch { /* ignore unrelated/malformed auth storage entries */ }
     }
-    return null;
+
+    if (typeof indexedDB === 'undefined') return null;
+    try {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('firebaseLocalStorageDb');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        request.onblocked = () => reject(new Error('Firebase auth persistence database is blocked.'));
+      });
+      try {
+        if (!db.objectStoreNames.contains('firebaseLocalStorage')) return null;
+        const records = await new Promise<unknown[]>((resolve, reject) => {
+          const request = db.transaction('firebaseLocalStorage', 'readonly')
+            .objectStore('firebaseLocalStorage').getAll();
+          request.onsuccess = () => resolve(request.result as unknown[]);
+          request.onerror = () => reject(request.error);
+        });
+        for (const record of records) {
+          if (!record || typeof record !== 'object') continue;
+          const value = (record as { value?: unknown }).value;
+          if (value && typeof value === 'object') {
+            const candidate = value as { uid?: unknown };
+            if (typeof candidate.uid === 'string' && candidate.uid) return candidate.uid;
+          }
+        }
+        return null;
+      } finally {
+        db.close();
+      }
+    } catch {
+      return null;
+    }
   });
-  if (!uid) throw new Error('Signed-in Firebase UID was not found in the emulator auth storage.');
+  if (!uid) throw new Error('Signed-in Firebase UID was not found in localStorage or Firebase IndexedDB auth persistence.');
   return uid;
 }
