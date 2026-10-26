@@ -645,3 +645,12 @@ This is a substantial implementation slice, **not a verified end-to-end feature 
 The malformed date-validation regex was corrected after the first synthetic Worker test failed. The resulting inventory code SHA `a2582d3135cc6ee1b9d5fd15b2df8415f2994ca3` passed [SHINE app checks #840](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40391912914): **checks passed and E2E passed**. The checks job reached and passed both new inventory tests, then completed TypeScript, the existing regression suites, Firestore access audit and build. The first run's Worker-test failure was due to the malformed date regex, not a production incident.
 
 The pass verifies automated behavior on code SHA `a2582d3135cc6ee1b9d5fd15b2df8415f2994ca3`. Documentation-only commits after that SHA do not change the code under test. It does not establish Android, weak-signal, staging or production acceptance. The remaining retry persistence and offline queue gaps listed above are still open, so the broader offline-first inventory workflow is not complete.
+
+
+## Durable retry follow-up — 2026-10-26
+
+The retry-persistence gap identified above has now been addressed for uncertain network outcomes. Added a per-user local pending-request record, validation when loading it, restoration of the same form and idempotency key after app reload, and clearing after confirmed success or a definitive HTTP 4xx rejection. Added `scripts/inventory-pending-retry.test.ts` and registered it in CI.
+
+**Verification:** exact code SHA `17896ad88910452842ef49ee2b54d2dbf411834c` passed [SHINE app checks #850](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40392565913): both the full `checks` job and Playwright E2E succeeded. The checks job included TypeScript, the Worker transaction test, durable retry persistence test, Firestore inventory transaction rules test, the existing regression suites, Firestore access audit and build. This is automated CI evidence, not physical-device acceptance.
+
+**Still not complete:** when the device is already offline before the user submits, the UI rejects the action without queueing it. The durable pending record covers requests that were sent or attempted but whose outcome is uncertain; it is not yet a full offline-first queue for new stock movements. A physical Android/weak-signal test is also outstanding. Production data and deployments remain untouched.
