@@ -388,6 +388,12 @@ assert.equal(conflicts[0].recordId, 'SG-200');
 assert.equal(conflicts[0].serverData?.fullName, 'Theirs');
 assert.equal(conflicts[0].serverUpdatedBy, null);
 assert.equal(getPendingOfflineSnapshotCount(), 1, 'the conflicted change stays queued until resolved');
+assert.equal(conflicts[0].ownerUid, 'uid-a', 'conflicts record their owning UID');
+setActiveWorkspaceUid('uid-b');
+assert.equal(await resolveSyncConflict(conflicts[0].id, 'keep-theirs', { uid: 'uid-b', name: 'Staff B' }), false,
+  'a second account cannot resolve the first account conflict');
+setActiveWorkspaceUid('uid-a');
+assert.equal((await readSyncConflicts()).length, 1, 'the original conflict remains after the other account is denied');
 
 // Keep theirs: the local edit is dropped.
 await resolveSyncConflict(conflicts[0].id, 'keep-theirs', { uid: 'uid-a', name: 'Staff A' });

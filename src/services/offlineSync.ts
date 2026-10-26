@@ -1,6 +1,6 @@
 import { AppDatabase, OfflineChangeEntry, SyncConflict, SyncConflictResolution } from '../types';
 import { appendSyncConflictAudit, syncChangeEntriesToFirestore, SyncChangeResult } from './firestoreSync';
-import { inspectPersistedQueueState, loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
+import { inspectPersistedQueueState, inspectUnownedLegacyIndexedDbState, loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
 import { getActiveWorkspaceUid, getWorkspaceStorageKey } from './accountWorkspace';
 
 const LEGACY_SNAPSHOT_KEY_BASE = 'shine_relief_trust_pending_sync_v2';
@@ -266,6 +266,11 @@ export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending
     }
   }
 
+  // Older builds also used a global IndexedDB queue. It has no trustworthy owner,
+  // so preserve it and block destructive restore until it is explicitly reviewed.
+  const legacyIndexedDbState = await inspectUnownedLegacyIndexedDbState();
+  if (legacyIndexedDbState !== 'clear') return legacyIndexedDbState;
+
   // A recovery lock blocks automatic queue replay, but it must not make an
   // administrator unable to retry a backup restore after an interrupted
   // restore/reset. Permit an explicit restore retry only when persisted queue
@@ -489,6 +494,7 @@ function conflictFromEntry(
   detectedBy: string | null,
 ): SyncConflict {
   return {
+    ownerUid: entry.ownerUid,
     id: `${entry.collection}::${entry.recordId}`,
     collection: entry.collection,
     recordId: entry.recordId,
@@ -602,7 +608,7 @@ export async function resolveSyncConflict(
   const conflicts = await readConflicts();
   if (getActiveWorkspaceUid() !== actor.uid) return false;
   const conflict = conflicts.find((candidate) => candidate.id === conflictId);
-  if (!conflict) return false;
+  if (!conflict || conflict.ownerUid !== actor.uid) return false;
 
   const remaining = conflicts.filter((candidate) => candidate.id !== conflictId);
   await persistSyncConflicts(remaining);

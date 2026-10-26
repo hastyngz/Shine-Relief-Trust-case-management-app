@@ -752,3 +752,9 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · final code review checkpoint
 - Further guarded asynchronous queue writes and reset/snapshot migration against UID changes, and reset in-progress forms/navigation on account switch so one user's form cannot carry into the next session.
 - Latest code SHA before this documentation-only update: `c9ac80368bf57b4664918819125d406bf7080629`. Exact-head CI still needs to complete; cancelled runs are not passes. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · conflict ownership and legacy IndexedDB quarantine
+- Added owner UID to new conflicts; conflict resolution/UI fail closed for missing or mismatched ownership, and audit is written only after local resolution succeeds.
+- Restore inspection now checks the former unscoped IndexedDB queue without opening/creating it when absent; unowned legacy entries block destructive restore. Added synthetic regression coverage and made the E2E UID helper read Firebase IndexedDB persistence too.
+- Exact-head CI is pending after the latest changes. No production data/rules/deployment changed; no Android device test. — Mosaic (ChatGPT), 2026-10-26

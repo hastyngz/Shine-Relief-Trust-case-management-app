@@ -1,6 +1,6 @@
 # Offline account isolation — implementation design
 
-**Status:** Approved direction for staged implementation; code migration not yet applied.  
+**Status:** Core UID-scoped implementation applied on `Replit`; exact-head CI and device acceptance are still pending.  
 **Branch:** `Replit` only.  
 **Scope:** Browser-local app database, sync baseline, queued writes, conflicts and legacy offline data.
 
@@ -8,15 +8,13 @@
 
 A shared or previously used browser must not expose one staff account's cached SHINE data to another account, and must never replay one account's queued edits under another account's authenticated identity. Offline edits must remain durable and recoverable. Existing Firestore/Storage authorization remains authoritative and is not weakened.
 
-## Current confirmed risks
+## Implementation status and remaining risks
 
-- `src/utils/storage.ts` stores the whole app database under the global `shine_relief_trust_prod_v1` key.
-- `src/services/offlineSync.ts` stores the last confirmed baseline and legacy whole-snapshot queue under global localStorage keys.
-- `src/services/offlineSyncDb.ts` stores a global IndexedDB queue and a global conflict list.
-- `OfflineChangeEntry` and `SyncConflict` do not record an owning UID.
-- `flushPendingOfflineSnapshots` currently requires a signed-in actor, but the actor is not checked against the queued entries.
-- `resolveSyncConflict` accepts an actor but currently does not use it to verify conflict ownership.
-- `App.tsx` creates its initial database before the authenticated account is resolved. Firestore snapshots are persisted through the same global storage key.
+- New local database, queue, baseline, snapshot and conflict stores are UID-scoped; the UI resets and guards account-switch state; queue flushes require owner UID equality.
+- New conflicts record an owner UID and conflict resolution checks it. Missing-owner conflicts are not resolvable through the normal UI.
+- Unowned legacy localStorage keys and the former global IndexedDB queue are preserved and checked by destructive-restore inspection; they are not automatically assigned, rendered, replayed or deleted.
+- A dedicated user-facing/admin-controlled recovery workflow for quarantined legacy data remains unfinished.
+- The latest CI run on the exact current SHA must pass before the code can be called verified; physical Android/weak-signal acceptance is still outstanding.
 
 ## Safety invariants
 

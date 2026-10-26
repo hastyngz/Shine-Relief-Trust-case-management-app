@@ -128,6 +128,42 @@ function writeLocalEntries(entries: OfflineChangeEntry[], uid: string | null = g
 }
 
 /**
+ * Inspect the previous device-wide IndexedDB queue without opening it when it
+ * does not exist. Its entries have no reliable owner and must never be replayed
+ * or silently treated as empty before a destructive restore.
+ */
+export async function inspectUnownedLegacyIndexedDbState(): Promise<'clear' | 'pending' | 'unavailable'> {
+  if (!hasIndexedDb()) return 'clear';
+  const factory = indexedDB as IDBFactory & { databases?: () => Promise<Array<{ name?: string }>> };
+  if (typeof factory.databases !== 'function') return 'unavailable';
+  let knownDatabases: Array<{ name?: string }>;
+  try { knownDatabases = await factory.databases(); } catch { return 'unavailable'; }
+  if (!knownDatabases.some((database) => database.name === 'shine_relief_trust_offline')) return 'clear';
+
+  let db: IDBDatabase;
+  try {
+    db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('shine_relief_trust_offline');
+      request.onupgradeneeded = () => { if (request.oldVersion === 0) request.transaction?.abort(); };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      request.onblocked = () => reject(new Error('Legacy offline database is blocked.'));
+    });
+  } catch { return 'unavailable'; }
+
+  try {
+    if (!db.objectStoreNames.contains(STORE_NAME)) return 'unavailable';
+    const entries = await new Promise<OfflineChangeEntry[]>((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
+      request.onsuccess = () => resolve((request.result as OfflineChangeEntry[]) || []);
+      request.onerror = () => reject(request.error);
+    });
+    return entries.length ? 'pending' : 'clear';
+  } catch { return 'unavailable'; }
+  finally { db.close(); }
+}
+
+/**
  * Loads the persisted queue. IndexedDB is authoritative when it is available
  * and already holds entries; otherwise the localStorage fallback is migrated
  * into IndexedDB so older queues are never dropped.

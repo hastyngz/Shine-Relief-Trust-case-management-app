@@ -92,6 +92,7 @@ async function seedConflict(
       request.onerror = () => reject(request.error);
     });
     const conflict = {
+      ownerUid: o.uid,
       id: `girls::${o.recordId}`,
       collection: 'girls',
       recordId: o.recordId,

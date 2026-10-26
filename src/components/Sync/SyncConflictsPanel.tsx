@@ -70,22 +70,34 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
   }, [isOpen, refresh]);
 
   const handleResolve = async (conflict: SyncConflict, resolution: SyncConflictResolution) => {
+    if (!currentUser || conflict.ownerUid !== currentUser.uid) {
+      setMessage('This conflict has no verified owner and cannot be resolved from this account. Its data has been preserved.');
+      return;
+    }
     setBusyId(conflict.id);
     setMessage(null);
     try {
-      await appendSyncConflictAudit({
-        action: 'conflict_resolved',
-        resolution,
-        collection: conflict.collection,
-        recordId: conflict.recordId,
-        userId: actor.uid,
-        userName: actor.name,
-        timestamp: new Date().toISOString(),
-        localUpdatedAt: conflict.localData?.updatedAt ?? conflict.baseUpdatedAt,
-        serverUpdatedAt: conflict.serverUpdatedAt,
-        serverUpdatedBy: conflict.serverUpdatedBy,
-      });
-      await resolveSyncConflict(conflict.id, resolution, actor);
+      const resolved = await resolveSyncConflict(conflict.id, resolution, actor);
+      if (!resolved) {
+        setMessage('Could not verify ownership of this conflict. It has been preserved for recovery.');
+        return;
+      }
+      try {
+        await appendSyncConflictAudit({
+          action: 'conflict_resolved',
+          resolution,
+          collection: conflict.collection,
+          recordId: conflict.recordId,
+          userId: actor.uid,
+          userName: actor.name,
+          timestamp: new Date().toISOString(),
+          localUpdatedAt: conflict.localData?.updatedAt ?? conflict.baseUpdatedAt,
+          serverUpdatedAt: conflict.serverUpdatedAt,
+          serverUpdatedBy: conflict.serverUpdatedBy,
+        });
+      } catch {
+        console.warn('Conflict was resolved locally but its audit event could not be saved.');
+      }
       if (resolution === 'keep-mine') {
         const result = await flushPendingOfflineSnapshots({ actor });
         setMessage(result.applied > 0 ? 'Your version was saved.' : 'Saved locally; it will sync when online.');
@@ -154,10 +166,15 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                           Your change{isDelete ? ' (deletion)' : ''} was made
                           {localUpdatedAt ? ` on ${new Date(localUpdatedAt).toLocaleString()}` : ' on this phone'}.
                         </p>
+                        {(!currentUser || conflict.ownerUid !== currentUser.uid) && (
+                          <p className="mt-2 text-[11px] font-semibold text-amber-900">
+                            Owner not verified. This conflict is preserved and cannot be resolved in this session.
+                          </p>
+                        )}
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={busyId === conflict.id}
+                            disabled={busyId === conflict.id || !currentUser || conflict.ownerUid !== currentUser.uid}
                             onClick={() => handleResolve(conflict, 'keep-mine')}
                             className="rounded-lg bg-teal-800 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-teal-700 disabled:opacity-50"
                           >
@@ -165,7 +182,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                           </button>
                           <button
                             type="button"
-                            disabled={busyId === conflict.id}
+                            disabled={busyId === conflict.id || !currentUser || conflict.ownerUid !== currentUser.uid}
                             onClick={() => handleResolve(conflict, 'keep-theirs')}
                             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-[11px] font-bold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
                           >

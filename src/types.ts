@@ -1555,6 +1555,8 @@ export interface OfflineChangeEntry {
 export type SyncConflictResolution = 'keep-mine' | 'keep-theirs';
 
 export interface SyncConflict {
+  /** UID of the workspace that owns this conflict; missing owner is not resolvable. */
+  ownerUid?: string;
   id: string;
   collection: string;
   recordId: string;

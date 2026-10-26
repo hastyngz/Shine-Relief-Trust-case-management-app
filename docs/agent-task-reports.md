@@ -428,3 +428,14 @@ Final code hardening after the previous report addendum:
 - Latest code SHA before this documentation-only update: `c9ac80368bf57b4664918819125d406bf7080629`.
 
 The code changes are complete enough for automated verification, but are **not yet declared verified**. The workflow on the final documentation-updated SHA must pass TypeScript, offline/storage regressions, the remaining check suite, production build and E2E. No local execution is claimed. Use only synthetic records until CI and real-device acceptance are complete. The unowned legacy IndexedDB queue remains preserved and unreplayed; its explicit recovery workflow remains open.
+
+
+## 2026-10-26 additional hardening — conflict owner and legacy IndexedDB
+
+The prior E2E run exposed a test harness assumption: the helper only looked for Firebase Auth's user in localStorage, while the SDK may persist auth state in IndexedDB. Updated the synthetic E2E helper to check both supported browser persistence locations. This fixes the test's UID discovery path without changing application authentication.
+
+New conflicts now carry `ownerUid`. The resolver refuses a conflict with missing/mismatched owner; the conflict panel disables unowned resolutions and explains that the state is preserved for recovery. The conflict-resolved audit is now attempted only after local resolution returns success, avoiding a false audit event for a denied resolution. Unit tests assert the wrong synthetic UID cannot resolve the original account's conflict.
+
+A second legacy-state gap was addressed: the old unscoped IndexedDB database (`shine_relief_trust_offline`) is now inspected before destructive restore. It is not opened when absent, and it is never migrated or replayed. Non-empty or unreadable legacy state blocks restore. The IndexedDB regression test creates a synthetic unowned legacy queue, verifies it is classified as pending, then deletes only that test fixture and verifies absence.
+
+The current CI run must be checked on the final SHA. The last completed exact code run before these fixes had a passing checks job (including TypeScript and production build) but failed E2E because three tests could not discover the signed-in emulator UID; that failure is not counted as a pass. No local test execution, live-service smoke test, production migration/deployment or physical Android test is claimed.
