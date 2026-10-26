@@ -543,3 +543,8 @@ No live services, production data, security rules or deployment changed. Verific
 Review of the UID-scoped offline queue found that `openDb` recreated the object store on version change before reading it. That would delete the only IndexedDB copy of queued edits in an existing v1 `shine_relief_trust_offline_v3::uid:<uid>` database; the localStorage fallback is not a reliable recovery path.
 
 The upgrade now reads existing rows within the version-change transaction, recreates the store with the composite `collection/recordId` key, and writes the migrated rows before the transaction can complete. Missing owner UID is filled only because the database itself is scoped to the authenticated UID; an explicit owner mismatch, malformed key, or duplicate composite key aborts the upgrade instead of guessing or overwriting. The regression test creates a synthetic v1 database, queues a record, opens it through the v2 code, and asserts the record and owner survive. CI has not yet been checked for this patch; no production data or deployment was touched.
+
+
+### Follow-up: fail closed on unsafe migration
+
+Review found that an aborted unsafe migration would still fall back to an empty localStorage queue and could appear to have no pending edits. Added a distinct migration error path that surfaces a storage warning and propagates the failure rather than presenting an empty queue. The test seeds a synthetic foreign-owner row and verifies the upgrade fails while the original v1 row remains readable. Exact-head CI remains pending.

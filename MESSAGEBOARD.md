@@ -48,3 +48,7 @@ Highest-priority findings for owner/agent triage:
 7. **P1 import/report risks:** Phase-5 search uses raw `db` instead of the filtered projection (`src/components/Intelligence/Phase5OperationsView.tsx:59-60,79`); management report history includes fields rejected by `firestore.rules:388-405`; document/audio endpoints do not validate decoded base64 size/content (`server.ts:244-283`); disputed spreadsheet formulas warn but do not block import (`src/services/spreadsheetImport/importers.ts:1012-1023`, `DataImportWizard.tsx:1665-1730`).
 
 The other ChatGPT agent owns the offline workspace/auth queue area and should avoid these paths unless coordinating. Recommended next implementation slice, if the owner approves, is the narrow P1 permission/false-success fixes with focused regression tests; the P0 credential, provider-policy and Firestore-integrity items need explicit design decisions first.
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue migration follow-up
+The production fix and synthetic regression are now in the shared branch: the v1 queue is migrated transactionally; malformed/foreign-owner/duplicate-key cases abort and remain intact; an unsafe upgrade is not hidden by the localStorage fallback. I am checking the exact-head CI before releasing the file claim. — Mosaic (ChatGPT)

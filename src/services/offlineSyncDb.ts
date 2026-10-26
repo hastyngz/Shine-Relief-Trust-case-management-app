@@ -18,6 +18,13 @@ const databaseName = (uid: string | null = getActiveWorkspaceUid()) => getWorksp
 const DB_VERSION = 2;
 const STORE_NAME = 'queue';
 
+class UnsafeQueueMigrationError extends Error {
+  constructor() {
+    super('Offline queue schema upgrade was blocked to preserve existing edits. The old queue remains intact and needs recovery.');
+    this.name = 'UnsafeQueueMigrationError';
+  }
+}
+
 /**
  * Composite storage key for a change entry. A queue keyed by `collection` alone
  * would make every changed record in the same collection overwrite the previous
@@ -49,6 +56,7 @@ function openDb(uid: string | null = getActiveWorkspaceUid()): Promise<IDBDataba
     const name = databaseName(uid);
     if (!name) { reject(new Error('No authenticated SHINE workspace is active.')); return; }
     const request = indexedDB.open(name, DB_VERSION);
+    let unsafeMigrationDetected = false;
     request.onupgradeneeded = (event) => {
       const db = request.result;
       const transaction = request.transaction;
@@ -63,7 +71,7 @@ function openDb(uid: string | null = getActiveWorkspaceUid()): Promise<IDBDataba
       }
 
       const read = transaction.objectStore(STORE_NAME).getAll();
-      read.onerror = () => transaction.abort();
+      read.onerror = () => { unsafeMigrationDetected = true; transaction.abort(); };
       read.onsuccess = () => {
         const oldEntries = (read.result as OfflineChangeEntry[]) || [];
         const migrated = oldEntries.map((entry) => ({
@@ -82,6 +90,7 @@ function openDb(uid: string | null = getActiveWorkspaceUid()): Promise<IDBDataba
           new Set(migrated.map((entry) => entry.queueKey)).size !== migrated.length
         ) {
           // Abort leaves the original v1 database intact for recovery.
+          unsafeMigrationDetected = true;
           transaction.abort();
           return;
         }
@@ -91,7 +100,7 @@ function openDb(uid: string | null = getActiveWorkspaceUid()): Promise<IDBDataba
       };
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(unsafeMigrationDetected ? new UnsafeQueueMigrationError() : request.error);
   });
 }
 
@@ -219,6 +228,12 @@ export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
     }
     return entries;
   } catch (error) {
+    if (error instanceof UnsafeQueueMigrationError) {
+      // An empty localStorage fallback cannot prove that the preserved v1
+      // IndexedDB queue is empty. Do not hide it as a zero-count queue.
+      notifyStorageFailure(error);
+      throw error;
+    }
     console.warn('IndexedDB queue unavailable; falling back to localStorage:', error);
     return readLocalEntries(uid);
   }

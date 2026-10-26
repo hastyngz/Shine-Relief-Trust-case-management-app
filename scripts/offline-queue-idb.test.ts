@@ -101,6 +101,36 @@ assert.equal(migratedLegacyQueue.length, 1, 'v1 queue rows survive the composite
 assert.equal(migratedLegacyQueue[0].recordId, 'SG-UPGRADE-01');
 assert.equal(migratedLegacyQueue[0].ownerUid, upgradeUid, 'legacy rows inherit only their UID-scoped database owner');
 assert.equal(migratedLegacyQueue[0].queueKey, 'girls/SG-UPGRADE-01');
+
+// A foreign owner must abort migration and leave the original v1 row readable.
+const badUpgradeUid = 'synthetic-bad-upgrade-uid';
+const badUpgradeName = `shine_relief_trust_offline_v3::uid:${encodeURIComponent(badUpgradeUid)}`;
+const badRequest = indexedDB.open(badUpgradeName, 1);
+const badDb = await new Promise<IDBDatabase>((resolve, reject) => {
+  badRequest.onupgradeneeded = () => badRequest.result.createObjectStore('queue', { keyPath: 'collection' });
+  badRequest.onsuccess = () => resolve(badRequest.result);
+  badRequest.onerror = () => reject(badRequest.error);
+});
+await new Promise<void>((resolve, reject) => {
+  const tx = badDb.transaction('queue', 'readwrite');
+  tx.objectStore('queue').put({ ownerUid: 'synthetic-foreign-owner', collection: 'girls', recordId: 'SG-FOREIGN', operation: 'set', data: { id: 'SG-FOREIGN' } });
+  tx.oncomplete = () => resolve();
+  tx.onerror = () => reject(tx.error);
+});
+badDb.close();
+setActiveWorkspaceUid(badUpgradeUid);
+await assert.rejects(loadQueueEntries(), /schema upgrade was blocked/i, 'unsafe migration must fail closed instead of returning an empty fallback');
+const preservedBadDb = await new Promise<IDBDatabase>((resolve, reject) => {
+  const req = indexedDB.open(badUpgradeName);
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+await new Promise<void>((resolve, reject) => {
+  const req = preservedBadDb.transaction('queue', 'readonly').objectStore('queue').get('girls');
+  req.onsuccess = () => { assert.equal(req.result.recordId, 'SG-FOREIGN'); resolve(); };
+  req.onerror = () => reject(req.error);
+});
+preservedBadDb.close();
 setActiveWorkspaceUid('synthetic-manager-uid');
 
 const legacyName = 'shine_relief_trust_offline';

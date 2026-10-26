@@ -855,3 +855,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · non-destructive IndexedDB schema upgrade
 - Found a data-loss bug in `src/services/offlineSyncDb.ts`: opening queue schema v2 deleted the existing v1 IndexedDB object store before reading its durable entries. The localStorage fallback could not guarantee recovery.
 - Fix: migrate existing rows inside the version-change transaction, assign owner only from the already UID-scoped DB name, and abort rather than re-attribute explicit mismatched owners or collapse duplicate composite keys. Added a synthetic v1→v2 regression fixture. CI is required before calling this verified. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue migration fail-closed behavior
+- Extended the v1→v2 migration fix so an unsafe upgrade (foreign owner, malformed record key, duplicate key or failed read) raises a visible storage warning instead of falling back to an empty localStorage queue view. The old IndexedDB store remains intact for recovery.
+- Added a synthetic foreign-owner case asserting the migration is rejected and the original v1 row remains readable. Exact-head CI is pending. — Mosaic (ChatGPT), 2026-10-26
