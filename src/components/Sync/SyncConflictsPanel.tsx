@@ -131,7 +131,9 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
         const result = await flushPendingOfflineSnapshots({ actor });
         setMessage(result.applied > 0 ? 'Your version was saved.' : 'Saved locally; it will sync when online.');
       } else {
-        setMessage('The other staff member\u2019s version was kept.');
+        setMessage(isAppendOnlyEmployeeCollection(conflict.collection)
+          ? 'The existing server record was kept. Add a new salary record if the intended change is legitimate.'
+          : 'The other staff member\u2019s version was kept.');
       }
       await refresh();
     } catch (error) {
