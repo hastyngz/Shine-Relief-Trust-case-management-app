@@ -211,6 +211,39 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     return true;
   };
 
+  const restorePendingInventoryForm = (): boolean => {
+    if (!currentUser?.uid) return false;
+    const pending = loadPendingInventoryMovement(currentUser.uid);
+    if (!pending) return false;
+    const item = items.find((entry) => entry.id === pending.itemId);
+    if (!item) return false;
+    setPendingMovementId(pending.id);
+    setPendingMovementSignature(pending.signature);
+    setError('');
+    setNotice('Restored the pending transaction. Retry it unchanged when online; the server will safely recognize an already-recorded transaction.');
+    if (pending.mode === 'movement') {
+      setMovementTarget(item);
+      setStocktakeTarget(null);
+      setMovement({
+        type: pending.payload.type === 'Issued' ? 'Issued' : 'Received',
+        quantity: String(pending.payload.quantity ?? ''),
+        date: String(pending.payload.date || getLocalDateInputValue()),
+        destination: String(pending.payload.destination || ''),
+        reference: String(pending.payload.reference || ''),
+        reason: String(pending.payload.reason || ''),
+      });
+    } else {
+      setStocktakeTarget(item);
+      setMovementTarget(null);
+      setStocktake({
+        countedQuantity: String(pending.payload.countedQuantity ?? ''),
+        date: String(pending.payload.date || getLocalDateInputValue()),
+        reason: String(pending.payload.formReason || ''),
+      });
+    }
+    return true;
+  };
+
   const submitMovement = async (event: FormEvent) => {
     event.preventDefault();
     if (!movementTarget || saving) return;
@@ -228,7 +261,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim(),
     });
     if (pendingMovementId && pendingMovementSignature !== signature) {
-      setError('A previous movement has an uncertain result. Restore its original details and retry it before starting a different movement.');
+      restorePendingInventoryForm();
+      setError('A previous stock transaction is still pending. Its original details have been restored; submit that transaction before recording another.');
       return;
     }
     const movementId = pendingMovementId || createInventoryId('mov');
@@ -236,7 +270,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       id: movementId, itemId: movementTarget.id, signature, mode: 'movement',
       payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
     })) {
-      setError('This phone could not preserve the retry key. No stock movement was sent; free device storage and try again.');
+      setError('No stock movement was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Restore/resolve the pending transaction first; if storage is full, free space and retry.');
       return;
     }
     setPendingMovementId(movementId);
@@ -302,7 +336,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
     });
     if (pendingMovementId && pendingMovementSignature !== signature) {
-      setError('A previous movement has an uncertain result. Restore its original details and retry it before starting a different movement.');
+      restorePendingInventoryForm();
+      setError('A previous stock transaction is still pending. Its original details have been restored; submit that transaction before recording another.');
       return;
     }
     const movementId = pendingMovementId || createInventoryId('mov');
@@ -311,7 +346,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       id: movementId, itemId: stocktakeTarget.id, signature, mode: 'stocktake',
       payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', reason: serverReason, formReason: stocktake.reason.trim() },
     })) {
-      setError('This phone could not preserve the retry key. No stocktake was sent; free device storage and try again.');
+      setError('No stocktake was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Restore/resolve the pending transaction first; if storage is full, free space and retry.');
       return;
     }
     setPendingMovementId(movementId);
