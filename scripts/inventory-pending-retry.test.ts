@@ -26,13 +26,17 @@ const pending: PendingInventoryMovementRequest = {
 assert.equal(savePendingInventoryMovement('uid-a', pending), true);
 assert.deepEqual(loadPendingInventoryMovement('uid-a'), pending);
 assert.equal(loadPendingInventoryMovement('uid-b'), null, 'one staff workspace must not read another workspace retry');
+assert.equal(savePendingInventoryMovement('uid-a', { ...pending, id: 'mov_other', signature: 'different' }), false, 'an unresolved transaction must not be overwritten');
+assert.deepEqual(loadPendingInventoryMovement('uid-a'), pending, 'the original transaction must remain recoverable');
 assert.equal(clearPendingInventoryMovement('uid-a'), true);
 assert.equal(loadPendingInventoryMovement('uid-a'), null);
 
 values.set('shine_inventory_pending_movement_uid-a', '{broken json');
 assert.equal(loadPendingInventoryMovement('uid-a'), null, 'malformed pending state must fail closed');
+assert.equal(savePendingInventoryMovement('uid-a', pending), false, 'malformed uncertain state must not be overwritten');
 values.set('shine_inventory_pending_movement_uid-a', JSON.stringify({ ...pending, mode: 'unknown' }));
 assert.equal(loadPendingInventoryMovement('uid-a'), null, 'unsupported pending state must fail closed');
+values.delete('shine_inventory_pending_movement_uid-a');
 
 failWrites = true;
 assert.equal(savePendingInventoryMovement('uid-a', pending), false, 'quota/write failures must be visible to the caller');
