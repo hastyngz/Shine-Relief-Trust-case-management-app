@@ -76,7 +76,21 @@ export interface PendingInventoryMovementRequest {
 export function savePendingInventoryMovement(uid: string, pending: PendingInventoryMovementRequest): boolean {
   if (typeof window === 'undefined' || !uid.trim()) return false;
   try {
-    window.localStorage.setItem(`shine_inventory_pending_movement_${uid}`, JSON.stringify(pending));
+    const key = `shine_inventory_pending_movement_${uid}`;
+    const existingRaw = window.localStorage.getItem(key);
+    if (existingRaw !== null) {
+      // There is only one recoverable transaction slot per user. Never replace
+      // a different or malformed request: its server outcome may be uncertain.
+      const existing = loadPendingInventoryMovement(uid);
+      if (
+        !existing ||
+        existing.id !== pending.id ||
+        existing.itemId !== pending.itemId ||
+        existing.signature !== pending.signature ||
+        existing.mode !== pending.mode
+      ) return false;
+    }
+    window.localStorage.setItem(key, JSON.stringify(pending));
     return true;
   } catch {
     return false;
