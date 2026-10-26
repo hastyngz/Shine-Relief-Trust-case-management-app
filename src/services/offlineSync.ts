@@ -218,8 +218,9 @@ export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void>
   // Only update the in-memory view after durable persistence succeeds. Otherwise
   // a failed IndexedDB/localStorage write could make the UI report an empty queue
   // while the old persisted entries remain and replay later.
-  await saveQueueEntries(entries);
-  cachedQueue = entries;
+  const ownedEntries = entries.map((entry) => ({ ...entry, ownerUid: uid }));
+  await saveQueueEntries(ownedEntries);
+  cachedQueue = ownedEntries;
   cachedQueueUid = uid;
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
 }
@@ -518,6 +519,11 @@ export async function flushPendingOfflineSnapshots(
   await migrateLegacySnapshots();
   const entries = await loadQueue();
   if (!entries.length) return { flushed: false, applied: 0, conflicts: [] };
+  // Defence in depth: even a malformed entry found inside a scoped store cannot
+  // be replayed under a different account or without an explicit owner.
+  if (entries.some((entry) => entry.ownerUid !== options.actor!.uid)) {
+    return { flushed: false, applied: 0, conflicts: [] };
+  }
   if (!isBrowserOnline()) return { flushed: false, applied: 0, conflicts: [] };
 
   let result: SyncChangeResult;
