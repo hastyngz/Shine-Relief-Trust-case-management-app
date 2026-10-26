@@ -497,3 +497,8 @@ Review of the account-isolation changes found a data-recovery defect in `src/ser
 The fix makes conflict persistence fail loudly, changes resolution ordering so the selected queue state is persisted first, and only then removes the conflict. If conflict-list persistence fails, the conflict remains available for a retry; for Keep mine, the queued edit is durable, and for Keep theirs, the queue removal is durable. A synthetic regression forces conflict-list storage failure and verifies the caller receives an error and the conflict remains visible. This intentionally prioritizes recoverability over hiding a partial local operation.
 
 No production data/rules/deployment changed. CI must pass on the resulting exact SHA; Android/weak-signal manual testing remains outstanding.
+
+
+## 2026-10-26 queue-read account-switch race
+
+A further review found `loadQueue()` captured the current UID before an asynchronous IndexedDB/localStorage read but did not verify it after the await. An account switch during the read could return the first account's queue to a caller executing in the next session. The queue loader now rejects the stale result before publishing it to memory or returning it. Added a synthetic regression that seeds an isolated queue for UID B, starts a read for UID A, switches back to B before the read resumes, and verifies the stale read is rejected. No production data or authorization rules changed. Exact-head CI remains the release gate; Android/weak-signal testing remains outstanding.

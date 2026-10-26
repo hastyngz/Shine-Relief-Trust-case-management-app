@@ -207,7 +207,13 @@ export async function loadQueue(): Promise<OfflineChangeEntry[]> {
   const uid = getActiveWorkspaceUid();
   if (!uid) return [];
   if (cachedQueue && cachedQueueUid === uid) return cachedQueue;
-  cachedQueue = await loadQueueEntries();
+  const loadedQueue = await loadQueueEntries();
+  // IndexedDB reads yield to the event loop. Auth can change while the read is
+  // pending; never hand the old account's entries to a caller in the new session.
+  if (getActiveWorkspaceUid() !== uid) {
+    throw new Error('Active SHINE workspace changed while loading offline edits.');
+  }
+  cachedQueue = loadedQueue;
   cachedQueueUid = uid;
   return cachedQueue;
 }

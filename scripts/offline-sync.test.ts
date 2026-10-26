@@ -138,6 +138,29 @@ function db(partial: Record<string, any> = {}): any {
   return { girls: [], households: [], educationalFollowUps: [], healthFollowUps: [], familyFollowUps: [], rentPayments: [], expenses: [], householdActivities: [], ...partial };
 }
 
+// A queue read can yield while IndexedDB is loading. If auth changes during
+// that await, the old queue must not be returned to the newly active account.
+setActiveWorkspaceUid('uid-b');
+await persistQueue([{
+  ownerUid: 'uid-b',
+  collection: 'girls',
+  recordId: 'SG-LOAD-RACE',
+  operation: 'set',
+  data: girl('SG-LOAD-RACE', T1),
+  baseUpdatedAt: null,
+  queuedAt: T1,
+}], 'uid-b');
+setActiveWorkspaceUid('uid-a');
+const staleWorkspaceQueueRead = loadQueue();
+setActiveWorkspaceUid('uid-b');
+await assert.rejects(
+  () => staleWorkspaceQueueRead,
+  /workspace changed while loading offline edits/,
+  'a queue read started for one UID must not complete into a different active session',
+);
+await persistQueue([], 'uid-b');
+setActiveWorkspaceUid('uid-a');
+
 // --- 1. Diffing only queues changed records ---------------------------------
 const baseline = db({ girls: [girl('SG-001', T1), girl('SG-002', T1)] });
 const edited = db({ girls: [girl('SG-001', T1, 'Renamed girl'), girl('SG-002', T1)] });

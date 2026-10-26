@@ -817,3 +817,7 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · conflict-resolution storage failure
 - Review found conflict-list writes swallowed localStorage failures, allowing resolution to report success even when the recovery record had not been durably removed; the old order also deleted the conflict before persisting the chosen queue outcome.
 - Changed resolution to persist the queue outcome first and only then remove the conflict; conflict-list write failures now propagate and preserve the original conflict for retry. Added a synthetic storage-failure regression. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue-read account-switch race
+- Review found `loadQueue()` checked the UID before an async IndexedDB read but not after it; a sign-out/account switch during the await could return old-account entries to a caller in the new session. It now rejects stale reads, with a synthetic regression that switches UIDs mid-read. — Mosaic (ChatGPT), 2026-10-26
