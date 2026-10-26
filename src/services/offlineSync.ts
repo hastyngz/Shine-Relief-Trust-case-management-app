@@ -212,16 +212,18 @@ export async function loadQueue(): Promise<OfflineChangeEntry[]> {
   return cachedQueue;
 }
 
-export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void> {
-  const uid = getActiveWorkspaceUid();
-  if (!uid) throw new Error('Cannot persist offline edits without an authenticated SHINE workspace.');
+export async function persistQueue(entries: OfflineChangeEntry[], expectedUid?: string): Promise<void> {
+  const uid = expectedUid ?? getActiveWorkspaceUid();
+  if (!uid || (expectedUid && getActiveWorkspaceUid() !== expectedUid)) throw new Error('Active SHINE workspace changed before offline edits could be persisted.');
   // Only update the in-memory view after durable persistence succeeds. Otherwise
   // a failed IndexedDB/localStorage write could make the UI report an empty queue
   // while the old persisted entries remain and replay later.
   const ownedEntries = entries.map((entry) => ({ ...entry, ownerUid: uid }));
-  await saveQueueEntries(ownedEntries);
-  cachedQueue = ownedEntries;
-  cachedQueueUid = uid;
+  await saveQueueEntries(ownedEntries, uid);
+  if (getActiveWorkspaceUid() === uid) {
+    cachedQueue = ownedEntries;
+    cachedQueueUid = uid;
+  }
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
 }
 
@@ -296,7 +298,10 @@ export function isDatabaseResetRecoveryRequired(): boolean {
 }
 
 export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Promise<void> {
-  await persistQueue([]);
+  const uid = getActiveWorkspaceUid();
+  if (!uid) throw new Error('Cannot finish reset recovery without an authenticated SHINE workspace.');
+  await persistQueue([], uid);
+  if (getActiveWorkspaceUid() !== uid) throw new Error('Account changed during reset recovery; the remaining recovery steps were paused.');
   clearPendingOfflineSnapshots();
   setLastSyncedSnapshotOrThrow(db);
   if (typeof window !== 'undefined') window.localStorage.removeItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE));
@@ -380,7 +385,8 @@ export function isConfirmedServerSnapshot(
  * before the next online flush.
  */
 export async function recordOfflineChanges(currentDb: AppDatabase): Promise<number> {
-  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return 0;
+  const uid = getActiveWorkspaceUid();
+  if (typeof window === 'undefined' || !uid) return 0;
   const baseline = getLastSyncedSnapshot();
   if (!baseline) {
     // No confirmed server copy yet. Keep any persisted queue untouched and
@@ -390,9 +396,10 @@ export async function recordOfflineChanges(currentDb: AppDatabase): Promise<numb
     return getPendingOfflineSnapshotCount();
   }
   const previous = await loadQueue();
+  if (getActiveWorkspaceUid() !== uid) return 0;
   const entries = computeChangeEntries(currentDb, baseline, previous);
   if (!entries.length) return previous.length;
-  await persistQueue(entries);
+  await persistQueue(entries, uid);
   return entries.length;
 }
 
@@ -442,13 +449,15 @@ export function clearPendingOfflineSnapshots(): void {
  * queue has been persisted, so an interrupted migration never drops data.
  */
 export async function migrateLegacySnapshots(): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
+  const uid = getActiveWorkspaceUid();
+  if (typeof window === 'undefined' || !uid) return false;
   const legacy = readPendingOfflineSnapshots();
   if (!legacy.length) return false;
   const newest = legacy[legacy.length - 1];
   const existing = await loadQueue();
+  if (getActiveWorkspaceUid() !== uid) return false;
   const migrated = computeChangeEntries(newest, null, existing);
-  await persistQueue(migrated);
+  await persistQueue(migrated, uid);
   clearLegacySnapshots();
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
   return true;
@@ -520,8 +529,10 @@ export async function flushPendingOfflineSnapshots(
     return { flushed: false, applied: 0, conflicts: [] };
   }
   await migrateLegacySnapshots();
+  if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: 0, conflicts: [] };
   const entries = await loadQueue();
   if (!entries.length) return { flushed: false, applied: 0, conflicts: [] };
+  if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: 0, conflicts: [] };
   // Defence in depth: even a malformed entry found inside a scoped store cannot
   // be replayed under a different account or without an explicit owner.
   if (entries.some((entry) => entry.ownerUid !== options.actor!.uid)) {
@@ -537,13 +548,21 @@ export async function flushPendingOfflineSnapshots(
     return { flushed: false, applied: 0, conflicts: [] };
   }
 
+  // If the account changed while Firestore was processing, leave its original
+  // queue intact. A retry is safer than writing old-account queue state to the new user.
+  if (getActiveWorkspaceUid() !== options.actor.uid) {
+    return { flushed: false, applied: result.applied, conflicts: result.conflicts };
+  }
+
   // Keep conflicted entries queued for manual resolution; drop the rest.
   const conflictedKeys = new Set(result.conflicts.map((conflict) => `${conflict.collection}/${conflict.recordId}`));
   const remaining = entries.filter((entry) => conflictedKeys.has(`${entry.collection}/${entry.recordId}`));
-  await persistQueue(remaining);
+  await persistQueue(remaining, options.actor.uid);
 
   if (result.conflicts.length) {
+    if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: result.applied, conflicts: result.conflicts };
     const existing = await readConflicts();
+    if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: result.applied, conflicts: result.conflicts };
     const newConflicts = result.conflicts.map((conflict) => {
       const entry = entries.find(
         (candidate) => candidate.collection === conflict.collection && candidate.recordId === conflict.recordId,
@@ -580,13 +599,16 @@ export async function resolveSyncConflict(
 ): Promise<boolean> {
   if (!getActiveWorkspaceUid() || getActiveWorkspaceUid() !== actor.uid) return false;
   const conflicts = await readConflicts();
+  if (getActiveWorkspaceUid() !== actor.uid) return false;
   const conflict = conflicts.find((candidate) => candidate.id === conflictId);
   if (!conflict) return false;
 
   const remaining = conflicts.filter((candidate) => candidate.id !== conflictId);
   await persistSyncConflicts(remaining);
 
+  if (getActiveWorkspaceUid() !== actor.uid) return false;
   const queue = await loadQueue();
+  if (getActiveWorkspaceUid() !== actor.uid) return false;
   const withoutConflict = queue.filter(
     (entry) => `${entry.collection}/${entry.recordId}` !== `${conflict.collection}/${conflict.recordId}`,
   );
@@ -601,9 +623,9 @@ export async function resolveSyncConflict(
       baseUpdatedAt: conflict.serverUpdatedAt,
       queuedAt: new Date().toISOString(),
     };
-    await persistQueue([...withoutConflict, keepMine]);
+    await persistQueue([...withoutConflict, keepMine], actor.uid);
   } else {
-    await persistQueue(withoutConflict);
+    await persistQueue(withoutConflict, actor.uid);
   }
 
   void actor;
