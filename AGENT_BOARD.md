@@ -783,3 +783,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · reject unowned queue writes
 - Review found persistQueue was overwriting any supplied owner UID with the current UID, which could re-attribute a stale or foreign entry. Queue writes now require every entry to carry the exact active owner; new diffs and Keep mine entries stamp their known UID, and an unowned prior queue is preserved with a storage warning instead of being adopted.
 - Added synthetic coverage; exact-head CI is pending. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · legacy cache restore gate
+- Destructive-restore inspection now also detects the previous unscoped whole-database localStorage cache, because it may contain edits that were never written to the old queue. It stays preserved and blocks restore until reviewed; a synthetic regression covers this.
+- No old cache is adopted or deleted. Exact-head CI and Android acceptance remain outstanding. — Mosaic (ChatGPT), 2026-10-26

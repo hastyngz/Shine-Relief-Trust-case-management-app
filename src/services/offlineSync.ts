@@ -250,6 +250,19 @@ export function markDatabaseResetRecoveryRequired(): void {
 export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending' | 'unavailable'> {
   if (typeof window === 'undefined') return 'unavailable';
 
+  // The previous app database cache may contain edits that were never queued.
+  // Its owner is unknown, so its presence blocks destructive restore until reviewed.
+  try {
+    const legacyDatabase = window.localStorage.getItem('shine_relief_trust_prod_v1');
+    if (legacyDatabase) {
+      const parsed: unknown = JSON.parse(legacyDatabase);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'unavailable';
+      return 'pending';
+    }
+  } catch {
+    return 'unavailable';
+  }
+
   // Older versions stored queue/conflict/snapshot state without an owner UID.
   // Preserve and quarantine it: never guess an owner, replay it, or call restore safe.
   for (const legacyKey of [

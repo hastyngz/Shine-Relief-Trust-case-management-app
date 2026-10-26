@@ -462,3 +462,8 @@ Attachment follow-up: the same UID check now protects report-image loading, atta
 ## 2026-10-26 strict queue ownership
 
 A further review found that the queue persistence helper was unconditionally stamping the current UID onto all entries. That could convert a stale/mismatched entry into an apparently owned entry. Queue persistence now rejects any missing or mismatched owner instead of re-attributing it. Newly computed diffs and Keep mine conflict entries explicitly carry the active UID; if a pre-existing scoped queue contains an entry without a verified owner, automatic diff persistence pauses and raises a visible storage warning while preserving that queue. The lower-level IndexedDB/localStorage persistence function also validates ownership. Tests use explicit synthetic owner UIDs.
+
+
+## 2026-10-26 legacy database-cache restore gate
+
+The legacy quarantine review now includes the old whole-database localStorage key as well as legacy queues, conflicts, snapshots and IndexedDB. A valid old database cache can contain local edits that were never represented in the former queue, so its presence blocks destructive restore; malformed cache state returns unavailable. The old cache remains untouched and is never rendered or attributed to a new UID. Added a synthetic restore-inspection regression.
