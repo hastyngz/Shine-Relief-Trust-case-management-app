@@ -52,3 +52,6 @@ export async function deleteStoredFile(storagePath: string): Promise<void> {
   const query = new URLSearchParams({ path: storagePath });
   await requestR2(`/api/storage/object?${query}`, { method: 'DELETE' });
 }
+
+
+// Server-backed stock movement requests are implemented in the next integration slice.
