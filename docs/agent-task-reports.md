@@ -638,3 +638,10 @@ Add a secured, atomic server-backed transaction path for inventory receipts, iss
 ## Current completion assessment
 
 This is a substantial implementation slice, **not a verified end-to-end feature yet**. The most important positive change is that existing-item stock movements no longer use the ordinary full-record save path; the remaining work is to verify the security rules and Worker transaction behavior, close the restart/offline workflow gaps, and prove the integrated behavior with CI and staging evidence.
+
+
+## Verification update — 2026-10-26
+
+The malformed date-validation regex was corrected after the first synthetic Worker test failed. The resulting inventory code SHA `a2582d3135cc6ee1b9d5fd15b2df8415f2994ca3` passed [SHINE app checks #840](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40391912914): **checks passed and E2E passed**. The checks job reached and passed both new inventory tests, then completed TypeScript, the existing regression suites, Firestore access audit and build. The first run's Worker-test failure was due to the malformed date regex, not a production incident.
+
+The pass verifies automated behavior on code SHA `a2582d3135cc6ee1b9d5fd15b2df8415f2994ca3`. Documentation-only commits after that SHA do not change the code under test. It does not establish Android, weak-signal, staging or production acceptance. The remaining retry persistence and offline queue gaps listed above are still open, so the broader offline-first inventory workflow is not complete.
