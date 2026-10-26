@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarDays, DollarSign, Save, X } from 'lucide-react';
 import { EmployeeRecord, EmployeeContractFields, ContractStatus, EmployeeCategory, EmploymentStatus, SalaryFrequency, SalaryHistoryRecord, EmploymentPeriod } from '../types';
-import { appendEmployeeAuditLog, getEmployeeSalaryHistory, persistEmployeeSalaryHistoryToFirestore } from '../services/firestoreSync';
+import { appendEmployeeAuditLog, COLLECTIONS, getEmployeeSalaryHistory } from '../services/firestoreSync';
+import { flushPendingOfflineSnapshots, loadQueue, queueOfflineRecordsForSync } from '../services/offlineSync';
 import { calculateGratuity } from '../services/gratuityService';
 
 interface EmployeeContractPanelProps {
@@ -20,6 +21,7 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [contract, setContract] = useState({
     employeeCategory: employee.employeeCategory || 'Other Staff' as EmployeeCategory,
     position: employee.position || employee.positionTitle || employee.department || '',
@@ -35,8 +37,46 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
   const [calculationEndDate, setCalculationEndDate] = useState(employee.contractEndDate || new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
-    getEmployeeSalaryHistory(employee.id).then(setSalaryHistory).catch(() => setError('Salary history could not be loaded.'));
-  }, [employee.id]);
+    let cancelled = false;
+    const loadHistory = async () => {
+      const [serverResult, queueResult] = await Promise.allSettled([
+        getEmployeeSalaryHistory(employee.id),
+        loadQueue(),
+      ]);
+      if (cancelled) return;
+      const serverRecords = serverResult.status === 'fulfilled' ? serverResult.value : [];
+      const queuedRecords = queueResult.status === 'fulfilled'
+        ? queueResult.value
+            .filter((entry) =>
+              entry.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY &&
+              entry.operation === 'set' &&
+              entry.data?.employeeId === employee.id &&
+              entry.ownerUid === actorUid
+            )
+            .map((entry) => entry.data as SalaryHistoryRecord)
+        : [];
+      const byId = new Map(serverRecords.map((record) => [record.id, record]));
+      // Only add queued records that are not already present in Firestore. If a
+      // conflicting server record exists, leave the server version visible and
+      // keep the local version in the conflict workflow rather than masking it.
+      for (const record of queuedRecords) {
+        if (!byId.has(record.id)) byId.set(record.id, record);
+      }
+      setSalaryHistory([...byId.values()].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)));
+      if (serverResult.status === 'rejected') {
+        setError(queuedRecords.length
+          ? 'Could not reach salary history on the server. Pending local salary records are shown and will retry sync.'
+          : 'Salary history could not be loaded from the server.');
+      } else {
+        setError(null);
+      }
+      if (queueResult.status === 'rejected') {
+        setSaveNotice('The offline queue could not be checked. Keep this device and retry when storage is available.');
+      }
+    };
+    void loadHistory();
+    return () => { cancelled = true; };
+  }, [employee.id, actorUid]);
 
   const gratuity = contract.contractStartDate && calculationEndDate
     ? (() => {
@@ -77,6 +117,7 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
 
   const addSalary = async () => {
     if (!canEdit) return;
+    setSaveNotice(null);
     const amount = Number(salary.amount);
     if (!salary.effectiveDate || !Number.isFinite(amount) || amount <= 0) { setError('Enter a positive salary and effective date.'); return; }
     setSaving(true); setError(null);
@@ -97,10 +138,47 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
         auditMetadata: { createdAt: now, createdByUid: actorUid },
         employmentPeriodId: employee.employmentPeriods?.[0]?.id,
       };
-      await persistEmployeeSalaryHistoryToFirestore(record);
-      await appendEmployeeAuditLog({ employeeId: employee.id, action: 'salary_creation', actorUid, actorName, changedAt: now, recordId: record.id });
-      setSalaryHistory((history) => [...history, record].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)));
+      const auditId = `salary-audit-${record.id}`;
+      const auditRecord = {
+        id: auditId,
+        employeeId: employee.id,
+        action: 'salary_creation',
+        actorUid,
+        actorName,
+        changedAt: now,
+        recordId: record.id,
+      };
+      // Persist both the append-only salary record and its audit event in one
+      // durable, account-scoped queue operation before showing local success.
+      await queueOfflineRecordsForSync([
+        { collection: COLLECTIONS.EMPLOYEE_SALARY_HISTORY, record },
+        { collection: COLLECTIONS.EMPLOYEE_AUDIT_LOGS, record: auditRecord },
+      ], actorUid);
+      setSalaryHistory((history) =>
+        history.some((item) => item.id === record.id)
+          ? history
+          : [...history, record].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))
+      );
       setSalary({ amount: '', effectiveDate: '', frequency: 'Monthly', reason: '', notes: '' });
+      setSaveNotice('Salary record saved on this device and queued for sync.');
+      // Attempt the normal conflict-aware queue immediately when online. The
+      // global reconnect handler will retry any remaining entries later.
+      try {
+        const flush = await flushPendingOfflineSnapshots({ actor: { uid: actorUid, name: actorName } });
+        const salaryConflict = flush.conflicts.some((conflict) =>
+          (conflict.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY && conflict.recordId === record.id) ||
+          (conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS && conflict.recordId === auditId)
+        );
+        if (flush.flushed && !salaryConflict) {
+          setSaveNotice('Salary record and audit entry synced successfully.');
+        } else if (salaryConflict) {
+          setSaveNotice('Salary record is saved locally, but a server conflict needs review before it can sync.');
+        }
+      } catch {
+        // Queue persistence already succeeded; keep the saved entry and tell the
+        // user it remains pending instead of reporting the salary as lost.
+        setSaveNotice('Salary record saved on this device; sync is pending and will retry.');
+      }
     } catch (err: any) { setError(err.message || 'Salary record could not be saved.'); }
     finally { setSaving(false); }
   };
@@ -111,7 +189,8 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
         <div><h2 className="text-lg font-black text-stone-900">Employee Contract & Gratuity</h2><p className="text-xs text-stone-500">{employee.fullName} · Employee ID: {employee.id}</p></div>
         <button type="button" onClick={onClose} title="Close"><X className="w-5 h-5 text-stone-500" /></button>
       </div>
-      {error && <div className="mb-3 p-2 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-lg">{error}</div>}
+      {error && <div role="alert" className="mb-3 p-2 bg-rose-50 border border-rose-200 text-xs text-rose-800 rounded-lg">{error}</div>}
+      {saveNotice && <div role="status" className="mb-3 p-2 bg-amber-50 border border-amber-200 text-xs text-amber-900 rounded-lg">{saveNotice}</div>}
       {!contractDetailsAvailable && <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Contract details are not recorded for this historical payroll entry.</p>}
       <div className="grid md:grid-cols-2 gap-5">
         {contractDetailsAvailable && <section className="space-y-3">
