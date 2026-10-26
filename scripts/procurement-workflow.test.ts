@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { checkProcurementApproval, selectProcurementQuote } from '../src/services/procurementWorkflow';
+import { checkProcurementApproval, normalizeImportedProcurementItems, selectProcurementQuote } from '../src/services/procurementWorkflow';
 import type { ProcurementList, ProcurementListItem, ProcurementQuote } from '../src/types';
 const baseItem: ProcurementListItem = { description: 'Synthetic stationery pack', quantity: 10, unit: 'pack', unitPriceMWK: 12000, totalMWK: 120000, priceStatus: 'quoted' };
 const baseList: ProcurementList = { id: 'PRC-TEST-001', title: 'Synthetic stationery purchase', purpose: 'Automated test fixture only', items: [baseItem], totalMWK: 120000, status: 'draft', quoteThresholdMWK: 500000, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'synthetic-test', updatedBy: 'synthetic-test' };
@@ -26,6 +26,31 @@ const threeUnpricedQuotes: ProcurementQuote[] = [
 const selectedFromMissingPrice = selectProcurementQuote({ ...previouslyUnpriced, quotes: threeUnpricedQuotes }, singleQuote);
 assert.equal(checkProcurementApproval({ ...baseList, items: [selectedFromMissingPrice] }).allowed, true,
   'an originally unpriced item can pass after three distinct quotes and preferred quote selection');
+
+const duplicateSupplierQuotes = [
+  { supplier: 'Same Supplier', amountMWK: 1000000 },
+  { supplier: ' same supplier ', amountMWK: 950000 },
+  { supplier: 'SAME SUPPLIER', amountMWK: 900000 },
+];
+const duplicateQuoteCheck = checkProcurementApproval({ ...baseList, items: [{ ...selected, quotes: duplicateSupplierQuotes }] });
+assert.equal(duplicateQuoteCheck.allowed, false, 'repeated supplier names must not satisfy the three-quote requirement');
+assert.ok(duplicateQuoteCheck.blockers.some((message) => message.includes('three supplier quotes')));
+
+const imported = normalizeImportedProcurementItems([
+  { description: 'Synthetic A4 paper', quantity: '2', unit: 'ream', unitPriceMWK: '1200', priceStatus: 'quoted' },
+  { description: 'Synthetic toner', quantity: 1, unit: 'cartridge' },
+]);
+assert.equal(imported.totalMWK, 2400);
+assert.equal(imported.items[0].totalMWK, 2400);
+assert.equal(imported.items[1].priceStatus, 'missing');
+assert.throws(() => normalizeImportedProcurementItems([]), /at least one item/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Invalid quantity', quantity: 0, unit: 'box' }]), /quantity greater than zero/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Boolean quantity', quantity: true, unit: 'box' }]), /quantity greater than zero/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Boolean amount', quantity: 1, unit: 'box', unitPriceMWK: true, priceStatus: 'quoted' }]), /numeric MWK amount/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Inconsistent total', quantity: 2, unit: 'box', unitPriceMWK: 10, totalMWK: 50, priceStatus: 'quoted' }]), /does not match/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Duplicate quotes', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'A', amountMWK: 10 }, { supplier: ' a ', amountMWK: 11 },
+] }]), /duplicate supplier quotes/);
 
 assert.throws(() => selectProcurementQuote(baseItem, { supplier: 'Supplier', amountMWK: 0 }), /positive MWK amount/);
 assert.throws(() => selectProcurementQuote({ ...baseItem, quantity: 0 }, quotes[0]), /valid item quantity/);

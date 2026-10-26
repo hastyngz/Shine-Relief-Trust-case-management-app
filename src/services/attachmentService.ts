@@ -20,6 +20,7 @@ import { compressImage } from '../utils/imageOptimizer';
 import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
 import { deleteStoredFile, getStoredFile, getStoredFileDownloadUrl, uploadStoredFile } from './r2StorageClient';
 import { getActiveWorkspaceUid } from './accountWorkspace';
+import { getAttachmentFileValidationError } from './storageUploadValidation';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
 
@@ -192,6 +193,8 @@ export async function uploadPhotoAttachment(
   params: UploadAttachmentParams
 ): Promise<PhotoAttachment> {
   const { file, targetType, targetId, caption, category, date, consent, user } = params;
+  const fileValidationError = getAttachmentFileValidationError(file);
+  if (fileValidationError) throw new Error(fileValidationError);
   if (file.type.startsWith('image/') && consent !== true && !params.allowUnconfirmedConsent) {
     throw new Error('Photo consent must be confirmed before uploading an image.');
   }
@@ -202,6 +205,8 @@ export async function uploadPhotoAttachment(
     maxHeight: 1600,
     quality: 0.82,
   });
+  const optimizedValidationError = getAttachmentFileValidationError(optimizedFile);
+  if (optimizedValidationError) throw new Error(optimizedValidationError);
 
   // 2. Generate unique attachment ID
   const attachmentId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;

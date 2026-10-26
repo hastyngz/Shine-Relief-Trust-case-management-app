@@ -305,7 +305,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
           <input
             ref={cameraInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             capture="environment"
             className="hidden"
             onChange={(e) => {
@@ -316,7 +316,7 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,application/pdf"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
             multiple
             className="hidden"
             onChange={(e) => {

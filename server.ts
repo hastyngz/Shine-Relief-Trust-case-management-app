@@ -7,6 +7,7 @@ import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from '
 import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, resolveAuthenticatedUid, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
 import { createRateLimiter, getRateLimitConfig } from './src/server/rateLimit';
+import { getStorageUploadValidationError } from './src/services/storageUploadValidation';
 
 function canAccessSafeguardingRecord(staff: any, record: any): boolean {
   return staff.role === 'Administrator' || staff.safeguardingPermissions.canView ||
@@ -126,6 +127,8 @@ async function startServer() {
           throw new StorageAccessError('You are not authorized to upload health attachments.', 403);
         }
       }
+      const validationError = getStorageUploadValidationError(storagePath, contentType, req.body);
+      if (validationError) throw new StorageAccessError(validationError, 415);
       await putR2Object(storagePath, req.body, contentType);
       res.status(204).end();
     } catch (err: any) {

@@ -43,6 +43,7 @@ import { analyzeSpreadsheetWorkbook, SpreadsheetAnalysis } from './spreadsheetIm
 import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spreadsheetImport/importers';
 import { uploadPhotoAttachment } from './attachmentService';
 import { PROGRAMMES } from '../data/programmes';
+import { normalizeImportedProcurementItems } from './procurementWorkflow';
 
 /**
  * Import confirmation currently has a few separate cloud writes (notably salary history
@@ -608,6 +609,25 @@ export async function commitImportBatch(
   canReadImportSourceData = false,
   canWriteImportAuditMetadata = false,
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
+  const normalizedProcurementItems = new Map<ImportPreviewItem, ReturnType<typeof normalizeImportedProcurementItems>>();
+  for (const item of approvedItems) {
+    if (item.selected && item.targetEntity === 'procurementList') {
+      const data = item.extractedData;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('The imported procurement list is malformed. Reopen Import and try again.');
+      for (const [field, maximum] of [['title', 200], ['purpose', 1000]] as const) {
+        const value = data[field];
+        if (value !== undefined && value !== null && (typeof value !== 'string' || value.length > maximum)) {
+          throw new Error(`The imported procurement ${field} must be text of at most ${maximum} characters.`);
+        }
+      }
+      const programmeId = data.programmeId;
+      if (programmeId !== undefined && programmeId !== null && programmeId !== '' &&
+          (typeof programmeId !== 'string' || !PROGRAMMES.some((programme) => programme.id === programmeId))) {
+        throw new Error('The imported procurement list references an unknown programme. Choose a valid programme and retry.');
+      }
+      normalizedProcurementItems.set(item, normalizeImportedProcurementItems(item.extractedData.items));
+    }
+  }
   const authenticatedUid = auth.currentUser?.uid;
   const importingEmployee = approvedItems.some((item) => item.selected && item.targetEntity === 'employee');
   if (importingEmployee && !authenticatedUid) {
@@ -993,17 +1013,17 @@ export async function commitImportBatch(
     else if (item.targetEntity === 'procurementList') {
       const data = item.extractedData;
       const now = new Date().toISOString();
-      const sourceItems = Array.isArray(data.items) ? data.items : [];
+      const normalized = normalizedProcurementItems.get(item);
+      if (!normalized) throw new Error('The imported procurement list was not validated. Reopen Import and try again.');
       const procurement: ProcurementList = {
         id: generateFollowUpId('PRC'),
-        title: data.title || item.title || 'Imported procurement list',
-        purpose: data.purpose || 'Imported item list',
-        programmeId: data.programmeId,
-        items: sourceItems.map((source: ProcurementList['items'][number]) => ({ ...source })),
-        totalMWK: sourceItems.reduce(
-          (sum: number, source: ProcurementList['items'][number]) => sum + (source.totalMWK || 0),
-          0,
-        ),
+        title: (typeof data.title === 'string' && data.title.trim()) || (typeof item.title === 'string' && item.title.trim()) || 'Imported procurement list',
+        purpose: (typeof data.purpose === 'string' && data.purpose.trim()) || 'Imported item list',
+        programmeId: typeof data.programmeId === 'string' && data.programmeId.trim()
+          ? data.programmeId.trim() as ProcurementList['programmeId']
+          : undefined,
+        items: normalized.items,
+        totalMWK: normalized.totalMWK,
         status: 'draft',
         createdAt: now,
         updatedAt: now,
