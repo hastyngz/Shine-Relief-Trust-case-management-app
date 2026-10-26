@@ -529,3 +529,10 @@ Review found `getDatabase()` returned the seed-shaped fallback after JSON parsin
 **GitHub Actions run:** 40320219667 — completed successfully. Both the checks job and offline e2e job passed. The checks job includes TypeScript, Firestore rules/listener-permission emulator tests, offline sync and queue tests, local storage failure handling, Firestore access audit, and the production build.
 
 This pass covers the account-isolation changes committed up to the code SHA above, including queue ownership, stale queue-read protection, conflict persistence failure handling, auth profile race guards, and corrupt-cache recovery gating. It does not establish real-device behaviour or live-service readiness. No deployment, production data migration, production rules change, or Android/weak-signal test was performed. To make this testable on the user's Android phone, an approved staging deployment/preview URL is still needed; do not deploy to production as a workaround.
+
+
+## 2026-10-26 background sync when conflict metadata cannot be read
+
+After conflict-list reads were changed to fail closed, the background flush path needed a controlled recovery branch: a read failure after Firestore detects a conflict must not become an unhandled rejected promise from startup/connectivity handlers. At that point the queue already retains the conflicted entries, so the flush returns an incomplete result and leaves them queued for retry when local storage is readable. A synthetic regression forces the conflict-list read to fail during a repeated conflict and asserts the flush does not report success or drop the queued edit.
+
+No live services, production data, security rules or deployment changed. Verification remains tied to the exact current branch SHA and CI.

@@ -419,6 +419,17 @@ await recordOfflineChanges(db({ girls: [girl('SG-200', T2, 'Mine')] }));
 server.seed('girls', 'SG-200', girl('SG-200', T3, 'Theirs'));
 const conflictFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(conflictFlush.conflicts.length, 1);
+// If conflict metadata becomes unreadable during a retry, the flush must return
+// an incomplete result and preserve the conflicted queue entry for recovery.
+const originalConflictStorageGetItem = fakeWindow.localStorage.getItem;
+fakeWindow.localStorage.getItem = (key: string) => {
+  if (key.includes('shine_relief_trust_sync_conflicts_v2')) throw new Error('synthetic conflict list read failure during flush');
+  return originalConflictStorageGetItem(key);
+};
+const conflictMetadataUnavailable = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(conflictMetadataUnavailable.flushed, false, 'flush reports incomplete when conflict metadata cannot be verified');
+assert.equal(getPendingOfflineSnapshotCount(), 1, 'conflicted edits remain queued if conflict metadata cannot be read');
+fakeWindow.localStorage.getItem = originalConflictStorageGetItem;
 const conflicts = await readSyncConflicts();
 assert.equal(conflicts.length, 1);
 assert.equal(conflicts[0].recordId, 'SG-200');

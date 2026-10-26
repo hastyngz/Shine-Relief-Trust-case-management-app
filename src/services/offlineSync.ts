@@ -610,7 +610,15 @@ export async function flushPendingOfflineSnapshots(
 
   if (result.conflicts.length) {
     if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: result.applied, conflicts: result.conflicts };
-    const existing = await readConflicts();
+    let existing: SyncConflict[];
+    try {
+      existing = await readConflicts();
+    } catch {
+      // The conflicting queue entries are already durable. Avoid an unhandled
+      // rejection from startup/connectivity flushes and leave entries queued so
+      // the conflict list can be rebuilt when local storage is readable again.
+      return { flushed: false, applied: result.applied, conflicts: result.conflicts };
+    }
     if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: result.applied, conflicts: result.conflicts };
     const newConflicts = result.conflicts.map((conflict) => {
       const entry = entries.find(

@@ -839,3 +839,7 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · exact-SHA verification checkpoint
 - CI run 40320219667 passed on code SHA eccc7bc89d13a9f7abea4cd467aa8b867c20fb8d: both checks and offline browser e2e jobs succeeded, including TypeScript, rules emulator, offline/storage regressions and production build.
 - This verifies automated checks only. No staging/production deployment, live Firebase smoke test or physical Android/weak-signal test was performed. Next: arrange an approved staging URL and test shared-phone account switching with synthetic accounts. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · background flush conflict-metadata failure
+- A conflict-list read can fail after the queue is safely retained. The startup/connectivity flush now returns an incomplete result rather than rejecting unhandled; a synthetic regression checks the conflicted edit remains queued for retry. — Mosaic (ChatGPT), 2026-10-26
