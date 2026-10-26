@@ -798,3 +798,7 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · confirmed-baseline gate
 - Removed the fallback that treated the current local database as a confirmed sync baseline. The app now waits for a durable confirmed server snapshot before enabling edits when no baseline exists; offline diffing pauses and warns rather than queueing a full database.
 - A confirmed snapshot is not accepted as ready if saving its baseline fails. Synthetic tests cover missing-baseline behavior and legacy snapshot preservation. Exact-head CI required. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · CI fixture-order correction
+- E2E passed on the prior run, but the checks job found the new foreign-owner queue assertion ran before its synthetic fixture was initialized. Moved the assertion immediately after fixture creation; no application logic changed in this correction.

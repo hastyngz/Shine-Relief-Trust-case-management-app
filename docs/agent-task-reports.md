@@ -477,3 +477,6 @@ Updated the scoped legacy snapshot migration to meet the strict queue ownership 
 ## 2026-10-26 confirmed-baseline gate
 
 A final sync-safety review found that recordOfflineChanges still promoted the current local database to a baseline when no confirmed server baseline existed. That could mark unconfirmed local state as synced and make future diffs unsafe. The fallback is removed: offline diffing now warns and preserves the queue until a confirmed baseline exists. The UI stays in a non-editing secure-workspace state while no baseline is available, with a clear instruction to connect once; offline use resumes after a durable baseline exists. saveIncomingCloudSnapshot now treats a baseline persistence failure as failure and emits the storage warning instead of marking the workspace ready. Tests assert that a local snapshot without a baseline is not queued or adopted as confirmed.
+
+
+CI follow-up: the run on SHA 93598024dc61907f8797e5299952844cd3374fc8 passed E2E but failed the offline queue test because the new owner-mismatch assertion referenced the procurement fixture before initialization. The assertion has been moved after the fixture is created; this is a test-order correction, not an application behavior change. The next exact-head CI result is still required.
