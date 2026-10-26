@@ -595,3 +595,46 @@ GitHub Actions run **#786** checked code SHA `6a82e651fd379c42f90836877f048b9635
 1. No physical Android or weak-signal acceptance test was performed. Before using real HR data, test a synthetic salary save while offline, close/reopen the panel, reconnect, and confirm exactly one salary record and one audit event reach Firestore.
 2. Exercise a permission-denied save and same-ID conflict on a test account. The queue preserves the pending record; an append-only duplicate cannot be overwritten and must be resolved by keeping the server record or entering a new salary record with a fresh ID.
 3. The implementation is verified on code SHA `6a82e65`. Subsequent documentation-only commits do not change the code tested by run #786.
+
+
+# Inventory transaction safety — implementation report (in progress)
+
+**Report date:** 2026-10-26  
+**Branch:** `Replit`  
+**Latest handoff/documentation commit:** `d58be2fec0f83b75f6c071e805bcfef083eac8a4`  
+**Status:** IMPLEMENTATION STARTED; EXACT-HEAD CI NOT YET VERIFIED
+
+## Scope
+
+Add a secured, atomic server-backed transaction path for inventory receipts, issues and physical stocktakes, distinct from Manus's read-only inventory snapshot audit. No production deployment or production data write was performed.
+
+## Changes made
+
+- `workers/r2-storage/index.mjs`: added authenticated POST handler for inventory movements. The handler checks the authenticated active staff role, validates the request, reads the current item, computes the new balance on the server, rejects an issue larger than the available balance, uses the Firestore document `updateTime` as a write precondition, and commits the inventory balance/history update and a create-only `inventoryMovements/{id}` record in one Firestore commit. It retries recognized precondition conflicts up to four attempts and checks existing movement IDs for idempotent retries with the same actor/item/request fingerprint.
+- `src/services/r2StorageClient.ts`: added the client request helper for the Worker route.
+- `src/components/InventoryView.tsx`: Receive, Issue and Stocktake actions now call the server endpoint instead of saving a locally computed stock balance. Offline submissions show an explicit error and do not claim that stock was saved. Confirmed results update the local cache without dispatching a new generic snapshot write.
+- `src/types.ts`: added optional previous/new balance values to movement entries and `lastMovementId` to inventory items.
+- `firestore.rules`: inventory balance/history changes now require a linked movement record in the same atomic write; movement documents cannot be updated or deleted. Newly created inventory items must start at zero stock, so opening stock must be entered using Receive after the item syncs.
+- Added `scripts/inventory-movement-worker.test.mjs` for synthetic endpoint checks and `scripts/inventory-transaction-rules.test.ts` for Firestore rules checks. Registered them in `package.json` and `.github/workflows/shine-checks.yml`.
+
+## Verification evidence and limits
+
+- The tests have been added to CI, but I have **not obtained a trustworthy result for the exact current branch head**. Do not interpret this report as proof that the new tests or rules pass.
+- The environment used here could read and update repository files through GitHub integration, but I did not run the repository test suite in a local checkout.
+- No physical Android/weak-signal test has been performed for this feature.
+- Existing item creation now requires a zero opening balance. Users must wait for sync and then record opening stock with Receive. This is an intentional safety restriction until a fully atomic item-plus-opening-movement creation workflow is implemented.
+- Offline movements are rejected clearly rather than queued. That avoids false success and unsafe snapshot sync, but it does not yet meet a seamless offline-first movement workflow.
+- The retry key is currently retained in component state, so it protects retries while the view remains mounted but is not yet durably restored after a full app restart. A request whose response was lost must not be blindly resubmitted after a restart; first inspect server movement history.
+- Verify Firestore REST error mapping for update-time precondition failures on the actual emulator/CI run. The Worker retries recognized conflict responses; unrecognized error shapes may surface as a failure instead of retrying.
+
+## Required next steps before calling this complete
+
+1. Obtain exact-head CI evidence for `npm run test:inventory-movement-worker`, `npm run test:inventory-rules`, `npm run lint`, `npm run build`, and the full browser E2E job. Fix any failures and re-check the final SHA.
+2. Add durable per-user pending-request persistence and safe restoration of the same idempotency key after app restart.
+3. Verify the full queue interaction: stale local snapshots must conflict rather than overwrite a server-confirmed movement; metadata-only edits must still sync.
+4. Review the rules and Worker independently for atomicity, role denial, immutable audit entries, stale-write retry and legacy records without a movement array.
+5. Run the synthetic Android/weak-signal checklist in an approved isolated staging project. Do not deploy or use real inventory records until checks pass.
+
+## Current completion assessment
+
+This is a substantial implementation slice, **not a verified end-to-end feature yet**. The most important positive change is that existing-item stock movements no longer use the ordinary full-record save path; the remaining work is to verify the security rules and Worker transaction behavior, close the restart/offline workflow gaps, and prove the integrated behavior with CI and staging evidence.
