@@ -90,7 +90,11 @@ async function firestoreCommit(writes, idToken) {
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     const code = Number(payload.error?.code || response.status);
-    throw new ApiError(code === 403 ? 'Firestore rules rejected this inventory movement.' : 'The inventory transaction could not be committed.', code === 409 || code === 412 ? 409 : code === 403 ? 403 : code === 401 ? 401 : code >= 500 ? 503 : 400);
+    const state = String(payload.error?.status || '');
+    const message = String(payload.error?.message || '');
+    const lowerMessage = message.toLowerCase();
+    const conflict = code === 409 || code === 412 || state === 'FAILED_PRECONDITION' || state === 'ALREADY_EXISTS' || lowerMessage.includes('precondition') || lowerMessage.includes('already exists');
+    throw new ApiError(code === 403 ? 'Firestore rules rejected this inventory movement.' : 'The inventory transaction could not be committed.', conflict ? 409 : code === 403 ? 403 : code === 401 ? 401 : code >= 500 ? 503 : 400);
   }
   return response.json();
 }
