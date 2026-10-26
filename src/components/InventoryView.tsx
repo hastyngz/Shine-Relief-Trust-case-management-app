@@ -218,8 +218,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
       }
     } catch (err) {
+      const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined;
+      if (status !== undefined && status >= 400 && status < 500) {
+        setPendingMovementId(null);
+        setPendingMovementSignature(null);
+      }
       setError(err instanceof Error
-        ? `The stock movement was not confirmed: ${err.message} Keep the form unchanged and retry to safely check the same movement.`
+        ? `The stock movement was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
         : 'The stock movement was not confirmed. Keep the form unchanged and retry to safely check the same movement.');
     } finally {
       setSaving(false);
@@ -276,8 +281,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
       }
     } catch (err) {
+      const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined;
+      if (status !== undefined && status >= 400 && status < 500) {
+        setPendingMovementId(null);
+        setPendingMovementSignature(null);
+      }
       setError(err instanceof Error
-        ? `The stocktake was not confirmed: ${err.message} Keep the form unchanged and retry to safely check the same movement.`
+        ? `The stocktake was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
         : 'The stocktake was not confirmed. Keep the form unchanged and retry to safely check the same movement.');
     } finally {
       setSaving(false);
