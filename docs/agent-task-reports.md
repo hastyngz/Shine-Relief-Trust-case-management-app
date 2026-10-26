@@ -507,3 +507,12 @@ A further review found `loadQueue()` captured the current UID before an asynchro
 ## 2026-10-26 authentication profile race hardening
 
 During the shared-device account-isolation review, `AuthContext.loadStaffProfile` was found to allow overlapping asynchronous profile requests to complete out of order. A slow read for UID A could finish after UID B signed in and overwrite B's in-memory staff profile/role. The loader now checks that Firebase's current authenticated UID still matches the requested user after asynchronous reads and writes and before publishing the profile; account-specific profile linking/bootstrap writes are guarded too. This is client-side stale-request protection only and does not change Firestore authorization. Exact-head CI is required; no production data/rules/deployment or Android device test was performed.
+
+
+## 2026-10-26 conflict visibility and account-switch display guard
+
+A review found that a localStorage read failure was caught and converted to an empty array. That could make the UI state “No sync conflicts” while saved recovery records were unreadable. Conflict reads now throw on unavailable storage, missing workspace, malformed data, or read failure. The panel reports that conflict state could not be verified and does not clear its in-memory conflict list.
+
+The panel also checks the authenticated UID before and after its asynchronous refresh and only renders conflict details whose owner UID matches the current user. Unowned or mismatched entries are represented by a generic recovery notice without record IDs or data, avoiding accidental disclosure during a shared-device account switch. A synthetic regression asserts storage read failures reject rather than returning an empty conflict list.
+
+No production records, Firestore/Storage rules, deployment, or live services were changed. The exact resulting SHA CI is the verification gate; physical Android/weak-signal testing remains outstanding.

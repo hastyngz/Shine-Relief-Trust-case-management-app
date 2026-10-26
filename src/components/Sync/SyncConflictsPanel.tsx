@@ -11,6 +11,7 @@ import {
 import { appendSyncConflictAudit } from '../../services/firestoreSync';
 import { estimateStorage } from '../../services/offlineSyncDb';
 import { useAuth } from '../../contexts/AuthContext';
+import { getActiveWorkspaceUid } from '../../services/accountWorkspace';
 
 interface SyncConflictsPanelProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
   const [storage, setStorage] = useState<{ usage: number; quota: number } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [conflictLoadFailed, setConflictLoadFailed] = useState(false);
 
   const actor = {
     uid: currentUser?.uid || 'unknown',
@@ -47,15 +49,30 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
   };
 
   const refresh = useCallback(async () => {
-    const [nextConflicts, nextCount, estimate] = await Promise.all([
-      readSyncConflicts(),
-      refreshPendingOfflineSnapshotCount(),
-      estimateStorage(),
-    ]);
-    setConflicts(nextConflicts);
-    setQueuedCount(nextCount);
-    setStorage(estimate);
-  }, []);
+    const uid = currentUser?.uid;
+    if (!uid || getActiveWorkspaceUid() !== uid) {
+      setConflicts([]);
+      setQueuedCount(0);
+      setConflictLoadFailed(true);
+      setMessage('Sync conflict status is unavailable until your signed-in workspace is ready.');
+      return;
+    }
+    try {
+      const [nextConflicts, nextCount, estimate] = await Promise.all([
+        readSyncConflicts(),
+        refreshPendingOfflineSnapshotCount(),
+        estimateStorage(),
+      ]);
+      if (currentUser?.uid !== uid || getActiveWorkspaceUid() !== uid) return;
+      setConflicts(nextConflicts);
+      setQueuedCount(nextCount);
+      setStorage(estimate);
+      setConflictLoadFailed(false);
+    } catch {
+      setConflictLoadFailed(true);
+      setMessage('Could not read saved sync conflicts. They have not been cleared. Check device storage and retry.');
+    }
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -114,6 +131,8 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
   };
 
   if (!isOpen) return null;
+  const visibleConflicts = currentUser ? conflicts.filter((conflict) => conflict.ownerUid === currentUser.uid) : [];
+  const hasUnverifiedConflicts = conflicts.some((conflict) => conflict.ownerUid !== currentUser?.uid);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-stone-950/50 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Sync conflicts">
@@ -142,13 +161,21 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
             <p className="rounded-lg bg-teal-50 px-3 py-2 text-[11px] font-semibold text-teal-900">{message}</p>
           )}
 
-          {conflicts.length === 0 ? (
+          {conflictLoadFailed ? (
+            <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-4 text-xs text-amber-950">
+              The saved conflict list could not be verified. No conflicts have been cleared; retry after checking device storage.
+            </p>
+          ) : hasUnverifiedConflicts ? (
+            <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-4 text-xs text-amber-950">
+              Some saved conflict records have no verified owner. Their details are hidden and the records are preserved for recovery.
+            </p>
+          ) : visibleConflicts.length === 0 ? (
             <p className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-6 text-center text-xs text-stone-600">
               No sync conflicts. Edits from this phone have been applied without overwriting newer work.
             </p>
           ) : (
             <ul className="space-y-3">
-              {conflicts.map((conflict) => {
+              {visibleConflicts.map((conflict) => {
                 const localUpdatedAt = conflict.localData?.updatedAt ?? conflict.baseUpdatedAt;
                 const isDelete = conflict.localOperation === 'delete';
                 return (

@@ -825,3 +825,8 @@ Suggestion format:
 
 ### 2026-10-26 · Mosaic (ChatGPT) · auth profile completion race
 - Security review found overlapping async staff-profile loads could finish out of order after a quick account switch, leaving the previous account's role/profile in AuthContext. Profile loading now checks Firebase's current UID after awaited reads/writes and before publishing profile state. Exact-head CI required; no production changes. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · conflict list read failures and owner-safe display
+- A storage read error was being converted into an empty list, so the UI could falsely say there were no conflicts. Changed reads to fail visibly, added a synthetic regression, and guarded the panel against stale async reads after account switching.
+- The panel now renders conflict details only when owner UID matches the active user; unowned/mismatched entries get a generic recovery notice without record identifiers. — Mosaic (ChatGPT), 2026-10-26

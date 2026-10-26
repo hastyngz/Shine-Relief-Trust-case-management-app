@@ -601,6 +601,16 @@ assert.equal(await inspectPendingOfflineChanges(), 'pending',
   'the recovery lock does not make queued edits safe to discard silently');
 await clearOfflineChangesAfterDatabaseReset(resetDb);
 
+// Conflict storage read errors must not masquerade as an empty conflict list.
+const originalGetItem = fakeWindow.localStorage.getItem;
+fakeWindow.localStorage.getItem = (key: string) => {
+  if (key === 'shine_relief_trust_sync_conflicts_v2::uid:uid-a') throw new Error('synthetic conflict read failure');
+  return originalGetItem(key);
+};
+await assert.rejects(() => readSyncConflicts(), /synthetic conflict read failure/,
+  'a failed conflict read must be visible to the caller rather than reported as no conflicts');
+fakeWindow.localStorage.getItem = originalGetItem;
+
 // A failed durable queue write must not publish the new queue in memory.
 await persistQueue(procurementCreate);
 const originalSetItem = fakeWindow.localStorage.setItem;

@@ -252,17 +252,19 @@ export async function saveQueueEntries(entries: OfflineChangeEntry[], expectedUi
 }
 
 export async function readConflicts(): Promise<SyncConflict[]> {
-  if (!hasLocalStorage()) return [];
+  if (!hasLocalStorage()) throw new Error('Cannot read saved sync conflicts because local storage is unavailable.');
+  const key = conflictsStorageKey();
+  if (!key) throw new Error('Cannot read saved sync conflicts without an authenticated SHINE workspace.');
   try {
-    const key = conflictsStorageKey();
-    if (!key) return [];
     const raw = window.localStorage.getItem(key);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SyncConflict[]) : [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('Saved sync conflict data is not a valid list.');
+    return parsed as SyncConflict[];
   } catch (error) {
-    console.warn('Could not read sync conflicts:', error);
-    return [];
+    console.warn('Could not read saved sync conflicts; preserving the stored recovery state.');
+    notifyStorageFailure(error);
+    throw error;
   }
 }
 
