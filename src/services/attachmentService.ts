@@ -19,6 +19,7 @@ import {
 import { compressImage } from '../utils/imageOptimizer';
 import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
 import { deleteStoredFile, getStoredFile, getStoredFileDownloadUrl, uploadStoredFile } from './r2StorageClient';
+import { getActiveWorkspaceUid } from './accountWorkspace';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
 
@@ -56,20 +57,22 @@ export async function getArchivedReport(storagePath: string): Promise<Blob> {
   return getStoredFile(storagePath);
 }
 
-// Share only concurrent report-metadata requests. This is deliberately not
-// a persistent cache: attachment permissions and records must be rechecked on
-// later opens, and health-authorized and non-authorized results stay separate.
-const reportAttachmentRequests = new Map<boolean, Promise<PhotoAttachment[]>>();
+// Share only concurrent requests within the same authenticated workspace and
+// permission scope. Never hand account A's in-flight result to account B.
+const reportAttachmentRequests = new Map<string, Promise<PhotoAttachment[]>>();
 
 export function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
-  const existing = reportAttachmentRequests.get(canViewHealthRecords);
+  const uid = getActiveWorkspaceUid();
+  if (!uid) return Promise.reject(new Error('An authenticated SHINE workspace is required to load attachments.'));
+  const cacheKey = uid + ':' + (canViewHealthRecords ? 'health' : 'general');
+  const existing = reportAttachmentRequests.get(cacheKey);
   if (existing) return existing;
 
-  const request = fetchReportAttachmentMetadata(canViewHealthRecords);
-  reportAttachmentRequests.set(canViewHealthRecords, request);
+  const request = fetchReportAttachmentMetadata(canViewHealthRecords, true, uid);
+  reportAttachmentRequests.set(cacheKey, request);
   void request.finally(() => {
-    if (reportAttachmentRequests.get(canViewHealthRecords) === request) {
-      reportAttachmentRequests.delete(canViewHealthRecords);
+    if (reportAttachmentRequests.get(cacheKey) === request) {
+      reportAttachmentRequests.delete(cacheKey);
     }
   }).catch(() => {
     // The caller handles the original failure; don't create an unhandled cleanup rejection.
@@ -77,7 +80,14 @@ export function getReportAttachmentMetadata(canViewHealthRecords: boolean): Prom
   return request;
 }
 
-async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean, includeDownloadUrls = true): Promise<PhotoAttachment[]> {
+async function fetchReportAttachmentMetadata(
+  canViewHealthRecords: boolean,
+  includeDownloadUrls = true,
+  expectedUid: string | null = getActiveWorkspaceUid()
+): Promise<PhotoAttachment[]> {
+  if (!expectedUid || getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('The active SHINE workspace changed before attachments could be loaded.');
+  }
   const targetTypes: AttachmentTargetType[] = [
     'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
     'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
@@ -98,6 +108,9 @@ async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean, incl
         where('category', 'not-in', ['Medical Document', 'Prescription']),
       ))));
 
+  if (getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('The active SHINE workspace changed while attachments were loading.');
+  }
   const attachments = snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
     .filter((attachment) => canViewHealthRecords || (
       attachment.targetType !== 'healthFollowUp' &&
@@ -107,7 +120,12 @@ async function fetchReportAttachmentMetadata(canViewHealthRecords: boolean, incl
     .sort((a, b) => b.date.localeCompare(a.date));
   // Filing search only needs metadata. Create a short-lived signed URL only
   // after the user chooses a file, rather than signing every result up front.
-  return includeDownloadUrls ? Promise.all(attachments.map(withDownloadUrl)) : attachments;
+  if (!includeDownloadUrls) return attachments;
+  const withUrls = await Promise.all(attachments.map(withDownloadUrl));
+  if (getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('The active SHINE workspace changed while attachment URLs were being prepared.');
+  }
+  return withUrls;
 }
 
 export function getFilingAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {

@@ -768,3 +768,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · auth observer ordering review
 - Found a login-order race: the login form can publish currentUser just before Firebase's auth observer updates the workspace UID. The App could label a seed cache with the user's UID and miss the later cache reload. It now listens to the explicit workspace-change event and labels the DB with the actual active UID only.
 - This is defensive startup hardening; exact-head CI and Android acceptance remain pending. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · attachment request cache review
+- Found an in-memory metadata request cache shared by health permission only, not UID; a new account could receive the previous account's in-flight attachment results. Cache keys and async report metadata results now verify the active UID.
+- This is part of the same account-isolation work; CI/device verification still required. No real attachments or production data touched. — Mosaic (ChatGPT), 2026-10-26
