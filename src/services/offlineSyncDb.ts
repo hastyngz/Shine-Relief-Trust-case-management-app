@@ -1,5 +1,5 @@
 import type { OfflineChangeEntry, SyncConflict } from '../types';
-import { getActiveWorkspaceUid, getWorkspaceIndexedDbName, getWorkspaceStorageKey } from './accountWorkspace';
+import { getActiveWorkspaceUid, getWorkspaceIndexedDbNameForUid, getWorkspaceStorageKeyForUid } from './accountWorkspace';
 
 /**
  * Persistence for the offline change queue and the sync conflict list.
@@ -12,9 +12,9 @@ import { getActiveWorkspaceUid, getWorkspaceIndexedDbName, getWorkspaceStorageKe
 const QUEUE_KEY_BASE = 'shine_relief_trust_offline_queue_v3';
 const CONFLICTS_KEY_BASE = 'shine_relief_trust_sync_conflicts_v2';
 const DB_NAME_BASE = 'shine_relief_trust_offline_v3';
-const queueStorageKey = () => getWorkspaceStorageKey(QUEUE_KEY_BASE);
-const conflictsStorageKey = () => getWorkspaceStorageKey(CONFLICTS_KEY_BASE);
-const databaseName = () => getWorkspaceIndexedDbName(DB_NAME_BASE);
+const queueStorageKey = (uid: string | null = getActiveWorkspaceUid()) => getWorkspaceStorageKeyForUid(QUEUE_KEY_BASE, uid);
+const conflictsStorageKey = (uid: string | null = getActiveWorkspaceUid()) => getWorkspaceStorageKeyForUid(CONFLICTS_KEY_BASE, uid);
+const databaseName = (uid: string | null = getActiveWorkspaceUid()) => getWorkspaceIndexedDbNameForUid(DB_NAME_BASE, uid);
 const DB_VERSION = 2;
 const STORE_NAME = 'queue';
 
@@ -44,9 +44,9 @@ function hasIndexedDb(): boolean {
   return typeof indexedDB !== 'undefined' && indexedDB !== null;
 }
 
-function openDb(): Promise<IDBDatabase> {
+function openDb(uid: string | null = getActiveWorkspaceUid()): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const name = databaseName();
+    const name = databaseName(uid);
     if (!name) { reject(new Error('No authenticated SHINE workspace is active.')); return; }
     const request = indexedDB.open(name, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -69,8 +69,8 @@ function withQueueKey(entry: OfflineChangeEntry): OfflineChangeEntry {
   return { ...entry, queueKey: queueKeyOf(entry) };
 }
 
-async function readIdbEntries(): Promise<OfflineChangeEntry[]> {
-  const db = await openDb();
+async function readIdbEntries(uid: string): Promise<OfflineChangeEntry[]> {
+  const db = await openDb(uid);
   try {
     const entries = await new Promise<OfflineChangeEntry[]>((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readonly');
@@ -84,8 +84,8 @@ async function readIdbEntries(): Promise<OfflineChangeEntry[]> {
   }
 }
 
-async function writeIdbEntries(entries: OfflineChangeEntry[]): Promise<void> {
-  const db = await openDb();
+async function writeIdbEntries(entries: OfflineChangeEntry[], uid: string): Promise<void> {
+  const db = await openDb(uid);
   try {
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -100,10 +100,10 @@ async function writeIdbEntries(entries: OfflineChangeEntry[]): Promise<void> {
   }
 }
 
-function readLocalEntries(): OfflineChangeEntry[] {
+function readLocalEntries(uid: string | null = getActiveWorkspaceUid()): OfflineChangeEntry[] {
   if (!hasLocalStorage()) return [];
   try {
-    const key = queueStorageKey();
+    const key = queueStorageKey(uid);
     if (!key) return [];
     const raw = window.localStorage.getItem(key);
     if (!raw) return [];
@@ -115,10 +115,10 @@ function readLocalEntries(): OfflineChangeEntry[] {
   }
 }
 
-function writeLocalEntries(entries: OfflineChangeEntry[]): void {
+function writeLocalEntries(entries: OfflineChangeEntry[], uid: string | null = getActiveWorkspaceUid()): void {
   if (!hasLocalStorage()) return;
   try {
-    const key = queueStorageKey();
+    const key = queueStorageKey(uid);
     if (!key) throw new Error('Cannot persist offline edits without an authenticated SHINE workspace.');
     window.localStorage.setItem(key, JSON.stringify(entries));
   } catch (error) {
@@ -133,16 +133,17 @@ function writeLocalEntries(entries: OfflineChangeEntry[]): void {
  * into IndexedDB so older queues are never dropped.
  */
 export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
-  if (!getActiveWorkspaceUid()) return [];
-  if (!hasIndexedDb()) return readLocalEntries();
+  const uid = getActiveWorkspaceUid();
+  if (!uid) return [];
+  if (!hasIndexedDb()) return readLocalEntries(uid);
   try {
-    const entries = await readIdbEntries();
+    const entries = await readIdbEntries(uid);
     if (entries.length) return entries;
-    const legacy = readLocalEntries();
+    const legacy = readLocalEntries(uid);
     if (legacy.length) {
-      await writeIdbEntries(legacy);
+      await writeIdbEntries(legacy, uid);
       try {
-        const key = queueStorageKey();
+        const key = queueStorageKey(uid);
         if (key) window.localStorage.removeItem(key);
       } catch {
         /* ignore removal failures; the migrated copy is already in IndexedDB */
@@ -152,7 +153,7 @@ export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
     return entries;
   } catch (error) {
     console.warn('IndexedDB queue unavailable; falling back to localStorage:', error);
-    return readLocalEntries();
+    return readLocalEntries(uid);
   }
 }
 
@@ -162,11 +163,12 @@ export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
  * prove that no offline edits remain.
  */
 export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' | 'unavailable'> {
-  if (!getActiveWorkspaceUid()) return 'unavailable';
+  const uid = getActiveWorkspaceUid();
+  if (!uid) return 'unavailable';
   let localRaw: string | null;
   try {
     if (!hasLocalStorage()) return 'unavailable';
-    const key = queueStorageKey();
+    const key = queueStorageKey(uid);
     if (!key) return 'unavailable';
     localRaw = window.localStorage.getItem(key);
   } catch {
@@ -187,7 +189,7 @@ export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' 
   if (!hasIndexedDb()) return localEntries.length ? 'pending' : 'clear';
 
   try {
-    const indexedEntries = await readIdbEntries();
+    const indexedEntries = await readIdbEntries(uid);
     if (indexedEntries.length || localEntries.length) return 'pending';
     return 'clear';
   } catch {
@@ -197,17 +199,18 @@ export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' 
   }
 }
 
-export async function saveQueueEntries(entries: OfflineChangeEntry[]): Promise<void> {
-  if (!getActiveWorkspaceUid()) throw new Error('Cannot persist offline edits without an authenticated SHINE workspace.');
+export async function saveQueueEntries(entries: OfflineChangeEntry[], expectedUid?: string): Promise<void> {
+  const uid = getActiveWorkspaceUid();
+  if (!uid || (expectedUid && expectedUid !== uid)) throw new Error('Active SHINE workspace changed before offline edits could be persisted.');
   if (!hasIndexedDb()) {
-    writeLocalEntries(entries);
+    writeLocalEntries(entries, uid);
     return;
   }
   try {
-    await writeIdbEntries(entries);
+    await writeIdbEntries(entries, uid);
   } catch (error) {
     console.warn('Could not save the offline queue to IndexedDB; using localStorage:', error);
-    try { writeLocalEntries(entries); } catch (fallbackError) { notifyStorageFailure(fallbackError); throw fallbackError; }
+    try { writeLocalEntries(entries, uid); } catch (fallbackError) { notifyStorageFailure(fallbackError); throw fallbackError; }
   }
 }
 
