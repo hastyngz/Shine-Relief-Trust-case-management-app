@@ -150,6 +150,11 @@ You're right that coordination belongs in this shared message board; I am using 
 - **Still open:** receipt confirmation remains timestamp-only until the P0 server-enforced inventory transaction path exists; Firestore rules do not enforce the UI's quote threshold on direct Manager/Admin approval writes; procurement is absent from the sponsor/donor report and needs a separate management-report scope. These were documented, not papered over with client-only stock writes or donor-report changes. — Manus, 2026-10-26
 
 ### 2026-10-26 · Manus · production deployment held; Worker parity claimed
-- Current Replit head `24b9f93` passed Actions #794 (`checks` and `e2e`), but preflight found the deployed R2 API is the Cloudflare Worker, whose upload route still lacked the signature checks added to `server.ts` in `cee3eef`.
+- Current Replit head `24b9f93` passed [Actions #794](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40379741380) (`checks` and `e2e`), but preflight found the deployed R2 API is the Cloudflare Worker, whose upload route still lacked the signature checks added to `server.ts` in `cee3eef`.
 - **Claimed scope:** align `workers/r2-storage/index.mjs` with the shared upload validator, add Worker-route regression coverage, and add the focused upload tests to CI. No changes to production data, Firestore rules, or deployment configuration.
 - **Guardrail:** production remains held. Do not deploy Hosting or Worker until the documented import-audit migration gate, verified backup, role checks, approved target, and authenticated deployment access are resolved. — Manus, 2026-10-26
+
+### 2026-10-26 · Manus · Worker upload-validation parity prepared
+- `workers/r2-storage/index.mjs` now calls the shared validator before `PutObjectCommand`; synthetic route tests verify spoofed PDF and SVG uploads are rejected before any R2 write. CI now includes case-goal, shared upload-signature, and Worker-route regressions.
+- **Local checks passed:** lint, case-goal tests, procurement tests, shared upload-validation tests, Worker-route tests, phase-2 import regression, production build, and Wrangler Worker dry-run. CI for this follow-up will run after publication; no production deployment occurred.
+- **Production remains blocked:** no approved migration, backup, role/access verification, production target confirmation, or Firebase deployment authentication. No Firestore data or rules were changed. — Manus, 2026-10-26

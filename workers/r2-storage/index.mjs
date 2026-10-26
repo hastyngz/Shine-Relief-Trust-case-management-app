@@ -6,6 +6,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { handleAIRequest } from './aiBackend';
+import { getStorageUploadValidationError } from '../../src/services/storageUploadValidation.ts';
 
 const VALID_TARGETS = new Set([
   'girl', 'household', 'educationalFollowUp', 'healthFollowUp', 'familyFollowUp',
@@ -195,6 +196,8 @@ async function handleRequest(request, env) {
         throw new ApiError('You are not authorized to upload health attachments.', 403);
       }
     }
+    const validationError = getStorageUploadValidationError(storagePath, contentType, new Uint8Array(body));
+    if (validationError) throw new ApiError(validationError, 415);
     await client.send(new PutObjectCommand({
       Bucket: env.CLOUDFLARE_R2_BUCKET_NAME,
       Key: storagePath,

@@ -22,13 +22,15 @@ The procurement import branch previously copied extracted item objects directly 
 
 ### File uploads
 
-The authenticated storage endpoint previously checked role, path/target, non-empty body and a 50 MB maximum, but accepted arbitrary declared content types and did not compare them with the uploaded bytes. Since the download endpoint returns stored content types, that allowed type spoofing. The current patch adds client-side type/size feedback and trusted server-side allowlists plus file-signature checks for attachments (JPEG, PNG, WebP, PDF) and archived reports (PDF, DOCX, XLSX, CSV). Existing authentication, health-record permission, target ownership and path checks remain in place. Signature checks are not malware scanning; client `accept` attributes are only a usability aid, not the security boundary.
+The authenticated storage endpoint previously checked role, path/target, non-empty body and a 50 MB maximum, but accepted arbitrary declared content types and did not compare them with the uploaded bytes. Since the download endpoint returns stored content types, that allowed type spoofing. The `server.ts` path and the Cloudflare R2 Worker source now call the same validator before any object write; it enforces client-side type/size feedback plus server-side allowlists and file-signature checks for attachments (JPEG, PNG, WebP, PDF) and archived reports (PDF, DOCX, XLSX, CSV). Existing authentication, health-record permission, target ownership and path checks remain in place. A synthetic Worker-route test confirms spoofed PDFs and unsupported SVG uploads are rejected before R2. Signature checks are not malware scanning; client `accept` attributes are only a usability aid, not the security boundary.
 
 ## Changes committed
 
 Commit [`cee3eef`](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/commit/cee3eef) updates `src/services/procurementWorkflow.ts`, `src/services/importService.ts`, `server.ts`, `src/services/attachmentService.ts`, the attachment picker components, `package.json`, and focused tests. The procurement UI now requires three distinct supplier names and a selected quote that matches the recorded quote. Import rows and list metadata are validated before batch side effects; invalid quantities, prices, totals, duplicate suppliers, and unknown programme references are rejected.
 
 **Checks passed** against the source state committed as `cee3eef`: `git diff --check`, `npm run lint`, `npm run test:procurement`, `npm run test:storage-upload-validation`, `npm run test:phase2`, and `npm run build`. The build still reports the repository's existing large-chunk advisory; it completes successfully.
+
+The Worker-parity follow-up was validated locally with `npm run test:r2-worker-upload-validation`, the shared upload and case-goal suites, TypeScript lint, production build, and `npx wrangler deploy --dry-run --config workers/r2-storage/wrangler.toml`. The Wrangler command only bundled the Worker; no Worker or Hosting deployment was run, and no production data or Firestore rules were changed.
 
 ## Not changed
 

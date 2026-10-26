@@ -45,6 +45,15 @@ jobs:
       - name: Test shared UI effects and save feedback
         run: npm run test:ui-effects
 
+      - name: Test case-goal persistence recovery
+        run: npm run test:case-goals
+
+      - name: Test upload MIME and signature validation
+        run: npm run test:storage-upload-validation
+
+      - name: Test authenticated R2 Worker upload route
+        run: npm run test:r2-worker-upload-validation
+
       - name: Test health-record access and follow-up notifications
         run: npm run test:health-access
 
