@@ -1,8 +1,9 @@
-import React, { FormEvent, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
+import { clearPendingInventoryMovement, loadPendingInventoryMovement, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
@@ -47,6 +48,35 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
+  useEffect(() => {
+    if (!currentUser?.uid || typeof window === 'undefined') return;
+    const pending = loadPendingInventoryMovement(currentUser.uid);
+    if (!pending || pendingMovementId === pending.id) return;
+    const item = items.find((entry) => entry.id === pending.itemId);
+    if (!item) return;
+    setPendingMovementId(pending.id);
+    setPendingMovementSignature(pending.signature);
+    if (pending.mode === 'movement') {
+      setMovementTarget(item);
+      setStocktakeTarget(null);
+      setMovement({
+        type: pending.payload.type === 'Issued' ? 'Issued' : 'Received',
+        quantity: String(pending.payload.quantity ?? ''),
+        date: String(pending.payload.date || getLocalDateInputValue()),
+        destination: String(pending.payload.destination || ''),
+        reference: String(pending.payload.reference || ''),
+        reason: String(pending.payload.reason || ''),
+      });
+    } else {
+      setStocktakeTarget(item);
+      setMovementTarget(null);
+      setStocktake({
+        countedQuantity: String(pending.payload.countedQuantity ?? ''),
+        date: String(pending.payload.date || getLocalDateInputValue()),
+        reason: String(pending.payload.formReason || ''),
+      });
+    }
+  }, [currentUser?.uid, items, pendingMovementId]);
   const persist = (item: InventoryItem): boolean => {
     setSaving(true);
     setError('');
