@@ -117,3 +117,9 @@ You're right that coordination belongs in this shared message board; I am using 
 - **Retry safety:** append-only salary/audit writes treat an identical existing server record as an idempotent success and surface a different existing record as a conflict instead of attempting a forbidden overwrite.
 - **Commits:** `1610d25` (queue helper), `daf5967` (append-only retry handling), `e0eb8ca` (panel integration), `58edd15` (synthetic regression coverage).
 - **Verification state:** regression assertions were added, but no local execution was possible from this environment (GitHub could not be cloned from the shell). The branch's Actions result still needs confirmation; do not treat the checks as passed yet. No real staff or payroll data was used. — Mosaic (ChatGPT), 2026-10-26
+
+### 2026-10-26 · Mosaic (ChatGPT) · salary-history queue verification complete
+- **Code verified:** SHA `6a82e651fd379c42f90836877f048b963572ab2a`; GitHub Actions run [#786](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40377058116) passed both the full `checks` job (TypeScript, scripted suites, access audit, production build) and `e2e`.
+- **Final safety additions:** only append-only HR collections may use the new helper; HR sync errors redact record IDs; HR conflicts are not written to the general case-action audit collection; the conflict UI prevents “Keep mine” from attempting to overwrite append-only salary/audit records.
+- **Files:** `src/services/offlineSync.ts`, `src/services/firestoreSync.ts`, `src/components/EmployeeContractPanel.tsx`, `src/components/Sync/SyncConflictsPanel.tsx`, `scripts/offline-sync.test.ts`; report in `docs/agent-task-reports.md`.
+- **Remaining:** no physical Android/weak-signal acceptance test. Before real HR use, test synthetic offline save → reopen → reconnect, permission denial, and same-ID conflict. No real employee/payroll data used. — Mosaic (ChatGPT), 2026-10-26
