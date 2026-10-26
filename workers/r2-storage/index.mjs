@@ -104,7 +104,7 @@ function validateInventoryMovementPayload(payload) {
   const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
   if (!validId(payload.id) || !validId(payload.itemId)) throw new ApiError('A valid item and movement ID are required.');
   if (!['Received', 'Issued', 'Adjustment'].includes(payload.type)) throw new ApiError('This stock movement type is not supported.');
-  if (typeof payload.date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(payload.date) || !Number.isFinite(Date.parse(`${payload.date}T00:00:00Z`))) {
+  if (typeof payload.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date) || !Number.isFinite(Date.parse(`${payload.date}T00:00:00Z`))) {
     throw new ApiError('Enter a valid movement date.');
   }
   if (typeof payload.reason !== 'string' || !payload.reason.trim() || payload.reason.trim().length > 1000) throw new ApiError('A reason of up to 1,000 characters is required.');
