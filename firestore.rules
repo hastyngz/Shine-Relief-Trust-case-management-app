@@ -465,6 +465,42 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Procurement report audit metadata is separate from generic report history,
+    // which may archive full report files and has broader staff permissions.
+    match /managementProcurementReportHistory/{reportId} {
+      allow read: if isManagerOrAdmin() &&
+        resource.data.expiresAt is timestamp && resource.data.expiresAt > request.time;
+      allow create: if isManagerOrAdmin() &&
+        request.resource.data.keys().hasOnly([
+          'id', 'reportType', 'generatedByUid', 'generatedAt', 'expiresAt', 'dateBasis',
+          'startDate', 'endDate', 'programmeId', 'format', 'selectedListCount', 'aggregateRowCount'
+        ]) &&
+        request.resource.data.id == reportId &&
+        request.resource.data.reportType == 'management-procurement' &&
+        request.resource.data.generatedByUid == request.auth.uid &&
+        request.resource.data.generatedAt is timestamp &&
+        request.resource.data.generatedAt >= request.time - duration.value(5, 'm') &&
+        request.resource.data.generatedAt <= request.time + duration.value(5, 'm') &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt >= request.resource.data.generatedAt + duration.value(89, 'd') &&
+        request.resource.data.expiresAt <= request.resource.data.generatedAt + duration.value(91, 'd') &&
+        request.resource.data.dateBasis in ['createdAt', 'approvedAt', 'orderedAt', 'receivedAt', 'financeHandedOverAt'] &&
+        request.resource.data.format in ['docx', 'xlsx', 'csv'] &&
+        request.resource.data.selectedListCount is int && request.resource.data.selectedListCount >= 0 &&
+        request.resource.data.aggregateRowCount is int && request.resource.data.aggregateRowCount >= 0 &&
+        (!request.resource.data.keys().hasAny(['startDate']) ||
+          (request.resource.data.startDate is string && request.resource.data.startDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))) &&
+        (!request.resource.data.keys().hasAny(['endDate']) ||
+          (request.resource.data.endDate is string && request.resource.data.endDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))) &&
+        (!request.resource.data.keys().hasAny(['programmeId']) ||
+          request.resource.data.programmeId in [
+            'early-years', 'shine-village', 'bursary', 'child-house', 'relief-family',
+            'fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'
+          ]);
+      allow update, delete: if false;
+    }
+
     match /reportHistory/{reportId} {
       allow read: if isManagerOrAdmin() || (
         isStaffActive() && resource.data.generatedByUid == request.auth.uid

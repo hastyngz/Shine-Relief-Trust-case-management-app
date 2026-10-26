@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { QualityIssue } from '../../services/qualityRules';
 import { qualityMessage } from '../../services/qualityMessages';
 import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { ProcurementOperationsReport } from './ProcurementOperationsReport';
 
 interface ManagementReportsPanelProps {
   db: AppDatabase;
@@ -54,20 +55,21 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
   const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; before?: unknown; after?: unknown }>>([]);
   const [fixedReportVersion, setFixedReportVersion] = useState(0);
+  const [showProcurementReport, setShowProcurementReport] = useState(false);
 
   // Keep the dependency tied to staff identity, not the roster array reference.
   // Unrelated roster refreshes should not repeat this sensitive Firestore read.
   const salaryHistoryStaffKey = JSON.stringify(staff.map((person) => person.uid || person.id).filter(Boolean).sort());
 
   useEffect(() => {
-    if (!canAccessManagementDashboard(isAdmin, role)) return;
+    if (showProcurementReport || !canAccessManagementDashboard(isAdmin, role)) return;
     let mounted = true;
     const staffIds = JSON.parse(salaryHistoryStaffKey) as string[];
     getEmployeeSalaryHistoryForStaff(staffIds)
       .then((records) => { if (mounted) setSalaryHistory(records); })
       .catch(() => { if (mounted) setSalaryLoadFailed(true); });
     return () => { mounted = false; };
-  }, [isAdmin, role, salaryHistoryStaffKey]);
+  }, [isAdmin, role, salaryHistoryStaffKey, showProcurementReport]);
 
   useEffect(() => {
     if (reportId !== 'quarterly-management') return;
@@ -136,6 +138,9 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const permittedDb: AppDatabase = projectManagementDatabase(db, { canViewHealthRecords, canViewSafeguarding, canViewCaseReviews });
   if (!canAccessManagementDashboard(isAdmin, role)) {
     return <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">Management reports are restricted to Administrators and Managers.</div>;
+  }
+  if (showProcurementReport) {
+    return <ProcurementOperationsReport db={db} onBack={() => setShowProcurementReport(false)} />;
   }
   if (reportId === 'health' && !canViewHealthRecords) {
     return <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">Health reports are restricted for your account.</div>;
@@ -408,6 +413,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       <div>
         <h3 className="text-base font-black text-stone-900">Management reports</h3>
         <p className="text-xs text-stone-500">Exports contain filtered records and figures already stored in SHINE. No values are estimated or generated from mock data.</p>
+        <button type="button" onClick={() => setShowProcurementReport(true)} className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-900">Open Internal Procurement Operations Report</button>
       </div>
       <QualityCheckPanel
         issues={auditedQualityIssues}

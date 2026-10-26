@@ -1,4 +1,5 @@
 import type { ProgrammeId } from './data/programmes';
+import type { Timestamp } from 'firebase/firestore';
 
 export type GirlStatus = 'Active' | 'On Holiday' | 'Completed' | 'Left SHINE';
 
@@ -1638,6 +1639,21 @@ export interface ReportExportRecord {
   generatedAt: string;
   draft: boolean;
   finalLocked: boolean;
+}
+
+export interface ManagementProcurementReportHistoryRecord {
+  id: string;
+  reportType: 'management-procurement';
+  generatedByUid: string;
+  generatedAt: Timestamp;
+  expiresAt: Timestamp;
+  dateBasis: 'createdAt' | 'approvedAt' | 'orderedAt' | 'receivedAt' | 'financeHandedOverAt';
+  startDate?: string;
+  endDate?: string;
+  programmeId?: string;
+  format: 'docx' | 'xlsx' | 'csv';
+  selectedListCount: number;
+  aggregateRowCount: number;
 }
 
 export type ConversationType = 'direct' | 'group' | 'announcement';

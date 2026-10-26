@@ -1,6 +1,6 @@
 # Internal procurement management report — design proposal
 
-**Status:** Design only; no report code or production behavior has changed.
+**Status:** Implemented on the `Replit` branch; local TypeScript, production build, aggregate/export, procurement workflow, Firestore emulator, and Firestore-access audit checks pass. Exact-head GitHub Actions verification is pending after publication. Production use remains blocked until the Firestore TTL policy is configured and release gates are satisfied. No production deployment or data mutation has occurred.
 **Audience:** Internal Administrators and Managers only, subject to the existing `canAccessManagementDashboard` gate.
 **Explicit exclusion:** Do not add procurement records, supplier quotes, purchase orders, or finance references to Sponsor, Donor, or Trustee exports.
 **Inventory boundary:** A `receivedAt` value is only a procurement workflow timestamp. Until the server-validated inventory movement flow is complete and linked, it is not proof that stock was posted or reconciled.
@@ -33,7 +33,7 @@ A detailed internal appendix, if later required, should be opt-in and limited to
 
 ## Period rules
 
-The UI should make the selected date basis explicit: list creation date, approval date, order date, receipt acknowledgement date, or finance handover date. Do not mix these milestones under one ambiguous “date” filter. Lists with a missing selected milestone should be counted in a visible “missing date” bucket, not dropped silently. Define whether a list spanning the range is included by event date or by list-created date before implementation.
+The UI makes the selected date basis explicit: list creation date, approval date, order date, receipt acknowledgement date, or finance handover date. The inclusive range is evaluated against that selected milestone's stored date. Lists with a missing or invalid selected milestone are counted in a visible “missing date” bucket and excluded from period totals when a range is active; with no date bounds, all lists are included.
 
 ## Authorization, privacy, and audit
 
@@ -60,14 +60,18 @@ Use synthetic procurement fixtures only. Cover:
 7. Exports, filenames, report history, and all output formats carry the internal-only classification and never appear as sponsor/donor report data.
 8. No mutation of source procurement or inventory fixtures.
 
-## Decisions needed before implementation
+## Approved product defaults
 
-- Which milestone date is the default period basis, and should users be able to switch it?
-- Should the first version be aggregates only, or is an item-level internal appendix required? Which supplier/PO/finance fields are approved for that appendix?
-- Should recorded-vs-recomputed total differences block export, warn, or only appear as an exception count?
-- What date and data-retention rules govern procurement export history?
-- Who may export the internal report: existing Administrators and Managers, or Administrators only?
+The owner approved the following defaults on 2026-10-27: list creation date is the initial period basis, with an explicit selector for approval, order, receipt-acknowledgement, or finance-handover date; the first version is aggregate-only; total discrepancies are warnings and do not block export; Administrators and Managers may view and export; and export-history metadata expires after 90 days.
 
-## Implementation boundary
+## Implementation status
 
-A future implementation can add a pure procurement report assembler and synthetic tests in new files, then a distinct internal report view/export flow with exact role checks and report-history metadata. It should not change sponsor report assembly or inventory write/rule code. Implement only after the decisions above are resolved and the inventory/receipt linkage limitations are described accurately.
+- Added a distinct Procurement Operations Report entry under Management Reports. Its assembler reads procurement lists only and emits aggregate rows; it does not call `assembleSponsorReport` or add procurement values to Sponsor/Donor/Trustee exports.
+- Added CSV, XLSX, and DOCX outputs. Each output is labeled **Internal — not for Sponsor/Donor distribution** and excludes item descriptions, supplier names, free-text notes, staff identities, and raw records. CSV formula-like cells are escaped.
+- Added a dedicated `/managementProcurementReportHistory` collection. The client checks the existing Admin/Manager management gate at the report view and export handler; Firestore rules independently restrict history reads/creates to Admins and Managers, enforce actor UID and a bounded 90-day `expiresAt`, deny expired reads, reject extra payload fields, and make records immutable.
+- History records contain only actor UID, generation time, selected date basis/range/programme filter, output format, selected-list count, aggregate-row count, and expiry. The generated report file is not archived.
+- Synthetic unit tests cover aggregate results, source non-mutation, and parsed output from all three formats for the internal label and absence of item/supplier details. Firestore emulator tests cover role rejection on the audit collection, extra fields, expiry bounds, expired reads, and immutability. The explicit React view/handler gate is not yet covered by a dedicated UI integration test.
+
+## Release gate and limitations
+
+The Firestore TTL policy for collection group `managementProcurementReportHistory` must be enabled on field `expiresAt` before production use. The rules make expired records unreadable immediately, but physical deletion depends on the database TTL policy; no live Firebase configuration was changed here. Receipt timestamps remain acknowledgements only, not inventory movements or proof of stock, payment, or settlement. The report is observational and does not modify procurement or inventory records. Exact-head CI, deployment controls, backup, and production release gates remain separate requirements.

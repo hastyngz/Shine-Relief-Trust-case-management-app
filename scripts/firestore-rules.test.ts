@@ -5,7 +5,7 @@ import {
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import assert from 'node:assert/strict';
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getDocsFromServer, orderBy, query, runTransaction, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getDocsFromServer, orderBy, query, runTransaction, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -43,6 +43,12 @@ async function seedData() {
     safeguardingWorkerProfile.safeguardingPermissions = { canView: true, canCreate: false, canEdit: false, canClose: false };
     await setDoc(doc(firestore, 'staffUsers/safeguarding-worker'), safeguardingWorkerProfile);
     await setDoc(doc(firestore, 'procurementLists/procurement-test'), { id: 'procurement-test', title: 'Synthetic procurement test', purpose: 'Rules fixture only', items: [{ description: 'Synthetic test item', quantity: 1, unit: 'item', unitPriceMWK: 1, totalMWK: 1, priceStatus: 'quoted' }], totalMWK: 1, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'manager', updatedBy: 'manager' });
+    const expiredAt = Timestamp.fromMillis(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    await setDoc(doc(firestore, 'managementProcurementReportHistory/expired-report-metadata'), {
+      id: 'expired-report-metadata', reportType: 'management-procurement', generatedByUid: 'manager',
+      generatedAt: Timestamp.fromMillis(Date.now() - 100 * 24 * 60 * 60 * 1000), expiresAt: expiredAt,
+      dateBasis: 'createdAt', format: 'csv', selectedListCount: 1, aggregateRowCount: 20,
+    });
     await setDoc(doc(firestore, 'importAudits/legacy-source-data'), {
       id: 'legacy-source-data',
       fileName: 'synthetic.xlsx',
@@ -457,6 +463,47 @@ async function run() {
     await assertFails(setDoc(doc(worker, 'reportHistory/report-bad-path'), { id: 'report-bad-path', reportType: 'comprehensive', title: 'Bad path', reportingPeriod: '2026-01', filters: {}, generatedBy: 'worker', generatedByUid: 'worker', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'docx', fileName: 'report.docx', storagePath: 'reports/manager/report-bad-path/report.docx', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
     await assertFails(updateDoc(doc(worker, 'reportHistory/report-worker'), { title: 'Changed' }));
     await assertFails(setDoc(doc(viewer, 'reportHistory/report-viewer'), { id: 'report-viewer', reportType: 'comprehensive', title: 'Viewer report', reportingPeriod: '2026-01', filters: {}, generatedBy: 'viewer', generatedByUid: 'viewer', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'pdf', fileName: 'report.pdf', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
+    const procurementReportGeneratedAt = Timestamp.now();
+    const procurementReportMetadata = {
+      id: 'management-procurement-report-manager',
+      reportType: 'management-procurement',
+      generatedByUid: 'manager',
+      generatedAt: procurementReportGeneratedAt,
+      expiresAt: Timestamp.fromMillis(procurementReportGeneratedAt.toMillis() + 90 * 24 * 60 * 60 * 1000),
+      dateBasis: 'createdAt',
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+      programmeId: 'fish-farming',
+      format: 'csv',
+      selectedListCount: 2,
+      aggregateRowCount: 30,
+    };
+    await assertSucceeds(setDoc(doc(manager, 'managementProcurementReportHistory/management-procurement-report-manager'), procurementReportMetadata));
+    await assertSucceeds(getDoc(doc(manager, 'managementProcurementReportHistory/management-procurement-report-manager')));
+    await assertSucceeds(getDoc(doc(admin, 'managementProcurementReportHistory/management-procurement-report-manager')));
+    await assertFails(getDoc(doc(worker, 'managementProcurementReportHistory/management-procurement-report-manager')));
+    await assertFails(getDoc(doc(viewer, 'managementProcurementReportHistory/management-procurement-report-manager')));
+    await assertFails(setDoc(doc(worker, 'managementProcurementReportHistory/worker-attempt'), { ...procurementReportMetadata, id: 'worker-attempt', generatedByUid: 'worker' }));
+    await assertFails(setDoc(doc(viewer, 'managementProcurementReportHistory/viewer-attempt'), { ...procurementReportMetadata, id: 'viewer-attempt', generatedByUid: 'viewer' }));
+    await assertFails(setDoc(doc(manager, 'managementProcurementReportHistory/raw-payload-attempt'), { ...procurementReportMetadata, id: 'raw-payload-attempt', rawProcurementRows: [{ supplier: 'synthetic' }] }));
+    await assertFails(setDoc(doc(manager, 'managementProcurementReportHistory/long-retention-attempt'), {
+      ...procurementReportMetadata,
+      id: 'long-retention-attempt',
+      expiresAt: Timestamp.fromMillis(procurementReportGeneratedAt.toMillis() + 365 * 24 * 60 * 60 * 1000),
+    }));
+    await assertFails(setDoc(doc(manager, 'managementProcurementReportHistory/invalid-date-attempt'), {
+      ...procurementReportMetadata,
+      id: 'invalid-date-attempt',
+      startDate: 'unbounded and not a date',
+    }));
+    await assertFails(setDoc(doc(manager, 'managementProcurementReportHistory/unknown-programme-attempt'), {
+      ...procurementReportMetadata,
+      id: 'unknown-programme-attempt',
+      programmeId: 'unregistered-programme',
+    }));
+    await assertFails(getDoc(doc(manager, 'managementProcurementReportHistory/expired-report-metadata')));
+    await assertFails(updateDoc(doc(manager, 'managementProcurementReportHistory/management-procurement-report-manager'), { selectedListCount: 99 }));
+    await assertFails(deleteDoc(doc(manager, 'managementProcurementReportHistory/management-procurement-report-manager')));
     await assertSucceeds(setDoc(doc(worker, 'reportExports/fixed-export-worker'), {
       id: 'fixed-export-worker', reportType: 'import-fixed', title: 'Fixed report',
       fileName: 'source - fixed - 2026-10-05.docx', format: 'docx', version: 1,

@@ -12,6 +12,7 @@ import {
   where,
   orderBy,
   limit,
+  Timestamp,
   Unsubscribe,
   Query,
 } from 'firebase/firestore';
@@ -52,6 +53,7 @@ import {
   CaseGoal,
   ReportHistoryRecord,
   ReportExportRecord,
+  ManagementProcurementReportHistoryRecord,
   MeetingRecord,
   FeedingProgramLog,
   MarketPriceRecord,
@@ -164,6 +166,7 @@ export const COLLECTIONS = {
   EMPLOYEE_AUDIT_LOGS: 'employeeAuditLogs',
   REPORT_HISTORY: 'reportHistory',
   REPORT_EXPORTS: 'reportExports',
+  MANAGEMENT_PROCUREMENT_REPORT_HISTORY: 'managementProcurementReportHistory',
   PROCUREMENT_LISTS: 'procurementLists',
   PROJECT_PROJECTIONS: 'projectProjections',
   INVENTORY_ITEMS: 'inventoryItems',
@@ -300,6 +303,21 @@ export async function appendEmployeeAuditLog(event: Record<string, any>, eventId
 
 export async function appendReportHistory(record: ReportHistoryRecord): Promise<void> {
   await setDoc(doc(firestore, COLLECTIONS.REPORT_HISTORY, record.id), sanitizeForFirestore(record));
+}
+
+export async function appendManagementProcurementReportHistory(
+  record: Omit<ManagementProcurementReportHistoryRecord, 'id' | 'generatedAt' | 'expiresAt'>,
+): Promise<void> {
+  const ref = doc(collection(firestore, COLLECTIONS.MANAGEMENT_PROCUREMENT_REPORT_HISTORY));
+  const generatedAt = Timestamp.now();
+  const expiresAt = Timestamp.fromMillis(generatedAt.toMillis() + 90 * 24 * 60 * 60 * 1000);
+  const history: ManagementProcurementReportHistoryRecord = {
+    ...record,
+    id: ref.id,
+    generatedAt,
+    expiresAt,
+  };
+  await setDoc(ref, history);
 }
 
 export async function appendReportExport(record: ReportExportRecord): Promise<void> {

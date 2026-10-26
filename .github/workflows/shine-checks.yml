@@ -99,6 +99,9 @@ jobs:
       - name: Test procurement quote and approval workflow
         run: npm run test:procurement
 
+      - name: Test internal procurement report aggregates
+        run: npm run test:management-procurement-report
+
       - name: Test payroll and gratuity calculations
         run: npm run test:payroll
 
