@@ -166,6 +166,22 @@ const db = getDatabase();
 const dbGirlsBefore = db.girls.length;
 assert.equal(db.girls.length, dbGirlsBefore, 'the in-memory database is preserved after a failure');
 
+// Unconfirmed Firestore cache snapshots must not overwrite a UID-scoped local database.
+const localCacheKey = 'shine_relief_trust_prod_v1::uid:synthetic-storage-test-uid';
+const baselineCacheKey = 'shine_relief_trust_last_synced_v2::uid:synthetic-storage-test-uid';
+const localCacheBeforeUnconfirmed = values.get(localCacheKey) ?? null;
+const baselineBeforeUnconfirmed = values.get(baselineCacheKey) ?? null;
+const databaseBeforeUnconfirmed = getDatabase();
+const unconfirmedSnapshot = { ...databaseBeforeUnconfirmed, girls: [{ id: 'SYNTHETIC-UNCONFIRMED-CACHED-RECORD' } as never] };
+assert.equal(saveIncomingCloudSnapshot(unconfirmedSnapshot, false), false,
+  'an unconfirmed Firestore cache snapshot is rejected');
+assert.deepEqual(getDatabase().girls, databaseBeforeUnconfirmed.girls,
+  'an unconfirmed cache snapshot cannot overwrite the active UID database');
+assert.equal(values.get(localCacheKey) ?? null, localCacheBeforeUnconfirmed,
+  'the active UID cache is unchanged by an unconfirmed snapshot');
+assert.equal(values.get(baselineCacheKey) ?? null, baselineBeforeUnconfirmed,
+  'an unconfirmed snapshot cannot advance the sync baseline');
+
 // A failed Firestore snapshot save must not advance the local sync baseline.
 const baselineBeforeSnapshot = values.get('shine_relief_trust_last_synced_v2::uid:synthetic-storage-test-uid') ?? null;
 const databaseBeforeSnapshot = getDatabase();

@@ -802,3 +802,8 @@ Suggestion format:
 
 ### 2026-10-26 · Mosaic (ChatGPT) · CI fixture-order correction
 - E2E passed on the prior run, but the checks job found the new foreign-owner queue assertion ran before its synthetic fixture was initialized. Moved the assertion immediately after fixture creation; no application logic changed in this correction.
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · Firestore cache account boundary
+- Closed a further shared-device risk: Firestore's in-memory cache is not UID-partitioned. Unconfirmed/cache/optimistic snapshots are now rejected before they can be saved into or rendered from another UID's workspace; the app waits for a server-confirmed snapshot.
+- Added a synthetic regression that an unconfirmed snapshot cannot alter local database or baseline. Exact-head CI still required. — Mosaic (ChatGPT), 2026-10-26

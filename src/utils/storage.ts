@@ -156,16 +156,17 @@ export function getDatabase(): AppDatabase {
  * current state. Failed local persistence must not advance the sync baseline.
  */
 export function saveIncomingCloudSnapshot(db: AppDatabase, confirmedServerSnapshot: boolean): boolean {
+  // Firestore's memory cache can outlive an auth switch. Only a server-confirmed,
+  // no-pending-writes snapshot is safe to copy into a UID-scoped local workspace.
+  if (!confirmedServerSnapshot) return false;
   const result = saveDatabase(db, false);
   if (!result.ok) return false;
-  if (confirmedServerSnapshot) {
-    try {
-      setLastSyncedSnapshotOrThrow(db);
-    } catch (error) {
-      const quotaExceeded = isQuotaExceededError(error);
-      dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
-      return false;
-    }
+  try {
+    setLastSyncedSnapshotOrThrow(db);
+  } catch (error) {
+    const quotaExceeded = isQuotaExceededError(error);
+    dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
+    return false;
   }
   return true;
 }

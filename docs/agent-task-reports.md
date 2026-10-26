@@ -480,3 +480,8 @@ A final sync-safety review found that recordOfflineChanges still promoted the cu
 
 
 CI follow-up: the run on SHA 93598024dc61907f8797e5299952844cd3374fc8 passed E2E but failed the offline queue test because the new owner-mismatch assertion referenced the procurement fixture before initialization. The assertion has been moved after the fixture is created; this is a test-order correction, not an application behavior change. The next exact-head CI result is still required.
+
+
+## 2026-10-26 Firestore cache isolation
+
+A critical shared-device edge case was found: the Firestore SDK's in-memory cache is not partitioned by the app's Firebase UID. After account A signs out, a cached snapshot could be delivered to account B's listener; if it were copied into B's UID-scoped localStorage, B could see A's records when B already had a baseline. The App now ignores snapshots that are from cache or have pending writes, and saveIncomingCloudSnapshot rejects them defensively. Only a durable, server-confirmed snapshot can update the active local database and baseline. Offline use continues from the current UID's own local database; a new account without a confirmed baseline stays on the safe loading screen. Added synthetic regression coverage for unconfirmed snapshots not changing the cache or baseline.

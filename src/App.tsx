@@ -334,8 +334,11 @@ function AppContent() {
       // snapshot was durably saved on this device. saveIncomingCloudSnapshot
       // emits the persistent storage warning when local persistence fails.
       const confirmedServerSnapshot = isConfirmedServerSnapshot(meta);
-      if (!saveIncomingCloudSnapshot(cloudDb, confirmedServerSnapshot)) return;
-      if (confirmedServerSnapshot) setHasSyncBaseline(true);
+      // Firestore's in-memory cache is not partitioned by application UID.
+      // Never persist or render a cache/optimistic snapshot across account switches.
+      if (!confirmedServerSnapshot) return;
+      if (!saveIncomingCloudSnapshot(cloudDb, true)) return;
+      setHasSyncBaseline(true);
       setDb(cloudDb);
     }, {
       uid: currentUser.uid,
