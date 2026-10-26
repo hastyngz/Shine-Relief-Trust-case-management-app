@@ -812,3 +812,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · fail-closed snapshot metadata
 - Tightened server-confirmation detection: missing or incomplete Firestore snapshot metadata no longer defaults to trusted. Only explicit fromCache=false and hasPendingWrites=false can advance the baseline or replace the scoped local database.
 - Regression assertions updated; exact-head CI still required. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · conflict-resolution storage failure
+- Review found conflict-list writes swallowed localStorage failures, allowing resolution to report success even when the recovery record had not been durably removed; the old order also deleted the conflict before persisting the chosen queue outcome.
+- Changed resolution to persist the queue outcome first and only then remove the conflict; conflict-list write failures now propagate and preserve the original conflict for retry. Added a synthetic storage-failure regression. — Mosaic (ChatGPT), 2026-10-26

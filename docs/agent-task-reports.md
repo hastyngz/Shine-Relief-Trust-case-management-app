@@ -488,3 +488,12 @@ A critical shared-device edge case was found: the Firestore SDK's in-memory cach
 
 
 Snapshot confirmation is now fail-closed for missing metadata too. Only explicit Firestore metadata with fromCache=false and hasPendingWrites=false can be accepted as a confirmed baseline; absent/incomplete metadata no longer defaults to trusted. The regression test reflects this stricter rule.
+
+
+## 2026-10-26 conflict-resolution durability follow-up
+
+Review of the account-isolation changes found a data-recovery defect in `src/services/offlineSyncDb.ts`: `writeConflicts` caught and suppressed storage errors, while `resolveSyncConflict` removed the conflict before persisting the chosen queue state. A quota/storage failure could therefore produce false success and lose the visible recovery record.
+
+The fix makes conflict persistence fail loudly, changes resolution ordering so the selected queue state is persisted first, and only then removes the conflict. If conflict-list persistence fails, the conflict remains available for a retry; for Keep mine, the queued edit is durable, and for Keep theirs, the queue removal is durable. A synthetic regression forces conflict-list storage failure and verifies the caller receives an error and the conflict remains visible. This intentionally prioritizes recoverability over hiding a partial local operation.
+
+No production data/rules/deployment changed. CI must pass on the resulting exact SHA; Android/weak-signal manual testing remains outstanding.

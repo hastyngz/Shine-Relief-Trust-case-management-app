@@ -647,7 +647,6 @@ export async function resolveSyncConflict(
   if (!conflict || conflict.ownerUid !== actor.uid) return false;
 
   const remaining = conflicts.filter((candidate) => candidate.id !== conflictId);
-  await persistSyncConflicts(remaining);
 
   if (getActiveWorkspaceUid() !== actor.uid) return false;
   const queue = await loadQueue();
@@ -656,6 +655,9 @@ export async function resolveSyncConflict(
     (entry) => `${entry.collection}/${entry.recordId}` !== `${conflict.collection}/${conflict.recordId}`,
   );
 
+  // Persist the recovery path first. If the queue write fails, the original
+  // conflict remains visible. If conflict-list persistence fails afterward, the
+  // queue is durable and the conflict remains available for a safe retry.
   if (resolution === 'keep-mine') {
     const keepMine: OfflineChangeEntry = {
       ownerUid: actor.uid,
@@ -672,7 +674,8 @@ export async function resolveSyncConflict(
     await persistQueue(withoutConflict, actor.uid);
   }
 
-  void actor;
+  if (getActiveWorkspaceUid() !== actor.uid) return false;
+  await persistSyncConflicts(remaining);
   return true;
 }
 

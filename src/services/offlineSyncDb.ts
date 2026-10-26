@@ -267,7 +267,7 @@ export async function readConflicts(): Promise<SyncConflict[]> {
 }
 
 export async function writeConflicts(conflicts: SyncConflict[]): Promise<void> {
-  if (!hasLocalStorage()) return;
+  if (!hasLocalStorage()) throw new Error('Cannot persist sync conflicts because local storage is unavailable.');
   try {
     const key = conflictsStorageKey();
     if (!key) throw new Error('Cannot persist sync conflicts without an authenticated SHINE workspace.');
@@ -275,6 +275,7 @@ export async function writeConflicts(conflicts: SyncConflict[]): Promise<void> {
   } catch (error) {
     console.warn('Could not persist sync conflicts:', error);
     notifyStorageFailure(error);
+    throw error;
   }
 }
 

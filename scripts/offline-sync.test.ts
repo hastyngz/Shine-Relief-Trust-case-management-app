@@ -403,6 +403,21 @@ assert.equal(conflicts[0].serverData?.fullName, 'Theirs');
 assert.equal(conflicts[0].serverUpdatedBy, null);
 assert.equal(getPendingOfflineSnapshotCount(), 1, 'the conflicted change stays queued until resolved');
 assert.equal(conflicts[0].ownerUid, 'uid-a', 'conflicts record their owning UID');
+// If saving the updated conflict list fails, resolution must not claim success
+// or destroy the only recovery record. The queue decision is durable first.
+const originalConflictStorageSetItem = fakeWindow.localStorage.setItem;
+fakeWindow.localStorage.setItem = (key: string, value: string) => {
+  if (key.includes('shine_relief_trust_sync_conflicts_v2')) throw new Error('synthetic conflict storage failure');
+  originalConflictStorageSetItem(key, value);
+};
+await assert.rejects(
+  () => resolveSyncConflict(conflicts[0].id, 'keep-theirs', { uid: 'uid-a', name: 'Staff A' }),
+  /synthetic conflict storage failure/,
+  'conflict persistence failures must reach the caller instead of faking success',
+);
+fakeWindow.localStorage.setItem = originalConflictStorageSetItem;
+assert.equal((await readSyncConflicts()).length, 1, 'failed conflict persistence preserves the conflict for retry');
+assert.equal(getPendingOfflineSnapshotCount(), 0, 'the selected Keep theirs queue decision is durably applied before retry');
 setActiveWorkspaceUid('uid-b');
 assert.equal(await resolveSyncConflict(conflicts[0].id, 'keep-theirs', { uid: 'uid-b', name: 'Staff B' }), false,
   'a second account cannot resolve the first account conflict');
