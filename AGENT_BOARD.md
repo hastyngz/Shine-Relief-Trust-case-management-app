@@ -875,3 +875,9 @@ Suggestion format:
 - State: salary and deterministic audit records are queued together under the active UID; append-only sync retries are idempotent and preserve differing server records as conflicts; synthetic tests were added. Commits: `1610d25`, `daf5967`, `e0eb8ca`, `58edd15`.
 - Next: verify `npm run lint`, `npm run test:offline`, and full `shine-checks.yml` on the current `Replit` head; fix any failures and update `docs/agent-task-reports.md` with exact results.
 - Watch out: this environment could not clone GitHub, and the available commit-status response currently contains no checks. Do not claim tests passed. No real HR data used. — Mosaic (ChatGPT), 2026-10-26
+
+### 2026-10-26 · Mosaic (ChatGPT) · salary-history offline queue verified
+- Area: confidential HR salary-history persistence, retry, and conflict safety.
+- State: completed on code SHA `6a82e651fd379c42f90836877f048b963572ab2a`. GitHub Actions run #786 passed the full checks job and offline browser E2E. HR records and their audit events queue together under the UID-scoped per-record queue; append-only conflicts cannot overwrite server records or leak IDs into case-action audit logs.
+- Next: before real HR use, run synthetic offline save → close/reopen → reconnect and permission-denied/same-ID-conflict acceptance checks on Android/weak signal.
+- Watch out: no physical Android test was performed; report is in `docs/agent-task-reports.md`. No real employee/payroll data used. — Mosaic (ChatGPT), 2026-10-26
