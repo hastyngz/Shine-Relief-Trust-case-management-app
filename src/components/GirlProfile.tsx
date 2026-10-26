@@ -19,8 +19,7 @@ import {
 } from '../types';
 import { formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
-import { getDatabase, saveDatabase } from '../utils/storage';
-import { persistPhase2Record } from '../services/firestoreSync';
+import { saveCaseGoal as persistCaseGoal } from '../services/caseGoalPersistence';
 import {
   ArrowLeft,
   GraduationCap,
@@ -334,10 +333,7 @@ export const GirlProfile: React.FC<GirlProfileProps> = ({
   const outstandingItems = timeline.filter((item) => item.furtherActionRequired);
 
   const saveCaseGoal = async (goal: CaseGoal) => {
-    const current = getDatabase();
-    saveDatabase({ ...current, caseGoals: [...(current.caseGoals || []).filter((item) => item.id !== goal.id), goal] });
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    await persistPhase2Record('caseGoals', goal);
+    return persistCaseGoal(goal);
   };
 
   const getStatusBadge = (status: string) => {
