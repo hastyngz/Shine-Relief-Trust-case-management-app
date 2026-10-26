@@ -155,7 +155,7 @@ function AppContent() {
   // persisting a filtered view back into the shared cache (which can look like
   // deletions to the per-record offline queue).
   const viewDb = useMemo(() => {
-    if (!currentUser) return db;
+    if (!currentUser || dbOwnerUid !== currentUser.uid) return getDatabase();
     const restrictedDb = filterRestrictedCachedData(db, {
       canViewHealthRecords,
       canViewCaseReviews,
@@ -173,7 +173,7 @@ function AppContent() {
         canViewSafeguarding,
       }),
     };
-  }, [db, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
+  }, [db, dbOwnerUid, currentUser?.uid, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
   const [safeguardingCount, setSafeguardingCount] = useState<number>();
   const pendingOperationsReviewCount = useMemo(() => {
     const reviewDb = {
@@ -293,6 +293,7 @@ function AppContent() {
       return;
     }
     const unsub = initFirestoreListeners((cloudDb, meta) => {
+      if (getActiveWorkspaceUid() !== currentUser.uid) return;
       // Do not replace the live UI state or advance the baseline unless the
       // snapshot was durably saved on this device. saveIncomingCloudSnapshot
       // emits the persistent storage warning when local persistence fails.
@@ -364,6 +365,7 @@ function AppContent() {
   // Debounce expensive full-database diffing, but flush at lifecycle and
   // connectivity boundaries so a phone going offline or closing still queues edits.
   useEffect(() => {
+    if (!currentUser || dbOwnerUid !== currentUser.uid) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const flushLocalChanges = () => {
       if (timer) clearTimeout(timer);
@@ -396,7 +398,7 @@ function AppContent() {
       window.removeEventListener('pagehide', flushLocalChanges);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [db, currentUser, staffProfile?.fullName, isAdmin, role]);
+  }, [db, dbOwnerUid, currentUser, staffProfile?.fullName, isAdmin, role]);
 
   // Listen for browser Back/Forward navigation via hashchange
   useEffect(() => {
