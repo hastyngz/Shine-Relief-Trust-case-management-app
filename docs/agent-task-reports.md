@@ -409,3 +409,10 @@ The former unscoped cache and legacy localStorage queue/snapshot/conflict keys a
 2. Finish review of all consumers of raw cached `db`, especially asynchronous callbacks and non-UI operations, to ensure none can use stale data during account transitions.
 3. Verify restore/reset semantics and legacy quarantine tests.
 4. Build and provide a controlled test version after CI passes; ask the owner to test using synthetic records first. Then perform Android/weak-signal acceptance checks.
+
+
+## 2026-10-26 follow-up — async account-switch race review
+
+A second review traced async operations across account changes. Queue persistence now pins the UID that started the operation instead of looking up a potentially different active UID after an await. Recording offline diffs and migrating scoped snapshots stop if the active account changes; a flush leaves its original queue intact if the account changes while Firestore is processing; reset recovery stops before subsequent writes when the account changes; and the UI avoids showing a stale account's cached queue count. The App also prevents a late Firestore listener callback from persisting a snapshot after the active UID changes.
+
+The code head before this documentation-only update is `7c4430c2c6b5f966953f907d7ebad0582e447402`. GitHub Actions has been repeatedly cancelled by subsequent pushes during implementation; the workflow on the final report-updated head must complete before this is called verified. Do not treat the older cancelled runs as passes. No local test execution is claimed from this environment.

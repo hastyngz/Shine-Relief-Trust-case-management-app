@@ -742,3 +742,8 @@ Suggestion format:
 - Implemented UID-scoped local database keys, IndexedDB queues, sync baselines, pending snapshots, and conflicts; added an auth-switch render guard and owner checks before queue flush/conflict resolution.
 - Old unowned localStorage queue/conflict/snapshot entries are left untouched and block destructive restore inspection rather than being guessed, replayed or deleted. Added synthetic UID-switch regression coverage.
 - Verification is pending for the exact final SHA. Do not treat cancelled intermediate Actions runs as passes. No Firestore/Storage rules, production data or deployment changed; no Android weak-signal test. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · async account-switch hardening
+- Follow-up review identified an in-flight sync race: a save started under UID A must never switch to UID B's queue store if auth changes during an await. Queue I/O now pins the originating UID, stale callbacks/diffs are guarded, and queue counts are UID-aware.
+- Latest code SHA before this documentation-only update: `7c4430c2c6b5f966953f907d7ebad0582e447402`. CI is still pending/queued for the final code; no pass is claimed yet. — Mosaic (ChatGPT), 2026-10-26
