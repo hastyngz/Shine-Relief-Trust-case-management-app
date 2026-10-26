@@ -122,7 +122,7 @@ Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEven
 
 const { setActiveWorkspaceUid } = await import('../src/services/accountWorkspace');
 setActiveWorkspaceUid('uid-a');
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges, writePendingOfflineSnapshot } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, getLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges, writePendingOfflineSnapshot } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore, persistImportAuditToFirestore } = await import('../src/services/firestoreSync');
@@ -361,6 +361,18 @@ assert.equal(flushed.flushed, true);
 assert.equal(flushed.applied, 1);
 assert.equal(server.get('girls', 'SG-100').fullName, 'Offline edit');
 assert.equal(getPendingOfflineSnapshotCount(), 0, 'applied entries leave the queue');
+
+// Account switches must isolate both the queue and confirmed sync baseline.
+const managerBaseline = getLastSyncedSnapshot();
+assert.ok(managerBaseline, 'the manager workspace has its own confirmed baseline');
+setActiveWorkspaceUid('uid-b');
+assert.equal(getLastSyncedSnapshot(), null, 'a different UID cannot read the manager baseline');
+const wrongAccountFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(wrongAccountFlush.flushed, false, 'a mismatched actor cannot flush another workspace');
+assert.equal((await loadQueue()).length, 0, 'a second UID cannot read the manager queue');
+setActiveWorkspaceUid('uid-a');
+assert.ok(getLastSyncedSnapshot(), 'switching back restores the manager baseline');
+
 
 // --- 7. Conflicts surface in the conflict list and can be resolved ----------
 values.clear();
