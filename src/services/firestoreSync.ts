@@ -1403,6 +1403,25 @@ export async function syncChangeEntriesToFirestore(
         const serverUpdatedAt = typeof serverData?.updatedAt === 'string' ? serverData.updatedAt : null;
         const localUpdatedAt = typeof entry.data?.updatedAt === 'string' ? entry.data.updatedAt : null;
 
+        // HR salary history and its audit trail are append-only under Firestore
+        // rules. A queued retry must be idempotent: identical existing records
+        // are already synced; different records are surfaced as conflicts, never
+        // rewritten through the generic merge path.
+        const isAppendOnlyEmployeeRecord =
+          entry.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
+          entry.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS;
+        if (isAppendOnlyEmployeeRecord && serverData) {
+          const localRecord = sanitizeForFirestore(entry.data || {});
+          if (stableContentHash(serverData) === stableContentHash(localRecord)) return null;
+          return {
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: serverData,
+            updatedAt: serverUpdatedAt,
+            updatedBy: typeof serverData.updatedBy === 'string' ? serverData.updatedBy : null,
+          };
+        }
+
         // Restricted source documents are create-only for ordinary staff. Treat
         // an identical retry as success, but never overwrite a different source.
         if (isRestrictedImportSource && serverData) {
