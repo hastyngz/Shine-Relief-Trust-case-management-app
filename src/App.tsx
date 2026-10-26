@@ -64,6 +64,7 @@ import {
 } from './services/messagingService';
 import { excludeSafeguardingCaseActions, filterCaseActionsForStaff, filterRestrictedCachedData } from './services/healthRecordAccess';
 import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
+import { getActiveWorkspaceUid } from './services/accountWorkspace';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -143,6 +144,12 @@ function AppContent() {
     logout,
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
+  const [dbOwnerUid, setDbOwnerUid] = useState<string | null>(() => getActiveWorkspaceUid());
+  useEffect(() => {
+    const uid = currentUser?.uid ?? null;
+    setDb(getDatabase());
+    setDbOwnerUid(uid);
+  }, [currentUser?.uid]);
   // Keep the authoritative local database intact for offline diffing and queued
   // edits. Build a permission-scoped projection for UI consumers instead of
   // persisting a filtered view back into the shared cache (which can look like
@@ -1169,6 +1176,11 @@ function AppContent() {
   const currentHouseActivities = selectedHouseId
     ? viewDb.householdActivities.filter((a) => a.householdId === selectedHouseId)
     : [];
+
+  // Prevent a previous account's in-memory records rendering during a workspace switch.
+  if (!loading && currentUser && dbOwnerUid !== currentUser.uid) {
+    return <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center p-4"><p className="text-sm text-stone-600">Opening your secure SHINE workspace…</p></div>;
+  }
 
   // Authentication Loading Screen
   if (loading) {
