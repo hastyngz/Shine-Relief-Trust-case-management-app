@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signIn, logPageErrors } from './helpers';
+import { signIn, logPageErrors, getSignedInUid } from './helpers';
 
 /**
  * Regression test for an offline data-loss bug: while the app was open, an edit
@@ -21,8 +21,9 @@ const FIRESTORE_EMULATOR = 'http://127.0.0.1:8080';
 const PROJECT = 'shine-relief-trust-cms';
 const MINE_ID = 'SG-E2E-MINE';
 const EMULATOR_AUTH = { Authorization: 'Bearer owner' };
-const DB_KEY = 'shine_relief_trust_prod_v1';
-const BASELINE_KEY = 'shine_relief_trust_last_synced_v1';
+const DB_KEY_BASE = 'shine_relief_trust_prod_v1';
+const BASELINE_KEY_BASE = 'shine_relief_trust_last_synced_v2';
+const scopedKey = (base: string, uid: string) => base + '::uid:' + encodeURIComponent(uid);
 
 async function serverFullName(recordId: string): Promise<string | undefined> {
   const response = await fetch(
@@ -33,10 +34,10 @@ async function serverFullName(recordId: string): Promise<string | undefined> {
   return body.fields?.fullName?.stringValue;
 }
 
-function readQueue(page: import('@playwright/test').Page) {
+function readQueue(page: import('@playwright/test').Page, uid: string) {
   return page.evaluate(async () => {
     return await new Promise<Array<{ recordId: string; fullName?: string }>>((resolve) => {
-      const request = indexedDB.open('shine_relief_trust_offline', 2);
+      const request = indexedDB.open('shine_relief_trust_offline_v3::uid:' + encodeURIComponent(uid), 2);
       request.onsuccess = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains('queue')) { resolve([]); return; }
@@ -57,6 +58,9 @@ test('an edit made while offline is queued, not lost to the local-write echo', a
   const page = await context.newPage();
   logPageErrors(page);
   await signIn(page);
+  const uid = await getSignedInUid(page);
+  const dbKey = scopedKey(DB_KEY_BASE, uid);
+  const baselineKey = scopedKey(BASELINE_KEY_BASE, uid);
 
   // Let the initial listeners settle so the baseline is a confirmed copy.
   await page.waitForTimeout(3000);
@@ -73,7 +77,7 @@ test('an edit made while offline is queued, not lost to the local-write echo', a
   // The debounced full-database diff runs ~1s after the edit.
   await page.waitForTimeout(2500);
 
-  const queued = await readQueue(page);
+  const queued = await readQueue(page, uid);
   expect(queued.map((entry) => entry.recordId)).toContain(MINE_ID);
   expect(queued.find((entry) => entry.recordId === MINE_ID)?.fullName).toBe('Offline queued edit');
 
@@ -81,13 +85,13 @@ test('an edit made while offline is queued, not lost to the local-write echo', a
   const baselineName = await page.evaluate((key) => {
     const baseline = JSON.parse(window.localStorage.getItem(key) || '{}');
     return (baseline.girls || []).find((g: { id: string }) => g.id === 'SG-E2E-MINE')?.fullName;
-  }, BASELINE_KEY);
+  }, baselineKey);
   expect(baselineName).not.toBe('Offline queued edit');
   // The local copy still holds the edit (never thrown away).
   const localName = await page.evaluate((key) => {
     const db = JSON.parse(window.localStorage.getItem(key) || '{}');
     return (db.girls || []).find((g: { id: string }) => g.id === 'SG-E2E-MINE')?.fullName;
-  }, DB_KEY);
+  }, dbKey);
   expect(localName).toBe('Offline queued edit');
   expect(await serverFullName(MINE_ID)).not.toBe('Offline queued edit');
 
@@ -97,7 +101,7 @@ test('an edit made while offline is queued, not lost to the local-write echo', a
   await page.waitForTimeout(5000);
 
   expect(await serverFullName(MINE_ID)).toBe('Offline queued edit');
-  expect(await readQueue(page)).toHaveLength(0);
+  expect(await readQueue(page, uid)).toHaveLength(0);
 
   await context.close();
 });

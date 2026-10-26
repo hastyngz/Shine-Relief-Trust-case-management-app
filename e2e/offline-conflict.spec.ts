@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { signIn, logPageErrors } from './helpers';
+import { signIn, logPageErrors, getSignedInUid } from './helpers';
 
 /**
  * Two-device conflict end-to-end test (Task 5).
@@ -62,11 +62,12 @@ async function otherDeviceEdits(recordId: string, fullName: string, updatedAt: s
  */
 async function seedConflict(
   page: Page,
-  opts: { recordId: string; localName: string; baseUpdatedAt: string; serverName: string; serverUpdatedAt: string; serverUpdatedBy: string },
+  opts: { uid: string; recordId: string; localName: string; baseUpdatedAt: string; serverName: string; serverUpdatedAt: string; serverUpdatedBy: string },
 ): Promise<void> {
   await page.evaluate(async (o) => {
     const localData = { id: o.recordId, fullName: o.localName, updatedAt: new Date().toISOString(), updatedBy: 'This Phone' };
     const entry = {
+      ownerUid: o.uid,
       collection: 'girls',
       recordId: o.recordId,
       operation: 'set',
@@ -76,7 +77,7 @@ async function seedConflict(
       queueKey: `girls/${o.recordId}`,
     };
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('shine_relief_trust_offline', 2);
+      const request = indexedDB.open('shine_relief_trust_offline_v3::uid:' + encodeURIComponent(o.uid), 2);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', { keyPath: 'queueKey' });
@@ -103,7 +104,7 @@ async function seedConflict(
       detectedAt: new Date().toISOString(),
       detectedBy: null,
     };
-    window.localStorage.setItem('shine_relief_trust_sync_conflicts_v1', JSON.stringify([conflict]));
+    window.localStorage.setItem('shine_relief_trust_sync_conflicts_v2::uid:' + encodeURIComponent(o.uid), JSON.stringify([conflict]));
     // Nudge the mounted header/panel to re-read the queue and conflict list.
     window.dispatchEvent(new Event('shine_sync_conflicts_updated'));
     window.dispatchEvent(new Event('shine_offline_queue_updated'));
@@ -116,12 +117,14 @@ test.describe('two-device offline conflict', () => {
     const page = await context.newPage();
     logPageErrors(page);
     await signIn(page);
+    const uid = await getSignedInUid(page);
 
     const baseUpdatedAt = (await serverField(MINE_ID, 'updatedAt')) ?? '';
     // The other phone's edit is newer and is already the server's copy.
     const serverUpdatedAt2 = new Date(new Date(baseUpdatedAt).getTime() + 60_000).toISOString();
     await otherDeviceEdits(MINE_ID, 'Theirs newer edit', serverUpdatedAt2, 'Other Phone');
     await seedConflict(page, {
+      uid,
       recordId: MINE_ID,
       localName: 'Mine offline edit',
       baseUpdatedAt,

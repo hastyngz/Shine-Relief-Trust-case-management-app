@@ -19,3 +19,19 @@ export function logPageErrors(page: Page): void {
     if (message.type() === 'error') console.error('[e2e console]', message.text());
   });
 }
+
+/** Reads the UID from Firebase's browser-local auth persistence in the emulator. */
+export async function getSignedInUid(page: Page): Promise<string> {
+  const uid = await page.evaluate(() => {
+    for (const key of Object.keys(window.localStorage)) {
+      if (!key.startsWith('firebase:authUser:')) continue;
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(key) || 'null') as { uid?: unknown } | null;
+        if (typeof parsed?.uid === 'string' && parsed.uid) return parsed.uid;
+      } catch { /* ignore unrelated/malformed auth storage entries */ }
+    }
+    return null;
+  });
+  if (!uid) throw new Error('Signed-in Firebase UID was not found in the emulator auth storage.');
+  return uid;
+}
