@@ -20,6 +20,8 @@ const fakeWindow: any = {
   CustomEvent: FakeEvent,
 };
 Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWindow });
+const { setActiveWorkspaceUid } = await import('../src/services/accountWorkspace');
+setActiveWorkspaceUid('synthetic-storage-test-uid');
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: fakeLocalStorage });
 Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, value: FakeEvent });
