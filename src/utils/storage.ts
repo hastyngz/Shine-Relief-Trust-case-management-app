@@ -31,6 +31,7 @@ import {
   AssetRecord,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
+import { getActiveWorkspaceUid, getWorkspaceStorageKey } from '../services/accountWorkspace';
 import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired, setLastSyncedSnapshot } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { excludeSafeguardingCaseActions } from '../services/healthRecordAccess';
@@ -52,7 +53,8 @@ import {
   CaseReview,
 } from '../types';
 
-const STORAGE_KEY = 'shine_relief_trust_prod_v1';
+const STORAGE_KEY_BASE = 'shine_relief_trust_prod_v1';
+const scopedStorageKey = (): string | null => getWorkspaceStorageKey(STORAGE_KEY_BASE);
 const LEGACY_STORAGE_KEY = 'shine_relief_trust_db_v1';
 
 /** Dispatched when a local save fails so the UI can show a persistent banner. */
@@ -90,12 +92,10 @@ function cloneInitialDatabase(): AppDatabase {
 export function getDatabase(): AppDatabase {
   if (typeof window === 'undefined') return cloneInitialDatabase();
   try {
-    // Purge any old demo key from previous test sessions
-    if (localStorage.getItem(LEGACY_STORAGE_KEY)) {
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-    }
-
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // Preserve the old unscoped cache for explicit recovery; it has no reliable owner.
+    const key = scopedStorageKey();
+    if (!key || !getActiveWorkspaceUid()) return cloneInitialDatabase();
+    const raw = localStorage.getItem(key);
     if (!raw) {
       const initial = cloneInitialDatabase();
       saveDatabase(initial, false);
@@ -165,8 +165,14 @@ export function saveIncomingCloudSnapshot(db: AppDatabase, confirmedServerSnapsh
 
 export function saveDatabase(db: AppDatabase, dispatchEvent: boolean = true): StorageSaveResult {
   if (typeof window === 'undefined') return { ok: true, quotaExceeded: false };
+  const key = scopedStorageKey();
+  if (!key || !getActiveWorkspaceUid()) {
+    const error = new Error('Cannot save SHINE records before an authenticated workspace is active.');
+    dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded: false, error });
+    return { ok: false, quotaExceeded: false, error };
+  }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    localStorage.setItem(key, JSON.stringify(db));
     if (dispatchEvent) {
       window.dispatchEvent(new Event('shine_db_updated'));
     }
