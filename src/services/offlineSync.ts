@@ -1,5 +1,5 @@
 import { AppDatabase, OfflineChangeEntry, SyncConflict, SyncConflictResolution } from '../types';
-import { appendSyncConflictAudit, syncChangeEntriesToFirestore, SyncChangeResult } from './firestoreSync';
+import { appendSyncConflictAudit, COLLECTIONS, syncChangeEntriesToFirestore, SyncChangeResult } from './firestoreSync';
 import { inspectPersistedQueueState, inspectUnownedLegacyIndexedDbState, loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
 import { getActiveWorkspaceUid, getWorkspaceStorageKey } from './accountWorkspace';
 
@@ -698,17 +698,26 @@ export async function flushPendingOfflineSnapshots(
     });
     await persistSyncConflicts(mergeConflicts(existing, newConflicts));
     if (options.actor) {
-      await Promise.all(newConflicts.map((conflict) => appendSyncConflictAudit({
-        action: 'conflict_detected',
-        collection: conflict.collection,
-        recordId: conflict.recordId,
-        userId: options.actor!.uid,
-        userName: options.actor!.name,
-        timestamp: conflict.detectedAt,
-        localUpdatedAt: conflict.localData?.updatedAt ?? conflict.baseUpdatedAt,
-        serverUpdatedAt: conflict.serverUpdatedAt,
-        serverUpdatedBy: conflict.serverUpdatedBy,
-      })));
+      await Promise.all(newConflicts.map((conflict) => {
+        // HR identifiers must not be copied into the general case-action audit
+        // collection. The confidential conflict remains in the UID-scoped local
+        // conflict store for manager/admin review.
+        if (
+          conflict.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
+          conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS
+        ) return Promise.resolve();
+        return appendSyncConflictAudit({
+          action: 'conflict_detected',
+          collection: conflict.collection,
+          recordId: conflict.recordId,
+          userId: options.actor!.uid,
+          userName: options.actor!.name,
+          timestamp: conflict.detectedAt,
+          localUpdatedAt: conflict.localData?.updatedAt ?? conflict.baseUpdatedAt,
+          serverUpdatedAt: conflict.serverUpdatedAt,
+          serverUpdatedBy: conflict.serverUpdatedBy,
+        });
+      }));
     }
   }
 
