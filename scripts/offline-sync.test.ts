@@ -122,7 +122,7 @@ Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEven
 
 const { setActiveWorkspaceUid } = await import('../src/services/accountWorkspace');
 setActiveWorkspaceUid('uid-a');
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges, writePendingOfflineSnapshot } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore, persistImportAuditToFirestore } = await import('../src/services/firestoreSync');
@@ -339,10 +339,11 @@ assert.equal(ownResult.applied, 1);
 
 // --- 5. Legacy snapshot migration -------------------------------------------
 values.clear();
-values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-009', T1)] })]));
+writePendingOfflineSnapshot(db({ girls: [girl('SG-009', T1)] }));
+const scopedSnapshotKey = 'shine_relief_trust_pending_sync_v2::uid:uid-a';
 const migrated = await migrateLegacySnapshots();
-assert.equal(migrated, true, 'the legacy snapshot queue is migrated');
-assert.equal(values.has('shine_relief_trust_pending_sync_v1'), false, 'the legacy key is cleared after migration');
+assert.equal(migrated, true, 'the current workspace snapshot queue is migrated');
+assert.equal(values.has(scopedSnapshotKey), false, 'the scoped snapshot is cleared only after migration succeeds');
 const queue = await loadQueue();
 assert.equal(queue.length, 1, 'the migrated record becomes a per-record change');
 assert.equal(queue[0].recordId, 'SG-009');
@@ -501,14 +502,14 @@ assert.equal(isDatabaseResetRecoveryRequired(), true, 'a destructive reset sets 
 const pausedFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(pausedFlush.flushed, false, 'pending changes are not replayed while reset recovery is required');
 assert.equal((await loadQueue()).length, 1, 'paused sync preserves queued edits for recovery');
-assert.equal(values.has('shine_relief_trust_pending_sync_v1'), true, 'paused sync does not migrate/delete the legacy snapshot');
+assert.equal(values.has('shine_relief_trust_pending_sync_v1'), true, 'unowned legacy snapshot remains quarantined during paused sync');
 const resetDb = db();
 await clearOfflineChangesAfterDatabaseReset(resetDb);
 assert.equal(isDatabaseResetRecoveryRequired(), false, 'successful reset cleanup removes the recovery lock');
 assert.equal(getPendingOfflineSnapshotCount(), 0, 'a successful reset clears the in-memory queue');
 assert.deepEqual(await loadQueue(), [], 'a successful reset clears persisted per-record edits');
-assert.equal(values.has('shine_relief_trust_pending_sync_v1'), false, 'a successful reset removes legacy whole-database snapshots');
-assert.deepEqual(JSON.parse(values.get('shine_relief_trust_last_synced_v1') || 'null'), resetDb,
+assert.equal(values.has('shine_relief_trust_pending_sync_v1'), true, 'reset preserves unowned legacy snapshots for explicit recovery');
+assert.deepEqual(JSON.parse(values.get('shine_relief_trust_last_synced_v2::uid:uid-a') || 'null'), resetDb,
   'the reset database becomes the new sync baseline');
 
 // An interrupted destructive operation remains retryable by an administrator
@@ -536,16 +537,16 @@ await clearOfflineChangesAfterDatabaseReset(resetDb);
 await clearOfflineChangesAfterDatabaseReset(resetDb);
 assert.equal(await inspectPendingOfflineChanges(), 'clear', 'empty persisted queue and no legacy snapshots permit restore');
 
-values.set('shine_relief_trust_offline_queue_v2', JSON.stringify(procurementCreate));
+values.set('shine_relief_trust_offline_queue_v3::uid:uid-a', JSON.stringify(procurementCreate));
 assert.equal(await inspectPendingOfflineChanges(), 'pending', 'persisted localStorage edits block restore');
-values.set('shine_relief_trust_offline_queue_v2', '{invalid-json');
+values.set('shine_relief_trust_offline_queue_v3::uid:uid-a', '{invalid-json');
 assert.equal(await inspectPendingOfflineChanges(), 'unavailable', 'corrupt persisted queue blocks restore rather than appearing empty');
-values.delete('shine_relief_trust_offline_queue_v2');
+values.delete('shine_relief_trust_offline_queue_v3::uid:uid-a');
 
 values.set('shine_relief_trust_pending_sync_v1', '{invalid-legacy-json');
-assert.equal(await inspectPendingOfflineChanges(), 'unavailable', 'corrupt legacy snapshots block restore');
+assert.equal(await inspectPendingOfflineChanges(), 'unavailable', 'corrupt unowned legacy snapshots block restore');
 values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-LEGACY', T1)] })]));
-assert.equal(await inspectPendingOfflineChanges(), 'pending', 'legacy whole-database snapshots block restore');
+assert.equal(await inspectPendingOfflineChanges(), 'pending', 'unowned legacy whole-database snapshots stay quarantined and block destructive restore');
 values.delete('shine_relief_trust_pending_sync_v1');
 
 const originalIndexedDbDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
