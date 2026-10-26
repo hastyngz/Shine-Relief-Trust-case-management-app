@@ -68,6 +68,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     if (!item) return;
     setPendingMovementId(pending.id);
     setPendingMovementSignature(pending.signature);
+    setError('');
+    setNotice('A stock transaction is awaiting server confirmation. Keep its details unchanged and retry when online; the same transaction ID prevents duplicate stock movements.');
     if (pending.mode === 'movement') {
       setMovementTarget(item);
       setStocktakeTarget(null);
