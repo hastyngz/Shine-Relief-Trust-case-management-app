@@ -222,6 +222,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       return;
     }
     const movementId = pendingMovementId || createInventoryId('mov');
+    if (!currentUser?.uid || !savePendingInventoryMovement(currentUser.uid, {
+      id: movementId, itemId: movementTarget.id, signature, mode: 'movement',
+      payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
+    })) {
+      setError('This phone could not preserve the retry key. No stock movement was sent; free device storage and try again.');
+      return;
+    }
     setPendingMovementId(movementId);
     setPendingMovementSignature(signature);
     setSaving(true);
@@ -244,6 +251,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           : 'Stock movement recorded and confirmed by the server.');
         setPendingMovementId(null);
         setPendingMovementSignature(null);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
         setMovementTarget(null);
         setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
       }
@@ -252,6 +260,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       if (status !== undefined && status >= 400 && status < 500) {
         setPendingMovementId(null);
         setPendingMovementSignature(null);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
       }
       setError(err instanceof Error
         ? `The stock movement was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
@@ -286,6 +295,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       return;
     }
     const movementId = pendingMovementId || createInventoryId('mov');
+    const serverReason = `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`;
+    if (!currentUser?.uid || !savePendingInventoryMovement(currentUser.uid, {
+      id: movementId, itemId: stocktakeTarget.id, signature, mode: 'stocktake',
+      payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', reason: serverReason, formReason: stocktake.reason.trim() },
+    })) {
+      setError('This phone could not preserve the retry key. No stocktake was sent; free device storage and try again.');
+      return;
+    }
     setPendingMovementId(movementId);
     setPendingMovementSignature(signature);
     setSaving(true);
@@ -307,6 +324,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           : 'Stocktake recorded and confirmed by the server.');
         setPendingMovementId(null);
         setPendingMovementSignature(null);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
         setStocktakeTarget(null);
         setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
       }
