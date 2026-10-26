@@ -1162,6 +1162,7 @@ const salaryConflictFlush = await flushPendingOfflineSnapshots({ actor: { uid: '
 assert.equal(salaryConflictFlush.conflicts.length, 1, 'different server salary with the same ID is surfaced as a conflict');
 assert.equal(server.get('employeeSalaryHistory', conflictingSalary.id).salaryAmount, 999999, 'conflict handling never overwrites an existing salary record');
 assert.equal((await loadQueue()).length, 1, 'conflicting salary record remains queued for review');
+assert.equal(server.all().some(([key]: [string, unknown]) => key.startsWith('caseActionAuditLogs/')), false, 'salary conflicts must not leak employee identifiers into the general case-action audit collection');
 await persistQueue([], 'uid-a');
 await import('../src/services/offlineSync').then(({ persistSyncConflicts }) => persistSyncConflicts([]));
 
