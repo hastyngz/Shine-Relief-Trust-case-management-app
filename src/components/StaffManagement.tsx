@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
+import { getPasswordResetErrorMessage } from '../utils/passwordResetFeedback';
 import {
   Users,
   UserPlus,
@@ -184,11 +185,13 @@ export const StaffManagement: React.FC = () => {
   };
 
   const handleSendResetLink = async (staff: StaffUser) => {
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await sendResetPassword(staff.email);
-      setActionSuccess(`Dispatched password reset instructions to ${staff.email}.`);
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to send password reset email.');
+      setActionSuccess(`Password reset request accepted. If an Auth account exists for ${staff.email}, instructions should arrive by email. This action did not change the password.`);
+    } catch (err: unknown) {
+      setActionError(getPasswordResetErrorMessage(err));
     }
   };
 
