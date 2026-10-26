@@ -535,7 +535,9 @@ await clearOfflineChangesAfterDatabaseReset(resetDb);
 
 // --- 12. Restore inspection must fail closed on unreadable queue state -----
 await clearOfflineChangesAfterDatabaseReset(resetDb);
-assert.equal(await inspectPendingOfflineChanges(), 'clear', 'empty persisted queue and no legacy snapshots permit restore');
+assert.equal(await inspectPendingOfflineChanges(), 'pending', 'unowned legacy snapshots remain quarantined and block destructive restore');
+values.delete('shine_relief_trust_pending_sync_v1');
+assert.equal(await inspectPendingOfflineChanges(), 'clear', 'restore is allowed after the synthetic legacy quarantine fixture is removed');
 
 values.set('shine_relief_trust_offline_queue_v3::uid:uid-a', JSON.stringify(procurementCreate));
 assert.equal(await inspectPendingOfflineChanges(), 'pending', 'persisted localStorage edits block restore');
