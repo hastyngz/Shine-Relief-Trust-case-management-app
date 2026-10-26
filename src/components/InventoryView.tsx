@@ -347,6 +347,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       if (status !== undefined && status >= 400 && status < 500) {
         setPendingMovementId(null);
         setPendingMovementSignature(null);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
       }
       setError(err instanceof Error
         ? `The stocktake was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
