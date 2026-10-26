@@ -502,3 +502,8 @@ No production data/rules/deployment changed. CI must pass on the resulting exact
 ## 2026-10-26 queue-read account-switch race
 
 A further review found `loadQueue()` captured the current UID before an asynchronous IndexedDB/localStorage read but did not verify it after the await. An account switch during the read could return the first account's queue to a caller executing in the next session. The queue loader now rejects the stale result before publishing it to memory or returning it. Added a synthetic regression that seeds an isolated queue for UID B, starts a read for UID A, switches back to B before the read resumes, and verifies the stale read is rejected. No production data or authorization rules changed. Exact-head CI remains the release gate; Android/weak-signal testing remains outstanding.
+
+
+## 2026-10-26 authentication profile race hardening
+
+During the shared-device account-isolation review, `AuthContext.loadStaffProfile` was found to allow overlapping asynchronous profile requests to complete out of order. A slow read for UID A could finish after UID B signed in and overwrite B's in-memory staff profile/role. The loader now checks that Firebase's current authenticated UID still matches the requested user after asynchronous reads and writes and before publishing the profile; account-specific profile linking/bootstrap writes are guarded too. This is client-side stale-request protection only and does not change Firestore authorization. Exact-head CI is required; no production data/rules/deployment or Android device test was performed.

@@ -821,3 +821,7 @@ Suggestion format:
 
 ### 2026-10-26 · Mosaic (ChatGPT) · queue-read account-switch race
 - Review found `loadQueue()` checked the UID before an async IndexedDB read but not after it; a sign-out/account switch during the await could return old-account entries to a caller in the new session. It now rejects stale reads, with a synthetic regression that switches UIDs mid-read. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · auth profile completion race
+- Security review found overlapping async staff-profile loads could finish out of order after a quick account switch, leaving the previous account's role/profile in AuthContext. Profile loading now checks Firebase's current UID after awaited reads/writes and before publishing profile state. Exact-head CI required; no production changes. — Mosaic (ChatGPT), 2026-10-26
