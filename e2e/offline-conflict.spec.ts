@@ -160,11 +160,13 @@ test.describe('two-device offline conflict', () => {
     const page = await context.newPage();
     logPageErrors(page);
     await signIn(page);
+    const uid = await getSignedInUid(page);
 
     const baseUpdatedAt = (await serverField(THEIRS_ID, 'updatedAt')) ?? '';
     const serverUpdatedAt2 = new Date(new Date(baseUpdatedAt).getTime() + 60_000).toISOString();
     await otherDeviceEdits(THEIRS_ID, 'Authoritative server value', serverUpdatedAt2, 'Other Phone');
     await seedConflict(page, {
+      uid,
       recordId: THEIRS_ID,
       localName: 'Discard this local edit',
       baseUpdatedAt,
