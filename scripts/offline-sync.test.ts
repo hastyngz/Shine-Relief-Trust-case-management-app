@@ -528,8 +528,11 @@ assert.deepEqual(JSON.parse(values.get('shine_relief_trust_last_synced_v2::uid:u
 // when both persisted queue formats are provably empty. A lock must never make
 // an unreadable or non-empty queue look safe.
 markDatabaseResetRecoveryRequired();
+assert.equal(await inspectPendingOfflineChanges(), 'pending',
+  'the unowned legacy snapshot must block restore even when the scoped queues are empty');
+values.delete('shine_relief_trust_pending_sync_v1');
 assert.equal(await inspectPendingOfflineChanges(), 'clear',
-  'an admin can retry restore after interruption when all persisted queues are empty');
+  'an admin can retry restore once all scoped queues and legacy quarantine fixtures are empty');
 await persistQueue(procurementCreate);
 assert.equal(await inspectPendingOfflineChanges(), 'pending',
   'the recovery lock does not make queued edits safe to discard silently');
