@@ -258,6 +258,26 @@ function AppContent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
 
+  // Discard the previous account's in-progress UI context before the new
+  // workspace is rendered; do not carry an old form into another person's session.
+  useEffect(() => {
+    setView('dashboard');
+    setActiveTab('dashboard');
+    setSelectedGirlId(null);
+    setSelectedHouseId(null);
+    setSelectedProgrammeId(null);
+    setQualityRecordFocus(null);
+    setEditingGirl(null);
+    setEditingHouse(null);
+    setAiFocusGirlId(undefined);
+    setAiFocusHouseId(undefined);
+    setPendingImportFile(null);
+    setImportWizardKey((key) => key + 1);
+    setIsSearchOpen(false);
+    setIsDataModalOpen(false);
+    setIsQuickAddOpen(false);
+  }, [currentUser?.uid]);
+
   // Firestore sync status
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus());
 
