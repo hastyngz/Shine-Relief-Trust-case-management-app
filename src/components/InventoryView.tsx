@@ -270,7 +270,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       id: movementId, itemId: movementTarget.id, signature, mode: 'movement',
       payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
     })) {
-      setError('No stock movement was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Restore/resolve the pending transaction first; if storage is full, free space and retry.');
+      restorePendingInventoryForm();
+      setError('No stock movement was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Resolve the pending transaction first; if storage is full, free space and retry.');
       return;
     }
     setPendingMovementId(movementId);
@@ -346,7 +347,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       id: movementId, itemId: stocktakeTarget.id, signature, mode: 'stocktake',
       payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', reason: serverReason, formReason: stocktake.reason.trim() },
     })) {
-      setError('No stocktake was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Restore/resolve the pending transaction first; if storage is full, free space and retry.');
+      restorePendingInventoryForm();
+      setError('No stocktake was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Resolve the pending transaction first; if storage is full, free space and retry.');
       return;
     }
     setPendingMovementId(movementId);
