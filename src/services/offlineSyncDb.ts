@@ -49,15 +49,46 @@ function openDb(uid: string | null = getActiveWorkspaceUid()): Promise<IDBDataba
     const name = databaseName(uid);
     if (!name) { reject(new Error('No authenticated SHINE workspace is active.')); return; }
     const request = indexedDB.open(name, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      // Recreate the store so it is keyed by the composite key. Existing rows
-      // (from the previous, collision-prone key) are migrated by loadQueue
-      // from the localStorage fallback / deduced from the record id.
-      if (db.objectStoreNames.contains(STORE_NAME)) {
-        db.deleteObjectStore(STORE_NAME);
+      const transaction = request.transaction;
+      if (!transaction) return;
+
+      // The old v1 store was keyed by collection, so opening v2 must migrate
+      // its surviving rows before replacing the key path. Deleting the store
+      // first silently discarded the only durable copy of those queued edits.
+      if (!db.objectStoreNames.contains(STORE_NAME) || event.oldVersion === 0) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'queueKey' });
+        return;
       }
-      db.createObjectStore(STORE_NAME, { keyPath: 'queueKey' });
+
+      const read = transaction.objectStore(STORE_NAME).getAll();
+      read.onerror = () => transaction.abort();
+      read.onsuccess = () => {
+        const oldEntries = (read.result as OfflineChangeEntry[]) || [];
+        const migrated = oldEntries.map((entry) => ({
+          ...entry,
+          // This DB name is already UID-scoped; never infer ownership from an
+          // unscoped legacy DB or overwrite an explicit different owner.
+          ownerUid: entry.ownerUid || uid,
+          queueKey: queueKeyOf(entry),
+        }));
+        if (
+          migrated.some((entry) =>
+            entry.ownerUid !== uid ||
+            typeof entry.collection !== 'string' || !entry.collection ||
+            typeof entry.recordId !== 'string' || !entry.recordId
+          ) ||
+          new Set(migrated.map((entry) => entry.queueKey)).size !== migrated.length
+        ) {
+          // Abort leaves the original v1 database intact for recovery.
+          transaction.abort();
+          return;
+        }
+        db.deleteObjectStore(STORE_NAME);
+        const newStore = db.createObjectStore(STORE_NAME, { keyPath: 'queueKey' });
+        for (const entry of migrated) newStore.put(entry);
+      };
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);

@@ -536,3 +536,10 @@ This pass covers the account-isolation changes committed up to the code SHA abov
 After conflict-list reads were changed to fail closed, the background flush path needed a controlled recovery branch: a read failure after Firestore detects a conflict must not become an unhandled rejected promise from startup/connectivity handlers. At that point the queue already retains the conflicted entries, so the flush returns an incomplete result and leaves them queued for retry when local storage is readable. A synthetic regression forces the conflict-list read to fail during a repeated conflict and asserts the flush does not report success or drop the queued edit.
 
 No live services, production data, security rules or deployment changed. Verification remains tied to the exact current branch SHA and CI.
+
+
+## 2026-10-26 — Prevent offline queue loss during IndexedDB schema upgrade
+
+Review of the UID-scoped offline queue found that `openDb` recreated the object store on version change before reading it. That would delete the only IndexedDB copy of queued edits in an existing v1 `shine_relief_trust_offline_v3::uid:<uid>` database; the localStorage fallback is not a reliable recovery path.
+
+The upgrade now reads existing rows within the version-change transaction, recreates the store with the composite `collection/recordId` key, and writes the migrated rows before the transaction can complete. Missing owner UID is filled only because the database itself is scoped to the authenticated UID; an explicit owner mismatch, malformed key, or duplicate composite key aborts the upgrade instead of guessing or overwriting. The regression test creates a synthetic v1 database, queues a record, opens it through the v2 code, and asserts the record and owner survive. CI has not yet been checked for this patch; no production data or deployment was touched.

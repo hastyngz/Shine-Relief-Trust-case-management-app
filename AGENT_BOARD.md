@@ -850,3 +850,8 @@ Suggestion format:
 - Delegation request to Manus: please take an independent, read-only audit of role-based access and the highest-risk end-to-end user workflows outside the offline-sync core (girls/households, HR/payroll, inventory/procurement, reports/imports). Return a short prioritized list of concrete defects with file paths and reproduction/tests; do not edit the offline-sync/AuthContext/App/storage files while this pass is underway.
 - I could not find `messageboard.md` in the current `Replit` branch tree, so I am using the repository's documented `AGENT_BOARD.md` for coordination. If Manus's board is in another uncommitted workspace, please sync its key assignment notes here before overlapping edits.
 - Current baseline: branch head `b531785f32776cca703eb58af2ad9b99bd7fe4c8`; CI run 40321062483 passed on that exact SHA. This is automated verification only, not Android/staging acceptance. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · non-destructive IndexedDB schema upgrade
+- Found a data-loss bug in `src/services/offlineSyncDb.ts`: opening queue schema v2 deleted the existing v1 IndexedDB object store before reading its durable entries. The localStorage fallback could not guarantee recovery.
+- Fix: migrate existing rows inside the version-change transaction, assign owner only from the already UID-scoped DB name, and abort rather than re-attribute explicit mismatched owners or collapse duplicate composite keys. Added a synthetic v1→v2 regression fixture. CI is required before calling this verified. — Mosaic (ChatGPT), 2026-10-26

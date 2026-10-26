@@ -74,6 +74,35 @@ setActiveWorkspaceUid('synthetic-manager-uid');
 assert.equal((await loadQueueEntries()).length, 3, 'switching back must preserve the manager queue');
 assert.equal(await inspectUnownedLegacyIndexedDbState(), 'clear', 'the old device-wide DB is clear only when absent');
 
+// Simulate the previous v1 schema for a UID-scoped database. Opening v2 must
+// migrate the surviving row, not drop the queue during a key-path upgrade.
+const upgradeUid = 'synthetic-upgrade-uid';
+const upgradeDbName = `shine_relief_trust_offline_v3::uid:${encodeURIComponent(upgradeUid)}`;
+const oldDbRequest = indexedDB.open(upgradeDbName, 1);
+const oldDb = await new Promise<IDBDatabase>((resolve, reject) => {
+  oldDbRequest.onupgradeneeded = () => oldDbRequest.result.createObjectStore('queue', { keyPath: 'collection' });
+  oldDbRequest.onsuccess = () => resolve(oldDbRequest.result);
+  oldDbRequest.onerror = () => reject(oldDbRequest.error);
+});
+await new Promise<void>((resolve, reject) => {
+  const tx = oldDb.transaction('queue', 'readwrite');
+  tx.objectStore('queue').put({
+    collection: 'girls', recordId: 'SG-UPGRADE-01', operation: 'set',
+    data: { id: 'SG-UPGRADE-01', fullName: 'Legacy queued edit' },
+    baseUpdatedAt: '2026-01-01T00:00:00.000Z', queuedAt: '2026-01-02T00:00:00.000Z',
+  });
+  tx.oncomplete = () => resolve();
+  tx.onerror = () => reject(tx.error);
+});
+oldDb.close();
+setActiveWorkspaceUid(upgradeUid);
+const migratedLegacyQueue = await loadQueueEntries();
+assert.equal(migratedLegacyQueue.length, 1, 'v1 queue rows survive the composite-key schema upgrade');
+assert.equal(migratedLegacyQueue[0].recordId, 'SG-UPGRADE-01');
+assert.equal(migratedLegacyQueue[0].ownerUid, upgradeUid, 'legacy rows inherit only their UID-scoped database owner');
+assert.equal(migratedLegacyQueue[0].queueKey, 'girls/SG-UPGRADE-01');
+setActiveWorkspaceUid('synthetic-manager-uid');
+
 const legacyName = 'shine_relief_trust_offline';
 const legacyRequest = indexedDB.open(legacyName, 1);
 const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
