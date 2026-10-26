@@ -336,7 +336,10 @@ service cloud.firestore {
 
     match /caseReviews/{id} {
       allow read: if canViewCaseReviews();
-      allow create, update: if canEditCaseReviews();
+      allow create: if canEditCaseReviews() &&
+        (request.resource.data.get('health', '') == '' || canEditHealthRecords());
+      allow update: if canEditCaseReviews() &&
+        ((resource.data.get('health', '') == '' && request.resource.data.get('health', '') == '') || canEditHealthRecords());
       allow delete: if isAdmin();
     }
 

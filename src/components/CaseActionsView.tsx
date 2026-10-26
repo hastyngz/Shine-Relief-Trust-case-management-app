@@ -28,7 +28,7 @@ function effectiveStatus(action: CaseAction, today: string): CaseActionStatus {
 }
 
 export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh, onOpenGirl, onOpenHousehold }) => {
-  const { currentUser, staffProfile, allStaff, role, isAdmin, canViewHealthRecords, canViewSafeguarding } = useAuth();
+  const { currentUser, staffProfile, allStaff, role, isAdmin, isViewOnly, canViewHealthRecords, canViewSafeguarding } = useAuth();
   const [filter, setFilter] = useState<ActionFilter>('Mine');
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -147,6 +147,10 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    if (isViewOnly) {
+      setError('View-only accounts cannot create or change case actions.');
+      return;
+    }
     if (!actor.uid || !title.trim() || !dueDate || !assignedStaffId) {
       setError('Title, assigned staff member, and due date are required.');
       return;
@@ -193,6 +197,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   };
 
   const changeStatus = (action: CaseAction, nextStatus: CaseActionStatus) => {
+    if (isViewOnly) return;
     const completionNotes = nextStatus === 'Completed'
       ? window.prompt('Completion notes (optional):', action.completionNotes || '') ?? undefined
       : undefined;
@@ -202,6 +207,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
   };
 
   const reassign = async (action: CaseAction, nextStaffId: string) => {
+    if (isViewOnly) return;
     const assignee = allStaff.find((staff) => staff.uid === nextStaffId);
     if (!assignee || nextStaffId === action.assignedStaffId) return;
     updateCaseAction(action.id, { assignedStaffId: assignee.uid, assignedStaffName: assignee.fullName }, actor);
@@ -243,9 +249,11 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
           <h2 className="text-lg font-black text-stone-900">Staff work queue</h2>
           <p className="text-xs text-stone-500">Assigned actions and follow-ups that need attention</p>
         </div>
-        <button onClick={() => setShowForm((shown) => !shown)} className="inline-flex items-center gap-2 bg-teal-900 text-white px-3 py-2 rounded-lg text-xs font-bold">
-          <Plus className="w-4 h-4" /> New action
-        </button>
+        {!isViewOnly && (
+          <button onClick={() => setShowForm((shown) => !shown)} className="inline-flex items-center gap-2 bg-teal-900 text-white px-3 py-2 rounded-lg text-xs font-bold">
+            <Plus className="w-4 h-4" /> New action
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -257,7 +265,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
         {metric('Completed', completed.length, 'Completed', 'bg-emerald-50 border-emerald-200 text-emerald-950', CheckCircle2)}
       </div>
 
-      {showForm && (
+      {showForm && !isViewOnly && (
         <form onSubmit={submit} className="theme-card border border-stone-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <p className="md:col-span-2 text-[11px] text-stone-500">This draft is saved on this device and remains available if your connection drops.</p>
           <label className="text-xs font-semibold text-stone-700">Action title *
@@ -329,7 +337,7 @@ export const CaseActionsView: React.FC<CaseActionsViewProps> = ({ db, onRefresh,
         {visibleActions.map((action) => {
           const currentStatus = effectiveStatus(action, today);
           const assignee = allStaff.find((staff) => staff.uid === action.assignedStaffId);
-          const canUpdate = canAssignTeamTasks || action.assignedStaffId === actor.uid;
+          const canUpdate = !isViewOnly && (canAssignTeamTasks || action.assignedStaffId === actor.uid);
           return (
             <SwipeRow
               key={action.id}

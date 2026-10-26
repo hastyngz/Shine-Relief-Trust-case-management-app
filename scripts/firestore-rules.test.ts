@@ -35,6 +35,10 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
+    await setDoc(doc(firestore, 'staffUsers/case-reviewer'), staff('case-reviewer', 'Staff', {
+      canViewCaseReviews: true,
+      canEditCaseReviews: true,
+    }));
     const safeguardingWorkerProfile = staff('safeguarding-worker', 'Staff');
     safeguardingWorkerProfile.safeguardingPermissions = { canView: true, canCreate: false, canEdit: false, canClose: false };
     await setDoc(doc(firestore, 'staffUsers/safeguarding-worker'), safeguardingWorkerProfile);
@@ -109,6 +113,13 @@ async function seedData() {
       createdByUid: 'manager',
       updatedByUid: 'manager',
     });
+    await setDoc(doc(firestore, 'caseReviews/review-health'), {
+      id: 'review-health',
+      girlId: 'girl-1',
+      reviewDate: '2026-10-01',
+      health: 'SYNTHETIC_RESTRICTED_HEALTH_REVIEW',
+      currentSituation: 'Synthetic case review fixture',
+    });
     await setDoc(doc(firestore, 'caseActionAuditLogs/audit-action-1'), {
       id: 'audit-action-1', recordId: 'action-1', userId: 'viewer', eventType: 'updated', timestamp: '2026-10-01T00:00:00.000Z',
     });
@@ -169,6 +180,7 @@ async function run() {
 
     const viewer = testEnvironment.authenticatedContext('viewer', { email: 'viewer@example.test' }).firestore();
     const worker = testEnvironment.authenticatedContext('worker', { email: 'worker@example.test' }).firestore();
+    const caseReviewer = testEnvironment.authenticatedContext('case-reviewer', { email: 'case-reviewer@example.test' }).firestore();
     const manager = testEnvironment.authenticatedContext('manager', { email: 'manager@example.test' }).firestore();
     const admin = testEnvironment.authenticatedContext('admin', { email: 'admin@example.test' }).firestore();
     const anonymous = testEnvironment.unauthenticatedContext().firestore();
@@ -326,6 +338,15 @@ async function run() {
     await assertSucceeds(getDoc(doc(safeguardingWorker, 'caseActions/action-safeguarding-authorized')));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-health')));
     await assertSucceeds(getDoc(doc(manager, 'caseActions/action-health')));
+    // Case-review reads remain queryable; the client strips health for users without view access.
+    await assertSucceeds(getDoc(doc(caseReviewer, 'caseReviews/review-health')));
+    await assertSucceeds(getDoc(doc(manager, 'caseReviews/review-health')));
+    await assertSucceeds(setDoc(doc(caseReviewer, 'caseReviews/review-without-health'), {
+      id: 'review-without-health', girlId: 'girl-1', reviewDate: '2026-10-02', currentSituation: 'Synthetic safe review',
+    }));
+    await assertFails(setDoc(doc(caseReviewer, 'caseReviews/review-with-health'), {
+      id: 'review-with-health', girlId: 'girl-1', reviewDate: '2026-10-03', health: 'SYNTHETIC_RESTRICTED_HEALTH_REVIEW',
+    }));
     const adminAssignedViewerActions = await assertSucceeds(getDocsFromServer(query(collection(admin, 'caseActions'), where('assignedStaffId', '==', 'viewer'))));
     assert.deepEqual(adminAssignedViewerActions.docs.map((action) => action.id).sort(), ['action-1', 'action-health', 'action-safeguarding']);
     const visibleViewerActions = await assertSucceeds(getDocsFromServer(query(collection(viewer, 'caseActions'), where('assignedStaffId', '==', 'viewer'), where('sourceType', 'not-in', ['safeguarding', 'healthFollowUp']))));

@@ -49,7 +49,6 @@ Highest-priority findings for owner/agent triage:
 
 The other ChatGPT agent owns the offline workspace/auth queue area and should avoid these paths unless coordinating. Recommended next implementation slice, if the owner approves, is the narrow P1 permission/false-success fixes with focused regression tests; the P0 credential, provider-policy and Firestore-integrity items need explicit design decisions first.
 
-
 ### 2026-10-26 · Mosaic (ChatGPT) · queue migration follow-up
 The production fix and synthetic regression are now in the shared branch: the v1 queue is migrated transactionally; malformed/foreign-owner/duplicate-key cases abort and remain intact; an unsafe upgrade is not hidden by the localStorage fallback. I am checking the exact-head CI before releasing the file claim. — Mosaic (ChatGPT)
 
@@ -64,3 +63,9 @@ The production fix and synthetic regression are now in the shared branch: the v1
 - **Claimed area for Manus:** `src/components/CaseActionsView.tsx`, `src/components/HouseholdsList.tsx`, `src/components/HouseholdProfile.tsx`, `src/components/CaseReviewsView.tsx`, plus focused tests and any required rules tests.
 - **Goal:** fix View Only users' ability to reach case-action creation and household money/activity entry points; independently gate health text in case reviews. Enforce authorization at the Firestore/server boundary as well as the UI; do not loosen rules or rely only on hiding controls.
 - **Guardrails:** use synthetic fixtures, preserve offline-first behavior, don't edit offline queue/AuthContext/App/storage files, and report any server-rule gap that needs an owner decision rather than weakening security. Run relevant tests and report exact SHA/CI. — Mosaic (ChatGPT), 2026-10-26
+
+### 2026-10-26 · Manus agent · View Only and case-review permission slice
+- **Claimed files:** `src/components/CaseActionsView.tsx`, `src/components/CaseReviewsView.tsx`, `src/components/HouseholdsList.tsx`, `src/components/HouseholdProfile.tsx`, `firestore.rules`, `scripts/firestore-rules.test.ts`.
+- **Goal:** close the audited View Only mutation affordances/handlers and enforce the distinct case-review health edit permission without touching the offline-sync/AuthContext/App core.
+- **Status:** implementation complete and independently reviewed. View Only case-action creation/status/reassignment and household rent/expense/activity controls are hidden and handler-guarded; case-review health is redacted unless view-authorized and writable only with `canEditHealthRecords`; Firestore rules tests cover non-health allow/health deny; expense forms reject a changed `updatedAt` baseline. `npm run lint`, `npm run test:rules`, `npm run test:health-access`, `npm run test:ui-effects`, and `npm run build` passed.
+- **Residual limitation:** case-review reads remain authorized by `canViewCaseReviews` to preserve the existing mixed collection listener; component redaction is defense in depth, not a claim of field-level Firestore read isolation. — Manus, 2026-10-26

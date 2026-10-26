@@ -130,12 +130,14 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
               : 'Try adjusting your search criteria or filters.'}
           </p>
           {households.length === 0 ? (
-            <button
-              onClick={onAddHouse}
-              className="mt-4 px-4 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm transition-colors"
-            >
-              Add First Household
-            </button>
+            !isViewOnly && (
+              <button
+                onClick={onAddHouse}
+                className="mt-4 px-4 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm transition-colors"
+              >
+                Add First Household
+              </button>
+            )
           ) : (
             <button
               onClick={() => {
@@ -255,34 +257,36 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
 
               {/* Action Buttons Row */}
               <div className="p-3 bg-stone-50/70 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onAddRent(house)}
-                    className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-emerald-900 hover:bg-emerald-50 flex items-center gap-1 transition-colors"
-                    title="Record rent payment for this house"
-                  >
-                    <Banknote className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Rent</span>
-                  </button>
+                {!isViewOnly && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onAddRent(house)}
+                      className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-emerald-900 hover:bg-emerald-50 flex items-center gap-1 transition-colors"
+                      title="Record rent payment for this house"
+                    >
+                      <Banknote className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Rent</span>
+                    </button>
 
-                  <button
-                    onClick={() => onAddExpense(house)}
-                    className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-teal-900 hover:bg-teal-50 flex items-center gap-1 transition-colors"
-                    title="Add groceries or supplies"
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5 text-teal-700" />
-                    <span>Groceries</span>
-                  </button>
+                    <button
+                      onClick={() => onAddExpense(house)}
+                      className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-teal-900 hover:bg-teal-50 flex items-center gap-1 transition-colors"
+                      title="Add groceries or supplies"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5 text-teal-700" />
+                      <span>Groceries</span>
+                    </button>
 
-                  <button
-                    onClick={() => onAddActivity(house)}
-                    className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-amber-900 hover:bg-amber-50 flex items-center gap-1 transition-colors"
-                    title="Record group activity or follow-up"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Activity</span>
-                  </button>
-                </div>
+                    <button
+                      onClick={() => onAddActivity(house)}
+                      className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-amber-900 hover:bg-amber-50 flex items-center gap-1 transition-colors"
+                      title="Record group activity or follow-up"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Activity</span>
+                    </button>
+                  </div>
+                )}
 
                 <button
                   onClick={() => onSelectHouse(house.id)}
