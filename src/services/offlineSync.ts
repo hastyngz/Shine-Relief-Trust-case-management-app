@@ -285,6 +285,9 @@ export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending
 export function isDatabaseResetRecoveryRequired(): boolean {
   if (typeof window === 'undefined') return false;
   try {
+    // An older version may have interrupted a destructive reset before workspace
+    // keys existed. Keep that global safety lock effective until explicit recovery.
+    if (window.localStorage.getItem('shine_relief_trust_reset_recovery_required_v1') === '1') return true;
     return window.localStorage.getItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE)) === '1';
   } catch {
     // Fail closed: if the recovery marker cannot be read, do not replay queued edits.
