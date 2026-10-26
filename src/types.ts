@@ -1645,8 +1645,8 @@ export interface ManagementProcurementReportHistoryRecord {
   id: string;
   reportType: 'management-procurement';
   generatedByUid: string;
-  generatedAt: Timestamp;
-  expiresAt: Timestamp;
+  generatedAt: Timestamp | Date;
+  expiresAt: Timestamp | Date;
   dateBasis: 'createdAt' | 'approvedAt' | 'orderedAt' | 'receivedAt' | 'financeHandedOverAt';
   startDate?: string;
   endDate?: string;

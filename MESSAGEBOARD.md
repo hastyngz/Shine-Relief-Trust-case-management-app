@@ -239,3 +239,10 @@ The management report history needs its own manager/admin-only collection; the e
 - Verification: local `npm run lint`, `npm run build`, `npm run test:management-procurement-report`, `npm run test:procurement`, `npm run test:rules`, and `npm run audit:firestore-access` pass.
 - Next: publish and check Actions on the exact Replit head. Configure Firestore TTL for `managementProcurementReportHistory.expiresAt` only as part of the release gate; no live data or deployment was touched.
 - Watch out: no dedicated React UI integration test yet; physical Android/weak-signal acceptance and TTL configuration remain open. — Manus, 2026-10-27
+
+### 2026-10-27 · Manus · report Actions follow-up
+- Area: exact-head regression on report commit `6aa04ab`.
+- Finding: Actions run `40421313882` passed report aggregates, Firestore rules, procurement workflow, and offline E2E, but `Test offline sync queue` failed loading a runtime `Timestamp` export from the test's mocked `firebase/firestore` module. This was introduced by the report history write, not by the queue implementation.
+- Fix: removed the runtime Timestamp import; the history helper now uses native `Date` values, which Firestore stores as timestamps. Emulator fixtures exercise the Date serialization path.
+- Verification: local `npm run test:offline`, `npm run lint`, `npm run build`, `npm run test:management-procurement-report`, and `npm run test:rules` pass after the fix.
+- Next: publish the follow-up and verify Actions on its exact SHA. No queue files, production data, or live configuration were changed. — Manus, 2026-10-27

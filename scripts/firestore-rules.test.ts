@@ -463,13 +463,13 @@ async function run() {
     await assertFails(setDoc(doc(worker, 'reportHistory/report-bad-path'), { id: 'report-bad-path', reportType: 'comprehensive', title: 'Bad path', reportingPeriod: '2026-01', filters: {}, generatedBy: 'worker', generatedByUid: 'worker', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'docx', fileName: 'report.docx', storagePath: 'reports/manager/report-bad-path/report.docx', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
     await assertFails(updateDoc(doc(worker, 'reportHistory/report-worker'), { title: 'Changed' }));
     await assertFails(setDoc(doc(viewer, 'reportHistory/report-viewer'), { id: 'report-viewer', reportType: 'comprehensive', title: 'Viewer report', reportingPeriod: '2026-01', filters: {}, generatedBy: 'viewer', generatedByUid: 'viewer', generatedAt: '2026-09-28T00:00:00.000Z', fileType: 'pdf', fileName: 'report.pdf', dataSourceReferences: ['girls'], recordCount: 1, photoCount: 0, tableCount: 1, status: 'Generated' }));
-    const procurementReportGeneratedAt = Timestamp.now();
+    const procurementReportGeneratedAt = new Date();
     const procurementReportMetadata = {
       id: 'management-procurement-report-manager',
       reportType: 'management-procurement',
       generatedByUid: 'manager',
       generatedAt: procurementReportGeneratedAt,
-      expiresAt: Timestamp.fromMillis(procurementReportGeneratedAt.toMillis() + 90 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(procurementReportGeneratedAt.getTime() + 90 * 24 * 60 * 60 * 1000),
       dateBasis: 'createdAt',
       startDate: '2026-01-01',
       endDate: '2026-01-31',
@@ -489,7 +489,7 @@ async function run() {
     await assertFails(setDoc(doc(manager, 'managementProcurementReportHistory/long-retention-attempt'), {
       ...procurementReportMetadata,
       id: 'long-retention-attempt',
-      expiresAt: Timestamp.fromMillis(procurementReportGeneratedAt.toMillis() + 365 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(procurementReportGeneratedAt.getTime() + 365 * 24 * 60 * 60 * 1000),
     }));
     await assertFails(setDoc(doc(manager, 'managementProcurementReportHistory/invalid-date-attempt'), {
       ...procurementReportMetadata,
