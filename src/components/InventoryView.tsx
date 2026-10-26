@@ -221,10 +221,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Add a reason for this stock movement.');
       return;
     }
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setError('No stock movement was saved. Connect to the internet and retry so the server can validate the current balance.');
-      return;
-    }
     const signature = JSON.stringify({
       itemId: movementTarget.id, type: movement.type, quantity, date: movement.date,
       destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim(),
@@ -243,6 +239,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     setPendingMovementId(movementId);
     setPendingMovementSignature(signature);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('');
+      setNotice('Stock movement saved as pending on this device only. Stock has NOT changed on the server. Reconnect and press Record movement again to submit it.');
+      return;
+    }
     setSaving(true);
     setError('');
     setNotice('');
@@ -294,10 +295,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Record who/what was checked or why the stocktake was performed.');
       return;
     }
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setError('No stocktake was saved. Connect to the internet and retry so the server can validate the current balance.');
-      return;
-    }
     const signature = JSON.stringify({
       itemId: stocktakeTarget.id, type: 'Adjustment', countedQuantity: counted, date: stocktake.date,
       reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
@@ -317,6 +314,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     setPendingMovementId(movementId);
     setPendingMovementSignature(signature);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('');
+      setNotice('Stocktake saved as pending on this device only. Stock has NOT changed on the server. Reconnect and press Record stocktake again to submit it.');
+      return;
+    }
     setSaving(true);
     setError('');
     setNotice('');
