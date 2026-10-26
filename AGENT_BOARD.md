@@ -881,3 +881,9 @@ Suggestion format:
 - State: completed on code SHA `6a82e651fd379c42f90836877f048b963572ab2a`. GitHub Actions run #786 passed the full checks job and offline browser E2E. HR records and their audit events queue together under the UID-scoped per-record queue; append-only conflicts cannot overwrite server records or leak IDs into case-action audit logs.
 - Next: before real HR use, run synthetic offline save → close/reopen → reconnect and permission-denied/same-ID-conflict acceptance checks on Android/weak signal.
 - Watch out: no physical Android test was performed; report is in `docs/agent-task-reports.md`. No real employee/payroll data used. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · inventory transaction implementation in progress
+- Added the Worker transaction endpoint and client integration for existing-item Receive, Issue and Stocktake actions. Firestore rules now link quantity/history changes to a create-only movement document in the same commit and require newly created items to start at zero stock. Added synthetic Worker + emulator rules tests to the package and CI workflow.
+- Exact-head CI is not yet verified from the evidence available to me. Do not call this complete until the Worker test, Firestore rules emulator, lint, build, and E2E pass on the same SHA. No production data or deployment was touched.
+- Follow-up required: durable retry-ID persistence across app restarts is still missing; offline stock movements fail explicitly instead of queueing. Check whether the Cloudflare Worker maps Firestore update-time precondition errors into the retryable path, and confirm legacy inventory documents with missing movement arrays. — Mosaic (ChatGPT), 2026-10-26
