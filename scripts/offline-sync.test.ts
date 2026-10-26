@@ -1163,6 +1163,8 @@ assert.equal(salaryConflictFlush.conflicts.length, 1, 'different server salary w
 assert.equal(server.get('employeeSalaryHistory', conflictingSalary.id).salaryAmount, 999999, 'conflict handling never overwrites an existing salary record');
 assert.equal((await loadQueue()).length, 1, 'conflicting salary record remains queued for review');
 assert.equal(server.all().some(([key]: [string, unknown]) => key.startsWith('caseActionAuditLogs/')), false, 'salary conflicts must not leak employee identifiers into the general case-action audit collection');
+assert.equal(await resolveSyncConflict('employeeSalaryHistory::SALARY-SYNTHETIC-CONFLICT', 'keep-mine', { uid: 'uid-a', name: 'Synthetic manager' }), false, 'append-only salary conflicts must not offer an overwrite resolution');
+assert.equal((await loadQueue()).length, 1, 'a rejected keep-mine resolution preserves the queued salary record');
 await persistQueue([], 'uid-a');
 await import('../src/services/offlineSync').then(({ persistSyncConflicts }) => persistSyncConflicts([]));
 
