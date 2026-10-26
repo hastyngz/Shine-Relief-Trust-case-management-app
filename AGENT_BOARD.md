@@ -869,3 +869,9 @@ Suggestion format:
 
 ### 2026-10-26 · Mosaic (ChatGPT) · safe flush when queue recovery is required
 - Added a narrow catch around legacy migration and queue reads in `flushPendingOfflineSnapshots`. Unsafe/corrupt queue reads now return an incomplete flush result after preserving the queue and emitting the storage warning, rather than leaking an unhandled rejection from startup/connectivity event handlers. Exact-head CI pending. — Mosaic (ChatGPT), 2026-10-26
+
+### 2026-10-26 · Mosaic (ChatGPT) · salary-history offline queue
+- Area: confidential HR salary-history persistence and reconnect retry.
+- State: salary and deterministic audit records are queued together under the active UID; append-only sync retries are idempotent and preserve differing server records as conflicts; synthetic tests were added. Commits: `1610d25`, `daf5967`, `e0eb8ca`, `58edd15`.
+- Next: verify `npm run lint`, `npm run test:offline`, and full `shine-checks.yml` on the current `Replit` head; fix any failures and update `docs/agent-task-reports.md` with exact results.
+- Watch out: this environment could not clone GitHub, and the available commit-status response currently contains no checks. Do not claim tests passed. No real HR data used. — Mosaic (ChatGPT), 2026-10-26
