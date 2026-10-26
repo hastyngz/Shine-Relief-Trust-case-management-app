@@ -69,6 +69,9 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
           : 'Salary history could not be loaded from the server.');
       } else {
         setError(null);
+        if (queuedRecords.length) {
+          setSaveNotice('Pending salary records are saved on this device and waiting for sync or conflict review.');
+        }
       }
       if (queueResult.status === 'rejected') {
         setSaveNotice('The offline queue could not be checked. Keep this device and retry when storage is available.');
