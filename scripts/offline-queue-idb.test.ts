@@ -24,9 +24,12 @@ Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWin
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: fakeWindow.localStorage });
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false, storage: undefined } });
 
+const { setActiveWorkspaceUid } = await import('../src/services/accountWorkspace');
+setActiveWorkspaceUid('synthetic-manager-uid');
 const { saveQueueEntries, loadQueueEntries } = await import('../src/services/offlineSyncDb');
 
 const entry = (collection: string, recordId: string, fullName: string) => ({
+  ownerUid: 'synthetic-manager-uid',
   collection,
   recordId,
   operation: 'set' as const,
@@ -56,4 +59,17 @@ for (const item of reloaded) {
   assert.equal(item.queueKey, `${item.collection}/${item.recordId}`);
 }
 
-console.log('Offline queue IndexedDB tests passed: same-collection records are not overwritten.');
+setActiveWorkspaceUid('synthetic-staff-uid');
+assert.equal((await loadQueueEntries()).length, 0, 'a second UID must not read the manager queue');
+await saveQueueEntries([{
+  ownerUid: 'synthetic-staff-uid',
+  collection: 'girls',
+  recordId: 'SG-003',
+  operation: 'set',
+  data: { id: 'SG-003', fullName: 'Staff-only synthetic edit', updatedAt: '2026-01-01T00:00:00.000Z' },
+  baseUpdatedAt: null,
+  queuedAt: '2026-01-01T00:00:00.000Z',
+}]);
+setActiveWorkspaceUid('synthetic-manager-uid');
+assert.equal((await loadQueueEntries()).length, 3, 'switching back must preserve the manager queue');
+console.log('Offline queue IndexedDB tests passed: per-account isolation and composite record keys.');
