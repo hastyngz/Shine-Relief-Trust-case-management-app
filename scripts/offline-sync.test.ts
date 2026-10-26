@@ -122,7 +122,7 @@ Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEven
 
 const { setActiveWorkspaceUid } = await import('../src/services/accountWorkspace');
 setActiveWorkspaceUid('uid-a');
-const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, getLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges, writePendingOfflineSnapshot } = await import('../src/services/offlineSync');
+const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, getLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, queueOfflineRecordsForSync, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges, writePendingOfflineSnapshot } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
 const { syncChangeEntriesToFirestore, persistImportAuditToFirestore } = await import('../src/services/firestoreSync');
@@ -1106,5 +1106,63 @@ const employeeUpdateFlush = await flushPendingOfflineSnapshots({ actor: { uid: '
 assert.equal(employeeUpdateFlush.conflicts.length, 1, 'stale employee update is surfaced as a conflict');
 assert.equal(server.get('employees', 'EMP-QUEUE-STALE').salaryMWK, 150,
   'employee conflict preserves the newer server record');
+
+
+ // --- 22. Confidential salary history uses durable, append-only queue writes --
+await persistQueue([], 'uid-a');
+await import('../src/services/offlineSync').then(({ persistSyncConflicts }) => persistSyncConflicts([]));
+server.reset();
+const salaryQueueRecord = {
+  id: 'SALARY-SYNTHETIC-001',
+  employeeId: 'EMP-SYNTHETIC-001',
+  effectiveDate: '2026-10-01',
+  salaryAmount: 123456,
+  salaryFrequency: 'Monthly',
+  reasonForChange: 'Synthetic test fixture',
+  recordedBy: 'Synthetic manager',
+  recordedDate: T1,
+  auditMetadata: { createdAt: T1, createdByUid: 'uid-a' },
+};
+const salaryAuditRecord = {
+  id: 'salary-audit-SALARY-SYNTHETIC-001',
+  employeeId: salaryQueueRecord.employeeId,
+  action: 'salary_creation',
+  actorUid: 'uid-a',
+  actorName: 'Synthetic manager',
+  changedAt: T1,
+  recordId: salaryQueueRecord.id,
+};
+await queueOfflineRecordsForSync([
+  { collection: 'employeeSalaryHistory', record: salaryQueueRecord },
+  { collection: 'employeeAuditLogs', record: salaryAuditRecord },
+], 'uid-a');
+assert.equal((await loadQueue()).length, 2, 'salary and audit rows are durably queued together');
+const salaryFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Synthetic manager' } });
+assert.equal(salaryFlush.conflicts.length, 0, 'new append-only salary and audit records sync without conflicts');
+assert.equal(server.get('employeeSalaryHistory', salaryQueueRecord.id).salaryAmount, 123456, 'salary record reaches the restricted Firestore collection');
+assert.equal(server.get('employeeAuditLogs', salaryAuditRecord.id).recordId, salaryQueueRecord.id, 'salary audit event reaches the restricted audit collection');
+assert.equal((await loadQueue()).length, 0, 'successfully synced salary and audit records leave the queue');
+
+// Retrying the same records after an interrupted acknowledgement is idempotent.
+await queueOfflineRecordsForSync([
+  { collection: 'employeeSalaryHistory', record: salaryQueueRecord },
+  { collection: 'employeeAuditLogs', record: salaryAuditRecord },
+], 'uid-a');
+const salaryRetry = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Synthetic manager' } });
+assert.equal(salaryRetry.conflicts.length, 0, 'identical append-only retries are treated as already synced');
+assert.equal((await loadQueue()).length, 0, 'identical retries do not remain stuck in the queue');
+
+// A different server salary with the same ID is never overwritten by a retry.
+const conflictingSalary = { ...salaryQueueRecord, id: 'SALARY-SYNTHETIC-CONFLICT', salaryAmount: 222222 };
+server.seed('employeeSalaryHistory', conflictingSalary.id, { ...conflictingSalary, salaryAmount: 999999 });
+await queueOfflineRecordsForSync([
+  { collection: 'employeeSalaryHistory', record: conflictingSalary },
+], 'uid-a');
+const salaryConflictFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Synthetic manager' } });
+assert.equal(salaryConflictFlush.conflicts.length, 1, 'different server salary with the same ID is surfaced as a conflict');
+assert.equal(server.get('employeeSalaryHistory', conflictingSalary.id).salaryAmount, 999999, 'conflict handling never overwrites an existing salary record');
+assert.equal((await loadQueue()).length, 1, 'conflicting salary record remains queued for review');
+await persistQueue([], 'uid-a');
+await import('../src/services/offlineSync').then(({ persistSyncConflicts }) => persistSyncConflicts([]));
 
 console.log('Offline per-record queue and conflict tests passed.');
