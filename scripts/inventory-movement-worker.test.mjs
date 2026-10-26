@@ -1,0 +1,152 @@
+import assert from 'node:assert/strict';
+import worker from '../workers/r2-storage/index.mjs';
+
+const originalFetch = globalThis.fetch;
+const fields = (value) => {
+  if (value === null) return { nullValue: null };
+  if (typeof value === 'string') return { stringValue: value };
+  if (typeof value === 'boolean') return { booleanValue: value };
+  if (typeof value === 'number') return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(fields) } };
+  return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, fields(entry)])) } };
+};
+const decode = (field) => {
+  if (!field) return undefined;
+  if ('stringValue' in field) return field.stringValue;
+  if ('integerValue' in field) return Number(field.integerValue);
+  if ('doubleValue' in field) return field.doubleValue;
+  if ('booleanValue' in field) return field.booleanValue;
+  if ('arrayValue' in field) return (field.arrayValue.values || []).map(decode);
+  if ('mapValue' in field) return Object.fromEntries(Object.entries(field.mapValue.fields || {}).map(([key, value]) => [key, decode(value)]));
+  return undefined;
+};
+const asFields = (value) => Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, fields(entry)]));
+
+const env = {
+  FIREBASE_WEB_API_KEY: 'synthetic-test-key',
+  CLOUDFLARE_R2_ACCESS_KEY_ID: 'synthetic-test-access-key',
+  CLOUDFLARE_R2_SECRET_ACCESS_KEY: 'synthetic-test-secret-key',
+  CLOUDFLARE_R2_ENDPOINT: 'https://r2.example.invalid',
+  CLOUDFLARE_R2_BUCKET_NAME: 'synthetic-test-bucket',
+  CORS_ALLOWED_ORIGINS: 'https://shine-relief-trust-cms.web.app',
+};
+const baseItem = () => ({
+  id: 'item-synthetic',
+  stockCode: 'SYN-1',
+  name: 'Synthetic stock item',
+  unit: 'packs',
+  location: 'Main Office',
+  quantityOnHand: 10,
+  movements: [],
+  updatedAt: '2026-10-26T10:00:00.000Z',
+});
+const requestPayload = (overrides = {}) => ({
+  id: 'mov_synthetic_123',
+  itemId: 'item-synthetic',
+  type: 'Received',
+  quantity: 3,
+  date: '2026-10-26',
+  reason: 'Synthetic regression fixture',
+  ...overrides,
+});
+function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement } = {}) {
+  let itemReads = 0;
+  let commits = 0;
+  const writes = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url.includes('identitytoolkit.googleapis.com/v1/accounts:lookup')) {
+      return new Response(JSON.stringify({ users: [{ localId: 'staff-synthetic', email: 'staff@example.invalid', displayName: 'Synthetic Staff' }] }), { status: 200 });
+    }
+    if (url.includes('/documents/staffUsers/staff-synthetic')) {
+      return new Response(JSON.stringify({ fields: asFields({ email: 'staff@example.invalid', status: 'Active', role, fullName: 'Synthetic Staff' }) }), { status: 200 });
+    }
+    if (url.includes('/documents/inventoryMovements/mov_synthetic_123')) {
+      if (existingMovement) return new Response(JSON.stringify({ fields: asFields(existingMovement) }), { status: 200 });
+      return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
+    }
+    if (url.includes('/documents/inventoryItems/item-synthetic')) {
+      itemReads += 1;
+      const liveItem = typeof item === 'function' ? item(itemReads) : item;
+      return new Response(JSON.stringify({ name: 'projects/shine-relief-trust-cms/databases/(default)/documents/inventoryItems/item-synthetic', updateTime: `2026-10-26T10:00:0${itemReads}.000000Z`, fields: asFields(liveItem) }), { status: 200 });
+    }
+    if (url.includes('/documents:commit')) {
+      const body = JSON.parse(init.body);
+      writes.push(body.writes);
+      const status = commitStatuses[Math.min(commits, commitStatuses.length - 1)];
+      commits += 1;
+      return new Response(status === 200 ? JSON.stringify({ writeResults: [{}, {}] }) : JSON.stringify({ error: { code: status, message: 'synthetic commit conflict' } }), { status });
+    }
+    throw new Error(`Unexpected synthetic network request: ${url}`);
+  };
+  return { writes, getCounts: () => ({ itemReads, commits }) };
+}
+async function send(payload, envOverrides = env) {
+  return worker.fetch(new Request('https://worker.example.invalid/api/inventory/movement', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer synthetic-id-token',
+      Origin: 'https://shine-relief-trust-cms.web.app',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  }), envOverrides);
+}
+
+try {
+  {
+    const mock = setup();
+    const response = await send(requestPayload());
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.quantityOnHand, 13);
+    assert.equal(mock.writes.length, 1);
+    assert.equal(mock.writes[0].length, 2, 'balance and immutable movement must be committed atomically');
+    assert.equal(mock.writes[0][0].currentDocument.updateTime, '2026-10-26T10:00:01.000000Z');
+    assert.equal(decode(mock.writes[0][0].update.fields.quantityOnHand), 13);
+    assert.equal(decode(mock.writes[0][1].update.fields.previousQuantity), 10);
+    assert.equal(decode(mock.writes[0][1].update.fields.newQuantity), 13);
+    assert.deepEqual(mock.writes[0][1].currentDocument, { exists: false });
+  }
+
+  {
+    const mock = setup({ item: (read) => ({ ...baseItem(), quantityOnHand: read === 1 ? 10 : 12 }) , commitStatuses: [409, 200] });
+    const response = await send(requestPayload());
+    const body = await response.json();
+    assert.equal(response.status, 200, 'a stale item update should be retried against the newer balance');
+    assert.equal(body.quantityOnHand, 15);
+    assert.equal(mock.writes.length, 2);
+    assert.equal(mock.writes[1][0].currentDocument.updateTime, '2026-10-26T10:00:02.000000Z');
+  }
+
+  {
+    const mock = setup({ item: { ...baseItem(), quantityOnHand: 2 } });
+    const response = await send(requestPayload({ type: 'Issued', quantity: 3 }));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /Insufficient stock/);
+    assert.equal(mock.writes.length, 0, 'insufficient stock must never attempt a commit');
+  }
+
+  {
+    const payload = requestPayload();
+    const mock = setup({ role: 'View Only' });
+    const response = await send(payload);
+    assert.equal(response.status, 403);
+    assert.equal(mock.writes.length, 0, 'view-only role must be rejected before a write');
+  }
+
+  {
+    const payload = requestPayload();
+    const fingerprintPayload = { id: payload.id, itemId: payload.itemId, type: payload.type, quantity: payload.quantity, countedQuantity: undefined, date: payload.date, destination: undefined, reference: undefined, reason: payload.reason };
+    const fingerprint = JSON.stringify(Object.fromEntries(Object.entries(fingerprintPayload).filter(([, value]) => value !== undefined)));
+    const mock = setup({ existingMovement: { id: payload.id, inventoryItemId: payload.itemId, recordedByUid: 'staff-synthetic', requestFingerprint: fingerprint, newQuantity: 13 } });
+    const response = await send(payload);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).duplicate, true);
+    assert.equal(mock.writes.length, 0, 'a retried movement ID must not create a second stock change');
+  }
+
+  console.log('Inventory movement Worker transaction tests passed.');
+} finally {
+  globalThis.fetch = originalFetch;
+}
