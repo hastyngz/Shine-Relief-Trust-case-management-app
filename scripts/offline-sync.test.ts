@@ -574,7 +574,7 @@ assert.equal(await inspectPendingOfflineChanges(), 'clear', 'inspection recovers
 markDatabaseResetRecoveryRequired();
 const originalStorageSetItem = fakeWindow.localStorage.setItem;
 fakeWindow.localStorage.setItem = (key: string, value: string) => {
-  if (key === 'shine_relief_trust_last_synced_v1') throw new Error('synthetic baseline write failure');
+  if (key === 'shine_relief_trust_last_synced_v2::uid:uid-a') throw new Error('synthetic baseline write failure');
   originalStorageSetItem(key, value);
 };
 await assert.rejects(() => clearOfflineChangesAfterDatabaseReset(resetDb), /synthetic baseline write failure/);
