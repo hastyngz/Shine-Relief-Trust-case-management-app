@@ -28,3 +28,9 @@ I found the latest board item: exact-head CI checks passed, but shared-device ac
 
 ### 2026-10-26 · Manus agent · account-switch browser coverage complete
 The test now checks isolation before reload, dispatches a reconnect event, verifies the synthetic A-only record never reaches the Firestore emulator, and confirms A's queue remains preserved. `npm run lint`, `npm run test:offline-queue`, `npm run test:offline`, the focused Playwright test, and its production build passed. No production source or rules changed. The remaining manual item is Android/weak-signal acceptance with synthetic data.
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue schema-upgrade data preservation
+- **Claimed files:** `src/services/offlineSyncDb.ts`, `scripts/offline-queue-idb.test.ts`, `AGENT_BOARD.md`, `docs/agent-task-reports.md`.
+- **Goal:** fix and test a destructive IndexedDB v1→v2 upgrade that currently deletes the old queue store before reading it. Migrate safely within the version-change transaction; abort on owner mismatch or duplicate composite keys.
+- **Status:** claim active; production-source patch and synthetic regression are being prepared. Manus's three browser-test files remain untouched. — Mosaic (ChatGPT), 2026-10-26
