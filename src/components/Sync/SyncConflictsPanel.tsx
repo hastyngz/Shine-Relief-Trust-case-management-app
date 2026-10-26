@@ -8,7 +8,7 @@ import {
   resolveSyncConflict,
   SYNC_CONFLICTS_UPDATED_EVENT,
 } from '../../services/offlineSync';
-import { appendSyncConflictAudit } from '../../services/firestoreSync';
+import { appendSyncConflictAudit, COLLECTIONS } from '../../services/firestoreSync';
 import { estimateStorage } from '../../services/offlineSyncDb';
 import { useAuth } from '../../contexts/AuthContext';
 import { getActiveWorkspaceUid } from '../../services/accountWorkspace';
@@ -24,6 +24,11 @@ function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
   const mb = bytes / (1024 * 1024);
   return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+}
+
+function isAppendOnlyEmployeeCollection(collection: string): boolean {
+  return collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
+    collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS;
 }
 
 function friendlyCollection(collection: string): string {
@@ -91,29 +96,36 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
       setMessage('This conflict has no verified owner and cannot be resolved from this account. Its data has been preserved.');
       return;
     }
+    if (resolution === 'keep-mine' && isAppendOnlyEmployeeCollection(conflict.collection)) {
+      setMessage('Salary history and HR audit records are append-only. Keep the server version for this duplicate ID; enter a legitimate new salary change as a new record.');
+      return;
+    }
     setBusyId(conflict.id);
     setMessage(null);
     try {
       const resolved = await resolveSyncConflict(conflict.id, resolution, actor);
       if (!resolved) {
-        setMessage('Could not verify ownership of this conflict. It has been preserved for recovery.');
+        setMessage('This conflict cannot be resolved with that option or its ownership could not be verified. It has been preserved.');
         return;
       }
-      try {
-        await appendSyncConflictAudit({
-          action: 'conflict_resolved',
-          resolution,
-          collection: conflict.collection,
-          recordId: conflict.recordId,
-          userId: actor.uid,
-          userName: actor.name,
-          timestamp: new Date().toISOString(),
-          localUpdatedAt: conflict.localData?.updatedAt ?? conflict.baseUpdatedAt,
-          serverUpdatedAt: conflict.serverUpdatedAt,
-          serverUpdatedBy: conflict.serverUpdatedBy,
-        });
-      } catch {
-        console.warn('Conflict was resolved locally but its audit event could not be saved.');
+      // HR conflicts must not be copied into the general case-action audit log.
+      if (!isAppendOnlyEmployeeCollection(conflict.collection)) {
+        try {
+          await appendSyncConflictAudit({
+            action: 'conflict_resolved',
+            resolution,
+            collection: conflict.collection,
+            recordId: conflict.recordId,
+            userId: actor.uid,
+            userName: actor.name,
+            timestamp: new Date().toISOString(),
+            localUpdatedAt: conflict.localData?.updatedAt ?? conflict.baseUpdatedAt,
+            serverUpdatedAt: conflict.serverUpdatedAt,
+            serverUpdatedBy: conflict.serverUpdatedBy,
+          });
+        } catch {
+          console.warn('Conflict was resolved locally but its audit event could not be saved.');
+        }
       }
       if (resolution === 'keep-mine') {
         const result = await flushPendingOfflineSnapshots({ actor });
@@ -178,6 +190,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
               {visibleConflicts.map((conflict) => {
                 const localUpdatedAt = conflict.localData?.updatedAt ?? conflict.baseUpdatedAt;
                 const isDelete = conflict.localOperation === 'delete';
+                const isAppendOnlyEmployeeConflict = isAppendOnlyEmployeeCollection(conflict.collection);
                 return (
                   <li key={conflict.id} className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
                     <div className="flex items-start gap-2">
@@ -193,6 +206,11 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                           Your change{isDelete ? ' (deletion)' : ''} was made
                           {localUpdatedAt ? ` on ${new Date(localUpdatedAt).toLocaleString()}` : ' on this phone'}.
                         </p>
+                        {isAppendOnlyEmployeeConflict && (
+                          <p className="mt-2 text-[11px] font-semibold text-amber-900">
+                            This HR record is append-only. It cannot overwrite an existing record with the same ID; keep the server version and add a new record if the salary change is legitimate.
+                          </p>
+                        )}
                         {(!currentUser || conflict.ownerUid !== currentUser.uid) && (
                           <p className="mt-2 text-[11px] font-semibold text-amber-900">
                             Owner not verified. This conflict is preserved and cannot be resolved in this session.
@@ -201,7 +219,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={busyId === conflict.id || !currentUser || conflict.ownerUid !== currentUser.uid}
+                            disabled={busyId === conflict.id || !currentUser || conflict.ownerUid !== currentUser.uid || isAppendOnlyEmployeeConflict}
                             onClick={() => handleResolve(conflict, 'keep-mine')}
                             className="rounded-lg bg-teal-800 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-teal-700 disabled:opacity-50"
                           >
