@@ -49,9 +49,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
   useEffect(() => {
-    if (!currentUser?.uid || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    if (!currentUser?.uid) {
+      setPendingMovementId(null);
+      setPendingMovementSignature(null);
+      return;
+    }
     const pending = loadPendingInventoryMovement(currentUser.uid);
-    if (!pending || pendingMovementId === pending.id) return;
+    if (!pending) {
+      if (pendingMovementId) {
+        setPendingMovementId(null);
+        setPendingMovementSignature(null);
+      }
+      return;
+    }
+    if (pendingMovementId === pending.id) return;
     const item = items.find((entry) => entry.id === pending.itemId);
     if (!item) return;
     setPendingMovementId(pending.id);
