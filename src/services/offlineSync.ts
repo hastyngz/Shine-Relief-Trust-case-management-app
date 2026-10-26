@@ -414,10 +414,13 @@ export async function recordOfflineChanges(currentDb: AppDatabase): Promise<numb
   if (typeof window === 'undefined' || !uid) return 0;
   const baseline = getLastSyncedSnapshot();
   if (!baseline) {
-    // No confirmed server copy yet. Keep any persisted queue untouched and
-    // adopt the current database as the baseline so untouched records are not
-    // queued wholesale on first load.
-    setLastSyncedSnapshot(currentDb);
+    // Never invent a baseline from an unconfirmed local cache. Without one,
+    // diffing can turn the entire database into writes or mark unsynced edits as safe.
+    try {
+      window.dispatchEvent(new CustomEvent('shine_storage_warning', {
+        detail: { quotaExceeded: false, error: new Error('Offline editing is paused until a confirmed server baseline is available. Keep this device and reconnect before retrying.') },
+      }));
+    } catch { /* best effort warning; do not infer sync state */ }
     return getPendingOfflineSnapshotCount();
   }
   const previous = await loadQueue();

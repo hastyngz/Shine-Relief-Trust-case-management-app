@@ -793,3 +793,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · baseline-safe legacy snapshot migration
 - Strict queue ownership exposed a legacy migration path that needed explicit UID stamping. Migration now requires a confirmed same-workspace baseline, refuses unowned existing queue entries, stamps migrated entries with the known UID, and preserves snapshots if it cannot prove a safe diff.
 - Added synthetic tests for successful scoped migration and no-baseline quarantine. CI pending. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · confirmed-baseline gate
+- Removed the fallback that treated the current local database as a confirmed sync baseline. The app now waits for a durable confirmed server snapshot before enabling edits when no baseline exists; offline diffing pauses and warns rather than queueing a full database.
+- A confirmed snapshot is not accepted as ready if saving its baseline fails. Synthetic tests cover missing-baseline behavior and legacy snapshot preservation. Exact-head CI required. — Mosaic (ChatGPT), 2026-10-26

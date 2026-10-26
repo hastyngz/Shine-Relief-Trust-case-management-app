@@ -472,3 +472,8 @@ The legacy quarantine review now includes the old whole-database localStorage ke
 ## 2026-10-26 baseline-safe snapshot migration
 
 Updated the scoped legacy snapshot migration to meet the strict queue ownership rules. It now requires a confirmed baseline for the active UID, refuses to merge into a queue with missing/mismatched owners, stamps only the diff it derives from the UID-scoped snapshot with that known UID, and leaves the snapshot untouched if it cannot prove a safe diff. This avoids a missing baseline turning an entire database snapshot into queued writes. Synthetic tests cover both successful migration and the no-baseline preservation path.
+
+
+## 2026-10-26 confirmed-baseline gate
+
+A final sync-safety review found that recordOfflineChanges still promoted the current local database to a baseline when no confirmed server baseline existed. That could mark unconfirmed local state as synced and make future diffs unsafe. The fallback is removed: offline diffing now warns and preserves the queue until a confirmed baseline exists. The UI stays in a non-editing secure-workspace state while no baseline is available, with a clear instruction to connect once; offline use resumes after a durable baseline exists. saveIncomingCloudSnapshot now treats a baseline persistence failure as failure and emits the storage warning instead of marking the workspace ready. Tests assert that a local snapshot without a baseline is not queued or adopted as confirmed.

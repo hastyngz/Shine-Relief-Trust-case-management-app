@@ -358,6 +358,10 @@ writePendingOfflineSnapshot(db({ girls: [girl('SG-LEGACY-NO-BASELINE', T1)] }));
 assert.equal(await migrateLegacySnapshots(), false, 'migration pauses without a confirmed baseline');
 assert.equal(values.has(scopedSnapshotKey), true, 'the legacy snapshot remains preserved without a baseline');
 assert.equal((await loadQueue()).length, 0, 'no full-database queue is generated without a baseline');
+assert.equal(getLastSyncedSnapshot(), null, 'local edits cannot invent a confirmed baseline');
+await recordOfflineChanges(db({ girls: [girl('SG-BASELINE-MISSING', T1)] }));
+assert.equal(getLastSyncedSnapshot(), null, 'recording edits does not mark an unconfirmed cache as synced');
+assert.equal((await loadQueue()).length, 0, 'edits are not converted into unsafe full-database writes');
 
 // --- 6. End-to-end offline edit + flush through the queue -------------------
 values.clear();

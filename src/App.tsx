@@ -63,7 +63,7 @@ import {
   checkAndTriggerFollowUpReminders,
 } from './services/messagingService';
 import { excludeSafeguardingCaseActions, filterCaseActionsForStaff, filterRestrictedCachedData } from './services/healthRecordAccess';
-import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot } from './services/offlineSync';
+import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, isConfirmedServerSnapshot, getLastSyncedSnapshot } from './services/offlineSync';
 import { getActiveWorkspaceUid } from './services/accountWorkspace';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
@@ -145,6 +145,7 @@ function AppContent() {
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
   const [dbOwnerUid, setDbOwnerUid] = useState<string | null>(() => getActiveWorkspaceUid());
+  const [hasSyncBaseline, setHasSyncBaseline] = useState<boolean>(() => !!getLastSyncedSnapshot());
 
   // AuthContext may publish a login result just before Firebase's auth-state
   // observer updates the workspace UID. Listen for that authoritative workspace
@@ -154,6 +155,7 @@ function AppContent() {
     const reloadActiveWorkspace = () => {
       setDb(getDatabase());
       setDbOwnerUid(getActiveWorkspaceUid());
+      setHasSyncBaseline(!!getLastSyncedSnapshot());
     };
     window.addEventListener('shine_workspace_changed', reloadActiveWorkspace);
     return () => window.removeEventListener('shine_workspace_changed', reloadActiveWorkspace);
@@ -162,6 +164,7 @@ function AppContent() {
   useEffect(() => {
     setDb(getDatabase());
     setDbOwnerUid(getActiveWorkspaceUid());
+    setHasSyncBaseline(!!getLastSyncedSnapshot());
   }, [currentUser?.uid]);
   // Keep the authoritative local database intact for offline diffing and queued
   // edits. Build a permission-scoped projection for UI consumers instead of
@@ -330,7 +333,9 @@ function AppContent() {
       // Do not replace the live UI state or advance the baseline unless the
       // snapshot was durably saved on this device. saveIncomingCloudSnapshot
       // emits the persistent storage warning when local persistence fails.
-      if (!saveIncomingCloudSnapshot(cloudDb, isConfirmedServerSnapshot(meta))) return;
+      const confirmedServerSnapshot = isConfirmedServerSnapshot(meta);
+      if (!saveIncomingCloudSnapshot(cloudDb, confirmedServerSnapshot)) return;
+      if (confirmedServerSnapshot) setHasSyncBaseline(true);
       setDb(cloudDb);
     }, {
       uid: currentUser.uid,
@@ -398,7 +403,7 @@ function AppContent() {
   // Debounce expensive full-database diffing, but flush at lifecycle and
   // connectivity boundaries so a phone going offline or closing still queues edits.
   useEffect(() => {
-    if (!currentUser || dbOwnerUid !== currentUser.uid) return;
+    if (!currentUser || dbOwnerUid !== currentUser.uid || !hasSyncBaseline) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const flushLocalChanges = () => {
       if (timer) clearTimeout(timer);
@@ -431,7 +436,7 @@ function AppContent() {
       window.removeEventListener('pagehide', flushLocalChanges);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [db, dbOwnerUid, currentUser, staffProfile?.fullName, isAdmin, role]);
+  }, [db, dbOwnerUid, currentUser, staffProfile?.fullName, isAdmin, role, hasSyncBaseline]);
 
   // Listen for browser Back/Forward navigation via hashchange
   useEffect(() => {
@@ -1215,6 +1220,17 @@ function AppContent() {
   // Prevent a previous account's in-memory records rendering during a workspace switch.
   if (!loading && currentUser && dbOwnerUid !== currentUser.uid) {
     return <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center p-4"><p className="text-sm text-stone-600">Opening your secure SHINE workspace…</p></div>;
+  }
+
+  if (!loading && currentUser && !hasSyncBaseline) {
+    return <div className="min-h-screen flex items-center justify-center bg-stone-50 p-5" role="status" aria-live="polite">
+      <div className="max-w-md rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+        <h1 className="text-base font-bold text-stone-900">Preparing your secure workspace</h1>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600">SHINE is waiting for a confirmed server copy before enabling edits. This protects offline changes from being mistaken for synced data.</p>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600">{isBrowserOnline() ? 'Keep this page open while the first secure sync completes.' : 'Connect to the internet once to load your authorized records. Editing stays paused until a confirmed sync baseline is available.'}</p>
+        {storageWarning && <p className="mt-3 text-sm font-semibold text-rose-700">Device storage could not safely save the sync baseline. Free space and reconnect, then retry.</p>}
+      </div>
+    </div>;
   }
 
   // Authentication Loading Screen

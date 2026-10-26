@@ -32,7 +32,7 @@ import {
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getActiveWorkspaceUid, getWorkspaceStorageKey } from '../services/accountWorkspace';
-import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired, setLastSyncedSnapshot } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired, setLastSyncedSnapshotOrThrow } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { excludeSafeguardingCaseActions } from '../services/healthRecordAccess';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
@@ -158,7 +158,15 @@ export function getDatabase(): AppDatabase {
 export function saveIncomingCloudSnapshot(db: AppDatabase, confirmedServerSnapshot: boolean): boolean {
   const result = saveDatabase(db, false);
   if (!result.ok) return false;
-  if (confirmedServerSnapshot) setLastSyncedSnapshot(db);
+  if (confirmedServerSnapshot) {
+    try {
+      setLastSyncedSnapshotOrThrow(db);
+    } catch (error) {
+      const quotaExceeded = isQuotaExceededError(error);
+      dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
+      return false;
+    }
+  }
   return true;
 }
 
