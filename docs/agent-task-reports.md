@@ -454,3 +454,6 @@ Hardened App startup for the possible ordering where the login action updates Re
 ## 2026-10-26 attachment metadata account boundary
 
 A broader privacy review found an in-memory coalescing map in attachmentService.ts keyed only by health-record permission. If account A's report attachment request was still pending when account B opened a report with the same permission, B could receive A's promise result. The request cache is now keyed by authenticated UID plus permission, and metadata loading checks the active UID before returning results. Exact-head CI and Android acceptance remain required.
+
+
+Attachment follow-up: the same UID check now protects report-image loading, attachment metadata used by exports, and late girl/household attachment listener callbacks. These callbacks check the UID again after asynchronous URL preparation before invoking the UI callback. This is defense in depth only; the existing R2/Firestore authorization remains authoritative.

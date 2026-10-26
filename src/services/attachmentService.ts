@@ -138,6 +138,8 @@ export async function getAuthorizedReportImage(
   attachment: PhotoAttachment,
   canViewHealthRecords: boolean
 ): Promise<Uint8Array> {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) throw new Error('An authenticated SHINE workspace is required to read attachments.');
   if (!attachment.contentType.match(/^image\/(jpeg|png)$/i)) {
     throw new Error('Only JPEG and PNG attachments can be embedded in Word reports.');
   }
@@ -150,12 +152,18 @@ export async function getAuthorizedReportImage(
   }
 
   const image = await getStoredFile(attachment.storagePath);
+  if (getActiveWorkspaceUid() !== ownerUid) throw new Error('The active SHINE workspace changed while the attachment was loading.');
   return new Uint8Array(await image.arrayBuffer());
 }
 
 export async function getAllAttachmentMetadata(): Promise<PhotoAttachment[]> {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) throw new Error('An authenticated SHINE workspace is required to load attachments.');
   const snapshot = await getDocs(collection(firestore, ATTACHMENTS_COLLECTION));
-  return Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
+  if (getActiveWorkspaceUid() !== ownerUid) throw new Error('The active SHINE workspace changed while attachments were loading.');
+  const attachments = await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
+  if (getActiveWorkspaceUid() !== ownerUid) throw new Error('The active SHINE workspace changed while attachment URLs were being prepared.');
+  return attachments;
 }
 
 export interface UploadAttachmentParams {
@@ -298,6 +306,8 @@ export function subscribeAttachmentsForTarget(
   targetId: string,
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) { onUpdate([]); return () => {}; }
   try {
     const q = query(
       collection(firestore, ATTACHMENTS_COLLECTION),
@@ -309,11 +319,13 @@ export function subscribeAttachmentsForTarget(
       q,
       async (snapshot) => {
         const list = await Promise.all(snapshot.docs.map((d) => withDownloadUrl(d.data() as PhotoAttachment)));
+        if (getActiveWorkspaceUid() !== ownerUid) return;
         // Sort descending by date / createdAt
         list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         onUpdate(list);
       },
       (err) => {
+        if (getActiveWorkspaceUid() !== ownerUid) return;
         console.warn('Attachments snapshot notice:', err.message);
         onUpdate([]);
       }
@@ -337,10 +349,13 @@ export function subscribeAllGirlAttachments(
   followUpIds: string[],
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) { onUpdate([]); return () => {}; }
   try {
     const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
     const current = new Map<string, PhotoAttachment[]>();
     const emit = () => {
+      if (getActiveWorkspaceUid() !== ownerUid) return;
       const related = Array.from(current.values()).flat();
       related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       onUpdate(related);
@@ -349,10 +364,13 @@ export function subscribeAllGirlAttachments(
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
         async (snapshot) => {
-          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
+          const attachments = await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
+          if (getActiveWorkspaceUid() !== ownerUid) return;
+          current.set(targetId, attachments);
           emit();
         },
         (err) => {
+          if (getActiveWorkspaceUid() !== ownerUid) return;
           console.warn('Girl attachment subscription notice:', err.message);
           current.set(targetId, []);
           emit();
@@ -374,6 +392,8 @@ export function subscribeAllHouseholdAttachments(
   linkedRecordIds: string[],
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) { onUpdate([]); return () => {}; }
   try {
     const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
     const current = new Map<string, PhotoAttachment[]>();
@@ -390,6 +410,7 @@ export function subscribeAllHouseholdAttachments(
           emit();
         },
         (err) => {
+          if (getActiveWorkspaceUid() !== ownerUid) return;
           console.warn('Household attachment subscription notice:', err.message);
           current.set(targetId, []);
           emit();

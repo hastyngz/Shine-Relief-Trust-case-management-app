@@ -773,3 +773,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · attachment request cache review
 - Found an in-memory metadata request cache shared by health permission only, not UID; a new account could receive the previous account's in-flight attachment results. Cache keys and async report metadata results now verify the active UID.
 - This is part of the same account-isolation work; CI/device verification still required. No real attachments or production data touched. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · attachment callback isolation
+- Extended UID guards to report-image/report-export metadata and asynchronous girl/household attachment subscription callbacks, so an old listener cannot emit results after a workspace switch.
+- Server-side R2/Firestore authorization remains unchanged; this is client-side stale-result protection. CI/device verification still pending. — Mosaic (ChatGPT), 2026-10-26
