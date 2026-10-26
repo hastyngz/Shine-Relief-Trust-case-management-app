@@ -72,8 +72,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Enter an item name, stock code, unit and storage location.');
       return;
     }
-    if ((!editingTarget && (!Number.isFinite(opening) || opening < 0)) || !Number.isFinite(minimum) || minimum < 0 || (cost !== undefined && (!Number.isFinite(cost) || cost < 0))) {
-      setError('Quantities and costs must be zero or greater.');
+    if ((!editingTarget && (!Number.isFinite(opening) || opening < 0 || opening !== 0)) || !Number.isFinite(minimum) || minimum < 0 || (cost !== undefined && (!Number.isFinite(cost) || cost < 0))) {
+      setError(!editingTarget && opening !== 0
+        ? 'Register new items with zero stock first. After the item syncs, record opening stock with Receive so the balance and movement are committed together.'
+        : 'Quantities and costs must be zero or greater.');
       return;
     }
     if (items.some((item) => item.id !== editingTarget?.id && item.stockCode.trim().toLowerCase() === newItem.stockCode.trim().toLowerCase())) {
@@ -103,13 +105,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
       return;
     }
-    const openingMovement: InventoryMovement[] = opening > 0 ? [{
-      id: createInventoryId('mov'), type: 'Received', quantity: opening, date: getLocalDateInputValue(), location: newItem.location,
-      reason: 'Opening balance at item registration', recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
-    }] : [];
+    const openingMovement: InventoryMovement[] = [];
     const item: InventoryItem = {
       id: createInventoryId('inv'), stockCode: newItem.stockCode.trim(), name: newItem.name.trim(), category: newItem.category,
-      unit: newItem.unit, quantityOnHand: opening, minimumStockLevel: minimum, location: newItem.location,
+      unit: newItem.unit, quantityOnHand: 0, minimumStockLevel: minimum, location: newItem.location,
       supplier: newItem.supplier.trim() || undefined, unitCostMWK: cost, expiryDate: newItem.expiryDate || undefined, condition: newItem.condition, notes: newItem.notes.trim() || undefined,
       movements: openingMovement, createdAt: now, updatedAt: now, createdBy: actor, updatedBy: actor,
       createdByUid: currentUser?.uid, updatedByUid: currentUser?.uid,
@@ -312,14 +311,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         )}
       </section>
 
-      {showAdd && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}><section role="dialog" aria-modal="true" aria-labelledby="add-inventory-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-center justify-between gap-3"><div><h2 id="add-inventory-title" className="text-xl font-bold text-stone-900">{editingTarget ? 'Edit stock item' : 'Register stock item'}</h2><p className="mt-1 text-sm text-stone-600">{editingTarget ? 'Update item details. Use stocktake to change the recorded quantity.' : 'An opening quantity is recorded as the first stock movement.'}</p></div><button type="button" aria-label="Close form" onClick={() => setShowAdd(false)} className="fx-press rounded-xl p-2 hover:bg-stone-100"><X className="h-5 w-5" /></button></div>
+      {showAdd && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}><section role="dialog" aria-modal="true" aria-labelledby="add-inventory-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-center justify-between gap-3"><div><h2 id="add-inventory-title" className="text-xl font-bold text-stone-900">{editingTarget ? 'Edit stock item' : 'Register stock item'}</h2><p className="mt-1 text-sm text-stone-600">{editingTarget ? 'Update item details. Use stocktake to change the recorded quantity.' : 'Register new items at zero stock. After the item syncs, use Receive to record opening stock as a server-validated movement.'}</p></div><button type="button" aria-label="Close form" onClick={() => setShowAdd(false)} className="fx-press rounded-xl p-2 hover:bg-stone-100"><X className="h-5 w-5" /></button></div>
         <form onSubmit={submitNewItem} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold text-stone-700">Item name *<input required value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Unique stock code *<input required value={newItem.stockCode} onChange={(e) => setNewItem({ ...newItem, stockCode: e.target.value })} placeholder="e.g. FOOD-001" className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <p className="text-xs text-amber-800 sm:col-span-2">Stock-code checks use this device’s current register. If other devices may have been offline, sync and refresh before registering a code that might already exist.</p>
           <label className="text-sm font-semibold text-stone-700">Category<select value={newItem.category} onChange={(e) => setNewItem({ ...newItem, category: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{categories.map((v) => <option key={v}>{v}</option>)}</select></label>
           <label className="text-sm font-semibold text-stone-700">Unit of measure *<select value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{units.map((v) => <option key={v}>{v}</option>)}</select></label>
-          {!editingTarget ? <label className="text-sm font-semibold text-stone-700">Opening quantity<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
+          {!editingTarget ? <label className="text-sm font-semibold text-stone-700" >Opening quantity (must be zero)<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
           <label className="text-sm font-semibold text-stone-700">Minimum stock level<input type="number" min="0" step="0.01" value={newItem.minimum} onChange={(e) => setNewItem({ ...newItem, minimum: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Storage location<select value={newItem.location} disabled={Boolean(editingTarget)} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal disabled:cursor-not-allowed disabled:bg-stone-100">{locations.map((v) => <option key={v}>{v}</option>)}</select>{editingTarget && <span className="mt-1 block text-xs font-normal text-amber-800">Location changes are disabled until SHINE has a traceable stock-transfer workflow. This prevents stock from appearing to move without a transfer record.</span>}</label>
           <label className="text-sm font-semibold text-stone-700">Unit cost (MWK)<input type="number" min="0" step="0.01" value={newItem.unitCost} onChange={(e) => setNewItem({ ...newItem, unitCost: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
