@@ -1,18 +1,10 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement, InventoryMovementType } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { useAuth } from '../contexts/AuthContext';
 import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
-
-interface PendingInventorySubmission {
-  id: string;
-  itemId: string;
-  signature: string;
-  mode: 'movement' | 'stocktake';
-  payload: Record<string, unknown>;
-}
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -40,15 +32,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
-  const [pendingSubmission, setPendingSubmission] = useState<PendingInventorySubmission | null>(() => {
-    if (typeof window === 'undefined' || !currentUser?.uid) return null;
-    try {
-      const raw = window.localStorage.getItem(`shine_inventory_pending_movement_${currentUser.uid}`);
-      return raw ? JSON.parse(raw) as PendingInventorySubmission : null;
-    } catch {
-      return null;
-    }
-  });
+  const [pendingMovementId, setPendingMovementId] = useState<string | null>(null);
+  const [pendingMovementSignature, setPendingMovementSignature] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -62,58 +47,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
-  const pendingStorageKey = currentUser?.uid ? `shine_inventory_pending_movement_${currentUser.uid}` : null;
-  const persistPendingSubmission = (pending: PendingInventorySubmission) => {
-    setPendingSubmission(pending);
-    if (!pendingStorageKey) return;
-    try {
-      window.localStorage.setItem(pendingStorageKey, JSON.stringify(pending));
-    } catch {
-      setError('This phone could not preserve the pending movement ID. Do not retry blindly; refresh the register and check movement history before submitting again.');
-    }
-  };
-  const clearPendingSubmission = () => {
-    setPendingSubmission(null);
-    if (pendingStorageKey) {
-      try { window.localStorage.removeItem(pendingStorageKey); } catch { /* The confirmed server record remains authoritative. */ }
-    }
-  };
-
-  useEffect(() => {
-    if (!currentUser?.uid || pendingSubmission || typeof window === 'undefined') return;
-    try {
-      const raw = window.localStorage.getItem(`shine_inventory_pending_movement_${currentUser.uid}`);
-      if (raw) setPendingSubmission(JSON.parse(raw) as PendingInventorySubmission);
-    } catch {
-      setError('A saved pending stock movement could not be read. Check the server movement history before creating another movement.');
-    }
-  }, [currentUser?.uid, pendingSubmission]);
-  useEffect(() => {
-    if (!pendingSubmission) return;
-    const item = items.find((entry) => entry.id === pendingSubmission.itemId);
-    if (!item) return;
-    if (pendingSubmission.mode === 'movement') {
-      setMovementTarget(item);
-      setStocktakeTarget(null);
-      setMovement({
-        type: pendingSubmission.payload.type === 'Issued' ? 'Issued' : 'Received',
-        quantity: String(pendingSubmission.payload.quantity ?? ''),
-        date: String(pendingSubmission.payload.date || getLocalDateInputValue()),
-        destination: String(pendingSubmission.payload.destination || ''),
-        reference: String(pendingSubmission.payload.reference || ''),
-        reason: String(pendingSubmission.payload.reason || ''),
-      });
-    } else {
-      setStocktakeTarget(item);
-      setMovementTarget(null);
-      setStocktake({
-        countedQuantity: String(pendingSubmission.payload.countedQuantity ?? ''),
-        date: String(pendingSubmission.payload.date || getLocalDateInputValue()),
-        reason: String(pendingSubmission.payload.reason || '').replace(/^Physical stocktake: /, '').replace(/\\. Counted quantity .*$/, ''),
-      });
-    }
-  }, [pendingSubmission, items]);
-
   const persist = (item: InventoryItem): boolean => {
     setSaving(true);
     setError('');
