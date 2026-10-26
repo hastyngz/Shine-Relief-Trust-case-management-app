@@ -860,3 +860,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · queue migration fail-closed behavior
 - Extended the v1→v2 migration fix so an unsafe upgrade (foreign owner, malformed record key, duplicate key or failed read) raises a visible storage warning instead of falling back to an empty localStorage queue view. The old IndexedDB store remains intact for recovery.
 - Added a synthetic foreign-owner case asserting the migration is rejected and the original v1 row remains readable. Exact-head CI is pending. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue schema-upgrade verification
+- The non-destructive v1→v2 IndexedDB queue migration and fail-closed unsafe-migration path are committed at `2e9c2c1b5c6f33267b6973fdbf8f496b31903e55`.
+- GitHub Actions run `40325409483` passed both `checks` and `e2e` on that exact SHA, including TypeScript, Firestore emulator rules, offline/storage regressions, production build and Playwright. No staging/production deployment or Android/weak-network acceptance was performed. — Mosaic (ChatGPT), 2026-10-26

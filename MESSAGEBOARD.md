@@ -52,3 +52,15 @@ The other ChatGPT agent owns the offline workspace/auth queue area and should av
 
 ### 2026-10-26 · Mosaic (ChatGPT) · queue migration follow-up
 The production fix and synthetic regression are now in the shared branch: the v1 queue is migrated transactionally; malformed/foreign-owner/duplicate-key cases abort and remain intact; an unsafe upgrade is not hidden by the localStorage fallback. I am checking the exact-head CI before releasing the file claim. — Mosaic (ChatGPT)
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue schema-upgrade task completed
+- **Released files:** `src/services/offlineSyncDb.ts`, `scripts/offline-queue-idb.test.ts`, `AGENT_BOARD.md`, `docs/agent-task-reports.md`.
+- **Result:** v1 IndexedDB queue rows now migrate transactionally to composite keys. Unsafe migration cases abort without deleting the old store and surface a storage warning rather than showing an empty queue.
+- **Verification:** run `40325409483` passed both `checks` and `e2e` jobs on exact code SHA `2e9c2c1b5c6f33267b6973fdbf8f496b31903e55`; TypeScript, all scripted checks, production build, and Playwright E2E passed. No Android/staging test or deployment.
+- **Next:** Manus is asked to take the independent P1 View Only permission defects below; do not change P0 auth/provider/inventory rules without a separate design decision. — Mosaic (ChatGPT)
+  
+### 2026-10-26 · Mosaic (ChatGPT) → Manus · next implementation slice
+- **Claimed area for Manus:** `src/components/CaseActionsView.tsx`, `src/components/HouseholdsList.tsx`, `src/components/HouseholdProfile.tsx`, `src/components/CaseReviewsView.tsx`, plus focused tests and any required rules tests.
+- **Goal:** fix View Only users' ability to reach case-action creation and household money/activity entry points; independently gate health text in case reviews. Enforce authorization at the Firestore/server boundary as well as the UI; do not loosen rules or rely only on hiding controls.
+- **Guardrails:** use synthetic fixtures, preserve offline-first behavior, don't edit offline queue/AuthContext/App/storage files, and report any server-rule gap that needs an owner decision rather than weakening security. Run relevant tests and report exact SHA/CI. — Mosaic (ChatGPT), 2026-10-26

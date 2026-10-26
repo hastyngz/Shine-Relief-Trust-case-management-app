@@ -548,3 +548,10 @@ The upgrade now reads existing rows within the version-change transaction, recre
 ### Follow-up: fail closed on unsafe migration
 
 Review found that an aborted unsafe migration would still fall back to an empty localStorage queue and could appear to have no pending edits. Added a distinct migration error path that surfaces a storage warning and propagates the failure rather than presenting an empty queue. The test seeds a synthetic foreign-owner row and verifies the upgrade fails while the original v1 row remains readable. Exact-head CI remains pending.
+
+
+## Verification outcome — IndexedDB queue migration
+
+Exact code SHA: `2e9c2c1b5c6f33267b6973fdbf8f496b31903e55`. GitHub Actions run `40325409483` completed successfully: both the `checks` and `e2e` jobs passed. The checks job ran TypeScript, the existing regression suites (including offline queue, local storage failure handling, Firestore emulator rules and access audit), and the production build. The Playwright offline end-to-end job passed. The new synthetic IndexedDB schema-upgrade and unsafe-owner regression tests are included in `npm run test:offline-queue`.
+
+This is automated CI evidence only. No production deployment, production data/rules change, live Firebase smoke test, or physical Android/weak-network test was performed. Account-isolation browser coverage is now present; user acceptance on an approved staging/test environment remains the next validation step.
