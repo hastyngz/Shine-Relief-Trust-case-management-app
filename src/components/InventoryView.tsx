@@ -1,7 +1,8 @@
 import React, { FormEvent, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement, InventoryMovementType } from '../types';
-import { saveInventoryItem } from '../utils/storage';
+import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
+import { postInventoryMovement } from '../services/r2StorageClient';
 import { useAuth } from '../contexts/AuthContext';
 import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
@@ -31,6 +32,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pendingMovementId, setPendingMovementId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -117,9 +119,57 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   };
 
-  const submitMovement = (event: FormEvent) => {
+  const applyConfirmedMovement = (
+    item: InventoryItem,
+    movementId: string,
+    response: Awaited<ReturnType<typeof postInventoryMovement>>,
+  ): boolean => {
+    const serverMovement = response.movement as unknown as InventoryMovement & { newQuantity: number; previousQuantity: number };
+    const db = getDatabase();
+    if (!Array.isArray(db.inventoryItems)) db.inventoryItems = [];
+    const index = db.inventoryItems.findIndex((entry) => entry.id === item.id);
+    if (index < 0) {
+      setError('The server confirmed the stock movement, but this item is no longer in the local register. Refresh the register before continuing.');
+      return false;
+    }
+    const current = db.inventoryItems[index];
+    const movementEntry: InventoryMovement = {
+      id: serverMovement.id,
+      type: serverMovement.type,
+      quantity: serverMovement.quantity,
+      date: serverMovement.date,
+      location: serverMovement.location,
+      destination: serverMovement.destination,
+      reference: serverMovement.reference,
+      reason: serverMovement.reason,
+      recordedBy: serverMovement.recordedBy,
+      recordedByUid: serverMovement.recordedByUid,
+      createdAt: serverMovement.createdAt,
+      previousQuantity: serverMovement.previousQuantity,
+      newQuantity: serverMovement.newQuantity,
+    };
+    const updated: InventoryItem = {
+      ...current,
+      quantityOnHand: serverMovement.newQuantity,
+      movements: [...(current.movements || []).filter((entry) => entry.id !== movementId), movementEntry],
+      lastMovementId: movementId,
+      updatedAt: serverMovement.createdAt,
+      updatedBy: serverMovement.recordedBy,
+      updatedByUid: serverMovement.recordedByUid,
+    };
+    db.inventoryItems[index] = updated;
+    const saved = saveDatabase(db, false);
+    if (!saved.ok) {
+      setError('The server confirmed the movement, but this phone could not refresh its local copy. Refresh the register while online; do not submit the same movement again.');
+      return false;
+    }
+    onRefresh();
+    return true;
+  };
+
+  const submitMovement = async (event: FormEvent) => {
     event.preventDefault();
-    if (!movementTarget) return;
+    if (!movementTarget || saving) return;
     const quantity = Number(movement.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setError('Enter a quantity greater than zero.');
@@ -129,26 +179,47 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Add a reason for this stock movement.');
       return;
     }
-    if (movement.type === 'Issued' && quantity > movementTarget.quantityOnHand) {
-      setError(`Only ${movementTarget.quantityOnHand} ${movementTarget.unit} are currently recorded in stock.`);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('No stock movement was saved. Connect to the internet and retry so the server can validate the current balance.');
       return;
     }
     const now = new Date().toISOString();
-    const entry: InventoryMovement = {
-      id: createInventoryId('mov'), type: movement.type as InventoryMovementType, quantity, date: movement.date,
-      location: movementTarget.location, destination: movement.destination.trim() || undefined,
-      reference: movement.reference.trim() || undefined, reason: movement.reason.trim(),
-      recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
-    };
-    const nextQuantity = movement.type === 'Received' ? movementTarget.quantityOnHand + quantity : movementTarget.quantityOnHand - quantity;
-    if (!persist({ ...movementTarget, quantityOnHand: nextQuantity, movements: [...(movementTarget.movements || []), entry], updatedAt: now })) return;
-    setMovementTarget(null);
-    setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
+    const movementId = pendingMovementId || createInventoryId('mov');
+    setPendingMovementId(movementId);
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await postInventoryMovement({
+        id: movementId,
+        itemId: movementTarget.id,
+        type: movement.type,
+        quantity,
+        date: movement.date,
+        destination: movement.destination.trim() || undefined,
+        reference: movement.reference.trim() || undefined,
+        reason: movement.reason.trim(),
+      });
+      if (applyConfirmedMovement(movementTarget, movementId, response)) {
+        setNotice(response.duplicate
+          ? 'This stock movement was already recorded. The server confirmed the existing transaction.'
+          : 'Stock movement recorded and confirmed by the server.');
+        setPendingMovementId(null);
+        setMovementTarget(null);
+        setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
+      }
+    } catch (err) {
+      setError(err instanceof Error
+        ? `The stock movement was not confirmed: ${err.message} Keep the form unchanged and retry to safely check the same movement.`
+        : 'The stock movement was not confirmed. Keep the form unchanged and retry to safely check the same movement.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const submitStocktake = (event: FormEvent) => {
+  const submitStocktake = async (event: FormEvent) => {
     event.preventDefault();
-    if (!stocktakeTarget) return;
+    if (!stocktakeTarget || saving) return;
     const counted = Number(stocktake.countedQuantity);
     if (!Number.isFinite(counted) || counted < 0) {
       setError('The counted quantity must be zero or greater.');
@@ -158,22 +229,40 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Record who/what was checked or why the stocktake was performed.');
       return;
     }
-    if (!Number.isFinite(stocktakeTarget.quantityOnHand) || stocktakeTarget.quantityOnHand < 0) {
-      setError('The recorded stock balance is invalid. Review this item before stocktaking.');
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('No stocktake was saved. Connect to the internet and retry so the server can validate the current balance.');
       return;
     }
-    const adjustment = getInventoryStocktakeAdjustment(stocktakeTarget.quantityOnHand, counted);
-    const now = new Date().toISOString();
-    const entry: InventoryMovement = {
-      id: createInventoryId('mov'), type: 'Adjustment', quantity: adjustment.quantity, date: stocktake.date,
-      location: stocktakeTarget.location,
-      reference: 'STOCKTAKE',
-      reason: `Physical stocktake: ${stocktake.reason.trim()}. System balance ${adjustment.previousQuantity}; counted ${adjustment.countedQuantity}; ${adjustment.variance === 0 ? 'no variance' : `variance ${adjustment.variance > 0 ? '+' : ''}${adjustment.variance}`} ${stocktakeTarget.unit}.`,
-      recordedBy: actor, recordedByUid: currentUser?.uid, createdAt: now,
-    };
-    if (!persist({ ...stocktakeTarget, quantityOnHand: counted, movements: [...(stocktakeTarget.movements || []), entry], updatedAt: now })) return;
-    setStocktakeTarget(null);
-    setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
+    const movementId = pendingMovementId || createInventoryId('mov');
+    setPendingMovementId(movementId);
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await postInventoryMovement({
+        id: movementId,
+        itemId: stocktakeTarget.id,
+        type: 'Adjustment',
+        countedQuantity: counted,
+        date: stocktake.date,
+        reference: 'STOCKTAKE',
+        reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
+      });
+      if (applyConfirmedMovement(stocktakeTarget, movementId, response)) {
+        setNotice(response.duplicate
+          ? 'This stocktake was already recorded. The server confirmed the existing transaction.'
+          : 'Stocktake recorded and confirmed by the server.');
+        setPendingMovementId(null);
+        setStocktakeTarget(null);
+        setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
+      }
+    } catch (err) {
+      setError(err instanceof Error
+        ? `The stocktake was not confirmed: ${err.message} Keep the form unchanged and retry to safely check the same movement.`
+        : 'The stocktake was not confirmed. Keep the form unchanged and retry to safely check the same movement.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
