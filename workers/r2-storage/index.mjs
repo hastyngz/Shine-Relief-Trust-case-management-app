@@ -27,7 +27,7 @@ function getCorsHeaders(request, env) {
   if (!origin || !allowed.includes(origin)) return null;
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Storage-Path, X-Storage-Target-Type, X-Storage-Target-Id, X-Storage-Category',
     'Access-Control-Max-Age': '86400',
     'Cache-Control': 'no-store',
@@ -59,6 +59,184 @@ async function firestoreGet(path, idToken) {
   if (response.status === 404) return undefined;
   if (!response.ok) throw new ApiError('Firestore denied access to the requested storage metadata.', response.status === 401 ? 401 : 403);
   return response.json();
+}
+
+
+function encodeFirestoreValue(value) {
+  if (value === null) return { nullValue: null };
+  if (typeof value === 'string') return { stringValue: value };
+  if (typeof value === 'boolean') return { booleanValue: value };
+  if (typeof value === 'number') return Number.isInteger(value)
+    ? { integerValue: String(value) }
+    : { doubleValue: value };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeFirestoreValue) } };
+  if (value && typeof value === 'object') {
+    return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, encodeFirestoreValue(entry)])) } };
+  }
+  throw new ApiError('The inventory movement contains an unsupported value.');
+}
+
+function decodeFirestoreFields(fields = {}) {
+  return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, valueOf(value)]));
+}
+
+async function firestoreCommit(writes, idToken) {
+  const url = 'https://firestore.googleapis.com/v1/projects/shine-relief-trust-cms/databases/(default)/documents:commit';
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ writes }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const code = Number(payload.error?.code || response.status);
+    throw new ApiError(code === 403 ? 'Firestore rules rejected this inventory movement.' : 'The inventory transaction could not be committed.', code === 409 || code === 412 ? 409 : code === 403 ? 403 : code === 401 ? 401 : code >= 500 ? 503 : 400);
+  }
+  return response.json();
+}
+
+function validateInventoryMovementPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new ApiError('A stock movement is required.');
+  const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
+  if (!validId(payload.id) || !validId(payload.itemId)) throw new ApiError('A valid item and movement ID are required.');
+  if (!['Received', 'Issued', 'Adjustment'].includes(payload.type)) throw new ApiError('This stock movement type is not supported.');
+  if (typeof payload.date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(payload.date) || !Number.isFinite(Date.parse(`${payload.date}T00:00:00Z`))) {
+    throw new ApiError('Enter a valid movement date.');
+  }
+  if (typeof payload.reason !== 'string' || !payload.reason.trim() || payload.reason.trim().length > 1000) throw new ApiError('A reason of up to 1,000 characters is required.');
+  if (payload.type === 'Adjustment') {
+    if (!Number.isFinite(payload.countedQuantity) || payload.countedQuantity < 0 || payload.countedQuantity > 1_000_000_000) throw new ApiError('The counted stock quantity must be zero or greater.');
+  } else if (!Number.isFinite(payload.quantity) || payload.quantity <= 0 || payload.quantity > 1_000_000_000) {
+    throw new ApiError('Enter a quantity greater than zero.');
+  }
+  for (const key of ['destination', 'reference']) {
+    if (payload[key] !== undefined && (typeof payload[key] !== 'string' || payload[key].length > 250)) throw new ApiError(`The ${key} field is too long or invalid.`);
+  }
+  return {
+    id: payload.id,
+    itemId: payload.itemId,
+    type: payload.type,
+    quantity: payload.quantity,
+    countedQuantity: payload.countedQuantity,
+    date: payload.date,
+    destination: payload.destination?.trim() || undefined,
+    reference: payload.reference?.trim() || undefined,
+    reason: payload.reason.trim(),
+  };
+}
+
+async function handleInventoryMovement(request, staff, idToken) {
+  if (!['Administrator', 'Manager', 'Staff'].includes(staff.role)) throw new ApiError('Your SHINE role cannot record stock movements.', 403);
+  const payload = validateInventoryMovementPayload(await request.json().catch(() => null));
+  const fingerprint = JSON.stringify(payload);
+  const itemPath = `inventoryItems/${encodeURIComponent(payload.itemId)}`;
+  const movementPath = `inventoryMovements/${encodeURIComponent(payload.id)}`;
+
+  const existingMovement = await firestoreGet(movementPath, idToken);
+  if (existingMovement) {
+    const existing = decodeFirestoreFields(existingMovement.fields);
+    if (existing.recordedByUid !== staff.uid || existing.inventoryItemId !== payload.itemId || existing.requestFingerprint !== fingerprint) {
+      throw new ApiError('This movement ID has already been used for a different request.', 409);
+    }
+    return json({ ok: true, duplicate: true, movement: existing }, 200);
+  }
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const itemDocument = await firestoreGet(itemPath, idToken);
+    if (!itemDocument) throw new ApiError('The inventory item was not found in the synced register. Sync and refresh before retrying.', 404);
+    const item = decodeFirestoreFields(itemDocument.fields);
+    const previousQuantity = item.quantityOnHand;
+    if (!Number.isFinite(previousQuantity) || previousQuantity < 0 || !Array.isArray(item.movements)) {
+      throw new ApiError('The inventory record is invalid. Review it before recording a movement.', 409);
+    }
+    const nextQuantity = payload.type === 'Received'
+      ? previousQuantity + payload.quantity
+      : payload.type === 'Issued'
+        ? previousQuantity - payload.quantity
+        : payload.countedQuantity;
+    if (payload.type === 'Issued' && payload.quantity > previousQuantity) {
+      throw new ApiError(`Insufficient stock: only ${previousQuantity} ${String(item.unit || 'units')} are recorded.`, 409);
+    }
+    if (!Number.isFinite(nextQuantity) || nextQuantity < 0 || nextQuantity > 1_000_000_000) {
+      throw new ApiError('The resulting stock balance is outside the allowed range.', 409);
+    }
+
+    const now = new Date().toISOString();
+    const movementQuantity = payload.type === 'Adjustment' ? Math.abs(nextQuantity - previousQuantity) : payload.quantity;
+    const movement = {
+      id: payload.id,
+      inventoryItemId: payload.itemId,
+      type: payload.type,
+      quantity: movementQuantity,
+      date: payload.date,
+      location: String(item.location || ''),
+      ...(payload.destination ? { destination: payload.destination } : {}),
+      ...(payload.reference ? { reference: payload.reference } : {}),
+      reason: payload.reason,
+      recordedBy: staff.fullName,
+      recordedByUid: staff.uid,
+      createdAt: now,
+      previousQuantity,
+      newQuantity: nextQuantity,
+      requestFingerprint: fingerprint,
+    };
+    const embeddedMovement = {
+      id: movement.id,
+      type: movement.type,
+      quantity: movement.quantity,
+      date: movement.date,
+      location: movement.location,
+      ...(movement.destination ? { destination: movement.destination } : {}),
+      ...(movement.reference ? { reference: movement.reference } : {}),
+      reason: movement.reason,
+      recordedBy: movement.recordedBy,
+      recordedByUid: movement.recordedByUid,
+      createdAt: movement.createdAt,
+      previousQuantity,
+      newQuantity: nextQuantity,
+    };
+    const itemFields = {
+      quantityOnHand: encodeFirestoreValue(nextQuantity),
+      movements: encodeFirestoreValue([...item.movements, embeddedMovement]),
+      lastMovementId: encodeFirestoreValue(payload.id),
+      updatedAt: encodeFirestoreValue(now),
+      updatedBy: encodeFirestoreValue(staff.fullName),
+      updatedByUid: encodeFirestoreValue(staff.uid),
+    };
+    const movementFields = Object.fromEntries(Object.entries(movement).map(([key, value]) => [key, encodeFirestoreValue(value)]));
+    try {
+      await firestoreCommit([
+        {
+          update: {
+            name: `projects/shine-relief-trust-cms/databases/(default)/documents/${itemPath}`,
+            fields: itemFields,
+          },
+          updateMask: { fieldPaths: Object.keys(itemFields) },
+          currentDocument: { updateTime: itemDocument.updateTime },
+        },
+        {
+          update: {
+            name: `projects/shine-relief-trust-cms/databases/(default)/documents/${movementPath}`,
+            fields: movementFields,
+          },
+          currentDocument: { exists: false },
+        },
+      ], idToken);
+      return json({ ok: true, duplicate: false, quantityOnHand: nextQuantity, movement }, 200);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 409) throw error;
+      const retriedMovement = await firestoreGet(movementPath, idToken);
+      if (retriedMovement) {
+        const existing = decodeFirestoreFields(retriedMovement.fields);
+        if (existing.recordedByUid === staff.uid && existing.inventoryItemId === payload.itemId && existing.requestFingerprint === fingerprint) {
+          return json({ ok: true, duplicate: true, movement: existing }, 200);
+        }
+        throw new ApiError('This movement ID has already been used for a different request.', 409);
+      }
+      if (attempt === 3) throw new ApiError('Stock changed while saving. Refresh the register and retry; no success was reported.', 409);
+    }
+  }
+  throw new ApiError('The inventory transaction could not be confirmed.', 503);
 }
 
 async function authenticate(request, env) {
@@ -173,6 +351,10 @@ async function handleRequest(request, env) {
   const client = getS3Client(env);
 
   if (url.pathname.startsWith('/api/ai/')) return handleAIRequest(request, env, staff);
+
+  if (url.pathname === '/api/inventory/movement' && request.method === 'POST') {
+    return handleInventoryMovement(request, staff, idToken);
+  }
 
   if (url.pathname === '/api/storage/object' && request.method === 'PUT') {
     if (staff.role === 'View Only') throw new ApiError('Your role cannot upload files.', 403);
