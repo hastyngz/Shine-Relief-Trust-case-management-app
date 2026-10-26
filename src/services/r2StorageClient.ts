@@ -10,7 +10,9 @@ async function requestR2(path: string, init: RequestInit = {}): Promise<Response
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || `File storage request failed (${response.status}).`);
+    const error = new Error(payload.error || `File storage request failed (${response.status}).`) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
   return response;
 }
