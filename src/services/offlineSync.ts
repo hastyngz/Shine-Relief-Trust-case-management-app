@@ -300,7 +300,7 @@ export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Pr
 }
 
 export function getPendingOfflineSnapshotCount(): number {
-  return cachedQueue?.length ?? 0;
+  return cachedQueueUid === getActiveWorkspaceUid() ? (cachedQueue?.length ?? 0) : 0;
 }
 
 export async function refreshPendingOfflineSnapshotCount(): Promise<number> {
