@@ -248,7 +248,7 @@ export async function queueOfflineRecordsForSync(
     throw new Error('Active SHINE workspace changed before the record could be queued.');
   }
   if (!records.length) return;
-  const appendOnlyEmployeeCollections = new Set([
+  const appendOnlyEmployeeCollections = new Set<string>([
     COLLECTIONS.EMPLOYEE_SALARY_HISTORY,
     COLLECTIONS.EMPLOYEE_AUDIT_LOGS,
   ]);
