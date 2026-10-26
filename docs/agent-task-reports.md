@@ -564,10 +564,11 @@ Because the UI invokes startup/connectivity flushes without awaiting them, an un
 
 # Salary-history offline persistence — task report
 
-**Report date:** 2026-10-26
-**Branch:** `Replit`
-**Implementation commits:** `1610d259c1253b258cdd2e60daf5b0137878cd84`, `daf5967990f952c6cea53e1ef48b4a9d52f3da9a`, `e0eb8ca91f75b9499b4da15901df7d5dd605ba14`, `58edd15b34644277ed36160951d138bae19ad6a9`
-**Status:** IMPLEMENTED; VERIFICATION PENDING
+**Report date:** 2026-10-26  
+**Branch:** `Replit`  
+**Code SHA verified:** `6a82e651fd379c42f90836877f048b963572ab2a`  
+**Verification run:** [SHINE app checks #786](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40377058116)  
+**Status:** IMPLEMENTED; AUTOMATED CHECKS AND E2E PASSED
 
 ## Scope and observed defect
 
@@ -575,20 +576,22 @@ Because the UI invokes startup/connectivity flushes without awaiting them, an un
 
 ## Changes made
 
-- Added `queueOfflineRecordsForSync` in `src/services/offlineSync.ts`. It writes one or more stable-ID records into the authenticated UID-scoped per-record queue in one durable queue update, rejects workspace changes and conflicting duplicate IDs, and does not add HR data to the shared operational database snapshot.
+- Added `queueOfflineRecordsForSync` in `src/services/offlineSync.ts`. It accepts only the append-only salary-history and employee-audit collections, writes multiple records to the authenticated UID-scoped per-record queue in one durable queue update, rejects workspace changes and conflicting duplicate IDs, and does not copy HR data into the shared operational database snapshot.
 - Updated `EmployeeContractPanel` to queue the salary-history record and deterministic `employeeAuditLogs` event together before showing local success. It attempts the normal conflict-aware flush immediately, reports queued vs synced state, and merges pending salary-history queue entries into the view after reopening.
-- Updated `syncChangeEntriesToFirestore` so existing salary-history and employee-audit documents are treated as append-only: an identical existing document is an idempotent retry; a different existing document becomes a conflict and is not overwritten. This matches the existing Firestore rules that deny updates/deletes to these collections.
-- Added synthetic coverage to `scripts/offline-sync.test.ts` for durable queueing of salary+audit records, successful sync, identical retry, and preservation of a conflicting existing salary record.
+- Updated `syncChangeEntriesToFirestore` so existing salary-history and employee-audit documents are append-only during queue replay: an identical existing document is an idempotent retry; a different existing document becomes a conflict and is not overwritten. Confidential HR IDs and payloads are redacted from offline-sync error logs.
+- Kept salary/HR-audit conflicts out of the general case-action audit collection. The conflict remains in the UID-scoped local conflict store. The conflict UI explains the append-only rule, disables “Keep mine” for those records, and allows “Keep theirs” without creating a cross-domain audit entry.
+- Added synthetic regression coverage for durable salary+audit queueing, successful sync, identical retry, preservation of a conflicting server salary, prevention of overwrite resolution, and preventing salary conflict identifiers from leaking into the general case-action audit collection.
 
-## Verification
+## Verification results
 
-- **Not yet verified:** `npm run lint`, `npm run test:offline`, production build, and browser/device acceptance tests have not been executed from this environment. The shell could not clone the GitHub repository because DNS/network access was unavailable.
-- Queried the GitHub combined commit-status endpoint for the regression-test commit and latest documentation commit; it returned an empty status list. That is not evidence of a pass or a failure. Confirm the `SHINE app checks` workflow on the current `Replit` head before calling this complete.
-- No physical Android or weak-signal test was performed. No real employee/payroll data was used.
+GitHub Actions run **#786** checked code SHA `6a82e651fd379c42f90836877f048b963572ab2a`:
+- **Checks job: passed.** This includes `npm run lint` (TypeScript), the scripted regression suites including `npm run test:offline`, Firestore rules/access audits, and the production build.
+- **E2E job: passed.** The workflow's offline browser end-to-end tests completed successfully.
+- During an earlier run, TypeScript found one collection-allowlist type mismatch. I fixed it by explicitly typing the allowlist as `Set<string>`; the final run #786 then passed both jobs.
+- Local shell cloning was unavailable, so verification was performed through GitHub Actions. No real employee/payroll data was used.
 
 ## Remaining risks and next actions
 
-1. Confirm CI for the current branch head. At minimum, `npm run lint` and `npm run test:offline` must pass; review the full workflow for regressions.
-2. On a test device with synthetic HR records, verify offline save → close/reopen → reconnect → one salary record and one audit event in Firestore, then test a permission-denied save and a same-ID server conflict.
-3. Confirm pending queue/conflict visibility is appropriate for Manager/Administrator-only HR workflows. Firestore rules remain unchanged.
-4. If CI fails, fix the failure and amend this report with exact commands, results, and final SHA before handing off.
+1. No physical Android or weak-signal acceptance test was performed. Before using real HR data, test a synthetic salary save while offline, close/reopen the panel, reconnect, and confirm exactly one salary record and one audit event reach Firestore.
+2. Exercise a permission-denied save and same-ID conflict on a test account. The queue preserves the pending record; an append-only duplicate cannot be overwritten and must be resolved by keeping the server record or entering a new salary record with a fresh ID.
+3. The implementation is verified on code SHA `6a82e65`. Subsequent documentation-only commits do not change the code tested by run #786.
