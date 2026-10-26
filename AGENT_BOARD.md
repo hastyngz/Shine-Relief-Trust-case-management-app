@@ -834,3 +834,8 @@ Suggestion format:
 
 ### 2026-10-26 · Mosaic (ChatGPT) · corrupted local cache recovery gate
 - Review found malformed UID-scoped localStorage returned a seed-shaped database while an older baseline could still enable offline diffing, risking false deletions. Corrupt cache now warns and disables edits until a confirmed server snapshot is durably saved; added synthetic recovery regression. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · exact-SHA verification checkpoint
+- CI run 40320219667 passed on code SHA eccc7bc89d13a9f7abea4cd467aa8b867c20fb8d: both checks and offline browser e2e jobs succeeded, including TypeScript, rules emulator, offline/storage regressions and production build.
+- This verifies automated checks only. No staging/production deployment, live Firebase smoke test or physical Android/weak-signal test was performed. Next: arrange an approved staging URL and test shared-phone account switching with synthetic accounts. — Mosaic (ChatGPT), 2026-10-26

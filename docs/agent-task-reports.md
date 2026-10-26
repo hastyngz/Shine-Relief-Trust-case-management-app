@@ -521,3 +521,11 @@ No production records, Firestore/Storage rules, deployment, or live services wer
 ## 2026-10-26 corrupt-cache / stale-baseline safeguard
 
 Review found `getDatabase()` returned the seed-shaped fallback after JSON parsing failed, while an older confirmed baseline could still cause the app to treat that fallback as editable data. A subsequent offline diff could interpret the missing records as deletions. The storage layer now marks corrupt-cache recovery required and emits the persistent storage warning; the app does not enable editing from an existing baseline while this flag is set. Only a server-confirmed snapshot that is durably written along with its baseline clears the gate. Added synthetic coverage for corrupt JSON, blocked state, and successful confirmed recovery. This does not delete the old baseline before the confirmed server copy arrives.
+
+
+## 2026-10-26 verification checkpoint — account-isolation hardening
+
+**Code SHA verified:** eccc7bc89d13a9f7abea4cd467aa8b867c20fb8d  
+**GitHub Actions run:** 40320219667 — completed successfully. Both the checks job and offline e2e job passed. The checks job includes TypeScript, Firestore rules/listener-permission emulator tests, offline sync and queue tests, local storage failure handling, Firestore access audit, and the production build.
+
+This pass covers the account-isolation changes committed up to the code SHA above, including queue ownership, stale queue-read protection, conflict persistence failure handling, auth profile race guards, and corrupt-cache recovery gating. It does not establish real-device behaviour or live-service readiness. No deployment, production data migration, production rules change, or Android/weak-signal test was performed. To make this testable on the user's Android phone, an approved staging deployment/preview URL is still needed; do not deploy to production as a workaround.
