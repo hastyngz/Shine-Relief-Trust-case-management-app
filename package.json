@@ -40,7 +40,8 @@
     "test:deployment-smoke": "tsx scripts/cloudflare-deployment-smoke.test.ts",
     "test:offline-queue": "tsx scripts/offline-queue-idb.test.ts",
     "test:e2e": "playwright test",
-    "test:inventory": "tsx scripts/inventory.test.ts",
+    "test:inventory": "tsx scripts/inventory.test.ts && tsx scripts/inventory-integrity-audit.test.ts",
+    "audit:inventory-snapshot": "tsx scripts/audit-inventory-snapshot.ts",
     "test:asset-export": "tsx scripts/asset-export.test.ts",
     "test:asset-verification": "tsx scripts/asset-verification.test.ts",
     "test:compliance": "tsx scripts/compliance-calendar.test.ts"

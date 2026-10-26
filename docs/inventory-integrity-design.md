@@ -58,6 +58,12 @@ Because Firebase Admin SDK bypasses Firestore rules, the trusted handler's valid
 5. Deploy the command handler and compatible client first. Then enable rules that deny direct balance/history edits. Avoid an interval where the rules are strict but all clients still use the legacy full-document writer, or where the new UI is live but direct old-client writes remain authorized.
 6. Keep rollback bounded: if the command handler is unavailable, queue operations locally; do not reopen unrestricted client writes as a fallback. Define a supervised recovery procedure for stuck operations.
 
+### Read-only snapshot audit implemented and locally validated
+
+`npm run audit:inventory-snapshot -- <app-database-export.json>` inspects the `inventoryItems` array from an explicitly supplied local export. It emits aggregate counts only and never prints record IDs, stock codes, staff identities, or payloads; it never writes or repairs the input. The synthetic regression suite covers invalid/non-finite balances, reorder levels and costs, blank/duplicate stock codes, malformed movement lists/entries, missing actor/timestamp fields, and duplicate movement IDs. A non-zero exit means review findings exist, not that a repair is safe.
+
+This local export scan is not a Firestore audit or proof of production integrity. It cannot reconcile current balances against movement history because the existing schema lacks an immutable opening balance and a signed movement delta. Production data inspection/migration still requires the approved Admin workflow, backup and owner review described in the runbook.
+
 ## Test matrix
 
 - Unit-test validators for NaN/infinity, negative/zero values, invalid units, missing reason, unsupported operation type, permissions, and oversized input.
