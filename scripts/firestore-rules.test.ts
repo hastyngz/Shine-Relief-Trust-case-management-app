@@ -359,6 +359,19 @@ async function run() {
     await assertFails(getDocsFromServer(query(collection(manager, 'caseActionAuditLogs'), where('userId', '==', 'viewer'))));
     const adminCaseActionAuditLogs = await assertSucceeds(getDocsFromServer(collection(admin, 'caseActionAuditLogs')));
     assert.equal(adminCaseActionAuditLogs.size, 3);
+    const selfAssignedAction = (uid: string) => ({
+      id: `action-created-${uid}`,
+      title: 'Synthetic self-assigned action',
+      sourceType: 'manual',
+      assignedStaffId: uid,
+      createdByUid: uid,
+      status: 'Open',
+    });
+    await assertFails(setDoc(doc(viewer, 'caseActions/action-created-viewer'), selfAssignedAction('viewer')));
+    await assertSucceeds(setDoc(doc(worker, 'caseActions/action-created-worker'), selfAssignedAction('worker')));
+    await assertFails(setDoc(doc(viewer, 'rentPayments/viewer-write-denied'), { id: 'viewer-write-denied' }));
+    await assertFails(setDoc(doc(viewer, 'expenses/viewer-write-denied'), { id: 'viewer-write-denied' }));
+    await assertFails(setDoc(doc(viewer, 'householdActivities/viewer-write-denied'), { id: 'viewer-write-denied' }));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
     await assertSucceeds(updateDoc(doc(worker, 'caseActions/action-2'), { status: 'Completed', completedAt: '2026-09-26T00:00:00.000Z', updatedAt: '2026-09-26T00:00:00.000Z', updatedBy: 'worker', updatedByUid: 'worker' }));

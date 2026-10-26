@@ -261,7 +261,7 @@ service cloud.firestore {
       allow create: if (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
         (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
         (isManagerOrAdmin() || (
-          isStaffActive() &&
+          isManagerOrStaff() &&
           resource == null &&
           request.resource.data.createdByUid == request.auth.uid &&
           request.resource.data.assignedStaffId == request.auth.uid
