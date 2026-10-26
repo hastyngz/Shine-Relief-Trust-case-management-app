@@ -550,6 +550,7 @@ await clearOfflineChangesAfterDatabaseReset(resetDb);
 
 // --- 12. Restore inspection must fail closed on unreadable queue state -----
 await clearOfflineChangesAfterDatabaseReset(resetDb);
+values.set('shine_relief_trust_pending_sync_v1', JSON.stringify([db({ girls: [girl('SG-LEGACY-RESET', T1)] })]));
 assert.equal(await inspectPendingOfflineChanges(), 'pending', 'unowned legacy snapshots remain quarantined and block destructive restore');
 values.delete('shine_relief_trust_pending_sync_v1');
 assert.equal(await inspectPendingOfflineChanges(), 'clear', 'restore is allowed after the synthetic legacy quarantine fixture is removed');
