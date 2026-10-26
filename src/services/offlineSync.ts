@@ -487,9 +487,14 @@ export async function migrateLegacySnapshots(): Promise<boolean> {
   const legacy = readPendingOfflineSnapshots();
   if (!legacy.length) return false;
   const newest = legacy[legacy.length - 1];
+  const baseline = getLastSyncedSnapshot();
+  // Without a confirmed baseline, converting a whole-database snapshot into
+  // writes could replay every record. Keep it quarantined until a safe baseline exists.
+  if (!baseline) return false;
   const existing = await loadQueue();
   if (getActiveWorkspaceUid() !== uid) return false;
-  const migrated = computeChangeEntries(newest, null, existing);
+  if (existing.some((entry) => entry.ownerUid !== uid)) return false;
+  const migrated = computeChangeEntries(newest, baseline, existing).map((entry) => ({ ...entry, ownerUid: uid }));
   await persistQueue(migrated, uid);
   if (getActiveWorkspaceUid() !== uid) return false;
   clearLegacySnapshots();

@@ -339,6 +339,7 @@ assert.equal(ownResult.applied, 1);
 
 // --- 5. Legacy snapshot migration -------------------------------------------
 values.clear();
+setLastSyncedSnapshot(db());
 writePendingOfflineSnapshot(db({ girls: [girl('SG-009', T1)] }));
 const scopedSnapshotKey = 'shine_relief_trust_pending_sync_v2::uid:uid-a';
 const migrated = await migrateLegacySnapshots();
@@ -347,7 +348,16 @@ assert.equal(values.has(scopedSnapshotKey), false, 'the scoped snapshot is clear
 const queue = await loadQueue();
 assert.equal(queue.length, 1, 'the migrated record becomes a per-record change');
 assert.equal(queue[0].recordId, 'SG-009');
+assert.equal(queue[0].ownerUid, 'uid-a', 'migrated queue entries keep the known workspace owner');
 assert.equal(getPendingOfflineSnapshotCount(), 1);
+
+// A snapshot with no confirmed baseline must remain preserved, not become a full-database queue.
+values.clear();
+await persistQueue([], 'uid-a');
+writePendingOfflineSnapshot(db({ girls: [girl('SG-LEGACY-NO-BASELINE', T1)] }));
+assert.equal(await migrateLegacySnapshots(), false, 'migration pauses without a confirmed baseline');
+assert.equal(values.has(scopedSnapshotKey), true, 'the legacy snapshot remains preserved without a baseline');
+assert.equal((await loadQueue()).length, 0, 'no full-database queue is generated without a baseline');
 
 // --- 6. End-to-end offline edit + flush through the queue -------------------
 values.clear();

@@ -788,3 +788,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · legacy cache restore gate
 - Destructive-restore inspection now also detects the previous unscoped whole-database localStorage cache, because it may contain edits that were never written to the old queue. It stays preserved and blocks restore until reviewed; a synthetic regression covers this.
 - No old cache is adopted or deleted. Exact-head CI and Android acceptance remain outstanding. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · baseline-safe legacy snapshot migration
+- Strict queue ownership exposed a legacy migration path that needed explicit UID stamping. Migration now requires a confirmed same-workspace baseline, refuses unowned existing queue entries, stamps migrated entries with the known UID, and preserves snapshots if it cannot prove a safe diff.
+- Added synthetic tests for successful scoped migration and no-baseline quarantine. CI pending. — Mosaic (ChatGPT), 2026-10-26

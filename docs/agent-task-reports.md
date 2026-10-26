@@ -467,3 +467,8 @@ A further review found that the queue persistence helper was unconditionally sta
 ## 2026-10-26 legacy database-cache restore gate
 
 The legacy quarantine review now includes the old whole-database localStorage key as well as legacy queues, conflicts, snapshots and IndexedDB. A valid old database cache can contain local edits that were never represented in the former queue, so its presence blocks destructive restore; malformed cache state returns unavailable. The old cache remains untouched and is never rendered or attributed to a new UID. Added a synthetic restore-inspection regression.
+
+
+## 2026-10-26 baseline-safe snapshot migration
+
+Updated the scoped legacy snapshot migration to meet the strict queue ownership rules. It now requires a confirmed baseline for the active UID, refuses to merge into a queue with missing/mismatched owners, stamps only the diff it derives from the UID-scoped snapshot with that known UID, and leaves the snapshot untouched if it cannot prove a safe diff. This avoids a missing baseline turning an entire database snapshot into queued writes. Synthetic tests cover both successful migration and the no-baseline preservation path.
