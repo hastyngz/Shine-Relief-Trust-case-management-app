@@ -119,9 +119,8 @@ service cloud.firestore {
         request.resource.data.quantityOnHand is number &&
         request.resource.data.quantityOnHand >= 0 &&
         request.resource.data.movements is list &&
-        resource.data.movements is list &&
-        request.resource.data.movements.size() == resource.data.movements.size() + 1 &&
-        request.resource.data.movements.hasAll(resource.data.movements) &&
+        request.resource.data.movements.size() == resource.data.get('movements', []).size() + 1 &&
+        request.resource.data.movements.hasAll(resource.data.get('movements', [])) &&
         request.resource.data.movements[request.resource.data.movements.size() - 1].id == movementId &&
         inventoryMovementMatchesItem(itemId, movementId);
     }
@@ -591,7 +590,10 @@ service cloud.firestore {
 
     match /inventoryItems/{id} {
       allow read: if isStaffActive();
-      allow create: if isManagerOrStaff();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.quantityOnHand == 0 &&
+        request.resource.data.movements is list &&
+        request.resource.data.movements.size() == 0;
       allow update: if isManagerOrStaff() &&
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny([
