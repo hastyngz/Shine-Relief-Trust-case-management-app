@@ -248,6 +248,13 @@ export async function queueOfflineRecordsForSync(
     throw new Error('Active SHINE workspace changed before the record could be queued.');
   }
   if (!records.length) return;
+  const appendOnlyEmployeeCollections = new Set([
+    COLLECTIONS.EMPLOYEE_SALARY_HISTORY,
+    COLLECTIONS.EMPLOYEE_AUDIT_LOGS,
+  ]);
+  if (records.some(({ collection }) => !appendOnlyEmployeeCollections.has(collection))) {
+    throw new Error('This queue helper only accepts append-only HR salary and audit records.');
+  }
   if (records.some(({ collection, record }) =>
     !collection.trim() || !record || typeof record.id !== 'string' || !record.id.trim()
   )) {
