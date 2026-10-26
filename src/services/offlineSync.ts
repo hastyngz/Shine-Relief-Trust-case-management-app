@@ -458,6 +458,7 @@ export async function migrateLegacySnapshots(): Promise<boolean> {
   if (getActiveWorkspaceUid() !== uid) return false;
   const migrated = computeChangeEntries(newest, null, existing);
   await persistQueue(migrated, uid);
+  if (getActiveWorkspaceUid() !== uid) return false;
   clearLegacySnapshots();
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
   return true;
@@ -633,6 +634,9 @@ export async function resolveSyncConflict(
 }
 
 export async function clearAllOfflineQueue(): Promise<void> {
-  await persistQueue([]);
+  const uid = getActiveWorkspaceUid();
+  if (!uid) throw new Error('Cannot clear offline state without an authenticated SHINE workspace.');
+  await persistQueue([], uid);
+  if (getActiveWorkspaceUid() !== uid) return;
   await persistSyncConflicts([]);
 }
