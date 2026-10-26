@@ -238,6 +238,7 @@ export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' 
 export async function saveQueueEntries(entries: OfflineChangeEntry[], expectedUid?: string): Promise<void> {
   const uid = getActiveWorkspaceUid();
   if (!uid || (expectedUid && expectedUid !== uid)) throw new Error('Active SHINE workspace changed before offline edits could be persisted.');
+  if (entries.some((entry) => entry.ownerUid !== uid)) throw new Error('Cannot persist queue entries with missing or mismatched workspace ownership.');
   if (!hasIndexedDb()) {
     writeLocalEntries(entries, uid);
     return;

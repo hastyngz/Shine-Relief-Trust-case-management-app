@@ -218,10 +218,12 @@ export async function persistQueue(entries: OfflineChangeEntry[], expectedUid?: 
   // Only update the in-memory view after durable persistence succeeds. Otherwise
   // a failed IndexedDB/localStorage write could make the UI report an empty queue
   // while the old persisted entries remain and replay later.
-  const ownedEntries = entries.map((entry) => ({ ...entry, ownerUid: uid }));
-  await saveQueueEntries(ownedEntries, uid);
+  if (entries.some((entry) => entry.ownerUid !== uid)) {
+    throw new Error('Cannot persist offline edits with missing or mismatched workspace ownership.');
+  }
+  await saveQueueEntries(entries, uid);
   if (getActiveWorkspaceUid() === uid) {
-    cachedQueue = ownedEntries;
+    cachedQueue = entries;
     cachedQueueUid = uid;
   }
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
@@ -407,7 +409,15 @@ export async function recordOfflineChanges(currentDb: AppDatabase): Promise<numb
   }
   const previous = await loadQueue();
   if (getActiveWorkspaceUid() !== uid) return 0;
-  const entries = computeChangeEntries(currentDb, baseline, previous);
+  if (previous.some((entry) => entry.ownerUid !== uid)) {
+    try {
+      window.dispatchEvent(new CustomEvent('shine_storage_warning', {
+        detail: { quotaExceeded: false, error: new Error('Offline edits are paused because an existing queue entry has no verified owner. Preserve this device and request recovery before clearing browser data.') },
+      }));
+    } catch { /* best effort warning; preserve unowned queue entries */ }
+    return previous.length;
+  }
+  const entries = computeChangeEntries(currentDb, baseline, previous).map((entry) => ({ ...entry, ownerUid: uid }));
   if (!entries.length) return previous.length;
   await persistQueue(entries, uid);
   return entries.length;
@@ -627,6 +637,7 @@ export async function resolveSyncConflict(
 
   if (resolution === 'keep-mine') {
     const keepMine: OfflineChangeEntry = {
+      ownerUid: actor.uid,
       collection: conflict.collection,
       recordId: conflict.recordId,
       operation: conflict.localOperation,

@@ -370,6 +370,8 @@ assert.equal(getLastSyncedSnapshot(), null, 'a different UID cannot read the man
 const wrongAccountFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
 assert.equal(wrongAccountFlush.flushed, false, 'a mismatched actor cannot flush another workspace');
 assert.equal((await loadQueue()).length, 0, 'a second UID cannot read the manager queue');
+await assert.rejects(() => persistQueue([{ ...procurementCreate[0], ownerUid: 'uid-a' }], 'uid-b'), /missing or mismatched workspace ownership/,
+  'a second account cannot re-attribute another account\'s queued entry');
 setActiveWorkspaceUid('uid-a');
 assert.ok(getLastSyncedSnapshot(), 'switching back restores the manager baseline');
 
@@ -488,7 +490,7 @@ const procurementItem = {
 const procurementCreate = computeChangeEntries(
   db({ procurementLists: [procurementItem] }),
   db({ procurementLists: [] }),
-);
+).map((entry) => ({ ...entry, ownerUid: 'uid-a' }));
 assert.equal(procurementCreate.length, 1, 'new procurement lists should be queued as individual records');
 assert.equal(procurementCreate[0].collection, 'procurementLists');
 assert.equal(procurementCreate[0].recordId, 'PRC-E2E-001');

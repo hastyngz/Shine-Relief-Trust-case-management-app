@@ -778,3 +778,8 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · attachment callback isolation
 - Extended UID guards to report-image/report-export metadata and asynchronous girl/household attachment subscription callbacks, so an old listener cannot emit results after a workspace switch.
 - Server-side R2/Firestore authorization remains unchanged; this is client-side stale-result protection. CI/device verification still pending. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · reject unowned queue writes
+- Review found persistQueue was overwriting any supplied owner UID with the current UID, which could re-attribute a stale or foreign entry. Queue writes now require every entry to carry the exact active owner; new diffs and Keep mine entries stamp their known UID, and an unowned prior queue is preserved with a storage warning instead of being adopted.
+- Added synthetic coverage; exact-head CI is pending. — Mosaic (ChatGPT), 2026-10-26

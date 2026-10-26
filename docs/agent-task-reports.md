@@ -457,3 +457,8 @@ A broader privacy review found an in-memory coalescing map in attachmentService.
 
 
 Attachment follow-up: the same UID check now protects report-image loading, attachment metadata used by exports, and late girl/household attachment listener callbacks. These callbacks check the UID again after asynchronous URL preparation before invoking the UI callback. This is defense in depth only; the existing R2/Firestore authorization remains authoritative.
+
+
+## 2026-10-26 strict queue ownership
+
+A further review found that the queue persistence helper was unconditionally stamping the current UID onto all entries. That could convert a stale/mismatched entry into an apparently owned entry. Queue persistence now rejects any missing or mismatched owner instead of re-attributing it. Newly computed diffs and Keep mine conflict entries explicitly carry the active UID; if a pre-existing scoped queue contains an entry without a verified owner, automatic diff persistence pauses and raises a visible storage warning while preserving that queue. The lower-level IndexedDB/localStorage persistence function also validates ownership. Tests use explicit synthetic owner UIDs.
