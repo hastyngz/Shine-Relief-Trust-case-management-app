@@ -54,6 +54,9 @@ jobs:
       - name: Test authenticated R2 Worker upload route
         run: npm run test:r2-worker-upload-validation
 
+      - name: Test atomic inventory movement Worker transactions
+        run: npm run test:inventory-movement-worker
+
       - name: Test health-record access and follow-up notifications
         run: npm run test:health-access
 
