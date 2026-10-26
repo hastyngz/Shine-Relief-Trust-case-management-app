@@ -62,3 +62,52 @@ export function getInventoryStocktakeAdjustment(previousQuantity: number, counte
 export function resolveInventoryLocationForSave(currentLocation: string | undefined, requestedLocation: string, isEditing: boolean): string {
   return isEditing && currentLocation ? currentLocation : requestedLocation;
 }
+
+
+export interface PendingInventoryMovementRequest {
+  id: string;
+  itemId: string;
+  signature: string;
+  mode: 'movement' | 'stocktake';
+  payload: Record<string, unknown>;
+}
+
+/** Persist one uncertain request per authenticated user so retries reuse its idempotency key after reload. */
+export function savePendingInventoryMovement(uid: string, pending: PendingInventoryMovementRequest): boolean {
+  if (typeof window === 'undefined' || !uid.trim()) return false;
+  try {
+    window.localStorage.setItem(`shine_inventory_pending_movement_${uid}`, JSON.stringify(pending));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadPendingInventoryMovement(uid: string): PendingInventoryMovementRequest | null {
+  if (typeof window === 'undefined' || !uid.trim()) return null;
+  try {
+    const raw = window.localStorage.getItem(`shine_inventory_pending_movement_${uid}`);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<PendingInventoryMovementRequest>;
+    if (
+      typeof value.id !== 'string' || !value.id ||
+      typeof value.itemId !== 'string' || !value.itemId ||
+      typeof value.signature !== 'string' || !value.signature ||
+      (value.mode !== 'movement' && value.mode !== 'stocktake') ||
+      !value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload)
+    ) return null;
+    return value as PendingInventoryMovementRequest;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingInventoryMovement(uid: string): boolean {
+  if (typeof window === 'undefined' || !uid.trim()) return false;
+  try {
+    window.localStorage.removeItem(`shine_inventory_pending_movement_${uid}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
