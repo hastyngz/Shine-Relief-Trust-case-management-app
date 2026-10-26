@@ -236,6 +236,67 @@ export async function persistQueue(entries: OfflineChangeEntry[], expectedUid?: 
 }
 
 /**
+ * Atomically adds one or more confidential records to the normal per-record
+ * queue without copying them into the shared AppDatabase snapshot. Used for
+ * append-only HR records that must remain outside the staff-readable database.
+ */
+export async function queueOfflineRecordsForSync(
+  records: Array<{ collection: string; record: Record<string, any> }>,
+  expectedUid: string,
+): Promise<void> {
+  if (!expectedUid || getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('Active SHINE workspace changed before the record could be queued.');
+  }
+  if (!records.length) return;
+  if (records.some(({ collection, record }) =>
+    !collection.trim() || !record || typeof record.id !== 'string' || !record.id.trim()
+  )) {
+    throw new Error('Every queued record must have a collection and a stable record ID.');
+  }
+
+  const existingEntries = await loadQueue();
+  if (getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('Active SHINE workspace changed while preparing the offline record.');
+  }
+  const additions: OfflineChangeEntry[] = [];
+  for (const { collection, record } of records) {
+    const existing = existingEntries.find((entry) =>
+      entry.collection === collection && entry.recordId === record.id
+    );
+    if (existing) {
+      if (
+        existing.ownerUid !== expectedUid ||
+        existing.operation !== 'set' ||
+        stableStringify(existing.data) !== stableStringify(record)
+      ) {
+        throw new Error('A different pending change already exists for this record. Resolve it before retrying.');
+      }
+      continue;
+    }
+    if (additions.some((entry) => entry.collection === collection && entry.recordId === record.id)) {
+      const duplicate = additions.find((entry) => entry.collection === collection && entry.recordId === record.id)!;
+      if (stableStringify(duplicate.data) !== stableStringify(record)) {
+        throw new Error('Conflicting records with the same ID cannot be queued together.');
+      }
+      continue;
+    }
+    additions.push({
+      ownerUid: expectedUid,
+      collection,
+      recordId: record.id,
+      operation: 'set',
+      data: record,
+      baseUpdatedAt: null,
+      baseHash: null,
+      queuedAt: new Date().toISOString(),
+    });
+  }
+  if (!additions.length) return;
+  await persistQueue([...existingEntries, ...additions], expectedUid);
+}
+
+
+/**
  * Called only after an administrator's database reset has succeeded in both
  * Firestore and local storage. Old queued edits must not recreate the records
  * that the reset just removed. Persist the empty queue before removing the
