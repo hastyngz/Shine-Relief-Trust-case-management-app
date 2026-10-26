@@ -1,4 +1,5 @@
 import type { OfflineChangeEntry, SyncConflict } from '../types';
+import { getActiveWorkspaceUid, getWorkspaceIndexedDbName, getWorkspaceStorageKey } from './accountWorkspace';
 
 /**
  * Persistence for the offline change queue and the sync conflict list.
@@ -8,9 +9,12 @@ import type { OfflineChangeEntry, SyncConflict } from '../types';
  * fallback keeps the queue working on browsers without IndexedDB (or when the
  * database cannot be opened).
  */
-const QUEUE_KEY = 'shine_relief_trust_offline_queue_v2';
-const CONFLICTS_KEY = 'shine_relief_trust_sync_conflicts_v1';
-const DB_NAME = 'shine_relief_trust_offline';
+const QUEUE_KEY_BASE = 'shine_relief_trust_offline_queue_v3';
+const CONFLICTS_KEY_BASE = 'shine_relief_trust_sync_conflicts_v2';
+const DB_NAME_BASE = 'shine_relief_trust_offline_v3';
+const queueStorageKey = () => getWorkspaceStorageKey(QUEUE_KEY_BASE);
+const conflictsStorageKey = () => getWorkspaceStorageKey(CONFLICTS_KEY_BASE);
+const databaseName = () => getWorkspaceIndexedDbName(DB_NAME_BASE);
 const DB_VERSION = 2;
 const STORE_NAME = 'queue';
 
@@ -42,7 +46,9 @@ function hasIndexedDb(): boolean {
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const name = databaseName();
+    if (!name) { reject(new Error('No authenticated SHINE workspace is active.')); return; }
+    const request = indexedDB.open(name, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
       // Recreate the store so it is keyed by the composite key. Existing rows
@@ -97,7 +103,9 @@ async function writeIdbEntries(entries: OfflineChangeEntry[]): Promise<void> {
 function readLocalEntries(): OfflineChangeEntry[] {
   if (!hasLocalStorage()) return [];
   try {
-    const raw = window.localStorage.getItem(QUEUE_KEY);
+    const key = queueStorageKey();
+    if (!key) return [];
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as OfflineChangeEntry[]) : [];
@@ -110,7 +118,9 @@ function readLocalEntries(): OfflineChangeEntry[] {
 function writeLocalEntries(entries: OfflineChangeEntry[]): void {
   if (!hasLocalStorage()) return;
   try {
-    window.localStorage.setItem(QUEUE_KEY, JSON.stringify(entries));
+    const key = queueStorageKey();
+    if (!key) throw new Error('Cannot persist offline edits without an authenticated SHINE workspace.');
+    window.localStorage.setItem(key, JSON.stringify(entries));
   } catch (error) {
     notifyStorageFailure(error);
     throw error;
@@ -123,6 +133,7 @@ function writeLocalEntries(entries: OfflineChangeEntry[]): void {
  * into IndexedDB so older queues are never dropped.
  */
 export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
+  if (!getActiveWorkspaceUid()) return [];
   if (!hasIndexedDb()) return readLocalEntries();
   try {
     const entries = await readIdbEntries();
@@ -131,7 +142,8 @@ export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
     if (legacy.length) {
       await writeIdbEntries(legacy);
       try {
-        window.localStorage.removeItem(QUEUE_KEY);
+        const key = queueStorageKey();
+        if (key) window.localStorage.removeItem(key);
       } catch {
         /* ignore removal failures; the migrated copy is already in IndexedDB */
       }
@@ -150,10 +162,13 @@ export async function loadQueueEntries(): Promise<OfflineChangeEntry[]> {
  * prove that no offline edits remain.
  */
 export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' | 'unavailable'> {
+  if (!getActiveWorkspaceUid()) return 'unavailable';
   let localRaw: string | null;
   try {
     if (!hasLocalStorage()) return 'unavailable';
-    localRaw = window.localStorage.getItem(QUEUE_KEY);
+    const key = queueStorageKey();
+    if (!key) return 'unavailable';
+    localRaw = window.localStorage.getItem(key);
   } catch {
     return 'unavailable';
   }
@@ -183,6 +198,7 @@ export async function inspectPersistedQueueState(): Promise<'clear' | 'pending' 
 }
 
 export async function saveQueueEntries(entries: OfflineChangeEntry[]): Promise<void> {
+  if (!getActiveWorkspaceUid()) throw new Error('Cannot persist offline edits without an authenticated SHINE workspace.');
   if (!hasIndexedDb()) {
     writeLocalEntries(entries);
     return;
@@ -198,7 +214,9 @@ export async function saveQueueEntries(entries: OfflineChangeEntry[]): Promise<v
 export async function readConflicts(): Promise<SyncConflict[]> {
   if (!hasLocalStorage()) return [];
   try {
-    const raw = window.localStorage.getItem(CONFLICTS_KEY);
+    const key = conflictsStorageKey();
+    if (!key) return [];
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as SyncConflict[]) : [];
@@ -211,7 +229,9 @@ export async function readConflicts(): Promise<SyncConflict[]> {
 export async function writeConflicts(conflicts: SyncConflict[]): Promise<void> {
   if (!hasLocalStorage()) return;
   try {
-    window.localStorage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts));
+    const key = conflictsStorageKey();
+    if (!key) throw new Error('Cannot persist sync conflicts without an authenticated SHINE workspace.');
+    window.localStorage.setItem(key, JSON.stringify(conflicts));
   } catch (error) {
     console.warn('Could not persist sync conflicts:', error);
     notifyStorageFailure(error);
