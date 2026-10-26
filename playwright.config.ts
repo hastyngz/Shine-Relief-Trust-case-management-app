@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  * flow, and the update prompt.
  *
  * The global setup (e2e/global-setup.ts) starts the Firebase emulators and
- * seeds one test staff account. The app under test is a real production build
+ * seeds two synthetic test staff accounts. The app under test is a real production build
  * (vite build) served by server.ts, with the emulator hook switched on through
  * VITE_USE_FIREBASE_EMULATORS. Real girls' data is never used.
  *

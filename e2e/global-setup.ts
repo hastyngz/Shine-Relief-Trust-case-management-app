@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
  * 1. Builds the app with the emulator hook switched on, so the running bundle
  *    talks to the local Firebase emulators instead of production.
  * 2. Starts the Firestore and Auth emulators (needs Java; CI installs it).
- * 3. Seeds one Active Staff account so a real sign-in can be performed.
+ * 3. Seeds two Active Staff accounts so shared-device account switching can be tested.
  * 4. Starts the production server (server.ts) that serves the built app.
  *
  * The teardown returned here stops both processes after the suite finishes.
@@ -21,6 +21,8 @@ const FIRESTORE_EMULATOR_PORT = 8080;
 const APP_PORT = Number(process.env.PORT || 3000);
 const E2E_EMAIL = 'e2e-staff@example.test';
 const E2E_PASSWORD = 'e2e-password-123';
+const E2E_SECOND_EMAIL = 'e2e-second-staff@example.test';
+const E2E_SECOND_PASSWORD = 'e2e-second-password-123';
 
 const children: ChildProcess[] = [];
 
@@ -57,14 +59,14 @@ function start(command: string, args: string[], env: NodeJS.ProcessEnv): ChildPr
   return child;
 }
 
-async function seedStaffAccount(): Promise<void> {
+async function ensureAuthAccount(email: string, password: string): Promise<string> {
   // Auth emulator REST API. Any api key is accepted by the emulator.
   const signUp = await fetch(
     `http://127.0.0.1:${AUTH_EMULATOR_PORT}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=e2e`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: E2E_EMAIL, password: E2E_PASSWORD, returnSecureToken: true }),
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
     },
   );
   const body = (await signUp.json()) as { localId?: string; error?: unknown };
@@ -75,13 +77,19 @@ async function seedStaffAccount(): Promise<void> {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: E2E_EMAIL, password: E2E_PASSWORD, returnSecureToken: true }),
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
       },
     );
     const signInBody = (await signIn.json()) as { localId?: string };
     if (!signInBody.localId) throw new Error(`Could not create the e2e auth user: ${JSON.stringify(body.error)}`);
     body.localId = signInBody.localId;
   }
+  return body.localId;
+}
+
+async function seedStaffAccount(): Promise<void> {
+  const primaryUid = await ensureAuthAccount(E2E_EMAIL, E2E_PASSWORD);
+  const secondUid = await ensureAuthAccount(E2E_SECOND_EMAIL, E2E_SECOND_PASSWORD);
 
   const now = new Date().toISOString();
   process.env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${FIRESTORE_EMULATOR_PORT}`;
@@ -90,19 +98,24 @@ async function seedStaffAccount(): Promise<void> {
   const { getFirestore } = await import('firebase-admin/firestore');
   const adminApp = getApps()[0] || initializeApp({ projectId: PROJECT_ID });
   const db = getFirestore(adminApp);
-  await db.collection('staffUsers').doc(body.localId).set({
-    id: body.localId,
-    uid: body.localId,
-    email: E2E_EMAIL,
-    fullName: 'E2E Test Staff',
-    role: 'Staff',
-    status: 'Active',
-    departmentOrTitle: 'Field Staff',
-    createdAt: now,
-    updatedAt: now,
-    createdBy: 'E2E Setup',
-    lastLoginAt: now,
-  });
+  for (const [uid, email, fullName] of [
+    [primaryUid, E2E_EMAIL, 'E2E Test Staff'],
+    [secondUid, E2E_SECOND_EMAIL, 'E2E Second Staff'],
+  ] as const) {
+    await db.collection('staffUsers').doc(uid).set({
+      id: uid,
+      uid,
+      email,
+      fullName,
+      role: 'Staff',
+      status: 'Active',
+      departmentOrTitle: 'Field Staff',
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'E2E Setup',
+      lastLoginAt: now,
+    });
+  }
 
   // Synthetic procurement fixture: unknown price must still permit supplier quote collection.
   await db.collection('procurementLists').doc('PRC-E2E-MISSING-PRICE').set({

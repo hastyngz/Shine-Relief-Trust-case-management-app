@@ -2,14 +2,20 @@ import { expect, type Page } from '@playwright/test';
 
 export const E2E_EMAIL = 'e2e-staff@example.test';
 export const E2E_PASSWORD = 'e2e-password-123';
+export const E2E_SECOND_EMAIL = 'e2e-second-staff@example.test';
+export const E2E_SECOND_PASSWORD = 'e2e-second-password-123';
 
 /** Signs in through the real login form and waits for the app shell to render. */
-export async function signIn(page: Page): Promise<void> {
+export async function signInAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/#/');
-  await page.getByPlaceholder(/hastingszidanamot@gmail\.com/).fill(E2E_EMAIL);
-  await page.getByPlaceholder('Enter your password').fill(E2E_PASSWORD);
+  await page.getByPlaceholder(/hastingszidanamot@gmail\.com/).fill(email);
+  await page.getByPlaceholder('Enter your password').fill(password);
   await page.getByRole('button', { name: 'Sign In with Email & Password' }).click();
   await expect(page.getByRole('button', { name: /dashboard/i }).first()).toBeVisible({ timeout: 30_000 });
+}
+
+export async function signIn(page: Page): Promise<void> {
+  await signInAs(page, E2E_EMAIL, E2E_PASSWORD);
 }
 
 /** Surfaces in-page errors in the test output to make failures easier to read. */
