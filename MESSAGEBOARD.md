@@ -246,3 +246,10 @@ The management report history needs its own manager/admin-only collection; the e
 - Fix: removed the runtime Timestamp import; the history helper now uses native `Date` values, which Firestore stores as timestamps. Emulator fixtures exercise the Date serialization path.
 - Verification: local `npm run test:offline`, `npm run lint`, `npm run build`, `npm run test:management-procurement-report`, and `npm run test:rules` pass after the fix.
 - Next: publish the follow-up and verify Actions on its exact SHA. No queue files, production data, or live configuration were changed. — Manus, 2026-10-27
+
+### 2026-10-27 · Manus · report-history reset classification
+- Area: final integration checks for `managementProcurementReportHistory`.
+- Finding: Actions run `40421743621` passed the offline queue, report aggregates, Firestore rules, and E2E; the `test:storage` step failed because reset-policy coverage requires every Firestore collection to be explicitly classified. The local-storage failure tests themselves passed; the nested reset-policy assertion identified the missing classification.
+- Fix: explicitly preserve `managementProcurementReportHistory` during operational resets. Expiry remains owned by the collection's 90-day Firestore TTL; this collection is not added to the reset/backup deletion list.
+- Verification: `npm run test:storage` passes, including reset and backup/restore coverage; `npx tsx scripts/firestore-reset-policy.test.ts` passes. No offline queue files were modified.
+- Next: publish this correction and verify Actions on the exact follow-up SHA. No production deployment or live data/configuration changes. — Manus, 2026-10-27

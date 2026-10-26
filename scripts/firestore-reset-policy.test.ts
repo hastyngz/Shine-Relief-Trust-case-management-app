@@ -38,6 +38,7 @@ for (const collection of [
   'employeeAuditLogs',
   'reportHistory',
   'reportExports',
+  'managementProcurementReportHistory',
 ]) {
   assert.ok(!operational.has(collection), `operational reset must preserve ${collection}`);
 }
@@ -70,6 +71,7 @@ const intentionallyRetained = new Set([
   'employeeAuditLogs',
   'reportHistory',
   'reportExports',
+  'managementProcurementReportHistory',
 ]);
 const classifiedCollections = new Set([...operational, ...intentionallyRetained]);
 for (const collection of registeredCollections) {

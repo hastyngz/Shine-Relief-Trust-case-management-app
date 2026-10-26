@@ -3,8 +3,9 @@
  *
  * Staff accounts, conversations, messages, notifications, user preferences,
  * safeguarding case records, and dedicated audit-log/report-history collections
- * are intentionally retained. Some operational history (such as case actions
- * and import audit records) is cleared with the programme data. Keep this list
+ * are intentionally retained. Management procurement report metadata is also
+ * preserved through resets and expires through its dedicated 90-day Firestore TTL.
+ * Some operational history (such as case actions and import audit records) is cleared with the programme data. Keep this list
  * aligned with operational data persisted by firestoreSync.ts; omissions leave
  * stale operational data in the cloud.
  */
