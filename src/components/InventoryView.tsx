@@ -33,6 +33,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [pendingMovementId, setPendingMovementId] = useState<string | null>(null);
+  const [pendingMovementSignature, setPendingMovementSignature] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -182,9 +183,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('No stock movement was saved. Connect to the internet and retry so the server can validate the current balance.');
       return;
     }
-    const now = new Date().toISOString();
+    const signature = JSON.stringify({
+      itemId: movementTarget.id, type: movement.type, quantity, date: movement.date,
+      destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim(),
+    });
+    if (pendingMovementId && pendingMovementSignature !== signature) {
+      setError('A previous movement has an uncertain result. Restore its original details and retry it before starting a different movement.');
+      return;
+    }
     const movementId = pendingMovementId || createInventoryId('mov');
     setPendingMovementId(movementId);
+    setPendingMovementSignature(signature);
     setSaving(true);
     setError('');
     setNotice('');
@@ -204,6 +213,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           ? 'This stock movement was already recorded. The server confirmed the existing transaction.'
           : 'Stock movement recorded and confirmed by the server.');
         setPendingMovementId(null);
+        setPendingMovementSignature(null);
         setMovementTarget(null);
         setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
       }
@@ -232,8 +242,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('No stocktake was saved. Connect to the internet and retry so the server can validate the current balance.');
       return;
     }
+    const signature = JSON.stringify({
+      itemId: stocktakeTarget.id, type: 'Adjustment', countedQuantity: counted, date: stocktake.date,
+      reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
+    });
+    if (pendingMovementId && pendingMovementSignature !== signature) {
+      setError('A previous movement has an uncertain result. Restore its original details and retry it before starting a different movement.');
+      return;
+    }
     const movementId = pendingMovementId || createInventoryId('mov');
     setPendingMovementId(movementId);
+    setPendingMovementSignature(signature);
     setSaving(true);
     setError('');
     setNotice('');
@@ -252,6 +271,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           ? 'This stocktake was already recorded. The server confirmed the existing transaction.'
           : 'Stocktake recorded and confirmed by the server.');
         setPendingMovementId(null);
+        setPendingMovementSignature(null);
         setStocktakeTarget(null);
         setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
       }
