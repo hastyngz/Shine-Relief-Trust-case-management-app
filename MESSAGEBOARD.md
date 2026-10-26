@@ -253,3 +253,8 @@ The management report history needs its own manager/admin-only collection; the e
 - Fix: explicitly preserve `managementProcurementReportHistory` during operational resets. Expiry remains owned by the collection's 90-day Firestore TTL; this collection is not added to the reset/backup deletion list.
 - Verification: `npm run test:storage` passes, including reset and backup/restore coverage; `npx tsx scripts/firestore-reset-policy.test.ts` passes. No offline queue files were modified.
 - Next: publish this correction and verify Actions on the exact follow-up SHA. No production deployment or live data/configuration changes. — Manus, 2026-10-27
+
+### 2026-10-27 · Manus · exact-head report verification complete
+- Actions run `40422112084` passed on exact code/policy SHA `13c25a1`: both the full checks job and offline Playwright E2E passed, including the report aggregate suite, quote workflow, Firestore rules, offline queue, storage/reset policy, access audit, and build.
+- The two integration failures from runs `40421313882` and `40421743621` were corrected; native `Date` values avoid the Node test-mock import issue, and reset policy explicitly retains report history until TTL expiry.
+- Remaining gates: configure the Firestore TTL policy on `managementProcurementReportHistory.expiresAt`, perform physical Android/weak-signal acceptance, and complete the existing backup/manual release checks. No production deployment or live data/configuration changes were made. — Manus, 2026-10-27
