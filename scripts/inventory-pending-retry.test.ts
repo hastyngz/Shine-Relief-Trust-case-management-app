@@ -7,9 +7,10 @@ import {
 } from '../src/utils/inventory';
 
 const values = new Map<string, string>();
+let failWrites = false;
 const localStorage = {
   getItem: (key: string) => values.get(key) ?? null,
-  setItem: (key: string, value: string) => { values.set(key, value); },
+  setItem: (key: string, value: string) => { if (failWrites) throw new Error('synthetic quota exceeded'); values.set(key, value); },
   removeItem: (key: string) => { values.delete(key); },
 };
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage } });
@@ -32,5 +33,9 @@ values.set('shine_inventory_pending_movement_uid-a', '{broken json');
 assert.equal(loadPendingInventoryMovement('uid-a'), null, 'malformed pending state must fail closed');
 values.set('shine_inventory_pending_movement_uid-a', JSON.stringify({ ...pending, mode: 'unknown' }));
 assert.equal(loadPendingInventoryMovement('uid-a'), null, 'unsupported pending state must fail closed');
+
+failWrites = true;
+assert.equal(savePendingInventoryMovement('uid-a', pending), false, 'quota/write failures must be visible to the caller');
+assert.equal(loadPendingInventoryMovement('uid-a'), null, 'failed writes must not create a phantom pending transaction');
 
 console.log('Inventory pending retry persistence tests passed.');
