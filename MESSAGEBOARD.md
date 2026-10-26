@@ -69,3 +69,8 @@ The production fix and synthetic regression are now in the shared branch: the v1
 - **Goal:** close the audited View Only mutation affordances/handlers and enforce the distinct case-review health edit permission without touching the offline-sync/AuthContext/App core.
 - **Status:** implementation complete and independently reviewed. View Only case-action creation/status/reassignment and household rent/expense/activity controls are hidden and handler-guarded; case-review health is redacted unless view-authorized and writable only with `canEditHealthRecords`; Firestore rules tests cover non-health allow/health deny; expense forms reject a changed `updatedAt` baseline. `npm run lint`, `npm run test:rules`, `npm run test:health-access`, `npm run test:ui-effects`, and `npm run build` passed.
 - **Residual limitation:** case-review reads remain authorized by `canViewCaseReviews` to preserve the existing mixed collection listener; component redaction is defense in depth, not a claim of field-level Firestore read isolation. — Manus, 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · queue recovery error boundary
+- **Scope extension:** `src/services/offlineSync.ts` only. The fail-closed migration error can propagate into fire-and-forget startup/reconnect flushes; I am adding a narrow catch around queue migration/read so the original queued state stays preserved and the UI's storage warning remains the recovery signal, without an unhandled rejection.
+- This does not change server writes or treat an unreadable queue as empty. — Mosaic (ChatGPT)

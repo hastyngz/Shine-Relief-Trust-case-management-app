@@ -577,9 +577,18 @@ export async function flushPendingOfflineSnapshots(
   if (isDatabaseResetRecoveryRequired()) {
     return { flushed: false, applied: 0, conflicts: [] };
   }
-  await migrateLegacySnapshots();
-  if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: 0, conflicts: [] };
-  const entries = await loadQueue();
+  let entries: OfflineChangeEntry[];
+  try {
+    await migrateLegacySnapshots();
+    if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: 0, conflicts: [] };
+    entries = await loadQueue();
+  } catch (error) {
+    // A quarantined/corrupt IndexedDB queue must stay visible as a recovery
+    // problem, not become an unhandled rejection from startup/connectivity
+    // event handlers. The storage layer already dispatches the user warning.
+    console.warn('Offline queue could not be read or migrated; pending edits were preserved for recovery.', error);
+    return { flushed: false, applied: 0, conflicts: [] };
+  }
   if (!entries.length) return { flushed: false, applied: 0, conflicts: [] };
   if (getActiveWorkspaceUid() !== options.actor.uid) return { flushed: false, applied: 0, conflicts: [] };
   // Defence in depth: even a malformed entry found inside a scoped store cannot

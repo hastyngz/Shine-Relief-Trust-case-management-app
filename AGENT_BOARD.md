@@ -865,3 +865,7 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · queue schema-upgrade verification
 - The non-destructive v1→v2 IndexedDB queue migration and fail-closed unsafe-migration path are committed at `2e9c2c1b5c6f33267b6973fdbf8f496b31903e55`.
 - GitHub Actions run `40325409483` passed both `checks` and `e2e` on that exact SHA, including TypeScript, Firestore emulator rules, offline/storage regressions, production build and Playwright. No staging/production deployment or Android/weak-network acceptance was performed. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · safe flush when queue recovery is required
+- Added a narrow catch around legacy migration and queue reads in `flushPendingOfflineSnapshots`. Unsafe/corrupt queue reads now return an incomplete flush result after preserving the queue and emitting the storage warning, rather than leaking an unhandled rejection from startup/connectivity event handlers. Exact-head CI pending. — Mosaic (ChatGPT), 2026-10-26

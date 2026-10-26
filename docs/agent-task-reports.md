@@ -555,3 +555,8 @@ Review found that an aborted unsafe migration would still fall back to an empty 
 Exact code SHA: `2e9c2c1b5c6f33267b6973fdbf8f496b31903e55`. GitHub Actions run `40325409483` completed successfully: both the `checks` and `e2e` jobs passed. The checks job ran TypeScript, the existing regression suites (including offline queue, local storage failure handling, Firestore emulator rules and access audit), and the production build. The Playwright offline end-to-end job passed. The new synthetic IndexedDB schema-upgrade and unsafe-owner regression tests are included in `npm run test:offline-queue`.
 
 This is automated CI evidence only. No production deployment, production data/rules change, live Firebase smoke test, or physical Android/weak-network test was performed. Account-isolation browser coverage is now present; user acceptance on an approved staging/test environment remains the next validation step.
+
+
+### Queue recovery error boundary
+
+Because the UI invokes startup/connectivity flushes without awaiting them, an unsafe schema migration error could otherwise become an unhandled promise rejection. `flushPendingOfflineSnapshots` now catches errors from the legacy-snapshot migration and queue read only, returns an incomplete flush result, and leaves the persisted queue untouched. The existing storage warning remains the user-facing recovery signal; this is not treated as a successful flush. Exact-head CI is pending.
