@@ -516,3 +516,8 @@ A review found that a localStorage read failure was caught and converted to an e
 The panel also checks the authenticated UID before and after its asynchronous refresh and only renders conflict details whose owner UID matches the current user. Unowned or mismatched entries are represented by a generic recovery notice without record IDs or data, avoiding accidental disclosure during a shared-device account switch. A synthetic regression asserts storage read failures reject rather than returning an empty conflict list.
 
 No production records, Firestore/Storage rules, deployment, or live services were changed. The exact resulting SHA CI is the verification gate; physical Android/weak-signal testing remains outstanding.
+
+
+## 2026-10-26 corrupt-cache / stale-baseline safeguard
+
+Review found `getDatabase()` returned the seed-shaped fallback after JSON parsing failed, while an older confirmed baseline could still cause the app to treat that fallback as editable data. A subsequent offline diff could interpret the missing records as deletions. The storage layer now marks corrupt-cache recovery required and emits the persistent storage warning; the app does not enable editing from an existing baseline while this flag is set. Only a server-confirmed snapshot that is durably written along with its baseline clears the gate. Added synthetic coverage for corrupt JSON, blocked state, and successful confirmed recovery. This does not delete the old baseline before the confirmed server copy arrives.

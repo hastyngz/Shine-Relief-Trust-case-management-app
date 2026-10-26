@@ -830,3 +830,7 @@ Suggestion format:
 ### 2026-10-26 · Mosaic (ChatGPT) · conflict list read failures and owner-safe display
 - A storage read error was being converted into an empty list, so the UI could falsely say there were no conflicts. Changed reads to fail visibly, added a synthetic regression, and guarded the panel against stale async reads after account switching.
 - The panel now renders conflict details only when owner UID matches the active user; unowned/mismatched entries get a generic recovery notice without record identifiers. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-26 · Mosaic (ChatGPT) · corrupted local cache recovery gate
+- Review found malformed UID-scoped localStorage returned a seed-shaped database while an older baseline could still enable offline diffing, risking false deletions. Corrupt cache now warns and disables edits until a confirmed server snapshot is durably saved; added synthetic recovery regression. — Mosaic (ChatGPT), 2026-10-26

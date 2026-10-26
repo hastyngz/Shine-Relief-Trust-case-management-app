@@ -55,6 +55,13 @@ import {
 
 const STORAGE_KEY_BASE = 'shine_relief_trust_prod_v1';
 const scopedStorageKey = (): string | null => getWorkspaceStorageKey(STORAGE_KEY_BASE);
+// A malformed scoped cache must not be mistaken for an empty database and diffed
+// against a valid baseline. Keep edits disabled until a confirmed server snapshot
+// has replaced the corrupt cache and its baseline was durably saved.
+let databaseReadRecoveryRequired = false;
+export function isDatabaseReadRecoveryRequired(): boolean {
+  return databaseReadRecoveryRequired;
+}
 
 /** Dispatched when a local save fails so the UI can show a persistent banner. */
 export const STORAGE_WARNING_EVENT = 'shine_storage_warning';
@@ -146,7 +153,9 @@ export function getDatabase(): AppDatabase {
       assets: Array.isArray(parsed.assets) ? parsed.assets : [],
     };
   } catch (error) {
-    console.error('Error reading database from localStorage:', error);
+    databaseReadRecoveryRequired = true;
+    console.error('Could not read the local SHINE database; waiting for a confirmed server copy before enabling edits.');
+    dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded: false, error });
     return cloneInitialDatabase();
   }
 }
@@ -168,6 +177,7 @@ export function saveIncomingCloudSnapshot(db: AppDatabase, confirmedServerSnapsh
     dispatchStorageEvent(STORAGE_WARNING_EVENT, { quotaExceeded, error });
     return false;
   }
+  databaseReadRecoveryRequired = false;
   return true;
 }
 

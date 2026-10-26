@@ -28,6 +28,7 @@ Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, value: Fa
 
 const {
   getDatabase,
+  isDatabaseReadRecoveryRequired,
   saveDatabase,
   saveIncomingCloudSnapshot,
   saveInventoryItem,
@@ -195,6 +196,24 @@ assert.deepEqual(getDatabase().girls, databaseBeforeSnapshot.girls,
 assert.equal(values.get('shine_relief_trust_last_synced_v2::uid:synthetic-storage-test-uid') ?? null, baselineBeforeSnapshot,
   'failed snapshot persistence does not advance the sync baseline');
 fakeLocalStorage.setItem = setItemBeforeSnapshotTest;
+
+// A corrupt UID-scoped database must not be diffed against a valid baseline as
+// if the cache were simply empty. Only a confirmed, durably saved server copy
+// clears the recovery gate.
+const validBeforeCorruption = getDatabase();
+assert.equal(saveIncomingCloudSnapshot(validBeforeCorruption, true), true);
+values.set(localCacheKey, '{synthetic-corrupt-json');
+const fallbackAfterCorruption = getDatabase();
+assert.ok(Array.isArray(fallbackAfterCorruption.girls), 'corrupt cache fallback remains renderable');
+assert.equal(isDatabaseReadRecoveryRequired(), true, 'corrupt local data blocks offline editing despite an old baseline');
+const confirmedRecoverySnapshot = {
+  ...validBeforeCorruption,
+  girls: [{ id: 'SYNTHETIC-CORRUPT-CACHE-RECOVERY' } as never],
+};
+assert.equal(saveIncomingCloudSnapshot(confirmedRecoverySnapshot, true), true,
+  'a confirmed server snapshot repairs the cache and baseline');
+assert.equal(isDatabaseReadRecoveryRequired(), false, 'successful server recovery re-enables editing');
+assert.equal(getDatabase().girls[0]?.id, 'SYNTHETIC-CORRUPT-CACHE-RECOVERY');
 
 // --- A later successful save clears the warning ----------------------------
 failNext = false;

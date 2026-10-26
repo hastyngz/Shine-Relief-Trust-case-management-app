@@ -12,6 +12,7 @@ import {
 } from './types';
 import {
   getDatabase,
+  isDatabaseReadRecoveryRequired,
   saveIncomingCloudSnapshot,
   addGirl,
   updateGirl,
@@ -145,7 +146,7 @@ function AppContent() {
   } = useAuth();
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
   const [dbOwnerUid, setDbOwnerUid] = useState<string | null>(() => getActiveWorkspaceUid());
-  const [hasSyncBaseline, setHasSyncBaseline] = useState<boolean>(() => !!getLastSyncedSnapshot());
+  const [hasSyncBaseline, setHasSyncBaseline] = useState<boolean>(() => !!getLastSyncedSnapshot() && !isDatabaseReadRecoveryRequired());
 
   // AuthContext may publish a login result just before Firebase's auth-state
   // observer updates the workspace UID. Listen for that authoritative workspace
@@ -155,7 +156,7 @@ function AppContent() {
     const reloadActiveWorkspace = () => {
       setDb(getDatabase());
       setDbOwnerUid(getActiveWorkspaceUid());
-      setHasSyncBaseline(!!getLastSyncedSnapshot());
+      setHasSyncBaseline(!!getLastSyncedSnapshot() && !isDatabaseReadRecoveryRequired());
     };
     window.addEventListener('shine_workspace_changed', reloadActiveWorkspace);
     return () => window.removeEventListener('shine_workspace_changed', reloadActiveWorkspace);
@@ -164,7 +165,7 @@ function AppContent() {
   useEffect(() => {
     setDb(getDatabase());
     setDbOwnerUid(getActiveWorkspaceUid());
-    setHasSyncBaseline(!!getLastSyncedSnapshot());
+    setHasSyncBaseline(!!getLastSyncedSnapshot() && !isDatabaseReadRecoveryRequired());
   }, [currentUser?.uid]);
   // Keep the authoritative local database intact for offline diffing and queued
   // edits. Build a permission-scoped projection for UI consumers instead of
