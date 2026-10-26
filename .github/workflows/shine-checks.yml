@@ -57,6 +57,9 @@ jobs:
       - name: Test atomic inventory movement Worker transactions
         run: npm run test:inventory-movement-worker
 
+      - name: Test durable inventory retry persistence
+        run: npm run test:inventory-pending-retry
+
       - name: Test inventory transaction Firestore rules
         run: npm run test:inventory-rules
 
