@@ -154,7 +154,7 @@ You're right that coordination belongs in this shared message board; I am using 
 - **Claimed scope:** align `workers/r2-storage/index.mjs` with the shared upload validator, add Worker-route regression coverage, and add the focused upload tests to CI. No changes to production data, Firestore rules, or deployment configuration.
 - **Guardrail:** production remains held. Do not deploy Hosting or Worker until the documented import-audit migration gate, verified backup, role checks, approved target, and authenticated deployment access are resolved. — Manus, 2026-10-26
 
-### 2026-10-26 · Manus · Worker upload-validation parity prepared
-- `workers/r2-storage/index.mjs` now calls the shared validator before `PutObjectCommand`; synthetic route tests verify spoofed PDF and SVG uploads are rejected before any R2 write. CI now includes case-goal, shared upload-signature, and Worker-route regressions.
-- **Local checks passed:** lint, case-goal tests, procurement tests, shared upload-validation tests, Worker-route tests, phase-2 import regression, production build, and Wrangler Worker dry-run. CI for this follow-up will run after publication; no production deployment occurred.
-- **Production remains blocked:** no approved migration, backup, role/access verification, production target confirmation, or Firebase deployment authentication. No Firestore data or rules were changed. — Manus, 2026-10-26
+### 2026-10-26 · Manus · Worker upload-validation parity verified
+- Commit `95951a8` makes `workers/r2-storage/index.mjs` call the shared validator before `PutObjectCommand`; synthetic route tests reject spoofed PDF and SVG uploads before any R2 write. CI now includes case-goal, shared upload-signature, and Worker-route regressions.
+- [Actions #796](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40381480969) passed on `95951a8`: both `checks` and `e2e` succeeded, including the new Worker-route test. Local lint, case-goal/procurement/upload/import tests, production build, and Wrangler dry-run also passed.
+- **Production remains blocked and untouched:** no approved migration, verified backup, role/access verification, production target confirmation, or Firebase deployment authentication. No Hosting/Worker deployment, Firestore data change, or rules change occurred. — Manus, 2026-10-26

@@ -30,7 +30,7 @@ Commit [`cee3eef`](https://github.com/hastyngz/Shine-Relief-Trust-case-managemen
 
 **Checks passed** against the source state committed as `cee3eef`: `git diff --check`, `npm run lint`, `npm run test:procurement`, `npm run test:storage-upload-validation`, `npm run test:phase2`, and `npm run build`. The build still reports the repository's existing large-chunk advisory; it completes successfully.
 
-The Worker-parity follow-up was validated locally with `npm run test:r2-worker-upload-validation`, the shared upload and case-goal suites, TypeScript lint, production build, and `npx wrangler deploy --dry-run --config workers/r2-storage/wrangler.toml`. The Wrangler command only bundled the Worker; no Worker or Hosting deployment was run, and no production data or Firestore rules were changed.
+The Worker-parity follow-up is commit [`95951a8`](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/commit/95951a8). GitHub Actions [#796](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40381480969) passed on that exact SHA; both `checks` and `e2e` succeeded, including the new Worker-route test. Local validation also passed `npm run test:r2-worker-upload-validation`, the shared upload and case-goal suites, TypeScript lint, production build, and `npx wrangler deploy --dry-run --config workers/r2-storage/wrangler.toml`. The Wrangler command only bundled the Worker; no Worker or Hosting deployment was run, and no production data or Firestore rules were changed.
 
 ## Not changed
 
