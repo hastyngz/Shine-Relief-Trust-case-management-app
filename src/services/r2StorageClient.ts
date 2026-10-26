@@ -54,4 +54,12 @@ export async function deleteStoredFile(storagePath: string): Promise<void> {
 }
 
 
-// Server-backed stock movement requests are implemented in the next integration slice.
+export async function postInventoryMovement(payload: Record<string, unknown>): Promise<any> {
+  const endpoint = ['/api', 'inventory', 'movement'].join('/');
+  const response = await requestR2(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return response.json();
+}
