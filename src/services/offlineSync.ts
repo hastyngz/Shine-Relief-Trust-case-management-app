@@ -1,12 +1,16 @@
 import { AppDatabase, OfflineChangeEntry, SyncConflict, SyncConflictResolution } from '../types';
 import { appendSyncConflictAudit, syncChangeEntriesToFirestore, SyncChangeResult } from './firestoreSync';
 import { inspectPersistedQueueState, loadQueueEntries, readConflicts, saveQueueEntries, writeConflicts } from './offlineSyncDb';
+import { getActiveWorkspaceUid, getWorkspaceStorageKey } from './accountWorkspace';
 
-const LEGACY_SNAPSHOT_KEY = 'shine_relief_trust_pending_sync_v1';
-const RESET_RECOVERY_REQUIRED_KEY = 'shine_relief_trust_reset_recovery_required_v1';
-const LAST_SYNCED_KEY = 'shine_relief_trust_last_synced_v1';
+const LEGACY_SNAPSHOT_KEY_BASE = 'shine_relief_trust_pending_sync_v2';
+const RESET_RECOVERY_REQUIRED_KEY_BASE = 'shine_relief_trust_reset_recovery_required_v2';
+const LAST_SYNCED_KEY_BASE = 'shine_relief_trust_last_synced_v2';
+const scopedKey = (base: string): string => { const key = getWorkspaceStorageKey(base); if (!key) throw new Error('No authenticated SHINE workspace is active.'); return key; };
 let cachedBaselineRaw: string | null = null;
 let cachedBaselineDb: AppDatabase | null = null;
+let cachedBaselineUid: string | null = null;
+let cachedQueueUid: string | null = null;
 export const OFFLINE_QUEUE_UPDATED_EVENT = 'shine_offline_queue_updated';
 export const SYNC_CONFLICTS_UPDATED_EVENT = 'shine_sync_conflicts_updated';
 
@@ -200,17 +204,23 @@ export function computeChangeEntries(
 let cachedQueue: OfflineChangeEntry[] | null = null;
 
 export async function loadQueue(): Promise<OfflineChangeEntry[]> {
-  if (cachedQueue) return cachedQueue;
+  const uid = getActiveWorkspaceUid();
+  if (!uid) return [];
+  if (cachedQueue && cachedQueueUid === uid) return cachedQueue;
   cachedQueue = await loadQueueEntries();
+  cachedQueueUid = uid;
   return cachedQueue;
 }
 
 export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void> {
+  const uid = getActiveWorkspaceUid();
+  if (!uid) throw new Error('Cannot persist offline edits without an authenticated SHINE workspace.');
   // Only update the in-memory view after durable persistence succeeds. Otherwise
   // a failed IndexedDB/localStorage write could make the UI report an empty queue
   // while the old persisted entries remain and replay later.
   await saveQueueEntries(entries);
   cachedQueue = entries;
+  cachedQueueUid = uid;
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
 }
 
@@ -224,7 +234,7 @@ export async function persistQueue(entries: OfflineChangeEntry[]): Promise<void>
  * partially succeeds, the old queue must not repopulate cloud records. */
 export function markDatabaseResetRecoveryRequired(): void {
   if (typeof window === 'undefined') throw new Error('Cannot mark reset recovery outside the browser.');
-  window.localStorage.setItem(RESET_RECOVERY_REQUIRED_KEY, '1');
+  window.localStorage.setItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE), '1');
 }
 
 /**
@@ -243,7 +253,7 @@ export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending
   if (queueState !== 'clear') return queueState;
 
   try {
-    const raw = window.localStorage.getItem(LEGACY_SNAPSHOT_KEY);
+    const raw = window.localStorage.getItem(scopedKey(LEGACY_SNAPSHOT_KEY_BASE));
     if (!raw) return 'clear';
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return 'unavailable';
@@ -256,7 +266,7 @@ export async function inspectPendingOfflineChanges(): Promise<'clear' | 'pending
 export function isDatabaseResetRecoveryRequired(): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    return window.localStorage.getItem(RESET_RECOVERY_REQUIRED_KEY) === '1';
+    return window.localStorage.getItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE)) === '1';
   } catch {
     // Fail closed: if the recovery marker cannot be read, do not replay queued edits.
     return true;
@@ -267,7 +277,7 @@ export async function clearOfflineChangesAfterDatabaseReset(db: AppDatabase): Pr
   await persistQueue([]);
   clearPendingOfflineSnapshots();
   setLastSyncedSnapshotOrThrow(db);
-  if (typeof window !== 'undefined') window.localStorage.removeItem(RESET_RECOVERY_REQUIRED_KEY);
+  if (typeof window !== 'undefined') window.localStorage.removeItem(scopedKey(RESET_RECOVERY_REQUIRED_KEY_BASE));
 }
 
 export function getPendingOfflineSnapshotCount(): number {
@@ -280,18 +290,21 @@ export async function refreshPendingOfflineSnapshotCount(): Promise<number> {
 }
 
 export function getLastSyncedSnapshot(): AppDatabase | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return null;
   try {
-    const raw = window.localStorage.getItem(LAST_SYNCED_KEY);
+    const uid = getActiveWorkspaceUid()!;
+    const raw = window.localStorage.getItem(scopedKey(LAST_SYNCED_KEY_BASE));
     if (!raw) {
       cachedBaselineRaw = null;
       cachedBaselineDb = null;
+      cachedBaselineUid = uid;
       return null;
     }
-    if (raw === cachedBaselineRaw && cachedBaselineDb) return cachedBaselineDb;
+    if (uid === cachedBaselineUid && raw === cachedBaselineRaw && cachedBaselineDb) return cachedBaselineDb;
     const parsed = JSON.parse(raw) as AppDatabase;
     cachedBaselineRaw = raw;
     cachedBaselineDb = parsed;
+    cachedBaselineUid = uid;
     return parsed;
   } catch (error) {
     console.warn('Could not read the last synced database copy.');
@@ -302,10 +315,13 @@ export function getLastSyncedSnapshot(): AppDatabase | null {
 /** Persist the sync baseline and throw when it cannot be made durable. */
 export function setLastSyncedSnapshotOrThrow(db: AppDatabase): void {
   if (typeof window === 'undefined') throw new Error('Cannot persist the sync baseline outside the browser.');
+  const uid = getActiveWorkspaceUid();
+  if (!uid) throw new Error('Cannot persist a sync baseline without an authenticated SHINE workspace.');
   const raw = JSON.stringify(db);
-  window.localStorage.setItem(LAST_SYNCED_KEY, raw);
+  window.localStorage.setItem(scopedKey(LAST_SYNCED_KEY_BASE), raw);
   cachedBaselineRaw = raw;
   cachedBaselineDb = db;
+  cachedBaselineUid = uid;
 }
 
 export function setLastSyncedSnapshot(db: AppDatabase): void {
@@ -342,7 +358,7 @@ export function isConfirmedServerSnapshot(
  * before the next online flush.
  */
 export async function recordOfflineChanges(currentDb: AppDatabase): Promise<number> {
-  if (typeof window === 'undefined') return 0;
+  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return 0;
   const baseline = getLastSyncedSnapshot();
   if (!baseline) {
     // No confirmed server copy yet. Keep any persisted queue untouched and
@@ -364,9 +380,9 @@ export function queueOfflineSnapshotIfNeeded(snapshot: AppDatabase): void {
 }
 
 export function readPendingOfflineSnapshots(): AppDatabase[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return [];
   try {
-    const raw = window.localStorage.getItem(LEGACY_SNAPSHOT_KEY);
+    const raw = window.localStorage.getItem(scopedKey(LEGACY_SNAPSHOT_KEY_BASE));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as AppDatabase[]) : [];
@@ -377,15 +393,15 @@ export function readPendingOfflineSnapshots(): AppDatabase[] {
 }
 
 function clearLegacySnapshots(): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(LEGACY_SNAPSHOT_KEY);
+  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return;
+  window.localStorage.removeItem(scopedKey(LEGACY_SNAPSHOT_KEY_BASE));
 }
 
 /** Legacy writer: still stores a snapshot until the migration converts it. */
 export function writePendingOfflineSnapshot(snapshot: AppDatabase): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return;
   try {
-    window.localStorage.setItem(LEGACY_SNAPSHOT_KEY, JSON.stringify([snapshot]));
+    window.localStorage.setItem(scopedKey(LEGACY_SNAPSHOT_KEY_BASE), JSON.stringify([snapshot]));
     dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
   } catch (error) {
     console.warn('Could not queue legacy offline snapshot:', error);
@@ -393,7 +409,7 @@ export function writePendingOfflineSnapshot(snapshot: AppDatabase): void {
 }
 
 export function clearPendingOfflineSnapshots(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !getActiveWorkspaceUid()) return;
   clearLegacySnapshots();
   dispatch(OFFLINE_QUEUE_UPDATED_EVENT);
 }
@@ -470,6 +486,7 @@ export async function flushPendingOfflineSnapshots(
   options: { actor?: { uid: string; name: string; canReadImportSourceData?: boolean; canWriteImportAuditMetadata?: boolean } } = {},
 ): Promise<FlushResult> {
   if (typeof window === 'undefined') return { flushed: false, applied: 0, conflicts: [] };
+  if (!getActiveWorkspaceUid() || getActiveWorkspaceUid() !== options.actor?.uid) return { flushed: false, applied: 0, conflicts: [] };
   // Never replay a device-wide queue without a verified signed-in actor. This
   // also protects the online event path during sign-out/account transitions.
   if (!options.actor?.uid || options.actor.uid === 'unknown') {
@@ -534,6 +551,7 @@ export async function resolveSyncConflict(
   resolution: SyncConflictResolution,
   actor: { uid: string; name: string },
 ): Promise<boolean> {
+  if (!getActiveWorkspaceUid() || getActiveWorkspaceUid() !== actor.uid) return false;
   const conflicts = await readConflicts();
   const conflict = conflicts.find((candidate) => candidate.id === conflictId);
   if (!conflict) return false;
