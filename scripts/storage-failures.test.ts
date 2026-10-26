@@ -91,7 +91,23 @@ const {
   STORAGE_RECOVERED_EVENT,
 } = await import('../src/utils/storage');
 
+// --- Account-scoped local database cache -----------------------------------
+const isolationMarker = 'SYNTHETIC-ACCOUNT-ISOLATION';
+const managerDb = getDatabase();
+managerDb.girls = [...(managerDb.girls || []), { id: isolationMarker, fullName: 'Synthetic account isolation' } as any];
+assert.equal(saveDatabase(managerDb).ok, true);
+setActiveWorkspaceUid('synthetic-second-uid');
+assert.equal((getDatabase().girls || []).some((girl) => girl.id === isolationMarker), false,
+  'a second UID must not read the first UID local database');
+setActiveWorkspaceUid('synthetic-storage-test-uid');
+assert.equal((getDatabase().girls || []).some((girl) => girl.id === isolationMarker), true,
+  'switching back restores only the owning UID database');
+const cleanedDb = getDatabase();
+cleanedDb.girls = (cleanedDb.girls || []).filter((girl) => girl.id !== isolationMarker);
+assert.equal(saveDatabase(cleanedDb).ok, true);
+
 // --- Normal save returns success -------------------------------------------
+
 events.length = 0;
 const ok = saveDatabase(getDatabase());
 assert.equal(ok.ok, true, 'a normal save reports success');
