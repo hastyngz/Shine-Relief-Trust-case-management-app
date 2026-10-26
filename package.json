@@ -32,6 +32,7 @@
     "test:storage": "tsx scripts/storage-failures.test.ts && tsx scripts/firestore-reset-policy.test.ts && tsx scripts/backup-restore-coverage.test.ts",
     "test:storage-upload-validation": "tsx scripts/storage-upload-validation.test.ts",
     "test:r2-worker-upload-validation": "tsx scripts/r2-worker-upload-validation.test.mjs",
+    "test:inventory-movement-worker": "node scripts/inventory-movement-worker.test.mjs",
     "test:error-boundary": "tsx scripts/error-boundary.test.tsx",
     "test:code-splitting": "tsx scripts/code-splitting.test.ts",
     "test:app-shell": "tsx scripts/app-shell-offline.test.ts",
