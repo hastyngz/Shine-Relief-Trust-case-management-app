@@ -1534,6 +1534,8 @@ export type OfflineChangeOperation = 'set' | 'delete';
  * flush detect that another device edited the same record while we were offline.
  */
 export interface OfflineChangeEntry {
+  /** UID of the authenticated workspace that owns this queued edit. */
+  ownerUid?: string;
   collection: string;
   recordId: string;
   operation: OfflineChangeOperation;
