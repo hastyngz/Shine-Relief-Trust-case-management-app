@@ -120,6 +120,8 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: f
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, storage: undefined } });
 Object.defineProperty(globalThis, 'Event', { configurable: true, value: FakeEvent });
 
+const { setActiveWorkspaceUid } = await import('../src/services/accountWorkspace');
+setActiveWorkspaceUid('uid-a');
 const { computeChangeEntries, migrateLegacySnapshots, recordOfflineChanges, flushPendingOfflineSnapshots, getPendingOfflineSnapshotCount, readSyncConflicts, resolveSyncConflict, setLastSyncedSnapshot, loadQueue, isConfirmedServerSnapshot, persistQueue, clearOfflineChangesAfterDatabaseReset, markDatabaseResetRecoveryRequired, isDatabaseResetRecoveryRequired, inspectPendingOfflineChanges } = await import('../src/services/offlineSync');
 const { __server } = await import('firebase/firestore') as unknown as { __server: any };
 const server: any = __server;
