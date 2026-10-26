@@ -12,6 +12,7 @@ import {
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth as getSecondaryAuth } from 'firebase/auth';
 import { auth, firestore } from '../firebase';
+import { setActiveWorkspaceUid } from '../services/accountWorkspace';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
 import {
@@ -151,6 +152,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      setActiveWorkspaceUid(user?.uid ?? null);
       setCurrentUser(user);
       await loadStaffProfile(user);
       setLoading(false);
