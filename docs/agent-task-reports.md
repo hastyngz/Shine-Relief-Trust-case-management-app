@@ -560,3 +560,35 @@ This is automated CI evidence only. No production deployment, production data/ru
 ### Queue recovery error boundary
 
 Because the UI invokes startup/connectivity flushes without awaiting them, an unsafe schema migration error could otherwise become an unhandled promise rejection. `flushPendingOfflineSnapshots` now catches errors from the legacy-snapshot migration and queue read only, returns an incomplete flush result, and leaves the persisted queue untouched. The existing storage warning remains the user-facing recovery signal; this is not treated as a successful flush. Exact-head CI is pending.
+
+
+# Salary-history offline persistence — task report
+
+**Report date:** 2026-10-26
+**Branch:** `Replit`
+**Implementation commits:** `1610d259c1253b258cdd2e60daf5b0137878cd84`, `daf5967990f952c6cea53e1ef48b4a9d52f3da9a`, `e0eb8ca91f75b9499b4da15901df7d5dd605ba14`, `58edd15b34644277ed36160951d138bae19ad6a9`
+**Status:** IMPLEMENTED; VERIFICATION PENDING
+
+## Scope and observed defect
+
+`EmployeeContractPanel` wrote salary history directly with `setDoc`, outside the shared per-record offline queue. It then wrote the audit event separately. A network interruption could leave an uncertain partial result, block the UI on server acknowledgement, and make pending salary entries unavailable after reopening the panel. The collection is confidential HR data and must remain outside the shared `AppDatabase` snapshot, which is readable by broader staff roles.
+
+## Changes made
+
+- Added `queueOfflineRecordsForSync` in `src/services/offlineSync.ts`. It writes one or more stable-ID records into the authenticated UID-scoped per-record queue in one durable queue update, rejects workspace changes and conflicting duplicate IDs, and does not add HR data to the shared operational database snapshot.
+- Updated `EmployeeContractPanel` to queue the salary-history record and deterministic `employeeAuditLogs` event together before showing local success. It attempts the normal conflict-aware flush immediately, reports queued vs synced state, and merges pending salary-history queue entries into the view after reopening.
+- Updated `syncChangeEntriesToFirestore` so existing salary-history and employee-audit documents are treated as append-only: an identical existing document is an idempotent retry; a different existing document becomes a conflict and is not overwritten. This matches the existing Firestore rules that deny updates/deletes to these collections.
+- Added synthetic coverage to `scripts/offline-sync.test.ts` for durable queueing of salary+audit records, successful sync, identical retry, and preservation of a conflicting existing salary record.
+
+## Verification
+
+- **Not yet verified:** `npm run lint`, `npm run test:offline`, production build, and browser/device acceptance tests have not been executed from this environment. The shell could not clone the GitHub repository because DNS/network access was unavailable.
+- Queried the GitHub combined commit-status endpoint for the regression-test commit and latest documentation commit; it returned an empty status list. That is not evidence of a pass or a failure. Confirm the `SHINE app checks` workflow on the current `Replit` head before calling this complete.
+- No physical Android or weak-signal test was performed. No real employee/payroll data was used.
+
+## Remaining risks and next actions
+
+1. Confirm CI for the current branch head. At minimum, `npm run lint` and `npm run test:offline` must pass; review the full workflow for regressions.
+2. On a test device with synthetic HR records, verify offline save → close/reopen → reconnect → one salary record and one audit event in Firestore, then test a permission-denied save and a same-ID server conflict.
+3. Confirm pending queue/conflict visibility is appropriate for Manager/Administrator-only HR workflows. Firestore rules remain unchanged.
+4. If CI fails, fix the failure and amend this report with exact commands, results, and final SHA before handing off.
