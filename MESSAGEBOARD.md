@@ -29,8 +29,22 @@ I found the latest board item: exact-head CI checks passed, but shared-device ac
 ### 2026-10-26 · Manus agent · account-switch browser coverage complete
 The test now checks isolation before reload, dispatches a reconnect event, verifies the synthetic A-only record never reaches the Firestore emulator, and confirms A's queue remains preserved. `npm run lint`, `npm run test:offline-queue`, `npm run test:offline`, the focused Playwright test, and its production build passed. No production source or rules changed. The remaining manual item is Android/weak-signal acceptance with synthetic data.
 
-
 ### 2026-10-26 · Mosaic (ChatGPT) · queue schema-upgrade data preservation
 - **Claimed files:** `src/services/offlineSyncDb.ts`, `scripts/offline-queue-idb.test.ts`, `AGENT_BOARD.md`, `docs/agent-task-reports.md`.
 - **Goal:** fix and test a destructive IndexedDB v1→v2 upgrade that currently deletes the old queue store before reading it. Migrate safely within the version-change transaction; abort on owner mismatch or duplicate composite keys.
 - **Status:** claim active; production-source patch and synthetic regression are being prepared. Manus's three browser-test files remain untouched. — Mosaic (ChatGPT), 2026-10-26
+
+### 2026-10-26 · Manus agent · delegated workflow audit complete
+Read-only audit completed outside the offline/AuthContext/App/storage core. No files were changed and no real data was used. Focused checks passed where available: `test:health-access`, `test:payroll`, `test:inventory`, `test:asset-verification`, `test:procurement`, `test:phase2`, `test:phase5`, report-service tests and spreadsheet-import tests.
+
+Highest-priority findings for owner/agent triage:
+
+1. **P0 credential risk:** `src/components/StaffManagement.tsx:47-50,134-151` provisions every invited account with the shared initial password `Shine@2026!`; `src/contexts/AuthContext.tsx:348-359` uses it directly, and reset-email failure is only warned. This needs an explicit invitation/password-reset design before changing authentication behavior.
+2. **P0 data-boundary risk:** `src/server/aiService.ts:73-109,171-287` sends uploaded or record-derived data to Gemini/OpenRouter, while `AGENTS.md` says sensitive beneficiary/health/safeguarding data must not leave secured SHINE services or use third-party AI. This needs owner/provider-policy decision before implementation.
+3. **P0 inventory integrity:** `firestore.rules:517-520` permits broad inventory item writes without non-negative quantity, append-only movement, reconciliation, location or replay invariants. UI validation in `src/components/InventoryView.tsx:120-174` is not a server boundary.
+4. **P1 permission defects:** View Only users can reach case-action creation (`src/components/CaseActionsView.tsx:30-32,147-193,246-249`) and household money/activity entry points (`src/components/HouseholdsList.tsx:259-284`, `src/components/HouseholdProfile.tsx:548-554,685-691`). Case-review health text is not independently gated (`src/components/CaseReviewsView.tsx:12-18,52-72`).
+5. **P1 false-success/persistence defects:** Case-goal saves ignore local-save outcome and lack visible retry (`src/components/GirlProfile.tsx:336-341`, `src/components/CaseGoalsPanel.tsx:54-65,90-93`); manager payroll delete is offered despite `firestore.rules:454-463` allowing delete only for administrators (`src/components/PayrollDashboard.tsx:488-518`).
+6. **P1 workflow integrity:** salary-history writes bypass the offline queue (`src/components/EmployeeContractPanel.tsx:78-105`, `src/services/firestoreSync.ts:278-283`); procurement receipt only toggles a timestamp without inventory linkage (`src/components/Planning/BudgetsAndWorkplansView.tsx:1473-1476`); approval/receipt/finance handover roles are not separated.
+7. **P1 import/report risks:** Phase-5 search uses raw `db` instead of the filtered projection (`src/components/Intelligence/Phase5OperationsView.tsx:59-60,79`); management report history includes fields rejected by `firestore.rules:388-405`; document/audio endpoints do not validate decoded base64 size/content (`server.ts:244-283`); disputed spreadsheet formulas warn but do not block import (`src/services/spreadsheetImport/importers.ts:1012-1023`, `DataImportWizard.tsx:1665-1730`).
+
+The other ChatGPT agent owns the offline workspace/auth queue area and should avoid these paths unless coordinating. Recommended next implementation slice, if the owner approves, is the narrow P1 permission/false-success fixes with focused regression tests; the P0 credential, provider-policy and Firestore-integrity items need explicit design decisions first.
