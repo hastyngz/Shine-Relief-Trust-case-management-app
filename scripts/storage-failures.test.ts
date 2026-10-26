@@ -139,14 +139,14 @@ fakeLocalStorage.setItem = (key: string, value: string) => {
 };
 
 events.length = 0;
-const before = values.get('shine_relief_trust_prod_v1');
+const before = values.get('shine_relief_trust_prod_v1::uid:synthetic-storage-test-uid');
 const failed = saveDatabase(getDatabase());
 assert.equal(failed.ok, false, 'a failed save reports failure');
 assert.equal(failed.quotaExceeded, true, 'QuotaExceededError is detected specifically');
 assert.ok(events.includes(STORAGE_WARNING_EVENT), 'a failed save dispatches the warning event');
 
 
-assert.equal(values.get('shine_relief_trust_prod_v1'), before, 'the previously stored data is left intact');
+assert.equal(values.get('shine_relief_trust_prod_v1::uid:synthetic-storage-test-uid'), before, 'the previously stored data is left intact');
 
 // dispatchEvent=false suppresses only shine_db_updated, never storage health signals.
 events.length = 0;
@@ -167,7 +167,7 @@ const dbGirlsBefore = db.girls.length;
 assert.equal(db.girls.length, dbGirlsBefore, 'the in-memory database is preserved after a failure');
 
 // A failed Firestore snapshot save must not advance the local sync baseline.
-const baselineBeforeSnapshot = values.get('shine_relief_trust_last_synced_v1') ?? null;
+const baselineBeforeSnapshot = values.get('shine_relief_trust_last_synced_v2::uid:synthetic-storage-test-uid') ?? null;
 const databaseBeforeSnapshot = getDatabase();
 const setItemBeforeSnapshotTest = fakeLocalStorage.setItem;
 fakeLocalStorage.setItem = () => { throw new Error('synthetic snapshot storage failure'); };
@@ -176,7 +176,7 @@ assert.equal(saveIncomingCloudSnapshot(incomingSnapshot, true), false,
   'a Firestore snapshot is not accepted when local persistence fails');
 assert.deepEqual(getDatabase().girls, databaseBeforeSnapshot.girls,
   'failed snapshot persistence leaves the prior local database intact');
-assert.equal(values.get('shine_relief_trust_last_synced_v1') ?? null, baselineBeforeSnapshot,
+assert.equal(values.get('shine_relief_trust_last_synced_v2::uid:synthetic-storage-test-uid') ?? null, baselineBeforeSnapshot,
   'failed snapshot persistence does not advance the sync baseline');
 fakeLocalStorage.setItem = setItemBeforeSnapshotTest;
 
@@ -812,7 +812,7 @@ assert.ok(!afterFailedMutations.girls.some((girl) => girl.id === 'SG-STORAGE-FAI
 
 // Empty/corrupt storage fallback must return a fresh seed copy, not the shared
 // INITIAL_DATABASE singleton, or failed writes can leak into later reads.
-values.delete('shine_relief_trust_prod_v1');
+values.delete('shine_relief_trust_prod_v1::uid:synthetic-storage-test-uid');
 fakeLocalStorage.setItem = () => { throw new Error('synthetic storage unavailable'); };
 const fallbackOne = getDatabase();
 fallbackOne.girls.push({ id: 'SG-SEED-FALLBACK-LEAK' } as never);
