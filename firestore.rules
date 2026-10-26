@@ -89,12 +89,18 @@ service cloud.firestore {
     function inventoryMovementMatchesItem(itemId, movementId) {
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
       let movement = getAfter(movementPath).data;
+      let embedded = request.resource.data.movements[request.resource.data.movements.size() - 1];
       return existsAfter(movementPath) &&
         movement.inventoryItemId == itemId &&
         movement.id == movementId &&
         movement.recordedByUid == request.auth.uid &&
         movement.previousQuantity == resource.data.quantityOnHand &&
         movement.newQuantity == request.resource.data.quantityOnHand &&
+        embedded.type == movement.type &&
+        embedded.quantity == movement.quantity &&
+        embedded.date == movement.date &&
+        embedded.reason == movement.reason &&
+        embedded.createdAt == movement.createdAt &&
         movement.quantity is number &&
         movement.quantity >= 0 &&
         (
