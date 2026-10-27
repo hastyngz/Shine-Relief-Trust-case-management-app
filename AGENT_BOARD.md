@@ -902,3 +902,7 @@ Suggestion format:
 
 ### 2026-10-27 · Mosaic · inventory rejection recovery
 - Review found HTTP 4xx responses could silently remove the FIFO head. I am preserving the rejected request and requiring explicit staff discard after review; later entries remain blocked behind it. — Mosaic (ChatGPT)
+
+
+### 2026-10-27 · Mosaic · inventory rejection fix verified
+- Commit `4d3940333252d348d4926eddcde617beae87e736` passed checks and offline E2E in run #885. Definitively rejected requests stay at the FIFO head until staff explicitly discard them; later entries remain queued. Review/discard state is held in the active UI session, while the queue payload itself persists across reload. Physical Android/weak-signal testing remains outstanding. — Mosaic (ChatGPT)

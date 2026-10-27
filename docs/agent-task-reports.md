@@ -681,3 +681,13 @@ The synthetic test covers FIFO order, same-ID idempotency, payload overwrite rej
 # Inventory FIFO rejection recovery — 2026-10-27
 
 Code review found that a definitive HTTP 4xx was clearing the oldest pending transaction automatically. That could discard the user's intent and make later queued requests appear ready without explicit review. The fix preserves the rejected entry at the FIFO head, marks it for review in the UI, and offers an explicit discard action; only that action removes the local entry. Uncertain network/5xx outcomes retain the same request ID and payload for safe retry. Exact-head CI must pass before this fix is considered verified. No server permission/rules changes, production data writes or deployment.
+
+
+## Inventory FIFO rejection recovery — verification outcome
+
+**Code commit:** `4d3940333252d348d4926eddcde617beae87e736`  
+**GitHub Actions:** run #885 — **checks: passed; offline E2E: passed**.
+
+The checks job completed successfully, including TypeScript/lint, the focused inventory queue persistence test, inventory Worker transaction tests, Firestore inventory rules tests, broader regression checks and production build. The Playwright offline E2E job also passed on the exact code SHA. A definitive HTTP 4xx no longer clears the FIFO head automatically; the request stays queued until the staff member explicitly chooses “Discard rejected transaction.” Network/5xx uncertainty retains the same request ID for safe retry.
+
+**Known limitation:** the rejected/review marker is component state, not a persisted queue status. After a reload the request remains in the queue and the form restores; retrying it will reproduce a definitive rejection and show the review/discard action again. Persisting the review marker is a possible follow-up. No production deployment/data writes or physical Android/weak-signal test occurred.

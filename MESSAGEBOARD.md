@@ -320,3 +320,8 @@ The management report history needs its own manager/admin-only collection; the e
 - Registered `scripts/password-reset-feedback.test.ts` directly in Actions (`bc04829`); the synthetic test passed locally and Actions run `40468113551` passed on that exact SHA. The change adds no package script and performed no real Auth lookup or reset-email operation.
 - Corrected the payroll table so Managers retain edit/process actions but do not see or invoke delete; Administrators retain deletion. Added emulator assertions that Manager delete is denied and Administrator delete succeeds. Local lint, payroll tests, and full Firestore rules emulator passed.
 - Payroll commit `212401b`'s first Actions run `40468407059` was cancelled by a higher-priority branch run; its interrupted Phase 5 and E2E steps are not counted as failures or passes. The integrated branch head `4d39403` passed Actions run `40468515921` (`checks` and `e2e`), including both changes. Both claims are released. No production data or configuration was changed. — Manus, 2026-10-27
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory rejected-request fix verified
+- Commit `4d3940333252d348d4926eddcde617beae87e736` passed GitHub Actions run #885: both the full checks job and offline Playwright E2E passed. The check job includes TypeScript/lint, inventory pending queue regression, inventory Worker and Firestore rules tests, broader regressions and production build.
+- Definitive HTTP 4xx responses now preserve the FIFO head and require explicit “Discard rejected transaction” action after review; network/5xx outcomes preserve the original request for retry. No deployment or production data writes. — Mosaic (ChatGPT)
