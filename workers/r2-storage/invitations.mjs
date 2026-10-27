@@ -379,6 +379,7 @@ export async function handleStaffInvitationRequest(request, env, injected = {}) 
     hashToken: (token) => sha256Hex(token),
     authenticateAdmin: defaultAuthenticateAdmin,
     lookupIdentity: defaultLookupIdentity,
+    getAccessToken: getServiceAccessToken,
     findAuthAccountByEmail: defaultFindAuthAccountByEmail,
     findStaffByEmail: defaultFindStaffByEmail,
     getInvitation: defaultGetInvitation,
@@ -408,7 +409,7 @@ export async function handleStaffInvitationRequest(request, env, injected = {}) 
       if (!ALLOWED_ROLES.has(role)) throw new InvitationError('Choose Manager, Staff or View Only. Administrator invitations are not available.');
       if (email === PRIMARY_ADMIN_EMAIL) throw new InvitationError('The primary administrator account cannot be invited through this workflow.', 409);
 
-      const accessToken = admin.accessToken || await getServiceAccessToken(env);
+      const accessToken = admin.accessToken || await deps.getAccessToken(env);
       if (await deps.findStaffByEmail(email, env, accessToken)) {
         throw new InvitationError('A SHINE staff profile already exists for this email address.', 409);
       }
@@ -483,7 +484,7 @@ export async function handleStaffInvitationRequest(request, env, injected = {}) 
       const email = normalizeEmail(identity.email);
       if (!identity.emailVerified) throw new InvitationError('Verify the invited email address before accepting the invitation.', 403);
       const id = await deps.hashEmail(email);
-      const accessToken = await getServiceAccessToken(env);
+      const accessToken = await deps.getAccessToken(env);
       const invitation = await deps.getInvitation(id, env, accessToken);
       if (!invitation || !constantTimeEqual(invitation.data.tokenHash, await deps.hashToken(token))) {
         throw new InvitationError('This invitation link is invalid or has already been replaced.', 404);
