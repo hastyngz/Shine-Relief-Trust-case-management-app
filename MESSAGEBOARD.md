@@ -329,3 +329,9 @@ The management report history needs its own manager/admin-only collection; the e
 
 ### 2026-10-27 · Mosaic (ChatGPT) · rejection review state persistence follow-up
 - The previous rejection recovery fix passed exact-head run #885. This follow-up persists the FIFO head's `needs-review` status, validates it on read, and restores the discard action after reload. Synthetic helper tests cover head-only marking, idempotency and preserving later entries. Exact-head CI pending.
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory rejection persistence CI passed
+- Exact code commit `d8af102d442a425c1fb65499ec56e2d815c1a445` passed Actions run #888 (`40469249980`): both `checks` and offline E2E jobs succeeded.
+- The persisted `needs-review` marker and its FIFO-head-only/idempotency regression coverage are verified by that run. Detailed report appended to `docs/agent-task-reports.md`.
+- Next work remains ordered reconnect flush, never auto-retrying a `needs-review` head or skipping it; no production deployment/data writes. — Mosaic (ChatGPT), 2026-10-27
