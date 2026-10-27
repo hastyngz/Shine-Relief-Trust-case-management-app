@@ -12,6 +12,8 @@ assert.equal(loadPendingInventoryMovements('uid-b')?.length,0);
 assert.equal(savePendingInventoryMovement('uid-a',second),true);
 assert.equal(savePendingInventoryMovement('uid-a',third),true);
 assert.deepEqual(loadPendingInventoryMovements('uid-a'),[first,second,third],'FIFO order is preserved');
+// A rejected request remains persisted unless staff explicitly removes the FIFO head.
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[first,second,third],'rejected request remains persisted until explicit removal');
 assert.equal(savePendingInventoryMovement('uid-a',first),true,'identical ID retry is idempotent');
 assert.equal(savePendingInventoryMovement('uid-a',{...first,payload:{type:'Received',quantity:99}}),false,'same ID cannot overwrite payload');
 assert.equal(savePendingInventoryMovement('uid-a',{...second,id:first.id}),false,'duplicate IDs cannot collapse entries');

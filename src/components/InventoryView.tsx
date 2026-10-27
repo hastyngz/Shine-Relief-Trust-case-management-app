@@ -36,6 +36,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [pendingMovementId, setPendingMovementId] = useState<string | null>(null);
   const [pendingMovementSignature, setPendingMovementSignature] = useState<string | null>(null);
   const [pendingQueueCount, setPendingQueueCount] = useState(0);
+  const [rejectedPendingId, setRejectedPendingId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -246,6 +247,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     return true;
   };
 
+  const discardRejectedPendingMovement = () => {
+    if (!currentUser?.uid || !rejectedPendingId) return;
+    const removed = clearPendingInventoryMovement(currentUser.uid, rejectedPendingId);
+    if (!removed) {
+      setError('The rejected transaction could not be removed safely. It remains saved on this device; free storage space or reload and try again.');
+      return;
+    }
+    setPendingMovementId(null);
+    setPendingMovementSignature(null);
+    setRejectedPendingId(null);
+    setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
+    setError('');
+    setNotice('The rejected transaction was removed from this device after your confirmation. Its rejected request did not change server stock.');
+  };
+
   const submitMovement = async (event: FormEvent) => {
     event.preventDefault();
     if (!movementTarget || saving) return;
@@ -320,6 +336,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           : 'Stock movement recorded and confirmed by the server.');
         setPendingMovementId(null);
         setPendingMovementSignature(null);
+        setRejectedPendingId(null);
         if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
         if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
         setMovementTarget(null);
@@ -328,10 +345,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     } catch (err) {
       const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined;
       if (status !== undefined && status >= 400 && status < 500) {
-        setPendingMovementId(null);
-        setPendingMovementSignature(null);
-        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
-        if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
+        // Keep definitive rejections at the FIFO head until staff explicitly discard them.
+        setRejectedPendingId(movementId);
       }
       setError(err instanceof Error
         ? `The stock movement was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
@@ -415,6 +430,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           : 'Stocktake recorded and confirmed by the server.');
         setPendingMovementId(null);
         setPendingMovementSignature(null);
+        setRejectedPendingId(null);
         if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
         if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
         setStocktakeTarget(null);
@@ -423,10 +439,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     } catch (err) {
       const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined;
       if (status !== undefined && status >= 400 && status < 500) {
-        setPendingMovementId(null);
-        setPendingMovementSignature(null);
-        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
-        if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
+        // Keep definitive rejections at the FIFO head until staff explicitly discard them.
+        setRejectedPendingId(movementId);
       }
       setError(err instanceof Error
         ? `The stocktake was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
@@ -457,9 +471,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         </div>
       </header>
 
-      {pendingQueueCount > 0 && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>{pendingQueueCount} inventory transaction{pendingQueueCount === 1 ? '' : 's'} awaiting server confirmation.</strong> They are stored on this device in FIFO order. Queued requests do not change the authoritative stock balance; retry the oldest transaction first and resolve it before later entries are sent.</div>}
+      {pendingQueueCount > 0 && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>{pendingQueueCount} inventory transaction{pendingQueueCount === 1 ? '' : 's'} stored on this device.</strong> They are in FIFO order and do not change authoritative stock until server-confirmed. {rejectedPendingId ? 'The oldest transaction was rejected by the server and needs review; later transactions remain queued behind it.' : 'Retry the oldest transaction first and resolve it before later entries are sent.'}</div>}
       {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div>}
       {error && <div role="alert" className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={() => setError('')}><X className="h-4 w-4" /></button></div>}
+      {rejectedPendingId && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-semibold">This transaction was rejected and has not changed server stock. Review the error above. Discarding it removes only this local pending request; it does not alter server records.</p><button type="button" onClick={discardRejectedPendingMovement} disabled={saving} className="fx-press mt-3 min-h-11 rounded-lg border border-amber-700 px-4 py-2 font-bold text-amber-950 disabled:opacity-50">Discard rejected transaction</button></div>}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Balances are calculated from recorded receipts and issues.</p></div><label className="flex min-h-10 w-full max-w-sm items-center gap-2 rounded-xl border border-stone-300 bg-white px-3"><Search className="h-4 w-4 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label></div>

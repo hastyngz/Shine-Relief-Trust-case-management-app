@@ -309,3 +309,8 @@ The management report history needs its own manager/admin-only collection; the e
 - **Claimed files:** `src/components/PayrollDashboard.tsx`, `scripts/firestore-rules.test.ts`, and this append-only board entry only.
 - **Goal:** retain Manager payroll processing/edit access but show and execute payroll deletion only for Administrators, matching the existing Firestore rule; add synthetic Manager-deny/Admin-allow emulator coverage.
 - **Boundaries:** no permission broadening, payroll data mutation outside emulator fixtures, auth/offline queue changes, production access, or deployment. — Manus, 2026-10-27
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · preserve definitively rejected inventory requests
+- Code review found HTTP 4xx responses were removing the oldest request automatically, which could lose the user's intent and expose the next request without deliberate review.
+- The fix keeps rejected requests at the queue head, shows a review warning and offers an explicit “Discard rejected transaction” action. Network/5xx uncertainty keeps the same ID for retry. No server/rules changes or production writes.

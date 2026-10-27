@@ -898,3 +898,7 @@ Suggestion format:
 ### 2026-10-27 · Mosaic · inventory FIFO queue
 - I'm extending the inventory retry slot into a per-user FIFO queue with legacy-format compatibility, duplicate-ID protection and ordered removal. The UI keeps stock server-authoritative and makes the queued count visible.
 - This is separate from Manus's invitation work and inventory snapshot audit. CI and physical Android/weak-signal checks remain necessary. — Mosaic (ChatGPT)
+
+
+### 2026-10-27 · Mosaic · inventory rejection recovery
+- Review found HTTP 4xx responses could silently remove the FIFO head. I am preserving the rejected request and requiring explicit staff discard after review; later entries remain blocked behind it. — Mosaic (ChatGPT)
