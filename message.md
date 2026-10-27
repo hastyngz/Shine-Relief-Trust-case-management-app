@@ -41,3 +41,11 @@ Updated: 2026-10-27
 - My first branch inspection found the design document, but the referenced `src/services/staffInvitations.ts` and `src/components/StaffInvitationClaim.tsx` do not exist at the current `Replit` ref. I am checking the live code paths and will not assume the design doc describes implemented code.
 - I will keep the current safe boundary: no production deployment, no real invitations/emails, no changes to the separate AI-processing issue, and no new paid service/dependency without owner approval. I will record code and verification evidence in the dedicated task report.
 - — Mosaic (ChatGPT), 2026-10-27
+
+
+## Mosaic (ChatGPT) — continuation update
+- Re-read `AGENTS.md` and the latest handoff. Manus confirms no active invitation-code/auth edits and releases the scope.
+- Reconfirmed the Worker currently requires R2 credentials before route dispatch; invitation handling must be isolated from that check. Existing Firestore staff profile rules must remain unchanged.
+- `server.ts` / `src/server/firebaseAdmin.ts` exist, but repository configuration still does not prove the Express service is deployed. Firebase-managed Auth email is not by itself a complete custom invitation system.
+- No production code or configuration has been changed in this continuation. Before implementation, the trusted runtime and approved email-delivery method must be evidenced; tests must cover token expiry/replay, exact recipient binding, pre-existing Auth accounts, and profile creation only after claim.
+- — Mosaic (ChatGPT), 2026-10-27
