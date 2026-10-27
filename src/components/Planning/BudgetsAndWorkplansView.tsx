@@ -57,6 +57,13 @@ import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../
 import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
 import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, selectProcurementQuote } from '../../services/procurementWorkflow';
+import { postInventoryMovement } from '../../services/r2StorageClient';
+import {
+  clearProcurementReceiptIntent,
+  NOT_INVENTORY_TRACKED,
+  postProcurementReceiptMovements,
+  readProcurementReceiptIntent,
+} from '../../services/procurementInventoryReceipt';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
@@ -92,6 +99,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, { supplier: string; amount: string }>>({});
   const [purchaseOrderDrafts, setPurchaseOrderDrafts] = useState<Record<string, string>>({});
   const [financeReferenceDrafts, setFinanceReferenceDrafts] = useState<Record<string, string>>({});
+  const [receiptLineChoices, setReceiptLineChoices] = useState<Record<string, string>>({});
+  const [receiptPosting, setReceiptPosting] = useState<Record<string, boolean>>({});
+  const [receiptPostingStatus, setReceiptPostingStatus] = useState<Record<string, string>>({});
   const canApproveProcurement = isAdmin || staffProfile?.role === 'Manager';
   const focusedQualityKey = useRef('');
 
@@ -161,8 +171,53 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     if (!purchaseOrderReference) { window.alert('Enter the purchase order or order reference before marking this list purchased.'); return; }
     saveProcurementList(list, { status: 'purchased', purchaseOrderReference, orderedAt: new Date().toISOString(), orderedBy: actorName });
   };
-  const confirmProcurementReceipt = (list: ProcurementList) => {
-    if (list.status !== 'purchased' || list.receivedAt) return; saveProcurementList(list, { receivedAt: new Date().toISOString(), receivedBy: actorName });
+  const confirmProcurementReceipt = async (list: ProcurementList) => {
+    if (!canEdit || list.status !== 'purchased' || list.receivedAt || receiptPosting[list.id]) return;
+    setReceiptPosting((current) => ({ ...current, [list.id]: true }));
+    setReceiptPostingStatus((current) => ({ ...current, [list.id]: '' }));
+    try {
+      const savedIntent = staffProfile?.uid && typeof window !== 'undefined'
+        ? readProcurementReceiptIntent(window.localStorage, staffProfile.uid, list.id)
+        : null;
+      const choices = list.items.map((_, itemIndex) => {
+        const key = `${list.id}:${itemIndex}`;
+        const persisted = savedIntent?.lines.find((line) => line.itemIndex === itemIndex);
+        const value = persisted
+          ? (persisted.inventoryItemId || NOT_INVENTORY_TRACKED)
+          : (receiptLineChoices[key] || '');
+        return { itemIndex, inventoryItemId: value === NOT_INVENTORY_TRACKED ? null : value || null };
+      });
+      if (choices.some((choice, index) => !choice.inventoryItemId &&
+          !savedIntent?.lines.some((line) => line.itemIndex === index && line.inventoryItemId === null) &&
+          receiptLineChoices[`${list.id}:${index}`] !== NOT_INVENTORY_TRACKED)) {
+        throw new Error('Choose an inventory item or explicitly mark each line as not inventory tracked.');
+      }
+      if (!staffProfile?.uid || typeof window === 'undefined') throw new Error('The signed-in staff identity is unavailable; no inventory movement was submitted.');
+      const result = await postProcurementReceiptMovements({
+        uid: staffProfile.uid,
+        list,
+        choices,
+        inventoryItems: db.inventoryItems || [],
+        storage: window.localStorage,
+        postMovement: postInventoryMovement,
+      });
+      const saved = saveProcurementList(list, { receivedAt: new Date().toISOString(), receivedBy: actorName });
+      if (!saved) throw new Error('Stock movements were confirmed, but the receipt acknowledgement could not be saved locally. Retry the same receipt; its stable movement IDs prevent duplicate stock additions.');
+      clearProcurementReceiptIntent(window.localStorage, staffProfile.uid, list.id);
+      setReceiptPostingStatus((current) => ({
+        ...current,
+        [list.id]: result.movementIds.length
+          ? `Receipt recorded and linked to ${result.movementIds.length} inventory movement(s).${result.duplicateCount ? ` ${result.duplicateCount} prior movement(s) were safely confirmed.` : ''}`
+          : 'Receipt acknowledgement recorded; all lines were explicitly marked as not inventory tracked.',
+      }));
+    } catch (error) {
+      setReceiptPostingStatus((current) => ({
+        ...current,
+        [list.id]: error instanceof Error ? error.message : 'The receipt could not be confirmed. Retry the same selections.',
+      }));
+    } finally {
+      setReceiptPosting((current) => ({ ...current, [list.id]: false }));
+    }
   };
   const handOverProcurementToFinance = (list: ProcurementList) => {
     if (!canApproveProcurement || !list.receivedAt || list.financeHandedOverAt) return; const financeReference = financeReferenceDrafts[list.id]?.trim() || '';
@@ -1392,6 +1447,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         const quoteCollectionAvailable = quoteRequired || item.priceStatus !== 'quoted';
                         const draftKey = `${list.id}:${index}`;
                         const draft = quoteDrafts[draftKey] || { supplier: '', amount: '' };
+                        let savedReceiptIntent = null;
+                        try {
+                          if (staffProfile?.uid && typeof window !== 'undefined') {
+                            savedReceiptIntent = readProcurementReceiptIntent(window.localStorage, staffProfile.uid, list.id);
+                          }
+                        } catch { /* Receipt submission will fail closed if browser storage is unavailable. */ }
+                        const savedReceiptLine = savedReceiptIntent?.lines.find((line) => line.itemIndex === index);
+                        const receiptChoiceKey = `${list.id}:${index}`;
+                        const receiptChoice = receiptLineChoices[receiptChoiceKey] ??
+                          (savedReceiptLine ? (savedReceiptLine.inventoryItemId || NOT_INVENTORY_TRACKED) : '');
                         return (
                           <div key={`${list.id}-${item.itemNumber || index}`} className="grid gap-2 p-4 lg:grid-cols-[1.2fr_0.6fr_0.9fr_1fr]">
                             <div className="min-w-0">
@@ -1400,6 +1465,25 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                 {item.quantity} {item.unit}{item.specification ? ` · ${item.specification}` : ''}
                               </p>
                               {item.note && <p className="mt-1 text-[11px] font-semibold text-amber-900">{item.note}</p>}
+                              {list.status === 'purchased' && !list.receivedAt && (
+                                <label className="mt-2 block text-[11px] font-semibold text-stone-700">
+                                  Inventory receipt link
+                                  <select
+                                    aria-label={`Inventory receipt link for ${item.description}`}
+                                    className="field mt-1 w-full"
+                                    disabled={!canEdit || Boolean(savedReceiptIntent) || Boolean(receiptPosting[list.id])}
+                                    value={receiptChoice}
+                                    onChange={(event) => setReceiptLineChoices((current) => ({ ...current, [receiptChoiceKey]: event.target.value }))}
+                                  >
+                                    <option value="">Choose before confirming receipt</option>
+                                    <option value={NOT_INVENTORY_TRACKED}>Not inventory tracked</option>
+                                    {(db.inventoryItems || []).map((stockItem) => (
+                                      <option key={stockItem.id} value={stockItem.id} disabled={stockItem.unit !== item.unit}>{stockItem.stockCode} · {stockItem.name} ({stockItem.unit}){stockItem.unit !== item.unit ? ' · unit mismatch' : ''}</option>
+                                    ))}
+                                  </select>
+                                  {savedReceiptIntent && <span className="mt-1 block font-normal text-amber-900">Saved retry intent; keep this selection unchanged until receipt completes.</span>}
+                                </label>
+                              )}
                             </div>
                             <div className="text-xs">
                               <p className={`font-bold ${item.priceStatus === 'quoted' ? 'text-stone-800' : 'text-amber-900'}`}>
@@ -1471,7 +1555,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                       {list.status === 'draft' && canApproveProcurement && <div className="space-y-2"><button type="button" onClick={() => approveProcurementList(list)} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Validate &amp; approve</button><p className="text-[11px] text-stone-600">Approval checks item prices, quantities and the three-quote threshold.</p></div>}
                       {list.status === 'approved' && canApproveProcurement && <div className="flex flex-wrap items-end gap-2"><label className="min-w-48 flex-1 text-[11px] font-semibold text-stone-700">Purchase order / order reference<input aria-label="Purchase order reference" className="field mt-1 w-full" value={purchaseOrderDrafts[list.id] ?? list.purchaseOrderReference ?? ''} onChange={(event) => setPurchaseOrderDrafts((current) => ({ ...current, [list.id]: event.target.value }))} /></label><button type="button" onClick={() => markProcurementPurchased(list)} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Record order</button></div>}
                       {list.status === 'purchased' && <div className="space-y-2"><p className="text-[11px] text-stone-700">Order reference: <strong>{list.purchaseOrderReference || 'Not recorded'}</strong>{list.orderedAt ? ` · ordered ${formatDate(list.orderedAt.slice(0, 10))} by ${list.orderedBy || 'staff'}` : ''}</p>
-                        {!list.receivedAt ? (canEdit && <button type="button" onClick={() => confirmProcurementReceipt(list)} className="rounded-lg border border-teal-800 px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">Confirm goods received</button>) : <p className="text-[11px] font-semibold text-emerald-800">Received {formatDate(list.receivedAt.slice(0, 10))} · recorded by {list.receivedBy || 'staff'}</p>}
+                        {!list.receivedAt ? (canEdit && <div className="space-y-1"><p className="text-[11px] text-stone-600">Confirm only when the full listed quantities have arrived. Every line must be linked to a matching-unit inventory item or explicitly marked not tracked; partial deliveries are not posted by this workflow.</p><button type="button" disabled={Boolean(receiptPosting[list.id])} onClick={() => void confirmProcurementReceipt(list)} className="rounded-lg border border-teal-800 px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50 disabled:opacity-60">{receiptPosting[list.id] ? 'Posting receipt movements…' : 'Confirm full receipt & post stock'}</button></div>) : <div><p className="text-[11px] font-semibold text-emerald-800">Received {formatDate(list.receivedAt.slice(0, 10))} · recorded by {list.receivedBy || 'staff'}</p><p className="text-[11px] text-stone-600">Linked inventory movements visible in the synced register: {(db.inventoryItems || []).reduce((count, stockItem) => count + stockItem.movements.filter((movement) => movement.sourceType === 'procurementReceipt' && movement.sourceId === list.id).length, 0)}</p></div>}
+                        {receiptPostingStatus[list.id] && <p role="status" className={`text-[11px] ${receiptPostingStatus[list.id].startsWith('Receipt recorded') || receiptPostingStatus[list.id].startsWith('Receipt acknowledgement') ? 'font-semibold text-emerald-800' : 'font-semibold text-rose-800'}`}>{receiptPostingStatus[list.id]}</p>}
                         {list.receivedAt && !list.financeHandedOverAt && canApproveProcurement && <div className="flex flex-wrap items-end gap-2"><label className="min-w-48 flex-1 text-[11px] font-semibold text-stone-700">Invoice / receipt / voucher reference<input aria-label="Finance handover reference" className="field mt-1 w-full" value={financeReferenceDrafts[list.id] ?? ''} onChange={(event) => setFinanceReferenceDrafts((current) => ({ ...current, [list.id]: event.target.value }))} /></label><button type="button" onClick={() => handOverProcurementToFinance(list)} className="rounded-lg bg-stone-800 px-3 py-2 text-xs font-bold text-white hover:bg-stone-900">Hand over to finance</button></div>}
                         {list.financeHandedOverAt && <p className="text-[11px] font-semibold text-emerald-800">Finance handover recorded {formatDate(list.financeHandedOverAt.slice(0, 10))} · {list.financeReference} · {list.financeHandedOverBy}</p>}
                       </div>}

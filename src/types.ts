@@ -1425,6 +1425,10 @@ export type InventoryMovementType = 'Received' | 'Issued' | 'Returned' | 'Damage
 export interface InventoryMovement {
   id: string; type: InventoryMovementType; quantity: number; date: string; location: string;
   destination?: string; reference?: string; reason: string; recordedBy: string; recordedByUid?: string; createdAt: string;
+  inventoryItemId?: string;
+  sourceType?: 'procurementReceipt';
+  sourceId?: string;
+  sourceLineIndex?: number;
   /** Server-validated stock balance before and after this immutable movement. */
   previousQuantity?: number; newQuantity?: number;
 }

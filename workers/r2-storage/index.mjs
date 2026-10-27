@@ -116,6 +116,19 @@ function validateInventoryMovementPayload(payload) {
   for (const key of ['destination', 'reference']) {
     if (payload[key] !== undefined && (typeof payload[key] !== 'string' || payload[key].length > 250)) throw new ApiError(`The ${key} field is too long or invalid.`);
   }
+  if (payload.sourceType !== undefined && payload.sourceType !== 'procurementReceipt') throw new ApiError('This stock movement source type is not supported.');
+  if (payload.sourceType === undefined && (payload.sourceId !== undefined || payload.sourceLineIndex !== undefined)) {
+    throw new ApiError('Procurement source fields require a supported source type.');
+  }
+  if (payload.sourceType === 'procurementReceipt' && (
+    payload.type !== 'Received' ||
+    typeof payload.sourceId !== 'string' || !validId(payload.sourceId) ||
+    !Number.isInteger(payload.sourceLineIndex) || payload.sourceLineIndex < 0 || payload.sourceLineIndex > 9999
+  )) throw new ApiError('A valid procurement list and line reference are required.');
+  if (payload.sourceType === 'procurementReceipt' &&
+      (typeof payload.reference !== 'string' || !payload.reference.startsWith(`Procurement ${payload.sourceId} · line ${payload.sourceLineIndex + 1}`))) {
+    throw new ApiError('The receipt reference does not match the procurement list line.');
+  }
   return {
     id: payload.id,
     itemId: payload.itemId,
@@ -126,13 +139,18 @@ function validateInventoryMovementPayload(payload) {
     destination: payload.destination?.trim() || undefined,
     reference: payload.reference?.trim() || undefined,
     reason: payload.reason.trim(),
+    sourceType: payload.sourceType,
+    sourceId: payload.sourceId,
+    sourceLineIndex: payload.sourceLineIndex,
   };
 }
 
 async function handleInventoryMovement(request, staff, idToken) {
   if (!['Administrator', 'Manager', 'Staff'].includes(staff.role)) throw new ApiError('Your SHINE role cannot record stock movements.', 403);
   const payload = validateInventoryMovementPayload(await request.json().catch(() => null));
-  const fingerprint = JSON.stringify(payload);
+  const fingerprintPayload = { ...payload };
+  if (payload.sourceType === 'procurementReceipt') delete fingerprintPayload.date;
+  const fingerprint = JSON.stringify(fingerprintPayload);
   const itemPath = `inventoryItems/${encodeURIComponent(payload.itemId)}`;
   const movementPath = `inventoryMovements/${encodeURIComponent(payload.id)}`;
 
@@ -146,12 +164,25 @@ async function handleInventoryMovement(request, staff, idToken) {
   }
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
+    let procurementLine;
+    if (payload.sourceType === 'procurementReceipt') {
+      const procurementDocument = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
+      if (!procurementDocument) throw new ApiError('The purchased procurement list was not found on the server.', 404);
+      const procurement = decodeFirestoreFields(procurementDocument.fields);
+      procurementLine = Array.isArray(procurement.items) ? procurement.items[payload.sourceLineIndex] : undefined;
+      if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt || !procurementLine || procurementLine.quantity !== payload.quantity) {
+        throw new ApiError('This procurement line is not eligible for a full-quantity inventory receipt.', 409);
+      }
+    }
     const itemDocument = await firestoreGet(itemPath, idToken);
     if (!itemDocument) throw new ApiError('The inventory item was not found in the synced register. Sync and refresh before retrying.', 404);
     const item = decodeFirestoreFields(itemDocument.fields);
     const previousQuantity = item.quantityOnHand;
     if (!Number.isFinite(previousQuantity) || previousQuantity < 0) {
       throw new ApiError('The inventory record is invalid. Review it before recording a movement.', 409);
+    }
+    if (procurementLine && procurementLine.unit !== item.unit) {
+      throw new ApiError('The procurement and inventory units do not match. Convert the quantity explicitly before posting.', 409);
     }
     const nextQuantity = payload.type === 'Received'
       ? previousQuantity + payload.quantity
@@ -176,6 +207,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       location: String(item.location || ''),
       ...(payload.destination ? { destination: payload.destination } : {}),
       ...(payload.reference ? { reference: payload.reference } : {}),
+      ...(payload.sourceType ? { sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex } : {}),
       reason: payload.reason,
       recordedBy: staff.fullName,
       recordedByUid: staff.uid,
@@ -186,12 +218,14 @@ async function handleInventoryMovement(request, staff, idToken) {
     };
     const embeddedMovement = {
       id: movement.id,
+      inventoryItemId: payload.itemId,
       type: movement.type,
       quantity: movement.quantity,
       date: movement.date,
       location: movement.location,
       ...(movement.destination ? { destination: movement.destination } : {}),
       ...(movement.reference ? { reference: movement.reference } : {}),
+      ...(movement.sourceType ? { sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineIndex: movement.sourceLineIndex } : {}),
       reason: movement.reason,
       recordedBy: movement.recordedBy,
       recordedByUid: movement.recordedByUid,

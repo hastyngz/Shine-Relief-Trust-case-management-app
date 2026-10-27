@@ -57,6 +57,9 @@ jobs:
       - name: Test atomic inventory movement Worker transactions
         run: npm run test:inventory-movement-worker
 
+      - name: Test procurement receipt to inventory linkage
+        run: npx tsx scripts/procurement-inventory-receipt.test.ts
+
       - name: Test durable inventory retry persistence
         run: npm run test:inventory-pending-retry
 

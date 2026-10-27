@@ -49,7 +49,15 @@ const requestPayload = (overrides = {}) => ({
   reason: 'Synthetic regression fixture',
   ...overrides,
 });
-function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement } = {}) {
+const procurementPayload = (overrides = {}) => requestPayload({
+  id: 'prc_proc-synthetic_0',
+  reference: 'Procurement proc-synthetic · line 1 · PO PO-SYNTHETIC',
+  sourceType: 'procurementReceipt',
+  sourceId: 'proc-synthetic',
+  sourceLineIndex: 0,
+  ...overrides,
+});
+function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement, procurementList } = {}) {
   let itemReads = 0;
   let commits = 0;
   const writes = [];
@@ -61,8 +69,12 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
     if (url.includes('/documents/staffUsers/staff-synthetic')) {
       return new Response(JSON.stringify({ fields: asFields({ email: 'staff@example.invalid', status: 'Active', role, fullName: 'Synthetic Staff' }) }), { status: 200 });
     }
-    if (url.includes('/documents/inventoryMovements/mov_synthetic_123')) {
+    if (url.includes('/documents/inventoryMovements/')) {
       if (existingMovement) return new Response(JSON.stringify({ fields: asFields(existingMovement) }), { status: 200 });
+      return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
+    }
+    if (url.includes('/documents/procurementLists/proc-synthetic')) {
+      if (procurementList) return new Response(JSON.stringify({ fields: asFields(procurementList) }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
     if (url.includes('/documents/inventoryItems/item-synthetic')) {
@@ -144,6 +156,84 @@ try {
     assert.equal(response.status, 200);
     assert.equal((await response.json()).duplicate, true);
     assert.equal(mock.writes.length, 0, 'a retried movement ID must not create a second stock change');
+  }
+
+  {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload());
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.movement.sourceType, 'procurementReceipt');
+    assert.equal(body.movement.sourceId, 'proc-synthetic');
+    assert.equal(body.movement.sourceLineIndex, 0);
+    assert.equal(decode(mock.writes[0][1].update.fields.sourceId), 'proc-synthetic');
+    assert.equal(decode(mock.writes[0][1].update.fields.sourceLineIndex), 0);
+    assert.equal(decode(mock.writes[0][0].update.fields.movements)[0].inventoryItemId, 'item-synthetic');
+  }
+
+  {
+    const mock = setup();
+    const response = await send(procurementPayload({ type: 'Issued' }));
+    assert.equal(response.status, 400, 'procurement provenance is restricted to receipt movements');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup();
+    const response = await send(requestPayload({ sourceId: 'proc-synthetic' }));
+    assert.equal(response.status, 400, 'orphan source fields are rejected');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', items: [{ description: 'Synthetic stock item', quantity: 4, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload());
+    assert.equal(response.status, 409, 'the Worker requires the full quantity recorded on the purchased line');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'boxes' }],
+    } });
+    const response = await send(procurementPayload());
+    assert.equal(response.status, 409, 'the Worker rejects unit conversion assumptions');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const payload = procurementPayload();
+    const fingerprintPayload = {
+      id: payload.id,
+      itemId: payload.itemId,
+      type: payload.type,
+      quantity: payload.quantity,
+      countedQuantity: undefined,
+      destination: undefined,
+      reference: payload.reference,
+      reason: payload.reason,
+      sourceType: payload.sourceType,
+      sourceId: payload.sourceId,
+      sourceLineIndex: payload.sourceLineIndex,
+    };
+    const fingerprint = JSON.stringify(Object.fromEntries(Object.entries(fingerprintPayload).filter(([, value]) => value !== undefined)));
+    const existingMovement = {
+      id: payload.id, inventoryItemId: payload.itemId, recordedByUid: 'staff-synthetic',
+      requestFingerprint: fingerprint, sourceType: 'procurementReceipt', sourceId: 'proc-synthetic',
+      sourceLineIndex: 0, date: '2026-10-25', quantity: 3,
+    };
+    const mock = setup({ existingMovement });
+    const response = await send(payload);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.duplicate, true);
+    assert.equal(body.movement.date, '2026-10-25', 'the first accepted server receipt date remains authoritative');
+    assert.equal(mock.writes.length, 0);
   }
 
   console.log('Inventory movement Worker transaction tests passed.');

@@ -26,6 +26,10 @@ async function seed() {
     await setDoc(doc(db, 'staffUsers/staff'), staff('staff', 'Staff'));
     await setDoc(doc(db, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+    await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+      id: 'proc-synthetic', status: 'purchased',
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    });
   });
 }
 async function applyMovement(uid: string, options: { id?: string; type?: 'Received' | 'Issued' | 'Adjustment'; quantity?: number; previous?: number; next?: number } = {}) {
@@ -60,6 +64,38 @@ async function applyMovement(uid: string, options: { id?: string; type?: 'Receiv
   await batch.commit();
 }
 
+async function applyProcurementMovement(uid: string, options: { id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number } = {}) {
+  const id = options.id || 'mov-proc-synthetic';
+  const previous = 10;
+  const quantity = options.quantity ?? 3;
+  const next = previous + quantity;
+  const db = env.authenticatedContext(uid).firestore();
+  const itemRef = doc(db, 'inventoryItems/item-synthetic');
+  const movementRef = doc(db, `inventoryMovements/${id}`);
+  const sourceId = options.sourceId || 'proc-synthetic';
+  const sourceLineIndex = options.sourceLineIndex ?? 0;
+  const movement = {
+    id, inventoryItemId: 'item-synthetic', type: 'Received', quantity, date: '2026-10-26',
+    location: 'Main Office', reference: `Procurement ${sourceId} · line ${sourceLineIndex + 1}`,
+    reason: 'Procurement receipt: synthetic fixture', recordedBy: `Synthetic ${uid}`,
+    recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z', previousQuantity: previous, newQuantity: next,
+    sourceType: 'procurementReceipt', sourceId, sourceLineIndex,
+  };
+  const embedded = {
+    id, inventoryItemId: 'item-synthetic', type: movement.type, quantity, date: movement.date,
+    location: movement.location, reference: movement.reference, reason: movement.reason,
+    recordedBy: movement.recordedBy, recordedByUid: uid, createdAt: movement.createdAt,
+    previousQuantity: previous, newQuantity: next, sourceType: movement.sourceType, sourceId, sourceLineIndex,
+  };
+  const batch = writeBatch(db);
+  batch.update(itemRef, {
+    quantityOnHand: next, movements: [embedded], lastMovementId: id,
+    updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
+  });
+  batch.set(movementRef, movement);
+  await batch.commit();
+}
+
 async function main() {
   env = await initializeTestEnvironment({
     projectId,
@@ -79,6 +115,47 @@ async function main() {
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryMovements/mov-synthetic'), { quantity: 99 }));
     await assertFails(applyMovement('viewer', { id: 'mov-viewer', previous: 13, next: 14, quantity: 1 }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await assertSucceeds(applyProcurementMovement('staff'));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-wrong-qty', quantity: 4 }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'boxes' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-wrong-unit' }));
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-wrong-line', sourceLineIndex: 1 }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'approved',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-unpurchased' }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased', receivedAt: '2026-10-26T10:00:00.000Z',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-already-received' }));
 
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
