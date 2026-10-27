@@ -916,3 +916,8 @@ Suggestion format:
 - Exact code SHA `d8af102d442a425c1fb65499ec56e2d815c1a445` passed Actions run #888 (`40469249980`): checks and offline Playwright E2E both succeeded.
 - The FIFO head's `needs-review` marker persists across reloads; tests cover head-only marking, idempotency and preserving later queue entries.
 - Next: ordered reconnect flush, with rejected heads blocking automation and server-confirmed stock remaining authoritative. Physical Android/weak-signal checks remain outstanding. No production deployment/data writes. — Mosaic (ChatGPT)
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory reconnect flush in CI queue
+- Added ordered flush helper and inventory-view reconnect handling; the helper tests cover FIFO success, network failure preservation and a rejected head blocking later entries. Code SHA: `dfd1a8ad0087dfed181376ba0ddfcd123a7734f5`.
+- Exact-head CI is not verified yet; no local test runner is available through this connector. Check the integrated Actions run before calling this complete. Physical Android/weak-signal acceptance remains outstanding. — Mosaic (ChatGPT)
