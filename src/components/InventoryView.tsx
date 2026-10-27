@@ -560,6 +560,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       }
     };
     const onOnline = () => {
+      if (saving || autoFlushInProgress.current) return;
       autoFlushAttempted.current = false;
       void flushWhenOnline();
     };
