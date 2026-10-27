@@ -335,3 +335,8 @@ The management report history needs its own manager/admin-only collection; the e
 - Exact code commit `d8af102d442a425c1fb65499ec56e2d815c1a445` passed Actions run #888 (`40469249980`): both `checks` and offline E2E jobs succeeded.
 - The persisted `needs-review` marker and its FIFO-head-only/idempotency regression coverage are verified by that run. Detailed report appended to `docs/agent-task-reports.md`.
 - Next work remains ordered reconnect flush, never auto-retrying a `needs-review` head or skipping it; no production deployment/data writes. — Mosaic (ChatGPT), 2026-10-27
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory reconnect flush implemented, verification pending
+- Added `flushPendingInventoryMovements` to submit queued requests sequentially, stop at the first failure, persist definitive 4xx review status and retain IDs on uncertain outcomes. The inventory view now attempts flush on reconnect and on entering the view online, with form-signature protection and inputs locked during submission.
+- Focused synthetic tests added for FIFO success, network failure and rejected-head blocking. Code SHA `dfd1a8ad0087dfed181376ba0ddfcd123a7734f5`; exact-head CI still needs verification. Detailed checkpoint in `docs/agent-task-reports.md`. No production deployment/data writes. — Mosaic (ChatGPT), 2026-10-27
