@@ -149,3 +149,51 @@ export function clearPendingInventoryMovement(uid: string, id?: string): boolean
   } catch { return false; }
 }
 
+
+
+export type PendingInventoryFlushResult =
+  | { status: 'empty'; processed: number }
+  | { status: 'failed'; processed: number; failedId: string }
+  | { status: 'needs-review'; processed: number; failedId: string }
+  | { status: 'storage-error'; processed: number; failedId: string }
+  | { status: 'unavailable'; processed: 0 };
+
+/**
+ * Flush a user's queued inventory movements sequentially.
+ * The callback must resolve only after server confirmation and any required local
+ * application succeeds. A failed request stops the queue; a 4xx is persisted as
+ * needs-review and is never automatically retried or bypassed.
+ */
+export async function flushPendingInventoryMovements(
+  uid: string,
+  submit: (pending: PendingInventoryMovementRequest) => Promise<void>,
+): Promise<PendingInventoryFlushResult> {
+  let processed = 0;
+  while (true) {
+    const queue = loadPendingInventoryMovements(uid);
+    if (!queue) return { status: 'unavailable', processed: 0 };
+    const head = queue[0];
+    if (!head) return { status: 'empty', processed };
+    if (head.status === 'needs-review') return { status: 'needs-review', processed, failedId: head.id };
+
+    try {
+      await submit(head);
+    } catch (error) {
+      const status = error instanceof Error ? (error as Error & { status?: number }).status : undefined;
+      if (status !== undefined && status >= 400 && status < 500) {
+        if (!markPendingInventoryMovementRejected(uid, head.id)) {
+          return { status: 'storage-error', processed, failedId: head.id };
+        }
+        return { status: 'needs-review', processed, failedId: head.id };
+      }
+      return { status: 'failed', processed, failedId: head.id };
+    }
+
+    // If local storage fails after server confirmation, keep the same id for an
+    // idempotent retry rather than risking silent loss of the transaction.
+    if (!clearPendingInventoryMovement(uid, head.id)) {
+      return { status: 'storage-error', processed, failedId: head.id };
+    }
+    processed += 1;
+  }
+}
