@@ -38,6 +38,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [pendingQueueCount, setPendingQueueCount] = useState(0);
   const [rejectedPendingId, setRejectedPendingId] = useState<string | null>(null);
   const autoFlushInProgress = useRef(false);
+  const autoFlushAttempted = useRef(false);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -318,7 +319,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 1);
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setError('');
-      setNotice('Stock movement saved as pending on this device only. Stock has NOT changed on the server. Reconnect and press Record movement again to submit it.');
+      setNotice('Stock movement saved as pending on this device only. Stock has NOT changed on the server. When the connection returns, SHINE will try submitting it automatically. If confirmation fails, keep the details unchanged and retry.');
       return;
     }
     setSaving(true);
@@ -414,7 +415,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 1);
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setError('');
-      setNotice('Stocktake saved as pending on this device only. Stock has NOT changed on the server. Reconnect and press Record stocktake again to submit it.');
+      setNotice('Stocktake saved as pending on this device only. Stock has NOT changed on the server. When the connection returns, SHINE will try submitting it automatically. If confirmation fails, keep the details unchanged and retry.');
       return;
     }
     setSaving(true);
@@ -464,11 +465,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     if (typeof window === 'undefined' || !currentUser?.uid) return;
     const uid = currentUser.uid;
     const flushWhenOnline = async () => {
-      if (autoFlushInProgress.current || saving || !navigator.onLine) return;
+      if (autoFlushInProgress.current || autoFlushAttempted.current || saving || !navigator.onLine) return;
       const queue = loadPendingInventoryMovements(uid);
       if (!queue || !queue.length) return;
       const head = queue[0];
       if (head.status === 'needs-review') {
+        autoFlushAttempted.current = true;
         setRejectedPendingId(head.id);
         setNotice('The oldest stock transaction needs review. Discard it explicitly before the remaining queue can continue.');
         return;
@@ -491,6 +493,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         return;
       }
 
+      autoFlushAttempted.current = true;
       autoFlushInProgress.current = true;
       setSaving(true);
       setError('');
@@ -556,8 +559,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         setSaving(false);
       }
     };
-    window.addEventListener('online', flushWhenOnline);
-    return () => window.removeEventListener('online', flushWhenOnline);
+    const onOnline = () => {
+      autoFlushAttempted.current = false;
+      void flushWhenOnline();
+    };
+    window.addEventListener('online', onOnline);
+    const initialRetry = window.setTimeout(() => { void flushWhenOnline(); }, 0);
+    return () => {
+      window.clearTimeout(initialRetry);
+      window.removeEventListener('online', onOnline);
+    };
   }, [currentUser?.uid, items, movement, movementTarget, onRefresh, pendingMovementId, pendingMovementSignature, saving, stocktake, stocktakeTarget]);
 
   return (
