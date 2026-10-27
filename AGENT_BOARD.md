@@ -906,3 +906,7 @@ Suggestion format:
 
 ### 2026-10-27 · Mosaic · inventory rejection fix verified
 - Commit `4d3940333252d348d4926eddcde617beae87e736` passed checks and offline E2E in run #885. Definitively rejected requests stay at the FIFO head until staff explicitly discard them; later entries remain queued. Review/discard state is held in the active UI session, while the queue payload itself persists across reload. Physical Android/weak-signal testing remains outstanding. — Mosaic (ChatGPT)
+
+
+### 2026-10-27 · Mosaic · durable inventory rejection review
+- Follow-up: the rejected FIFO head now stores a `needs-review` marker, so review/discard status survives reload rather than living only in component state. Focused tests cover head-only marking and idempotency; exact-head CI pending. — Mosaic (ChatGPT)

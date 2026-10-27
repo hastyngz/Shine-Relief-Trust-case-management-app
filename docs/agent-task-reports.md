@@ -691,3 +691,8 @@ Code review found that a definitive HTTP 4xx was clearing the oldest pending tra
 The checks job completed successfully, including TypeScript/lint, the focused inventory queue persistence test, inventory Worker transaction tests, Firestore inventory rules tests, broader regression checks and production build. The Playwright offline E2E job also passed on the exact code SHA. A definitive HTTP 4xx no longer clears the FIFO head automatically; the request stays queued until the staff member explicitly chooses “Discard rejected transaction.” Network/5xx uncertainty retains the same request ID for safe retry.
 
 **Known limitation:** the rejected/review marker is component state, not a persisted queue status. After a reload the request remains in the queue and the form restores; retrying it will reproduce a definitive rejection and show the review/discard action again. Persisting the review marker is a possible follow-up. No production deployment/data writes or physical Android/weak-signal test occurred.
+
+
+## Inventory rejection status persistence follow-up — 2026-10-27
+
+The prior UI recovery fix passed exact-head run #885 (checks and offline E2E). This follow-up stores the `needs-review` status on the queue head, validates it at the storage boundary, restores the review/discard UI after reload, and adds focused tests for head-only marking, idempotency and preserving later queue entries. This additional code commit requires its own exact-head CI run. No production deployment or data writes.

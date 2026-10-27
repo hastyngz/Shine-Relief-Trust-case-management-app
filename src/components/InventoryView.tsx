@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, 
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
-import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, savePendingInventoryMovement } from '../utils/inventory';
+import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
@@ -60,6 +60,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const queue = loadPendingInventoryMovements(currentUser.uid);
     setPendingQueueCount(queue?.length ?? 0);
     const pending = queue?.[0] ?? null;
+    if (pending?.status === 'needs-review') setRejectedPendingId(pending.id);
+    else if (rejectedPendingId && rejectedPendingId !== pending?.id) setRejectedPendingId(null);
     if (!pending) {
       if (pendingMovementId) {
         setPendingMovementId(null);
@@ -72,7 +74,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     if (!item) return;
     setPendingMovementId(pending.id);
     setPendingMovementSignature(pending.signature);
-    setNotice('A stock transaction is awaiting server confirmation. Keep its details unchanged and retry when online; the same transaction ID prevents duplicate stock movements.');
+    setNotice(pending.status === 'needs-review'
+      ? 'The oldest stock transaction was rejected and needs review. Discard it explicitly before later queued transactions can proceed.'
+      : 'A stock transaction is awaiting server confirmation. Keep its details unchanged and retry when online; the same transaction ID prevents duplicate stock movements.');
     if (pending.mode === 'movement') {
       setMovementTarget(item);
       setStocktakeTarget(null);
@@ -346,6 +350,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined;
       if (status !== undefined && status >= 400 && status < 500) {
         // Keep definitive rejections at the FIFO head until staff explicitly discard them.
+        if (currentUser?.uid) markPendingInventoryMovementRejected(currentUser.uid, movementId);
         setRejectedPendingId(movementId);
       }
       setError(err instanceof Error
@@ -440,6 +445,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       const status = err instanceof Error ? (err as Error & { status?: number }).status : undefined;
       if (status !== undefined && status >= 400 && status < 500) {
         // Keep definitive rejections at the FIFO head until staff explicitly discard them.
+        if (currentUser?.uid) markPendingInventoryMovementRejected(currentUser.uid, movementId);
         setRejectedPendingId(movementId);
       }
       setError(err instanceof Error

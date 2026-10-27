@@ -70,6 +70,7 @@ export interface PendingInventoryMovementRequest {
   signature: string;
   mode: 'movement' | 'stocktake';
   payload: Record<string, unknown>;
+  status?: 'needs-review';
 }
 
 /** Validate untrusted persisted movement entries before they can be retried. */
@@ -80,6 +81,7 @@ function isPendingInventoryMovementRequest(value: unknown): value is PendingInve
     && typeof entry.itemId === 'string' && entry.itemId.trim().length > 0
     && typeof entry.signature === 'string' && entry.signature.length > 0
     && (entry.mode === 'movement' || entry.mode === 'stocktake')
+    && (entry.status === undefined || entry.status === 'needs-review')
     && Boolean(entry.payload && typeof entry.payload === 'object' && !Array.isArray(entry.payload));
 }
 const pendingInventoryKey = (uid: string) => `shine_inventory_pending_movement_${uid}`;
@@ -117,6 +119,19 @@ export function savePendingInventoryMovement(uid: string, pending: PendingInvent
 /** Backwards-compatible accessor for the oldest queued transaction. */
 export function loadPendingInventoryMovement(uid: string): PendingInventoryMovementRequest | null {
   return loadPendingInventoryMovements(uid)?.[0] ?? null;
+}
+
+/** Persist a definitive server rejection on the FIFO head so review survives reloads. */
+export function markPendingInventoryMovementRejected(uid: string, id: string): boolean {
+  if (typeof window === 'undefined' || !uid.trim() || !id.trim()) return false;
+  try {
+    const existing = loadPendingInventoryMovements(uid);
+    if (!existing || existing[0]?.id !== id) return false;
+    if (existing[0].status === 'needs-review') return true;
+    const updated = [{ ...existing[0], status: 'needs-review' as const }, ...existing.slice(1)];
+    window.localStorage.setItem(pendingInventoryKey(uid), JSON.stringify(updated));
+    return true;
+  } catch { return false; }
 }
 
 /** Remove only the FIFO head by default, preserving all later requests. */

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, savePendingInventoryMovement, type PendingInventoryMovementRequest } from '../src/utils/inventory';
+import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement, type PendingInventoryMovementRequest } from '../src/utils/inventory';
 const values = new Map<string, string>(); let failWrites = false;
 const localStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { if (failWrites) throw new Error('synthetic quota exceeded'); values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage } });
@@ -25,6 +25,16 @@ assert.equal(clearPendingInventoryMovement('uid-a'),true);
 assert.deepEqual(loadPendingInventoryMovements('uid-a'),[third]);
 assert.equal(clearPendingInventoryMovement('uid-a'),true);
 assert.deepEqual(loadPendingInventoryMovements('uid-a'),[]);
+const rejectedUid = 'uid-rejected';
+assert.equal(savePendingInventoryMovement(rejectedUid, first), true);
+assert.equal(savePendingInventoryMovement(rejectedUid, second), true);
+assert.equal(markPendingInventoryMovementRejected(rejectedUid, second.id), false, 'a later entry cannot be marked rejected ahead of the head');
+assert.equal(markPendingInventoryMovementRejected(rejectedUid, first.id), true, 'the FIFO head can be marked for review');
+assert.deepEqual(loadPendingInventoryMovements(rejectedUid), [{ ...first, status: 'needs-review' }, second], 'rejection review state persists in storage');
+assert.equal(markPendingInventoryMovementRejected(rejectedUid, first.id), true, 'marking the same rejection is idempotent');
+assert.equal(clearPendingInventoryMovement(rejectedUid, first.id), true, 'staff-confirmed discard removes the rejected head');
+assert.deepEqual(loadPendingInventoryMovements(rejectedUid), [second], 'discard does not remove later queued entries');
+
 const legacyKey='shine_inventory_pending_movement_uid-legacy'; values.set(legacyKey,JSON.stringify(first));
 assert.deepEqual(loadPendingInventoryMovements('uid-legacy'),[first],'legacy object remains readable');
 assert.equal(savePendingInventoryMovement('uid-legacy',second),true);

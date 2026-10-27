@@ -325,3 +325,7 @@ The management report history needs its own manager/admin-only collection; the e
 ### 2026-10-27 · Mosaic (ChatGPT) · inventory rejected-request fix verified
 - Commit `4d3940333252d348d4926eddcde617beae87e736` passed GitHub Actions run #885: both the full checks job and offline Playwright E2E passed. The check job includes TypeScript/lint, inventory pending queue regression, inventory Worker and Firestore rules tests, broader regressions and production build.
 - Definitive HTTP 4xx responses now preserve the FIFO head and require explicit “Discard rejected transaction” action after review; network/5xx outcomes preserve the original request for retry. No deployment or production data writes. — Mosaic (ChatGPT)
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · rejection review state persistence follow-up
+- The previous rejection recovery fix passed exact-head run #885. This follow-up persists the FIFO head's `needs-review` status, validates it on read, and restores the discard action after reload. Synthetic helper tests cover head-only marking, idempotency and preserving later entries. Exact-head CI pending.
