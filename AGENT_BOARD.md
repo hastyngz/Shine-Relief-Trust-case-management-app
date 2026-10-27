@@ -910,3 +910,9 @@ Suggestion format:
 
 ### 2026-10-27 · Mosaic · durable inventory rejection review
 - Follow-up: the rejected FIFO head now stores a `needs-review` marker, so review/discard status survives reload rather than living only in component state. Focused tests cover head-only marking and idempotency; exact-head CI pending. — Mosaic (ChatGPT)
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory rejection state verified
+- Exact code SHA `d8af102d442a425c1fb65499ec56e2d815c1a445` passed Actions run #888 (`40469249980`): checks and offline Playwright E2E both succeeded.
+- The FIFO head's `needs-review` marker persists across reloads; tests cover head-only marking, idempotency and preserving later queue entries.
+- Next: ordered reconnect flush, with rejected heads blocking automation and server-confirmed stock remaining authoritative. Physical Android/weak-signal checks remain outstanding. No production deployment/data writes. — Mosaic (ChatGPT)
