@@ -1,45 +1,38 @@
 import assert from 'node:assert/strict';
-import {
-  clearPendingInventoryMovement,
-  loadPendingInventoryMovement,
-  savePendingInventoryMovement,
-  type PendingInventoryMovementRequest,
-} from '../src/utils/inventory';
-
-const values = new Map<string, string>();
-let failWrites = false;
-const localStorage = {
-  getItem: (key: string) => values.get(key) ?? null,
-  setItem: (key: string, value: string) => { if (failWrites) throw new Error('synthetic quota exceeded'); values.set(key, value); },
-  removeItem: (key: string) => { values.delete(key); },
-};
+import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, savePendingInventoryMovement, type PendingInventoryMovementRequest } from '../src/utils/inventory';
+const values = new Map<string, string>(); let failWrites = false;
+const localStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { if (failWrites) throw new Error('synthetic quota exceeded'); values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage } });
-
-const pending: PendingInventoryMovementRequest = {
-  id: 'mov_synthetic_retry',
-  itemId: 'item_synthetic',
-  signature: '{"itemId":"item_synthetic","type":"Received","quantity":2}',
-  mode: 'movement',
-  payload: { type: 'Received', quantity: 2, date: '2026-10-26', reason: 'Synthetic retry test' },
-};
-
-assert.equal(savePendingInventoryMovement('uid-a', pending), true);
-assert.deepEqual(loadPendingInventoryMovement('uid-a'), pending);
-assert.equal(loadPendingInventoryMovement('uid-b'), null, 'one staff workspace must not read another workspace retry');
-assert.equal(savePendingInventoryMovement('uid-a', { ...pending, id: 'mov_other', signature: 'different' }), false, 'an unresolved transaction must not be overwritten');
-assert.deepEqual(loadPendingInventoryMovement('uid-a'), pending, 'the original transaction must remain recoverable');
-assert.equal(clearPendingInventoryMovement('uid-a'), true);
-assert.equal(loadPendingInventoryMovement('uid-a'), null);
-
-values.set('shine_inventory_pending_movement_uid-a', '{broken json');
-assert.equal(loadPendingInventoryMovement('uid-a'), null, 'malformed pending state must fail closed');
-assert.equal(savePendingInventoryMovement('uid-a', pending), false, 'malformed uncertain state must not be overwritten');
-values.set('shine_inventory_pending_movement_uid-a', JSON.stringify({ ...pending, mode: 'unknown' }));
-assert.equal(loadPendingInventoryMovement('uid-a'), null, 'unsupported pending state must fail closed');
-values.delete('shine_inventory_pending_movement_uid-a');
-
-failWrites = true;
-assert.equal(savePendingInventoryMovement('uid-a', pending), false, 'quota/write failures must be visible to the caller');
-assert.equal(loadPendingInventoryMovement('uid-a'), null, 'failed writes must not create a phantom pending transaction');
-
-console.log('Inventory pending retry persistence tests passed.');
+const makePending = (id: string, quantity: number): PendingInventoryMovementRequest => ({ id, itemId: 'item_synthetic', signature: JSON.stringify({ itemId: 'item_synthetic', type: 'Received', quantity }), mode: 'movement', payload: { type: 'Received', quantity, date: '2026-10-26', reason: 'Synthetic retry test' } });
+const first=makePending('mov_synthetic_first',2), second=makePending('mov_synthetic_second',3), third=makePending('mov_synthetic_third',4);
+assert.equal(savePendingInventoryMovement('uid-a',first),true);
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[first]);
+assert.deepEqual(loadPendingInventoryMovement('uid-a'),first);
+assert.equal(loadPendingInventoryMovements('uid-b')?.length,0);
+assert.equal(savePendingInventoryMovement('uid-a',second),true);
+assert.equal(savePendingInventoryMovement('uid-a',third),true);
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[first,second,third],'FIFO order is preserved');
+assert.equal(savePendingInventoryMovement('uid-a',first),true,'identical ID retry is idempotent');
+assert.equal(savePendingInventoryMovement('uid-a',{...first,payload:{type:'Received',quantity:99}}),false,'same ID cannot overwrite payload');
+assert.equal(savePendingInventoryMovement('uid-a',{...second,id:first.id}),false,'duplicate IDs cannot collapse entries');
+assert.equal(clearPendingInventoryMovement('uid-a',second.id),false,'cannot remove out of order');
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[first,second,third]);
+assert.equal(clearPendingInventoryMovement('uid-a',first.id),true);
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[second,third]);
+assert.equal(clearPendingInventoryMovement('uid-a'),true);
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[third]);
+assert.equal(clearPendingInventoryMovement('uid-a'),true);
+assert.deepEqual(loadPendingInventoryMovements('uid-a'),[]);
+const legacyKey='shine_inventory_pending_movement_uid-legacy'; values.set(legacyKey,JSON.stringify(first));
+assert.deepEqual(loadPendingInventoryMovements('uid-legacy'),[first],'legacy object remains readable');
+assert.equal(savePendingInventoryMovement('uid-legacy',second),true);
+assert.deepEqual(loadPendingInventoryMovements('uid-legacy'),[first,second],'legacy object safely upgrades on append');
+values.set('shine_inventory_pending_movement_uid-corrupt','{broken json');
+assert.equal(loadPendingInventoryMovements('uid-corrupt'),null);
+assert.equal(savePendingInventoryMovement('uid-corrupt',first),false);
+values.set('shine_inventory_pending_movement_uid-duplicate',JSON.stringify([first,first]));
+assert.equal(loadPendingInventoryMovements('uid-duplicate'),null);
+values.set('shine_inventory_pending_movement_uid-unsupported',JSON.stringify([{...first,mode:'unknown'}]));
+assert.equal(loadPendingInventoryMovements('uid-unsupported'),null);
+failWrites=true; assert.equal(savePendingInventoryMovement('uid-write-failure',first),false); assert.deepEqual(loadPendingInventoryMovements('uid-write-failure'),[]); failWrites=false;
+console.log('Inventory pending FIFO queue tests passed.');

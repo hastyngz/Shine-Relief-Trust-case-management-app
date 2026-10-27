@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, 
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
-import { clearPendingInventoryMovement, loadPendingInventoryMovement, savePendingInventoryMovement } from '../utils/inventory';
+import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
@@ -35,6 +35,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [saving, setSaving] = useState(false);
   const [pendingMovementId, setPendingMovementId] = useState<string | null>(null);
   const [pendingMovementSignature, setPendingMovementSignature] = useState<string | null>(null);
+  const [pendingQueueCount, setPendingQueueCount] = useState(0);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -55,7 +56,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setPendingMovementSignature(null);
       return;
     }
-    const pending = loadPendingInventoryMovement(currentUser.uid);
+    const queue = loadPendingInventoryMovements(currentUser.uid);
+    setPendingQueueCount(queue?.length ?? 0);
+    const pending = queue?.[0] ?? null;
     if (!pending) {
       if (pendingMovementId) {
         setPendingMovementId(null);
@@ -68,7 +71,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     if (!item) return;
     setPendingMovementId(pending.id);
     setPendingMovementSignature(pending.signature);
-    setError('');
     setNotice('A stock transaction is awaiting server confirmation. Keep its details unchanged and retry when online; the same transaction ID prevents duplicate stock movements.');
     if (pending.mode === 'movement') {
       setMovementTarget(item);
@@ -260,12 +262,28 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       itemId: movementTarget.id, type: movement.type, quantity, date: movement.date,
       destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim(),
     });
-    if (pendingMovementId && pendingMovementSignature !== signature) {
-      restorePendingInventoryForm();
-      setError('A previous stock transaction is still pending. Its original details have been restored; submit that transaction before recording another.');
+    const queue = currentUser?.uid ? loadPendingInventoryMovements(currentUser.uid) : null;
+    if (!currentUser?.uid || !queue) {
+      setError('The pending stock queue could not be read safely. No movement was sent; check device storage before retrying.');
       return;
     }
-    const movementId = pendingMovementId || createInventoryId('mov');
+    const isRetryingHead = Boolean(pendingMovementId && queue[0]?.id === pendingMovementId && pendingMovementSignature === signature);
+    if (queue.length > 0 && !isRetryingHead) {
+      const queued = savePendingInventoryMovement(currentUser.uid, {
+        id: createInventoryId('mov'), itemId: movementTarget.id, signature, mode: 'movement',
+        payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
+      });
+      if (!queued) {
+        setError('The new transaction was not queued. Existing pending transactions were preserved; check storage space and try again.');
+        return;
+      }
+      setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? queue.length + 1);
+      restorePendingInventoryForm();
+      setNotice('Added to the end of the pending queue. The oldest transaction must be confirmed first; queued requests do not change server stock until accepted.');
+      setError('');
+      return;
+    }
+    const movementId = isRetryingHead ? pendingMovementId as string : createInventoryId('mov');
     if (!currentUser?.uid || !savePendingInventoryMovement(currentUser.uid, {
       id: movementId, itemId: movementTarget.id, signature, mode: 'movement',
       payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
@@ -276,6 +294,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     setPendingMovementId(movementId);
     setPendingMovementSignature(signature);
+    setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 1);
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setError('');
       setNotice('Stock movement saved as pending on this device only. Stock has NOT changed on the server. Reconnect and press Record movement again to submit it.');
@@ -301,7 +320,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           : 'Stock movement recorded and confirmed by the server.');
         setPendingMovementId(null);
         setPendingMovementSignature(null);
-        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
+        if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
         setMovementTarget(null);
         setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
       }
@@ -310,7 +330,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       if (status !== undefined && status >= 400 && status < 500) {
         setPendingMovementId(null);
         setPendingMovementSignature(null);
-        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
+        if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
       }
       setError(err instanceof Error
         ? `The stock movement was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
@@ -336,12 +357,28 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       itemId: stocktakeTarget.id, type: 'Adjustment', countedQuantity: counted, date: stocktake.date,
       reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
     });
-    if (pendingMovementId && pendingMovementSignature !== signature) {
-      restorePendingInventoryForm();
-      setError('A previous stock transaction is still pending. Its original details have been restored; submit that transaction before recording another.');
+    const queue = currentUser?.uid ? loadPendingInventoryMovements(currentUser.uid) : null;
+    if (!currentUser?.uid || !queue) {
+      setError('The pending stock queue could not be read safely. No stocktake was sent; check device storage before retrying.');
       return;
     }
-    const movementId = pendingMovementId || createInventoryId('mov');
+    const isRetryingHead = Boolean(pendingMovementId && queue[0]?.id === pendingMovementId && pendingMovementSignature === signature);
+    if (queue.length > 0 && !isRetryingHead) {
+      const queued = savePendingInventoryMovement(currentUser.uid, {
+        id: createInventoryId('mov'), itemId: stocktakeTarget.id, signature, mode: 'stocktake',
+        payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`, formReason: stocktake.reason.trim() },
+      });
+      if (!queued) {
+        setError('The new transaction was not queued. Existing pending transactions were preserved; check storage space and try again.');
+        return;
+      }
+      setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? queue.length + 1);
+      restorePendingInventoryForm();
+      setNotice('Added to the end of the pending queue. The oldest transaction must be confirmed first; queued requests do not change server stock until accepted.');
+      setError('');
+      return;
+    }
+    const movementId = isRetryingHead ? pendingMovementId as string : createInventoryId('mov');
     const serverReason = `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`;
     if (!currentUser?.uid || !savePendingInventoryMovement(currentUser.uid, {
       id: movementId, itemId: stocktakeTarget.id, signature, mode: 'stocktake',
@@ -353,6 +390,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     setPendingMovementId(movementId);
     setPendingMovementSignature(signature);
+    setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 1);
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setError('');
       setNotice('Stocktake saved as pending on this device only. Stock has NOT changed on the server. Reconnect and press Record stocktake again to submit it.');
@@ -377,7 +415,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           : 'Stocktake recorded and confirmed by the server.');
         setPendingMovementId(null);
         setPendingMovementSignature(null);
-        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
+        if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
         setStocktakeTarget(null);
         setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
       }
@@ -386,7 +425,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       if (status !== undefined && status >= 400 && status < 500) {
         setPendingMovementId(null);
         setPendingMovementSignature(null);
-        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid);
+        if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
+        if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
       }
       setError(err instanceof Error
         ? `The stocktake was not confirmed: ${err.message} ${status !== undefined && status < 500 ? 'Correct the details or refresh the register before retrying.' : 'Keep the form unchanged and retry to safely check the same movement.'}`
@@ -417,6 +457,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         </div>
       </header>
 
+      {pendingQueueCount > 0 && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>{pendingQueueCount} inventory transaction{pendingQueueCount === 1 ? '' : 's'} awaiting server confirmation.</strong> They are stored on this device in FIFO order. Queued requests do not change the authoritative stock balance; retry the oldest transaction first and resolve it before later entries are sent.</div>}
       {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div>}
       {error && <div role="alert" className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={() => setError('')}><X className="h-4 w-4" /></button></div>}
 

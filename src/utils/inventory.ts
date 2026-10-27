@@ -72,56 +72,65 @@ export interface PendingInventoryMovementRequest {
   payload: Record<string, unknown>;
 }
 
-/** Persist one uncertain request per authenticated user so retries reuse its idempotency key after reload. */
-export function savePendingInventoryMovement(uid: string, pending: PendingInventoryMovementRequest): boolean {
-  if (typeof window === 'undefined' || !uid.trim()) return false;
-  try {
-    const key = `shine_inventory_pending_movement_${uid}`;
-    const existingRaw = window.localStorage.getItem(key);
-    if (existingRaw !== null) {
-      // There is only one recoverable transaction slot per user. Never replace
-      // a different or malformed request: its server outcome may be uncertain.
-      const existing = loadPendingInventoryMovement(uid);
-      if (
-        !existing ||
-        existing.id !== pending.id ||
-        existing.itemId !== pending.itemId ||
-        existing.signature !== pending.signature ||
-        existing.mode !== pending.mode
-      ) return false;
-    }
-    window.localStorage.setItem(key, JSON.stringify(pending));
-    return true;
-  } catch {
-    return false;
-  }
+/** Validate untrusted persisted movement entries before they can be retried. */
+function isPendingInventoryMovementRequest(value: unknown): value is PendingInventoryMovementRequest {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entry = value as Partial<PendingInventoryMovementRequest>;
+  return typeof entry.id === 'string' && entry.id.trim().length > 0
+    && typeof entry.itemId === 'string' && entry.itemId.trim().length > 0
+    && typeof entry.signature === 'string' && entry.signature.length > 0
+    && (entry.mode === 'movement' || entry.mode === 'stocktake')
+    && Boolean(entry.payload && typeof entry.payload === 'object' && !Array.isArray(entry.payload));
 }
+const pendingInventoryKey = (uid: string) => `shine_inventory_pending_movement_${uid}`;
 
-export function loadPendingInventoryMovement(uid: string): PendingInventoryMovementRequest | null {
+/** null means malformed/unavailable; an empty array means no pending requests. */
+export function loadPendingInventoryMovements(uid: string): PendingInventoryMovementRequest[] | null {
   if (typeof window === 'undefined' || !uid.trim()) return null;
   try {
-    const raw = window.localStorage.getItem(`shine_inventory_pending_movement_${uid}`);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<PendingInventoryMovementRequest>;
-    if (
-      typeof value.id !== 'string' || !value.id ||
-      typeof value.itemId !== 'string' || !value.itemId ||
-      typeof value.signature !== 'string' || !value.signature ||
-      (value.mode !== 'movement' && value.mode !== 'stocktake') ||
-      !value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload)
-    ) return null;
-    return value as PendingInventoryMovementRequest;
-  } catch {
-    return null;
-  }
+    const raw = window.localStorage.getItem(pendingInventoryKey(uid));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    const entries = Array.isArray(parsed) ? parsed : [parsed]; // legacy single-object compatibility
+    if (entries.length > 100 || !entries.every(isPendingInventoryMovementRequest)) return null;
+    const ids = entries.map((entry) => entry.id);
+    if (new Set(ids).size !== ids.length) return null;
+    return entries as PendingInventoryMovementRequest[];
+  } catch { return null; }
 }
 
-export function clearPendingInventoryMovement(uid: string): boolean {
+/** Append distinct transactions; an existing ID is accepted only for the identical request. */
+export function savePendingInventoryMovement(uid: string, pending: PendingInventoryMovementRequest): boolean {
+  if (typeof window === 'undefined' || !uid.trim() || !isPendingInventoryMovementRequest(pending)) return false;
+  try {
+    const existing = loadPendingInventoryMovements(uid);
+    if (!existing) return false;
+    const sameId = existing.find((entry) => entry.id === pending.id);
+    if (sameId) return sameId.itemId === pending.itemId && sameId.signature === pending.signature
+      && sameId.mode === pending.mode && JSON.stringify(sameId.payload) === JSON.stringify(pending.payload);
+    if (existing.length >= 100) return false;
+    window.localStorage.setItem(pendingInventoryKey(uid), JSON.stringify([...existing, pending]));
+    return true;
+  } catch { return false; }
+}
+
+/** Backwards-compatible accessor for the oldest queued transaction. */
+export function loadPendingInventoryMovement(uid: string): PendingInventoryMovementRequest | null {
+  return loadPendingInventoryMovements(uid)?.[0] ?? null;
+}
+
+/** Remove only the FIFO head by default, preserving all later requests. */
+export function clearPendingInventoryMovement(uid: string, id?: string): boolean {
   if (typeof window === 'undefined' || !uid.trim()) return false;
   try {
-    window.localStorage.removeItem(`shine_inventory_pending_movement_${uid}`);
+    const existing = loadPendingInventoryMovements(uid);
+    if (!existing) return false;
+    if (!existing.length) return true;
+    if (existing[0].id !== (id ?? existing[0].id)) return false;
+    const remaining = existing.slice(1);
+    if (remaining.length) window.localStorage.setItem(pendingInventoryKey(uid), JSON.stringify(remaining));
+    else window.localStorage.removeItem(pendingInventoryKey(uid));
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
+

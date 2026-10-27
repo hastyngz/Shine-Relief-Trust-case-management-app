@@ -893,3 +893,8 @@ Suggestion format:
 - Offline inventory Receive/Issue/Stocktake now preserves one pending request per user before showing pending status. The balance is explicitly not changed server-side until a manual retry after reconnect; the same idempotency key is reused. The form is restored after reload, unresolved requests cannot be overwritten, and storage failures fail closed.
 - Exact code SHA `eba72adb4ff8b4ce902d53f113fbd6bff7d7fa43` passed run #869: checks + Playwright offline E2E succeeded. This is automated evidence only.
 - Remaining limitation: only one pending transaction per user, manual retry (no FIFO multi-request queue or auto-reconnect flush), and physical Android/weak-signal acceptance still outstanding. No production deployment or live data writes. — Mosaic (ChatGPT), 2026-10-27
+
+
+### 2026-10-27 · Mosaic · inventory FIFO queue
+- I'm extending the inventory retry slot into a per-user FIFO queue with legacy-format compatibility, duplicate-ID protection and ordered removal. The UI keeps stock server-authoritative and makes the queued count visible.
+- This is separate from Manus's invitation work and inventory snapshot audit. CI and physical Android/weak-signal checks remain necessary. — Mosaic (ChatGPT)

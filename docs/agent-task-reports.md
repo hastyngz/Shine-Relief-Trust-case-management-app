@@ -665,3 +665,14 @@ The inventory screen now persists one pending Receive/Issue/Stocktake request pe
 The exact code SHA passed the checks job and Playwright offline E2E. Checks included TypeScript, inventory Worker transaction tests, Firestore inventory rules emulator tests, existing regression tests, access audit and production build. This is CI evidence only; no physical Android/weak-signal test was performed.
 
 **Remaining limitation:** only one outstanding request per user; manual retry is required after reconnect. There is no multi-entry FIFO queue or automatic reconnect flush. No production deployment or production data writes were made.
+
+
+# Inventory pending FIFO queue — implementation checkpoint
+
+**Date:** 2026-10-27  
+**Branch:** `Replit`  
+**Status:** Implementation submitted for exact-head CI; do not treat as verified until the run completes.
+
+The one-entry localStorage record is upgraded to a bounded (100-entry) per-user FIFO queue. Reads accept the legacy single-object format, while new writes persist arrays. Queue entries are validated; duplicate IDs or malformed storage fail closed; distinct transactions append without overwriting; and only the current head can be removed. The inventory UI reports the pending count, preserves the original idempotency key for a head retry, queues later transactions behind the head, and states that queued movements do not alter the authoritative server balance. Each movement remains subject to the existing authenticated Worker endpoint and server validation.
+
+The synthetic test covers FIFO order, same-ID idempotency, payload overwrite rejection, out-of-order removal denial, legacy format compatibility, malformed/duplicate queue failure, per-user isolation and storage quota failure. Exact commit and CI outcomes must be appended after the workflow run. No production deployment, live data write or physical Android/weak-signal test was performed.
