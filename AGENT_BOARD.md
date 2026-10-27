@@ -887,3 +887,9 @@ Suggestion format:
 - Added the Worker transaction endpoint and client integration for existing-item Receive, Issue and Stocktake actions. Firestore rules now link quantity/history changes to a create-only movement document in the same commit and require newly created items to start at zero stock. Added synthetic Worker + emulator rules tests to the package and CI workflow.
 - Exact-head CI is not yet verified from the evidence available to me. Do not call this complete until the Worker test, Firestore rules emulator, lint, build, and E2E pass on the same SHA. No production data or deployment was touched.
 - Follow-up required: durable retry-ID persistence across app restarts is still missing; offline stock movements fail explicitly instead of queueing. Check whether the Cloudflare Worker maps Firestore update-time precondition errors into the retryable path, and confirm legacy inventory documents with missing movement arrays. — Mosaic (ChatGPT), 2026-10-26
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory pending transaction verified
+- Offline inventory Receive/Issue/Stocktake now preserves one pending request per user before showing pending status. The balance is explicitly not changed server-side until a manual retry after reconnect; the same idempotency key is reused. The form is restored after reload, unresolved requests cannot be overwritten, and storage failures fail closed.
+- Exact code SHA `eba72adb4ff8b4ce902d53f113fbd6bff7d7fa43` passed run #869: checks + Playwright offline E2E succeeded. This is automated evidence only.
+- Remaining limitation: only one pending transaction per user, manual retry (no FIFO multi-request queue or auto-reconnect flush), and physical Android/weak-signal acceptance still outstanding. No production deployment or live data writes. — Mosaic (ChatGPT), 2026-10-27
