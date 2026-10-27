@@ -654,3 +654,14 @@ The retry-persistence gap identified above has now been addressed for uncertain 
 **Verification:** exact code SHA `17896ad88910452842ef49ee2b54d2dbf411834c` passed [SHINE app checks #850](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40392565913): both the full `checks` job and Playwright E2E succeeded. The checks job included TypeScript, the Worker transaction test, durable retry persistence test, Firestore inventory transaction rules test, the existing regression suites, Firestore access audit and build. This is automated CI evidence, not physical-device acceptance.
 
 **Still not complete:** when the device is already offline before the user submits, the UI rejects the action without queueing it. The durable pending record covers requests that were sent or attempted but whose outcome is uncertain; it is not yet a full offline-first queue for new stock movements. A physical Android/weak-signal test is also outstanding. Production data and deployments remain untouched.
+
+
+## Inventory offline-pending follow-up — 2026-10-27
+
+**Code SHA:** `eba72adb4ff8b4ce902d53f113fbd6bff7d7fa43`. **CI:** run #869; checks and Playwright offline E2E passed.
+
+The inventory screen now persists one pending Receive/Issue/Stocktake request per signed-in user before showing offline-pending status. It explicitly says the server balance has not changed. After reconnect, staff manually submit the same form again; the same idempotency key is reused. The pending form restores after reload. A different or malformed pending request cannot be overwritten, and storage failures fail closed. Stocktake now clears persisted retry state after definitive HTTP 4xx responses. Focused retry tests cover cross-user isolation, duplicate restore, overwrite protection, malformed state and storage write failure.
+
+The exact code SHA passed the checks job and Playwright offline E2E. Checks included TypeScript, inventory Worker transaction tests, Firestore inventory rules emulator tests, existing regression tests, access audit and production build. This is CI evidence only; no physical Android/weak-signal test was performed.
+
+**Remaining limitation:** only one outstanding request per user; manual retry is required after reconnect. There is no multi-entry FIFO queue or automatic reconnect flush. No production deployment or production data writes were made.
