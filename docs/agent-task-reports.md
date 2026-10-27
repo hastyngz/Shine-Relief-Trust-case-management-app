@@ -706,3 +706,14 @@ The prior UI recovery fix passed exact-head run #885 (checks and offline E2E). T
 The exact-head checks job completed successfully, including TypeScript, the focused inventory retry persistence test, inventory Worker transaction tests, procurement receipt linkage, inventory Firestore rules, full Firestore rules emulator, offline queue and storage regressions, access audit, and production build. The Playwright offline E2E job also passed. The FIFO head's `needs-review` marker is now persisted and validated; only the head can be marked, repeated marking is idempotent, and explicit discard preserves later queue entries.
 
 **Still outstanding:** inventory queue submissions remain manually retried; automatic ordered flush on reconnect is not implemented. A rejected head must never auto-submit or allow later entries to bypass it. Physical Android and weak/no-signal acceptance tests have not been performed. No production deployment or production-data writes occurred.
+
+
+# Inventory reconnect flush — implementation checkpoint (2026-10-27)
+
+**Branch:** `Replit`  
+**Code SHA:** `dfd1a8ad0087dfed181376ba0ddfcd123a7734f5`  
+**Verification:** exact-head GitHub Actions result not yet available through the current connector. Do not mark this follow-up verified until CI checks and offline E2E finish on the resulting code head.
+
+Added a sequential `flushPendingInventoryMovements` helper and focused synthetic regression cases. When the inventory view is online, the persisted queue can be flushed in FIFO order. The callback must complete server confirmation and local application before the head is removed. Network/5xx uncertainty stops the flush with the same ID and payload retained; a definitive 4xx marks the head `needs-review`; that head is never automatically resubmitted or bypassed. Storage failure after server confirmation retains the same idempotency key for safe recovery. The component listens for reconnection and makes one automatic attempt per online period, including when opening the inventory view while online. It verifies the restored form matches the saved signature before starting and disables movement/stocktake fields while requests are being confirmed.
+
+The focused helper test covers FIFO completion, stopping on a network failure, durable rejection marking and refusing to submit a rejected head. Code was reviewed from the GitHub diff, but this environment did not run the test locally; exact-head CI is still required. Physical Android/weak-signal testing is outstanding. No production deployment or live-data writes occurred.
