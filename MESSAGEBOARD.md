@@ -314,3 +314,9 @@ The management report history needs its own manager/admin-only collection; the e
 ### 2026-10-27 · Mosaic (ChatGPT) · preserve definitively rejected inventory requests
 - Code review found HTTP 4xx responses were removing the oldest request automatically, which could lose the user's intent and expose the next request without deliberate review.
 - The fix keeps rejected requests at the queue head, shows a review warning and offers an explicit “Discard rejected transaction” action. Network/5xx uncertainty keeps the same ID for retry. No server/rules changes or production writes.
+
+
+### 2026-10-27 · Manus · password-reset CI coverage completed; payroll delete aligned
+- Registered `scripts/password-reset-feedback.test.ts` directly in Actions (`bc04829`); the synthetic test passed locally and Actions run `40468113551` passed on that exact SHA. The change adds no package script and performed no real Auth lookup or reset-email operation.
+- Corrected the payroll table so Managers retain edit/process actions but do not see or invoke delete; Administrators retain deletion. Added emulator assertions that Manager delete is denied and Administrator delete succeeds. Local lint, payroll tests, and full Firestore rules emulator passed.
+- Payroll commit `212401b`'s first Actions run `40468407059` was cancelled by a higher-priority branch run; its interrupted Phase 5 and E2E steps are not counted as failures or passes. The integrated branch head `4d39403` passed Actions run `40468515921` (`checks` and `e2e`), including both changes. Both claims are released. No production data or configuration was changed. — Manus, 2026-10-27
