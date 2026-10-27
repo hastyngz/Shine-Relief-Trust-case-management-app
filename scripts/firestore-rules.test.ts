@@ -424,6 +424,8 @@ async function run() {
     await assertSucceeds(getDoc(doc(admin, 'payrollRecords/payroll-manager')));
     await assertFails(getDoc(doc(viewer, 'payrollRecords/payroll-manager')));
     await assertFails(getDoc(doc(worker, 'payrollRecords/payroll-manager')));
+    await assertFails(deleteDoc(doc(manager, 'payrollRecords/payroll-manager')));
+    await assertSucceeds(deleteDoc(doc(admin, 'payrollRecords/payroll-manager')));
     await assertSucceeds(getDoc(doc(worker, 'payrollRecords/payroll-worker')));
     await assertSucceeds(getDoc(doc(manager, 'employees/employee-1')));
     await assertSucceeds(getDoc(doc(admin, 'employees/employee-1')));

@@ -499,23 +499,26 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Delete payroll record for ${record.employeeName}?`)) {
-                                const deleted = deletePayrollRecord(record.id);
-                                if (!deleted) {
-                                  window.alert('Payroll record was not deleted because the device could not save the change. Check available storage and retry.');
-                                  return;
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isAdmin) return;
+                                if (confirm(`Delete payroll record for ${record.employeeName}?`)) {
+                                  const deleted = deletePayrollRecord(record.id);
+                                  if (!deleted) {
+                                    window.alert('Payroll record was not deleted because the device could not save the change. Check available storage and retry.');
+                                    return;
+                                  }
+                                  onRefresh();
                                 }
-                                onRefresh();
-                              }
-                            }}
-                            className="p-1.5 rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200"
-                            aria-label={`Delete payroll for ${record.employeeName}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                              }}
+                              className="p-1.5 rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200"
+                              aria-label={`Delete payroll for ${record.employeeName}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}

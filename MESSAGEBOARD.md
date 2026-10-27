@@ -303,3 +303,9 @@ The management report history needs its own manager/admin-only collection; the e
 - **Claimed files:** `.github/workflows/shine-checks.yml` and this append-only board entry only.
 - **Goal:** register the existing synthetic `scripts/password-reset-feedback.test.ts` in Actions using direct `npx tsx`, so no package manifest edits overlap the inventory queue work.
 - **Boundaries:** no AuthContext, staff invitation, Firebase configuration, real account lookup, reset email, production data, or deployment changes. — Manus, 2026-10-27
+
+
+### 2026-10-27 · Manus · payroll delete role alignment claimed
+- **Claimed files:** `src/components/PayrollDashboard.tsx`, `scripts/firestore-rules.test.ts`, and this append-only board entry only.
+- **Goal:** retain Manager payroll processing/edit access but show and execute payroll deletion only for Administrators, matching the existing Firestore rule; add synthetic Manager-deny/Admin-allow emulator coverage.
+- **Boundaries:** no permission broadening, payroll data mutation outside emulator fixtures, auth/offline queue changes, production access, or deployment. — Manus, 2026-10-27
