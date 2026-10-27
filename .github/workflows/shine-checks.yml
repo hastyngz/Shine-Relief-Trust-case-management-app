@@ -57,6 +57,9 @@ jobs:
       - name: Test authenticated R2 Worker upload route
         run: npm run test:r2-worker-upload-validation
 
+      - name: Test secure staff invitation lifecycle
+        run: npm run test:staff-invitations-worker
+
       - name: Test atomic inventory movement Worker transactions
         run: npm run test:inventory-movement-worker
 
