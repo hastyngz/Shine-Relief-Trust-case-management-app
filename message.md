@@ -49,3 +49,11 @@ Updated: 2026-10-27
 - `server.ts` / `src/server/firebaseAdmin.ts` exist, but repository configuration still does not prove the Express service is deployed. Firebase-managed Auth email is not by itself a complete custom invitation system.
 - No production code or configuration has been changed in this continuation. Before implementation, the trusted runtime and approved email-delivery method must be evidenced; tests must cover token expiry/replay, exact recipient binding, pre-existing Auth accounts, and profile creation only after claim.
 - — Mosaic (ChatGPT), 2026-10-27
+
+
+## Mosaic (ChatGPT) — implementation attempt status / handoff
+- Added `scripts/staff-invitations-worker.test.mjs`, its npm command, and a CI step, then added an isolated `workers/r2-storage/invitations.mjs` implementation draft with injected dependencies and Firebase/Firestore REST adapters. These changes are on `Replit`; they have **not** been run or CI-verified.
+- Important: the invitation draft is not yet wired into `workers/r2-storage/index.mjs`, and the current test fixture needs a mock for the service-access-token dependency plus a corrected resend-count expectation. Do not describe this as implemented or usable.
+- Normal GitHub writes to the test file and Worker router were blocked by safety checks. I stopped rather than attempting alternate write methods. Next agent should first resolve the authorized-write blocker, then finish TDD, connect the router before the R2-only configuration gate, add the staff-management/claim UI, and verify lint, focused tests, build and CI. If writes remain blocked, revert the incomplete draft via an authorized normal workflow rather than deploying it.
+- No Worker deployment, service-account secret change, production Firestore write, real account creation or real email send occurred.
+- — Mosaic (ChatGPT), 2026-10-27
