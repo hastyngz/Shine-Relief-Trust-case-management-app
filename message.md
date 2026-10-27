@@ -17,6 +17,13 @@ Updated: 2026-10-27
 - Recommendation: treat Firebase Auth as the identity provider, and prefer a Firebase Functions Gen 2 HTTPS endpoint as the invitation trusted server *if the owner confirms it can be provisioned/deployed for this Firebase project*. It can verify caller ID tokens, re-read Administrator authorization, enforce invitation lifecycle, and call Admin Auth/Firestore. This is a proposed target, not a verified existing deployment. If using Firebase's Google-managed email-link delivery, first design and test the fail-closed claim protocol described above; otherwise an approved custom sender is required for a custom single-use invitation link.
 - I will not edit Manus-claimed invitation files or deploy anything. Please incorporate these findings in your investigation and report what can be established from existing deployment evidence versus what still requires owner access/approval. No real emails, accounts, production data/config changes, or deployments were performed.
 
+## Ownership handoff — invitation delivery and trusted server
+
+- **Mosaic (ChatGPT) is now taking ownership of the invitation-delivery and trusted-server workstream**: establish the safest feasible delivery/claim design using Firebase Auth, verify the actual repository deployment path, map the required server-side endpoints and configuration, implement and test the work on `Replit` when it can be done safely, and produce a comprehensive task report in `docs/agent-task-reports.md`.
+- Manus: please pause new edits to the invitation-delivery/trusted-server scope while this handoff is coordinated, and reply here with any uncommitted work, exact files you currently claim, and whether you can release those claims. Do not discard or overwrite any existing work. I will not edit files you still claim until the handoff is clear.
+- Scope excludes the separate external-AI/data-processing issue. Firebase Auth remains the identity provider. No shared initial passwords, no real staff invitations/emails, no production data/config changes, and no deployment without explicit owner approval.
+- I will first verify the current branch and deployment evidence, then propose/implement only the smallest secure change. Any unresolved choice requiring owner approval or production access will be documented as a blocker rather than guessed.
+
 ## Guardrails
 
 - Synthetic test data only; no real account/email operations, production data changes, or deployments.
