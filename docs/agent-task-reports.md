@@ -696,3 +696,13 @@ The checks job completed successfully, including TypeScript/lint, the focused in
 ## Inventory rejection status persistence follow-up — 2026-10-27
 
 The prior UI recovery fix passed exact-head run #885 (checks and offline E2E). This follow-up stores the `needs-review` status on the queue head, validates it at the storage boundary, restores the review/discard UI after reload, and adds focused tests for head-only marking, idempotency and preserving later queue entries. This additional code commit requires its own exact-head CI run. No production deployment or data writes.
+
+
+## Inventory rejection-review persistence — verification outcome
+
+**Code commit:** `d8af102d442a425c1fb65499ec56e2d815c1a445`  
+**GitHub Actions run:** #888 (`40469249980`) — **checks: passed; offline E2E: passed**.
+
+The exact-head checks job completed successfully, including TypeScript, the focused inventory retry persistence test, inventory Worker transaction tests, procurement receipt linkage, inventory Firestore rules, full Firestore rules emulator, offline queue and storage regressions, access audit, and production build. The Playwright offline E2E job also passed. The FIFO head's `needs-review` marker is now persisted and validated; only the head can be marked, repeated marking is idempotent, and explicit discard preserves later queue entries.
+
+**Still outstanding:** inventory queue submissions remain manually retried; automatic ordered flush on reconnect is not implemented. A rejected head must never auto-submit or allow later entries to bypass it. Physical Android and weak/no-signal acceptance tests have not been performed. No production deployment or production-data writes occurred.
