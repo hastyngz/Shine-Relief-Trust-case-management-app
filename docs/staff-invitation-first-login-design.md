@@ -1,6 +1,6 @@
 # Staff invitation and first-login design
 
-**Status:** Design proposal only; no authentication behavior has been changed.  
+**Status:** Implementation blocked pending a safe, approved email-delivery protocol and confirmation of the production server runtime; no authentication behavior has been changed.
 **Scope:** Replace shared initial passwords, make invitation delivery/recovery reliable, and define a safe first-login lifecycle.  
 **AI-provider work:** Explicitly out of scope.
 
@@ -51,3 +51,19 @@ Failure handling must be explicit and retry-safe. If mail dispatch fails, retain
 - Are new Administrator invitations allowed, and if so, what additional approval is required?
 - What expiry and rate-limit values fit operational practice?
 - How should existing Auth accounts with matching emails be resolved?
+
+## Implementation blockers confirmed during review
+
+The approved combination of Firebase Functions Gen 2, Firebase Auth native email-link delivery, server-only staff profile writes, and fail-closed handling for existing Auth emails is not yet a complete protocol. Firebase email-link sign-in can authenticate an existing identity, so completing that link does not itself enforce the approved existing-account collision policy. Do not use it as an invitation claim until the flow proves how the identity is bound to a single-use invite without altering or signing into an existing account.
+
+Firebase's documented Admin SDK password-reset link generator requires the email to belong to an existing Auth user. The Admin SDK can create users with disabled/unverified properties, but the reviewed documentation does not establish a safe end-to-end way to email a reset link to such a newly-created disabled identity and then activate it only after a verified claim. Admin-generated action links also require an email delivery service; they do not send email themselves. Do not infer that the current client `sendPasswordResetEmail` behavior is a safe substitute or rely on undocumented disabled-account behavior.
+
+The current repository's `firebase.json` has no Functions configuration or deployment codebase, and Hosting rewrites all paths to the SPA only. This is confirmed repository evidence, not proof that no external runtime exists. Before implementing the security-sensitive lifecycle, the owner must identify the actual production Gen 2 deployment/runtime and how it authenticates to Firebase Admin. No service discovery, credentials, or live project changes were attempted.
+
+The initial board claim is retained as a proposed scope, not authorization to implement the unresolved protocol. Until these blockers are resolved, do not remove the legacy path, send emails, create or disable Auth users, mutate production configuration/data, or deploy. Existing legacy creation is risky but can only be replaced safely with an end-to-end tested path plus a migration plan.
+
+### Firebase references reviewed
+
+- Firebase documents that the client email-link sign-in flow completes using the recipient email and the action link, and warns against reusing email values supplied in link URLs: [Email link authentication](https://firebase.google.com/docs/auth/web/email-link-auth).
+- Firebase documents that Admin SDK password-reset link generation requires an existing Auth user and that the generated link must then be delivered by custom email infrastructure: [Generating email action links](https://firebase.google.com/docs/auth/admin/email-action-links).
+- Firebase documents that Admin SDK user creation supports `disabled` and `emailVerified` fields, and that an existing email causes creation to fail: [Manage users](https://firebase.google.com/docs/auth/admin/manage-users).
