@@ -1,9 +1,9 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
-import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
+import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
@@ -37,6 +37,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [pendingMovementSignature, setPendingMovementSignature] = useState<string | null>(null);
   const [pendingQueueCount, setPendingQueueCount] = useState(0);
   const [rejectedPendingId, setRejectedPendingId] = useState<string | null>(null);
+  const autoFlushInProgress = useRef(false);
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
@@ -455,6 +456,109 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setSaving(false);
     }
   };
+
+
+  // Flush the persisted FIFO only after reconnect. Never retry a rejected head,
+  // skip a failed head, or submit if the restored form has been edited.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !currentUser?.uid) return;
+    const uid = currentUser.uid;
+    const flushWhenOnline = async () => {
+      if (autoFlushInProgress.current || saving || !navigator.onLine) return;
+      const queue = loadPendingInventoryMovements(uid);
+      if (!queue || !queue.length) return;
+      const head = queue[0];
+      if (head.status === 'needs-review') {
+        setRejectedPendingId(head.id);
+        setNotice('The oldest stock transaction needs review. Discard it explicitly before the remaining queue can continue.');
+        return;
+      }
+      if (pendingMovementId !== head.id || pendingMovementSignature !== head.signature) return;
+
+      const currentSignature = head.mode === 'movement' && movementTarget?.id === head.itemId
+        ? JSON.stringify({
+          itemId: movementTarget.id, type: movement.type, quantity: Number(movement.quantity), date: movement.date,
+          destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim(),
+        })
+        : head.mode === 'stocktake' && stocktakeTarget?.id === head.itemId
+          ? JSON.stringify({
+            itemId: stocktakeTarget.id, type: 'Adjustment', countedQuantity: Number(stocktake.countedQuantity), date: stocktake.date,
+            reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${Number(stocktake.countedQuantity)} ${stocktakeTarget.unit}.`,
+          })
+          : '';
+      if (currentSignature !== head.signature) {
+        setNotice('A pending stock transaction has been edited. Restore its saved details or discard it explicitly before retrying; no automatic submission was made.');
+        return;
+      }
+
+      autoFlushInProgress.current = true;
+      setSaving(true);
+      setError('');
+      setNotice('Connection restored. Sending pending stock transactions in order; server-confirmed balances remain authoritative.');
+      try {
+        const result = await flushPendingInventoryMovements(uid, async (pending) => {
+          const item = items.find((entry) => entry.id === pending.itemId);
+          if (!item) throw new Error('The queued stock item is not available in the current register. Refresh before retrying.');
+          const payload = pending.payload;
+          const response = pending.mode === 'movement'
+            ? await postInventoryMovement({
+              id: pending.id,
+              itemId: pending.itemId,
+              type: payload.type === 'Issued' ? 'Issued' : 'Received',
+              quantity: Number(payload.quantity),
+              date: String(payload.date || ''),
+              destination: String(payload.destination || '') || undefined,
+              reference: String(payload.reference || '') || undefined,
+              reason: String(payload.reason || ''),
+            })
+            : await postInventoryMovement({
+              id: pending.id,
+              itemId: pending.itemId,
+              type: 'Adjustment',
+              countedQuantity: Number(payload.countedQuantity),
+              date: String(payload.date || ''),
+              reference: 'STOCKTAKE',
+              reason: String(payload.reason || ''),
+            });
+          if (!applyConfirmedMovement(item, pending.id, response)) {
+            throw new Error('The server confirmed this transaction, but the local register could not be refreshed. The same ID is retained for safe retry.');
+          }
+        });
+        const remaining = loadPendingInventoryMovements(uid);
+        setPendingQueueCount(remaining?.length ?? 0);
+        setPendingMovementId(null);
+        setPendingMovementSignature(null);
+        setRejectedPendingId(result.status === 'needs-review' ? result.failedId : null);
+        if (remaining?.length) {
+          restorePendingInventoryForm();
+          if (result.status === 'needs-review') {
+            setRejectedPendingId(result.failedId);
+            setNotice('A stock transaction was rejected and needs review. Discard that transaction explicitly before later queued transactions can proceed.');
+          } else if (result.status === 'failed') {
+            setError('Automatic retry stopped because the server did not confirm the oldest remaining transaction. Its ID and payload are preserved; retry when the connection is stable.');
+          } else if (result.status === 'storage-error' || result.status === 'unavailable') {
+            setError('Automatic retry stopped because the pending queue could not be safely updated or read. No later transaction was sent.');
+          }
+        } else if (result.status === 'empty' && result.processed > 0) {
+          setMovementTarget(null);
+          setStocktakeTarget(null);
+          setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
+          setStocktake({ countedQuantity: '', date: getLocalDateInputValue(), reason: '' });
+          setError('');
+          setNotice(`Connection restored. ${result.processed} pending stock transaction${result.processed === 1 ? '' : 's'} confirmed by the server in FIFO order.`);
+        } else if (result.status === 'failed') {
+          setError('Automatic retry stopped. The oldest transaction remains saved on this device; reconnect again or retry it manually.');
+        } else if (result.status === 'storage-error' || result.status === 'unavailable') {
+          setError('Automatic retry stopped because the pending queue could not be safely updated or read. The remaining transaction is not treated as complete.');
+        }
+      } finally {
+        autoFlushInProgress.current = false;
+        setSaving(false);
+      }
+    };
+    window.addEventListener('online', flushWhenOnline);
+    return () => window.removeEventListener('online', flushWhenOnline);
+  }, [currentUser?.uid, items, movement, movementTarget, onRefresh, pendingMovementId, pendingMovementSignature, saving, stocktake, stocktakeTarget]);
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-1 pb-28 sm:pb-8" aria-labelledby="inventory-title">
