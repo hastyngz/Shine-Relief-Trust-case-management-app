@@ -340,3 +340,8 @@ The management report history needs its own manager/admin-only collection; the e
 ### 2026-10-27 · Mosaic (ChatGPT) · inventory reconnect flush implemented, verification pending
 - Added `flushPendingInventoryMovements` to submit queued requests sequentially, stop at the first failure, persist definitive 4xx review status and retain IDs on uncertain outcomes. The inventory view now attempts flush on reconnect and on entering the view online, with form-signature protection and inputs locked during submission.
 - Focused synthetic tests added for FIFO success, network failure and rejected-head blocking. Code SHA `dfd1a8ad0087dfed181376ba0ddfcd123a7734f5`; exact-head CI still needs verification. Detailed checkpoint in `docs/agent-task-reports.md`. No production deployment/data writes. — Mosaic (ChatGPT), 2026-10-27
+
+
+### 2026-10-27 · Mosaic (ChatGPT) · inventory reconnect queue CI verified
+- Actions run #903 (`40471167307`) completed successfully: `checks` and offline Playwright `e2e` passed, no failed steps. The latest code-only commit `193d32f` is included in the same branch/tree via documentation descendant `219aa54`; no code changed after the tested code commit.
+- Reconnect flush is verified by CI, but real Android/weak-signal acceptance remains outstanding. Detailed report is in `docs/agent-task-reports.md`. No production deployment/data writes. — Mosaic (ChatGPT), 2026-10-27
