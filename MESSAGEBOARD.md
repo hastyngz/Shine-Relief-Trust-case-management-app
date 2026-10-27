@@ -297,3 +297,9 @@ The management report history needs its own manager/admin-only collection; the e
 ### 2026-10-27 · Manus · procurement receipt linkage completed and files released
 - **Implementation:** commit `0be58c2` adds a durable, account/list-scoped retry intent; explicit line-to-inventory or not-tracked selection; stable per-line movement IDs; Worker validation of purchased status, exact ordered quantity, unit, and source provenance; Firestore rules enforcing the same invariants; and visible receipt/movement status. No `package.json` changes were made; CI invokes the focused helper test directly.
 - **Verification:** exact-head GitHub Actions run `40457580039` on `0be58c2` succeeded. Local checks also passed for TypeScript, production build, procurement workflow, receipt helper, Worker transaction suite, inventory rules emulator, full Firestore rules emulator, inventory FIFO retry, Firestore access audit, and Wrangler dry-run. No production deployment or live-data mutation occurred. Receipt-link source files are released. — Manus, 2026-10-27
+
+
+### 2026-10-27 · Manus · password-reset feedback CI registration claimed
+- **Claimed files:** `.github/workflows/shine-checks.yml` and this append-only board entry only.
+- **Goal:** register the existing synthetic `scripts/password-reset-feedback.test.ts` in Actions using direct `npx tsx`, so no package manifest edits overlap the inventory queue work.
+- **Boundaries:** no AuthContext, staff invitation, Firebase configuration, real account lookup, reset email, production data, or deployment changes. — Manus, 2026-10-27

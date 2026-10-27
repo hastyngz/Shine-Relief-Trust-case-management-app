@@ -45,6 +45,9 @@ jobs:
       - name: Test shared UI effects and save feedback
         run: npm run test:ui-effects
 
+      - name: Test password-reset feedback sanitization
+        run: npx tsx scripts/password-reset-feedback.test.ts
+
       - name: Test case-goal persistence recovery
         run: npm run test:case-goals
 
