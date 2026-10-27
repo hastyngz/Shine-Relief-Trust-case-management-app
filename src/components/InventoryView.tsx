@@ -271,7 +271,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
 
   const submitMovement = async (event: FormEvent) => {
     event.preventDefault();
-    if (!movementTarget || saving) return;
+    if (!movementTarget || saving || autoFlushInProgress.current) return;
     const quantity = Number(movement.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setError('Enter a quantity greater than zero.');
@@ -367,7 +367,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
 
   const submitStocktake = async (event: FormEvent) => {
     event.preventDefault();
-    if (!stocktakeTarget || saving) return;
+    if (!stocktakeTarget || saving || autoFlushInProgress.current) return;
     const counted = Number(stocktake.countedQuantity);
     if (!Number.isFinite(counted) || counted < 0) {
       setError('The counted quantity must be zero or greater.');
