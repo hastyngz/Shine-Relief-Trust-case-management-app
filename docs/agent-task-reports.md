@@ -724,3 +724,13 @@ The focused helper test covers FIFO completion, stopping on a network failure, d
 **Latest code SHA:** `193d32f93b6524fe5ae1c36ffd511ca864c3614d`. The follow-up prevents manual Receive/Issue or Stocktake submission from racing the automatic reconnect flush. The two forms are disabled while the flush is confirming requests, and an explicit resolution of a rejected FIFO head allows a later online flush attempt. The previous checkpoint SHA `dfd1a8ad0087dfed181376ba0ddfcd123a7734f5` is superseded by this guard commit.
 
 **Verification remains pending:** this connector has not provided the Actions result for the latest integrated code head, and no local test command was run. Do not claim the reconnect workflow complete until TypeScript/lint, the focused inventory queue tests, production build and offline E2E pass on the integrated head. No production deployment or live-data writes occurred.
+
+
+## Inventory reconnect flush — exact-head verification (2026-10-27)
+
+**Integrated branch code SHA:** `193d32f93b6524fe5ae1c36ffd511ca864c3614d`  
+**Verification run:** [Actions #903](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40471167307), triggered by documentation commit `219aa5490b524add186ab4647b26092d9c1b64c0` on the same branch/tree — **checks: passed; offline E2E: passed**.
+
+The run's `checks` and `e2e` jobs both completed successfully with no failed steps. This verifies the inventory reconnect queue helper, synthetic FIFO/network/rejection tests, TypeScript/lint, production build, broader checks and offline Playwright E2E for the integrated code. The latest code-only change is `193d32f`; the passing run is on its descendant documentation commit `219aa54`, with no further code changes between them.
+
+**Remaining acceptance work:** physical Android testing and deliberate weak/no-signal testing are not possible through this GitHub connector and remain outstanding. Test scenarios should cover offline queue persistence after app close/reopen, reconnect flush in FIFO order, network interruption mid-queue, definitive 4xx review/discard, storage failure, and ensuring displayed stock remains server-authoritative. No production deployment or live-data writes occurred.
