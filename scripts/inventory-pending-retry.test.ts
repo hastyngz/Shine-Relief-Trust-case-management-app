@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { clearPendingInventoryMovement, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement, type PendingInventoryMovementRequest } from '../src/utils/inventory';
+import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement, type PendingInventoryMovementRequest } from '../src/utils/inventory';
 const values = new Map<string, string>(); let failWrites = false;
 const localStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { if (failWrites) throw new Error('synthetic quota exceeded'); values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage } });
@@ -48,3 +48,45 @@ values.set('shine_inventory_pending_movement_uid-unsupported',JSON.stringify([{.
 assert.equal(loadPendingInventoryMovements('uid-unsupported'),null);
 failWrites=true; assert.equal(savePendingInventoryMovement('uid-write-failure',first),false); assert.deepEqual(loadPendingInventoryMovements('uid-write-failure'),[]); failWrites=false;
 console.log('Inventory pending FIFO queue tests passed.');
+
+
+// Reconnect flushing must preserve FIFO order, stop on uncertain failures, and never auto-submit a rejected head.
+const flushUid = 'uid-flush';
+assert.equal(savePendingInventoryMovement(flushUid, first), true);
+assert.equal(savePendingInventoryMovement(flushUid, second), true);
+assert.equal(savePendingInventoryMovement(flushUid, third), true);
+const sent: string[] = [];
+const flushed = await flushPendingInventoryMovements(flushUid, async (entry) => { sent.push(entry.id); });
+assert.deepEqual(sent, [first.id, second.id, third.id], 'reconnect flush submits transactions in FIFO order');
+assert.deepEqual(flushed, { status: 'empty', processed: 3 });
+assert.deepEqual(loadPendingInventoryMovements(flushUid), [], 'confirmed entries are removed one by one');
+
+const interruptedUid = 'uid-flush-interrupted';
+assert.equal(savePendingInventoryMovement(interruptedUid, first), true);
+assert.equal(savePendingInventoryMovement(interruptedUid, second), true);
+assert.equal(savePendingInventoryMovement(interruptedUid, third), true);
+const interruptedSent: string[] = [];
+const interrupted = await flushPendingInventoryMovements(interruptedUid, async (entry) => {
+  interruptedSent.push(entry.id);
+  if (entry.id === second.id) throw new Error('synthetic network interruption');
+});
+assert.deepEqual(interruptedSent, [first.id, second.id]);
+assert.deepEqual(interrupted, { status: 'failed', processed: 1, failedId: second.id });
+assert.deepEqual(loadPendingInventoryMovements(interruptedUid)?.map((entry) => entry.id), [second.id, third.id], 'failed head and later entries remain queued');
+
+const rejectedUidForFlush = 'uid-flush-rejected';
+assert.equal(savePendingInventoryMovement(rejectedUidForFlush, first), true);
+assert.equal(savePendingInventoryMovement(rejectedUidForFlush, second), true);
+const rejectedSent: string[] = [];
+const rejected = await flushPendingInventoryMovements(rejectedUidForFlush, async (entry) => {
+  rejectedSent.push(entry.id);
+  const error = new Error('synthetic definitive rejection') as Error & { status?: number };
+  error.status = 422;
+  throw error;
+});
+assert.deepEqual(rejectedSent, [first.id]);
+assert.deepEqual(rejected, { status: 'needs-review', processed: 0, failedId: first.id });
+assert.equal(loadPendingInventoryMovements(rejectedUidForFlush)?.[0]?.status, 'needs-review');
+const retryRejected = await flushPendingInventoryMovements(rejectedUidForFlush, async () => { throw new Error('must not be called'); });
+assert.deepEqual(retryRejected, { status: 'needs-review', processed: 0, failedId: first.id }, 'needs-review head blocks automatic retry and later entries');
+console.log('Inventory reconnect flush tests passed.');
