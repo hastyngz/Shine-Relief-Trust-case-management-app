@@ -263,6 +263,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     setPendingMovementId(null);
     setPendingMovementSignature(null);
     setRejectedPendingId(null);
+    autoFlushAttempted.current = false;
     setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
     setError('');
     setNotice('The rejected transaction was removed from this device after your confirmation. Its rejected request did not change server stock.');
@@ -343,6 +344,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         setPendingMovementId(null);
         setPendingMovementSignature(null);
         setRejectedPendingId(null);
+        autoFlushAttempted.current = false;
         if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
         if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
         setMovementTarget(null);
@@ -438,6 +440,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         setPendingMovementId(null);
         setPendingMovementSignature(null);
         setRejectedPendingId(null);
+        autoFlushAttempted.current = false;
         if (currentUser?.uid) clearPendingInventoryMovement(currentUser.uid, movementId);
         if (currentUser?.uid) setPendingQueueCount(loadPendingInventoryMovements(currentUser.uid)?.length ?? 0);
         setStocktakeTarget(null);
