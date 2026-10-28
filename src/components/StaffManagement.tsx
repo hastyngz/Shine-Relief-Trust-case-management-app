@@ -48,7 +48,6 @@ export const StaffManagement: React.FC = () => {
   const [newRole, setNewRole] = useState<StaffRole>('Staff');
   const [newDepartment, setNewDepartment] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newPassword, setNewPassword] = useState('Shine@2026!');
 
   // Action states
   const [submitting, setSubmitting] = useState(false);
@@ -138,10 +137,9 @@ export const StaffManagement: React.FC = () => {
         role: newRole,
         departmentOrTitle: newDepartment,
         phone: newPhone,
-        initialPassword: newPassword,
       });
 
-      setActionSuccess(`Staff account created for ${newFullName} (${newRole}). An invitation email was sent.`);
+      setActionSuccess(`Invitation email sent to ${newEmail.trim().toLowerCase()}. The staff profile will be created only after the recipient verifies their email and accepts the invitation.`);
       setIsAddModalOpen(false);
       // Reset form
       setNewFullName('');
@@ -149,7 +147,6 @@ export const StaffManagement: React.FC = () => {
       setNewRole('Staff');
       setNewDepartment('');
       setNewPhone('');
-      setNewPassword('Shine@2026!');
     } catch (err: any) {
       setActionError(err.message || 'Failed to create staff account.');
     } finally {
@@ -683,19 +680,6 @@ export const StaffManagement: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                    Temporary Initial Password
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    minLength={6}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono text-stone-900 focus:bg-white focus:ring-2 focus:ring-teal-700"
-                  />
-                </div>
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900">
@@ -703,8 +687,7 @@ export const StaffManagement: React.FC = () => {
                   <Lock className="w-3.5 h-3.5" />
                   Firebase Authentication Account Provisioning
                 </div>
-                The account will be provisioned in Firebase Auth, and a password reset link will be
-                automatically sent so the staff member can immediately set their own private password.
+                Firebase sends a sign-in link to the invited address. No shared or temporary password is created; the staff profile is saved only after the recipient verifies the email and accepts the single-use invitation.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
