@@ -1,9 +1,18 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { handleStaffInvitationRequest } from '../workers/r2-storage/invitations.mjs';
 
 const NOW = Date.parse('2026-10-27T12:00:00.000Z');
 const emailHash = (email) => `email:${email}`;
 const tokenHash = (token) => `hash:${token}`;
+
+const workerRouterSource = readFileSync(new URL('../workers/r2-storage/index.mjs', import.meta.url), 'utf8');
+const workerFetchStart = workerRouterSource.indexOf('async fetch(request, env)');
+const invitationDispatch = workerRouterSource.indexOf('handleStaffInvitationRequest(request, env)', workerFetchStart);
+const normalDispatch = workerRouterSource.indexOf('await handleRequest(request, env)', workerFetchStart);
+assert.ok(workerFetchStart >= 0, 'Worker fetch entry point must exist');
+assert.ok(invitationDispatch >= 0 && invitationDispatch < normalDispatch,
+  'staff invitation routes must dispatch before the R2-only request gate');
 
 function setup(options = {}) {
   let serial = 0;
