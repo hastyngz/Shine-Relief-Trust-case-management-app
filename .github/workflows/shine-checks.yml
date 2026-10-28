@@ -63,6 +63,9 @@ jobs:
       - name: Test staff invitation URL handling
         run: npm run test:staff-invitation-url
 
+      - name: Test safe staff invitation feedback
+        run: npm run test:staff-invitation-feedback
+
       - name: Test atomic inventory movement Worker transactions
         run: npm run test:inventory-movement-worker
 
