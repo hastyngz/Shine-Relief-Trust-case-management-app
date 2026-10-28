@@ -331,10 +331,14 @@ async function defaultCommitClaim({ id, invitation, profile, env, accessToken })
 }
 
 function invitationErrorResponse(error) {
-  const status = error instanceof InvitationError ? error.status : 503;
-  if (status === 500) return new Response(JSON.stringify({ error: 'The invitation request could not be completed.' }), { status: 503 });
-  return new Response(JSON.stringify({ error: error.message || 'The invitation request could not be completed.' }), {
-    status,
+  const knownError = error instanceof InvitationError;
+  const status = knownError ? error.status : 503;
+  const safeStatus = status === 500 ? 503 : status;
+  const message = knownError && status !== 500
+    ? error.message
+    : 'The invitation request could not be completed.';
+  return new Response(JSON.stringify({ error: message }), {
+    status: safeStatus,
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
   });
 }
