@@ -46,6 +46,7 @@ import {
 } from './services/firestoreSync';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { isStaffInvitationRoute } from './utils/staffInvitationUrl';
 import { MessagingProvider } from './contexts/MessagingContext';
 import { useVisualSettings, VisualSettingsProvider } from './contexts/VisualSettingsContext';
 import { StaffLoginView } from './components/StaffLoginView';
