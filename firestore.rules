@@ -233,6 +233,7 @@ service cloud.firestore {
       // Active staff can view the roster; an unregistered user can only look up their own invitation.
       allow read: if isAdmin() || isStaffActive() || (
         isSignedIn() &&
+        request.auth.token.email_verified == true &&
         request.auth.token.email != null &&
         request.auth.token.email.lower() == resource.data.email.lower()
       );
