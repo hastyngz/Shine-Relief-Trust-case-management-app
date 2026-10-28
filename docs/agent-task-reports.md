@@ -796,3 +796,12 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Code commits for this round include `e7208c0`, `3eb7509`, `2b525d1`, `b6a7f75`, `7eabfe7`, `beaa0e0`, `d4a3392`, `c81d658`, `5b321d8`, `c172ae0`, `0ee5f29`, and `9897dc2`.
 - Verification limitation: the GitHub combined-status lookup for `9897dc2` returned no status entries (not a pass or failure). A local checkout attempt failed because this environment could not resolve `github.com`, so no npm test, lint or build command was executed here. The newly added tests must be run by CI; do not claim they pass yet.
 - No live Firebase email, account, production Firestore mutation, secret/configuration change or deployment was performed. Production readiness remains blocked on exact-head CI and approved staging email-link acceptance.
+
+
+### Password-reset and same-user profile-race review — 2026-10-28
+
+- The initial staff login screen's Forgot Password handler was still logging the raw Firebase error and displaying provider-specific messages; the shared sanitization helper was only used by the Administrator's staff roster reset action. Updated `src/components/StaffLoginView.tsx` to use the helper for all errors, remove raw error logging, and show a generic success message that does not confirm whether an account exists or echo the email address.
+- Updated `src/utils/passwordResetFeedback.ts` and `scripts/password-reset-feedback.test.ts` to cover non-enumerating success and user-not-found feedback alongside provider-error sanitization. The existing CI workflow already runs this test.
+- Found a first-login race in `src/contexts/AuthContext.tsx`: the initial `onAuthStateChanged` profile lookup could overlap the invitation claim's explicit refresh for the same UID and publish its earlier "Unregistered User" fallback after the new profile was created. Added a monotonically increasing profile-load sequence guard so only the newest load for the current UID can publish its result.
+- Code commits include `c90a575`, `fb00be9`, `75e0723`, `a11841b`, `1836961`, `cb77644`, and `2007c09`.
+- Verification remains blocked: exact-head GitHub status lookup for `2007c09` returned no status entries, and a local checkout failed because this environment could not resolve `github.com`. No npm tests, lint or build were executed here. No production/staging auth flow or data was touched.
