@@ -188,6 +188,17 @@ try {
     const f = setup();
     await f.invite();
     f.identities.set('claim-token', {
+      uid: 'malformed-uid', email: 'new.staff@example.invalid', emailVerified: true,
+      createdAt: 'not-a-timestamp',
+    });
+    const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'claim-token'), f.env, f.deps);
+    assert.equal(response.status, 409, 'malformed Auth creation timestamps must fail closed');
+    assert.equal(f.staffByUid.size, 0);
+  }
+  {
+    const f = setup();
+    await f.invite();
+    f.identities.set('claim-token', {
       uid: 'new-uid', email: 'new.staff@example.invalid', emailVerified: true,
       createdAt: String(NOW + 1000),
       displayName: 'New Synthetic Staff',
