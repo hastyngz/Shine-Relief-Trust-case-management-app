@@ -220,6 +220,7 @@ async function defaultAuthenticateAdmin(request, env) {
   if (!response.ok) throw new InvitationError('The Firebase sign-in token is invalid or expired.', 401);
   const identity = (await response.json()).users?.[0];
   if (!identity?.localId || !identity.email) throw new InvitationError('The Firebase sign-in token is invalid or expired.', 401);
+  if (identity.emailVerified !== true) throw new InvitationError('Verify the Administrator email before managing invitations.', 403);
   const accessToken = await getServiceAccessToken(env);
   const profile = await serviceFirestoreGet(env, `staffUsers/${encodeURIComponent(identity.localId)}`, accessToken);
   const email = normalizeEmail(identity.email);
