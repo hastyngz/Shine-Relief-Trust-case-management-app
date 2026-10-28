@@ -35,6 +35,14 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
+    await setDoc(doc(firestore, 'staffInvitations/synthetic-private-invitation'), {
+      id: 'synthetic-private-invitation',
+      email: 'invitee@example.test',
+      tokenHash: 'synthetic-token-hash-only',
+      status: 'pending',
+      createdAt: '2026-10-27T12:00:00.000Z',
+      expiresAt: '2026-10-28T12:00:00.000Z',
+    });
     await setDoc(doc(firestore, 'staffUsers/case-reviewer'), staff('case-reviewer', 'Staff', {
       canViewCaseReviews: true,
       canEditCaseReviews: true,
@@ -190,6 +198,28 @@ async function run() {
     const manager = testEnvironment.authenticatedContext('manager', { email: 'manager@example.test' }).firestore();
     const admin = testEnvironment.authenticatedContext('admin', { email: 'admin@example.test' }).firestore();
     const anonymous = testEnvironment.unauthenticatedContext().firestore();
+
+    // Invitation records contain private recipient addresses and token hashes.
+    // They are server-only: even Administrators must use the trusted Worker API.
+    const invitationPath = 'staffInvitations/synthetic-private-invitation';
+    for (const [role, context] of [
+      ['View Only', viewer],
+      ['Staff', worker],
+      ['Manager', manager],
+      ['Administrator', admin],
+    ] as const) {
+      await assertFails(getDoc(doc(context, invitationPath)), `${role} must not read server-only invitation records`);
+      await assertFails(getDocs(collection(context, 'staffInvitations')), `${role} must not list invitation records`);
+      await assertFails(setDoc(doc(context, 'staffInvitations/client-write'), {
+        id: 'client-write',
+        email: 'attacker@example.test',
+        tokenHash: 'client-controlled-hash',
+        status: 'accepted',
+      }), `${role} must not create invitation records from the client`);
+      await assertFails(updateDoc(doc(context, invitationPath), { status: 'accepted' }), `${role} must not claim invitations through direct Firestore writes`);
+      await assertFails(deleteDoc(doc(context, invitationPath)), `${role} must not delete invitation records from the client`);
+    }
+    await assertFails(getDoc(doc(anonymous, invitationPath)), 'anonymous clients must not read invitation records');
 
     // Original import rows must be separate from staff-readable audit metadata.
     await assertSucceeds(setDoc(doc(worker, 'importAudits/audit-safe'), {
