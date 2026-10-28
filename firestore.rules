@@ -243,16 +243,16 @@ service cloud.firestore {
       // Active staff can view the roster; a verified, unregistered email can read only its matching pre-registered profile for UID linking.
       allow read: if isAdmin() || isStaffActive() || (
         isSignedIn() &&
-        request.auth.token.email_verified == true &&
-        request.auth.token.email != null &&
-        request.auth.token.email.lower() == resource.data.email.lower()
+        request.auth.token.get('email_verified', false) == true &&
+        request.auth.token.get('email', null) != null &&
+        request.auth.token.get('email', '').lower() == resource.data.email.lower()
       );
 
       // Bootstrap rule: Hastings can initialize his own Administrator doc.
       // All other staff creations MUST be performed by an existing Administrator.
       // Self-registration as Administrator by anyone else is strictly blocked.
       allow create: if isSignedIn() && (
-        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator' && request.resource.data.email is string && request.resource.data.email.lower() == request.auth.token.email.lower()) ||
+        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator' && request.resource.data.email is string && request.resource.data.email.lower() == request.auth.token.get('email', '').lower()) ||
         isAdmin()
       );
 
