@@ -16,14 +16,16 @@ export function isStaffInvitationRoute(hash: string, search: string): boolean {
  * fragment of Firebase's validated continueUrl. Never accept a token from an
  * arbitrary top-level query parameter.
  */
-export function getStaffInvitationToken(hash: string, search: string): string {
+export function getStaffInvitationToken(hash: string, search: string, expectedOrigin: string): string {
   const direct = tokenFromHash(hash);
   if (direct) return direct;
 
   const continueUrl = new URLSearchParams(search).get('continueUrl');
   if (!continueUrl) return '';
   try {
-    return tokenFromHash(new URL(continueUrl).hash);
+    const nested = new URL(continueUrl);
+    if (nested.protocol !== 'https:' || nested.origin !== expectedOrigin) return '';
+    return tokenFromHash(nested.hash);
   } catch {
     return '';
   }
