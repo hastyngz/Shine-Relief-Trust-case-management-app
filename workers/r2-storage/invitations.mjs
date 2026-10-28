@@ -273,7 +273,12 @@ async function defaultFindAuthAccountByEmail(email, env, accessToken) {
     throw new InvitationError('Firebase could not safely verify whether this email already has an account.', 503);
   }
   if (!Array.isArray(payload.users)) throw new InvitationError('Firebase returned an incomplete account eligibility response.', 503);
-  return payload.users.some((user) => normalizeEmail(user.email) === email) ? { exists: true } : null;
+  const account = payload.users.find((user) => normalizeEmail(user.email) === email);
+  return account ? {
+    exists: true,
+    createdAt: account.createdAt,
+    emailVerified: account.emailVerified === true,
+  } : null;
 }
 
 async function defaultFindStaffByEmail(email, env, accessToken) {
@@ -452,19 +457,39 @@ export async function handleStaffInvitationRequest(request, env, injected = {}) 
       if (await deps.findStaffByEmail(email, env, accessToken)) {
         throw new InvitationError('A SHINE staff profile already exists for this email address.', 409);
       }
-      if (await deps.findAuthAccountByEmail(email, env, accessToken)) {
-        throw new InvitationError('A Firebase account already exists for this email address. Ask the person to use the approved account-recovery process.', 409);
-      }
 
       const id = await deps.hashEmail(email);
       const existing = await deps.getInvitation(id, env, accessToken);
+      if (existing?.data.status === 'accepted') {
+        throw new InvitationError('This invitation has already been accepted.', 409);
+      }
+
+      const existingAuthAccount = await deps.findAuthAccountByEmail(email, env, accessToken);
+      if (existingAuthAccount) {
+        // A recipient can create their Firebase identity by opening the first
+        // email link, then lose the session or encounter a transient claim error.
+        // Permit recovery only for the same still-unaccepted invitation and only
+        // when that verified identity was created after this invitation. Older
+        // or unrelated accounts must continue through the separate recovery path.
+        const invitationCreatedAt = parseTimestamp(existing?.data.createdAt);
+        const accountCreatedAt = parseTimestamp(existingAuthAccount.createdAt);
+        const recoverableInvitation = existing
+          && ['pending', 'delivery_failed', 'sending'].includes(existing.data.status)
+          && Number.isFinite(invitationCreatedAt)
+          && Number.isFinite(accountCreatedAt)
+          && accountCreatedAt > invitationCreatedAt
+          && existingAuthAccount.emailVerified === true;
+        if (!recoverableInvitation) {
+          throw new InvitationError('A Firebase account already exists for this email address. Ask the person to use the approved account-recovery process.', 409);
+        }
+      }
+
       const now = deps.now();
       const nowString = new Date(now).toISOString();
       const expiresAt = new Date(now + INVITE_TTL_MS).toISOString();
       let sendWindowStart = now;
       let sendCount = 1;
       if (existing) {
-        if (existing.data.status === 'accepted') throw new InvitationError('This invitation has already been accepted.', 409);
         const previousWindow = Date.parse(existing.data.sendWindowStart || '');
         if (Number.isFinite(previousWindow) && now - previousWindow < SEND_WINDOW_MS) {
           sendWindowStart = previousWindow;
