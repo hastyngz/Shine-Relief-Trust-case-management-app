@@ -45,7 +45,7 @@ export const StaffInvitationClaim: React.FC = () => {
       setError('The invitation token is missing from this link. Ask a SHINE Administrator to send a new invitation.');
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(cleanEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setError('Enter the email address that received the invitation.');
       return;
     }
