@@ -199,6 +199,31 @@ async function run() {
     const admin = testEnvironment.authenticatedContext('admin', { email: 'admin@example.test' }).firestore();
     const anonymous = testEnvironment.unauthenticatedContext().firestore();
 
+    const verifiedPrimaryAdmin = testEnvironment.authenticatedContext('primary-admin', {
+      email: 'hastingszidanamot@gmail.com',
+      email_verified: true,
+    }).firestore();
+    const unverifiedPrimaryAdmin = testEnvironment.authenticatedContext('unverified-primary-admin', {
+      email: 'hastingszidanamot@gmail.com',
+      email_verified: false,
+    }).firestore();
+
+    // The primary-admin email alone is not proof of identity: bootstrap privileges
+    // require Firebase's verified-email claim and the profile must use that email.
+    await assertSucceeds(getDoc(doc(verifiedPrimaryAdmin, 'staffUsers/admin')));
+    await assertFails(getDoc(doc(unverifiedPrimaryAdmin, 'staffUsers/admin')));
+    await assertFails(setDoc(doc(unverifiedPrimaryAdmin, 'staffUsers/unverified-primary-admin'), {
+      ...staff('unverified-primary-admin', 'Administrator'),
+      email: 'hastingszidanamot@gmail.com',
+    }));
+    await assertSucceeds(setDoc(doc(verifiedPrimaryAdmin, 'staffUsers/primary-admin'), {
+      ...staff('primary-admin', 'Administrator'),
+      email: 'hastingszidanamot@gmail.com',
+    }));
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), 'staffUsers/primary-admin'));
+    });
+
     // Invitation records contain private recipient addresses and token hashes.
     // They are server-only: even Administrators must use the trusted Worker API.
     const invitationPath = 'staffInvitations/synthetic-private-invitation';
