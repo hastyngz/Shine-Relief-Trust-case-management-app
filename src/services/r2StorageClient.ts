@@ -71,3 +71,26 @@ export async function postInventoryMovement(payload: Record<string, unknown>): P
   });
   return response.json();
 }
+
+
+export async function createStaffInvitation(payload: {
+  email: string;
+  fullName: string;
+  role: 'Manager' | 'Staff' | 'View Only';
+  departmentOrTitle?: string;
+  phone?: string;
+}): Promise<void> {
+  await requestR2('/api/staff-invitations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function claimStaffInvitation(token: string): Promise<void> {
+  await requestR2('/api/staff-invitations/claim', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+}
