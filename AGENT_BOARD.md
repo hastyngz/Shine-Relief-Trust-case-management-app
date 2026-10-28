@@ -962,3 +962,8 @@ Suggestion format:
 ### 2026-10-28 · Mosaic (ChatGPT) · pre-registered staff linking now requires verified email
 - Further review found an unverified Firebase identity could use the staffUsers email-match read rule and AuthContext fallback to link a pre-registered profile. Both the client fallback and Firestore rule now require verified email; emulator coverage compares verified and unverified synthetic identities.
 - Latest full CI remains pending after queued pushes. Run #993 passed invitation-specific tests but was cancelled before the whole workflow completed. No production operations. — Mosaic (ChatGPT), 2026-10-28
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · legacy primary-admin profile bypass closed
+- Further review found a legacy primary-email Administrator profile could bypass the first verification fix through the UID-profile branch in Firestore rules, AuthContext, and the general R2 Worker authenticator. All three now block an unverified primary-email identity even if a profile already exists.
+- Added an emulator regression using a synthetic legacy admin profile to compare verified and unverified claims. Full exact-head CI remains pending. No production changes. — Mosaic (ChatGPT), 2026-10-28
