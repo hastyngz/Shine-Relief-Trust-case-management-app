@@ -867,3 +867,13 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Added a Firestore emulator case that seeds a synthetic legacy primary-admin profile and confirms the verified identity can read it while the same UID/email with email_verified=false cannot. The existing verified bootstrap and unverified create-denial cases remain.
 - Latest code commits: 15f66f7 (rules role helpers), de4919e (AuthContext legacy profile guard), e964a6f (general Worker guard), f6e8c82 (legacy-profile rules test), plus 0fe00b0 (rule comment).
 - No live config or deployment was changed. Full exact-head CI remains pending after the latest pushes; no pass is claimed until the queued run completes.
+
+
+### Exact-head CI passed after Firestore claim-access fix — 2026-10-28
+
+- Full GitHub Actions run **#1020** passed on code commit **9c68d4767932687f394c015ae7126c72681fe649**: the checks job completed successfully (all 50 steps) and the offline e2e job completed successfully (11 steps). This is the first completed full run after the verified-primary-email hardening and its added rules regressions.
+- The previous run #1018 failed in scripts/inventory-transaction-rules.test.ts because Firestore rules directly accessed request.auth.token.email / email_verified when synthetic authenticated contexts intentionally omitted those claims. Updated firestore.rules to use request.auth.token.get(..., default) consistently; the inventory transaction rules and full Firestore rules emulator suite now pass in run #1020.
+- Latest code commit is 9c68d47 (commit f4b6370 introduced the safe missing-claim defaults; 9c68d47 applied them consistently to all remaining email-claim references).
+- Invitation/password-reset feedback tests, staff invitation lifecycle and URL tests, inventory transaction and procurement retry/rules tests, Firestore access/security tests, TypeScript/lint, production build, and offline browser E2E all passed in the full run.
+- Still not production-ready / not verified: deployed Worker still needs the non-secret FIREBASE_INVITATION_CONTINUE_URL config and a controlled deployment; Firebase email-link provider and authorized domains must be verified; invitation delivery/claim must be accepted in an authorized staging environment. No production deployment, live emails, real account changes, or production data changes were performed. AI-provider privacy review remains outside this non-AI workstream.
+- Documentation-only update; no application code changed after the passing commit. — Mosaic (ChatGPT)
