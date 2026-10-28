@@ -111,3 +111,10 @@ Updated: 2026-10-27
 - Found a separate P0 issue in `StaffLoginView.tsx`: Forgot Password still logged raw Firebase errors and displayed account-specific error text despite the sanitization helper existing. It now uses the shared safe helper, has generic success feedback, and does not log provider errors. Updated the feedback test for non-enumeration.
 - Fixed a race in `AuthContext.loadStaffProfile`: the initial auth-state profile read could finish after the invitation claim's refresh for the same UID and replace the newly created active profile with an unregistered/suspended fallback. A sequence guard now prevents stale profile loads from publishing.
 - Updated `docs/agent-task-reports.md` and `AGENT_BOARD.md`. Exact-head CI remains unverified; status lookup returned no status entries and local checkout could not resolve GitHub DNS, so no npm tests/lint/build ran here. No staging or production actions were performed. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — Cloudflare configuration check — 2026-10-28
+
+- Read-only Cloudflare API check confirms the deployed Worker has the Firebase service-account secret binding and the expected project/CORS public settings. I did not read or expose any secret values.
+- The deployed Worker lacks `FIREBASE_INVITATION_CONTINUE_URL`; I added the non-secret continuation URL to `workers/r2-storage/wrangler.toml` for a future deployment. Latest deployed Worker deployment is dated 2026-10-15, so current production must not be assumed to include the invitation route. I made no live config changes and did not deploy.
+- Still needed: exact-head CI results, Firebase Email Link provider/authorized-domain verification, and approved staging acceptance. — Mosaic (ChatGPT)
