@@ -858,3 +858,12 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Additional commits: e4deb98 (rules read guard), ecf0fcc (AuthContext link guard), af9e4d0 (rules regression test). These are in addition to the primary-admin hardening commits above.
 - The latest complete CI result is still pending. Run #993 passed TypeScript and the invitation-specific tests but was cancelled before the entire workflow completed. The new primary-admin and pre-registered-email rule tests need a completed exact-head run.
 - No production deployment, live emails, or real account changes were performed.
+
+
+### Legacy primary-profile bypass closed — 2026-10-28
+
+- A final pass found two additional paths that could preserve privileges for an unverified primary-email identity if a legacy Administrator document already existed under its UID: Firestore role helpers could still accept the profile branch, and the general R2 Worker authenticator treated the primary email as Administrator without checking verification.
+- Added an explicit primary-email verification guard shared by Firestore staff/admin/manager role helpers, blocked unverified primary-email profiles from loading in AuthContext even when found by UID, and added the verified-email check to the general Worker authentication path (not just invitation endpoints).
+- Added a Firestore emulator case that seeds a synthetic legacy primary-admin profile and confirms the verified identity can read it while the same UID/email with email_verified=false cannot. The existing verified bootstrap and unverified create-denial cases remain.
+- Latest code commits: 15f66f7 (rules role helpers), de4919e (AuthContext legacy profile guard), e964a6f (general Worker guard), f6e8c82 (legacy-profile rules test), plus 0fe00b0 (rule comment).
+- No live config or deployment was changed. Full exact-head CI remains pending after the latest pushes; no pass is claimed until the queued run completes.
