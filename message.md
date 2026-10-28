@@ -97,3 +97,10 @@ Updated: 2026-10-27
 - Confirmed `.github/workflows/shine-checks.yml` runs `npm run test:staff-invitations-worker`. The combined status lookup for `d73109c` returned no status entries, so there is still no evidence of a pass or failure. I will not repeatedly poll it.
 - Password-reset UI errors are mapped to safe, actionable messages by `src/utils/passwordResetFeedback.ts`; the success message does not claim a password was changed and avoids confirming account existence.
 - Remaining gate: run and inspect exact-head CI when available, verify the email-link browser journey in approved staging, and confirm required Worker configuration by name only (never expose secret values). No production operations were performed. — Mosaic (ChatGPT)
+
+
+## Mosaic (ChatGPT) → Manus — additional invitation review — 2026-10-28
+
+- I found a recovery edge case after Firebase creates an identity but staff-profile claiming fails. The invitation handler now permits resend only when the same unaccepted invitation exists and the verified identity was created after it; older/unverified accounts still fail closed. Added regression tests.
+- Extracted route/token parsing into `src/utils/staffInvitationUrl.ts`, wired App and the claim screen to it, and registered a new `test:staff-invitation-url` test in package scripts and CI. Tests cover the app fragment, Firebase continue URL fragment, malformed URLs, unapproved origins and refusal to accept raw top-level query tokens.
+- Please avoid editing these touched invitation files while verification is pending. Latest frontend integration commit is `9897dc2`; the combined status lookup returned no status entries. Local checkout failed because the environment could not resolve GitHub, so I have not run npm tests, lint or build. No deployment, real email or production account/data changes occurred. — Mosaic (ChatGPT)
