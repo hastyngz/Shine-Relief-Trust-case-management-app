@@ -9,11 +9,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth as getSecondaryAuth } from 'firebase/auth';
 import { auth, firestore } from '../firebase';
 import { setActiveWorkspaceUid } from '../services/accountWorkspace';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
 import {
   getStaffUserDoc,
@@ -23,6 +20,7 @@ import {
   subscribeStaffUsers,
   subscribeStaffUserDoc,
 } from '../services/firestoreSync';
+import { createStaffInvitation } from '../services/r2StorageClient';
 
 export const PRIMARY_ADMIN_EMAIL = 'hastingszidanamot@gmail.com';
 
@@ -57,8 +55,7 @@ interface AuthContextType {
     role: StaffRole;
     departmentOrTitle?: string;
     phone?: string;
-    initialPassword?: string;
-  }) => Promise<StaffUser>;
+  }) => Promise<void>;
   updateStaffAccount: (staffId: string, updates: Partial<StaffUser>) => Promise<void>;
   deleteStaffAccount: (staffId: string, email: string) => Promise<void>;
   refreshStaffProfile: () => Promise<void>;
@@ -327,77 +324,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(null);
   };
 
-  // Admin invites / provisions a new staff account
+  // Invite a staff member through the trusted Worker. Firebase Auth creates the
+  // identity only after the recipient follows the email link and claims the invitation.
   const createStaffAccount = async (data: {
     email: string;
     fullName: string;
     role: StaffRole;
     departmentOrTitle?: string;
     phone?: string;
-    initialPassword?: string;
-  }): Promise<StaffUser> => {
+  }): Promise<void> => {
     if (!isAdmin) {
-      throw new Error('Unauthorized: Only Administrators can create staff accounts.');
+      throw new Error('Unauthorized: Only Administrators can invite staff accounts.');
     }
-
-    const cleanEmail = data.email.trim().toLowerCase();
-    if (cleanEmail === PRIMARY_ADMIN_EMAIL && data.role !== 'Administrator') {
-      throw new Error('Cannot change primary administrator account.');
+    if (data.role === 'Administrator') {
+      throw new Error('Administrator accounts cannot be created through staff invitations.');
     }
-
-    // Default password if not provided
-    const password = data.initialPassword || `Shine${Math.floor(100000 + Math.random() * 900000)}!`;
-
-    // Use an isolated secondary Firebase app instance to avoid signing out the current admin
-    const tempAppName = `StaffProvision_${Date.now()}`;
-    const secondaryApp = initializeApp(firebaseConfig, tempAppName);
-    let newUid: string;
-
-    try {
-      const secondaryAuth = getSecondaryAuth(secondaryApp);
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, password);
-      newUid = userCredential.user.uid;
-    } catch (authErr: any) {
-      if (authErr.code === 'auth/email-already-in-use') {
-        // If email already exists in Auth, generate a deterministic or look up UID from staff list
-        const existingStaff = allStaff.find((s) => s.email.toLowerCase() === cleanEmail);
-        newUid = existingStaff ? existingStaff.uid : `ext_${Date.now()}`;
-      } else if (authErr.code === 'auth/operation-not-allowed') {
-        // Firebase project only has Google auth enabled; create provisioned profile for Google sign-in
-        newUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      } else {
-        throw authErr;
-      }
-    } finally {
-      await deleteApp(secondaryApp);
-    }
-
-    const now = new Date().toISOString();
-    const newStaffUser: StaffUser = {
-      id: newUid,
-      uid: newUid,
-      email: cleanEmail,
+    await createStaffInvitation({
+      email: data.email.trim().toLowerCase(),
       fullName: data.fullName.trim(),
       role: data.role,
-      status: 'Active',
       departmentOrTitle: data.departmentOrTitle || '',
       phone: data.phone || '',
-      createdAt: now,
-      updatedAt: now,
-      createdBy: auditActor,
-      lastLoginAt: '',
-    };
-
-    await persistStaffUserToFirestore(newStaffUser);
-
-    // Optionally trigger a password reset link to staff so they can set their personal password
-    try {
-      await sendPasswordResetEmail(auth, cleanEmail);
-    } catch (emailErr) {
-      console.warn('Password reset invitation email dispatch note:', emailErr);
-    }
-
-    return newStaffUser;
+    });
   };
 
   // Update staff member
