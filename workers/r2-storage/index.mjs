@@ -292,10 +292,13 @@ async function authenticate(request, env) {
   if (!identity?.localId) throw new ApiError('The Firebase sign-in token is invalid or expired.', 401);
 
   const email = String(identity.email || '').toLowerCase();
+  if (email === PRIMARY_ADMIN_EMAIL && identity.emailVerified !== true) {
+    throw new ApiError('Verify the primary Administrator email before accessing SHINE services.', 403);
+  }
   const profile = await firestoreGet(`staffUsers/${encodeURIComponent(identity.localId)}`, token);
   const fields = profile?.fields || {};
   const profileEmail = String(valueOf(fields.email) || '').toLowerCase();
-  const isPrimaryAdmin = email === PRIMARY_ADMIN_EMAIL;
+  const isPrimaryAdmin = email === PRIMARY_ADMIN_EMAIL && identity.emailVerified === true;
   if (!profile && !isPrimaryAdmin) throw new ApiError('This account is not registered as SHINE staff.', 403);
   if (profile && valueOf(fields.status) !== 'Active') throw new ApiError('This SHINE staff account is inactive or suspended.', 403);
   if (profileEmail && profileEmail !== email) throw new ApiError('The staff profile does not match the authenticated account.', 403);
