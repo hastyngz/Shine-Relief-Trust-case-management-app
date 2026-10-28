@@ -776,3 +776,12 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 3. Review the full client route and Worker integration with the security skill, especially email-link URL handling, CORS/preflight, token leakage and account-switch behaviour.
 4. Verify approved Worker configuration without exposing secret values. If service-account credentials or delivery configuration are missing, leave the feature disabled and document the exact owner/deployment action required.
 5. Only after CI and staging acceptance, ask the owner for explicit approval before any production deployment.
+
+
+### Follow-up review — 2026-10-28
+
+- A second review caught over-escaped regular-expression literals in the new SPA route and email validation. Corrected them in commits `60985d1` and `0590d36`.
+- Added a malformed Firebase `createdAt` regression case that must fail closed in commit `d73109c`; the earlier test addition covers a valid millisecond-string timestamp.
+- The repository's `.github/workflows/shine-checks.yml` does include `npm run test:staff-invitations-worker`, so the focused lifecycle test is part of the checks job.
+- Read-only exact-SHA status lookup for code commit `d73109cbb22880dfc5c580460a89e2eb8542e8a4` returned no published status entries. This is **not** a pass or a failure; exact-head CI remains unverified. Per the board rule, continue independent review rather than repeatedly querying the same status.
+- Review limitation: the Firebase email-link browser journey has not been exercised in staging, and the deployed Worker secret/configuration state has not been verified. Keep production invitation use blocked until the actual CI results and approved staging journey are available.
