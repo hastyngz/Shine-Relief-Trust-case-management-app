@@ -3,31 +3,9 @@ import { isSignInWithEmailLink, signInWithEmailLink, signOut } from 'firebase/au
 import { auth } from '../firebase';
 import { claimStaffInvitation } from '../services/r2StorageClient';
 import { useAuth } from '../contexts/AuthContext';
+import { getStaffInvitationToken } from '../utils/staffInvitationUrl';
 
-function getInvitationToken(): string {
-  const fragment = window.location.hash.replace(/^#\/?/, '');
-  const question = fragment.indexOf('?');
-  if (question >= 0) {
-    const token = new URLSearchParams(fragment.slice(question + 1)).get('invitationToken');
-    if (token) return token;
-  }
-
-  const continueUrl = new URLSearchParams(window.location.search).get('continueUrl');
-  if (continueUrl) {
-    try {
-      const nested = new URL(continueUrl);
-      const nestedFragment = nested.hash.replace(/^#\/?/, '');
-      const nestedQuestion = nestedFragment.indexOf('?');
-      if (nestedQuestion >= 0) {
-        const token = new URLSearchParams(nestedFragment.slice(nestedQuestion + 1)).get('invitationToken');
-        if (token) return token;
-      }
-    } catch {
-      // Invalid continue URLs are ignored; the server still validates the token.
-    }
-  }
-  return '';
-}
+const getInvitationToken = () => getStaffInvitationToken(window.location.hash, window.location.search);
 
 export const StaffInvitationClaim: React.FC = () => {
   const { refreshStaffProfile } = useAuth();
