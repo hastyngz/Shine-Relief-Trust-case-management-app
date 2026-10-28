@@ -32,7 +32,7 @@ export async function exportInventoryRegister(items: InventoryItem[], format: In
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   doc.setFontSize(16); doc.text('SHINE Relief Trust — Inventory Register', 36, 34); doc.setFontSize(9);
   doc.text(`Generated ${date} · ${items.length} items · Amounts in MWK`, 36, 50);
-  autoTable(doc, { head: [rows[0].map(String)], body: rows.slice(1).map((row) => row.map((v) => String(v ?? '')),
+  autoTable(doc, { head: [rows[0].map(String)], body: rows.slice(1).map((row) => row.map((v) => String(v ?? ''))),
    startY: 62, margin: { left: 24, right: 24 }, styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
    headStyles: { fillColor: [59, 26, 6] }, didDrawPage: () => { doc.setFontSize(8); doc.text(`SHINE Relief Trust · Page ${doc.getNumberOfPages()}`, doc.internal.pageSize.getWidth() - 24, doc.internal.pageSize.getHeight() - 12, { align: 'right' }); } });
   doc.save(`${filename}.pdf`); return;
