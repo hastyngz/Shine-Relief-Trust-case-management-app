@@ -5,7 +5,7 @@ import { claimStaffInvitation } from '../services/r2StorageClient';
 import { useAuth } from '../contexts/AuthContext';
 
 function getInvitationToken(): string {
-  const fragment = window.location.hash.replace(/^#\\/?/, '');
+  const fragment = window.location.hash.replace(/^#\/?/, '');
   const question = fragment.indexOf('?');
   if (question >= 0) {
     const token = new URLSearchParams(fragment.slice(question + 1)).get('invitationToken');
@@ -16,7 +16,7 @@ function getInvitationToken(): string {
   if (continueUrl) {
     try {
       const nested = new URL(continueUrl);
-      const nestedFragment = nested.hash.replace(/^#\\/?/, '');
+      const nestedFragment = nested.hash.replace(/^#\/?/, '');
       const nestedQuestion = nestedFragment.indexOf('?');
       if (nestedQuestion >= 0) {
         const token = new URLSearchParams(nestedFragment.slice(nestedQuestion + 1)).get('invitationToken');
@@ -45,7 +45,7 @@ export const StaffInvitationClaim: React.FC = () => {
       setError('The invitation token is missing from this link. Ask a SHINE Administrator to send a new invitation.');
       return;
     }
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(cleanEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(cleanEmail)) {
       setError('Enter the email address that received the invitation.');
       return;
     }
