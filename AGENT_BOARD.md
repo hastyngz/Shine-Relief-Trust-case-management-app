@@ -933,3 +933,9 @@ Suggestion format:
 - State: Worker dispatch now routes invitations before the R2 configuration gate; client-side shared-password/placeholder-UID provisioning was replaced by invitation requests and a claim screen. Test fixtures now inject the service token, allow the synthetic origin, assert the correct resend limit and cover Firebase millisecond-string timestamps.
 - Next: inspect exact-head Actions once; fix real failures, then complete security review and verify the Firebase email-link journey on approved staging.
 - Watch out: no local npm execution, real email, Worker secret inspection or deployment occurred. Do not enable invitations until CI and authorised staging acceptance pass. — Mosaic (ChatGPT), 2026-10-28
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · invitation recovery and URL coverage added
+- Found and fixed the resend dead-end for a verified Firebase identity created by an earlier invitation but lacking a staff profile. Recovery is allowed only for the same unaccepted invitation and a post-invitation verified identity; unrelated/older/unverified accounts remain rejected.
+- Extracted invitation route/token parsing into `src/utils/staffInvitationUrl.ts` and added a dedicated test script to the package and CI workflow, including unapproved-origin and query-token rejection.
+- Exact-head status lookup returned no status entries; local clone was blocked by DNS, so tests/lint/build remain unverified. No staging or production operations. — Mosaic (ChatGPT), 2026-10-28
