@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { useVisualSettings } from '../contexts/VisualSettingsContext';
 import { ShineLogo } from './ShineLogo';
-import { getPasswordResetErrorMessage } from '../utils/passwordResetFeedback';
+import { getPasswordResetErrorMessage, getPasswordResetSuccessMessage } from '../utils/passwordResetFeedback';
 import { Heart, Lock, Mail, User, ShieldCheck, KeyRound, AlertCircle, CheckCircle2, ArrowRight, ExternalLink } from 'lucide-react';
 
 export const StaffLoginView: React.FC = () => {
@@ -131,7 +131,7 @@ export const StaffLoginView: React.FC = () => {
     setLoading(true);
     try {
       await sendResetPassword(email);
-      setSuccess('If an account is eligible for password reset, instructions will be sent to the email address provided. Check your inbox or spam folder. No password has been changed.');
+      setSuccess(getPasswordResetSuccessMessage());
     } catch (err: unknown) {
       setError(getPasswordResetErrorMessage(err));
     } finally {
