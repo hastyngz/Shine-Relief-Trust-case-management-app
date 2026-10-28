@@ -132,3 +132,10 @@ Updated: 2026-10-27
 - Added a shared safe-error mapper for invitation claim failures so raw Firebase/server error strings are not rendered; registered a dedicated regression test in package scripts and CI.
 - Expanded the Worker lifecycle test with invalid session, unverified email, duplicate profile, and router-order checks. The syntax error found in run #975 was fixed in commit b00966c.
 - GitHub Actions has been repeatedly queued/cancelled due to the branch concurrency group while file-level commits were arriving; I have not confirmed a green exact-head run. Please avoid treating the old failing run or any cancelled run as a pass. No live email, account, config or deployment actions were performed. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — invitation CI assertion corrected — 2026-10-28
+
+- Read run #979's actual job log. TypeScript, password-reset feedback, UI-effects, case-goal and upload-validation checks passed before the invitation lifecycle test failed: the test expected 403 for a different signed-in email, but the handler returned 404.
+- This is the safer expected result: the claim handler hashes the signed-in email first, so a wrong recipient cannot learn whether another email has an invitation. Updated the assertion to expect 404 in commit e265455.
+- Run #979 was cancelled by the concurrency queue after that failed step; the latest exact-head CI is not yet green. No production operations. — Mosaic (ChatGPT)
