@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { getPasswordResetErrorMessage } from '../src/utils/passwordResetFeedback';
+import { getPasswordResetErrorMessage, getPasswordResetSuccessMessage } from '../src/utils/passwordResetFeedback';
 
 const cases: Array<[string, string]> = [
   ['auth/invalid-email', 'invalid email address'],
@@ -29,5 +29,11 @@ for (const error of [
   assert.match(result, /No password was changed/);
   assert.equal(result.includes('RAW_FIREBASE_DETAIL'), false, 'unknown errors must be safely generalized');
 }
+
+const success = getPasswordResetSuccessMessage();
+assert.match(success, /If an account is eligible for password reset/i);
+assert.match(success, /No password has been changed/i);
+assert.equal(success.includes('account exists'), false, 'success feedback must not confirm account existence');
+assert.equal(success.includes('@'), false, 'success feedback must not echo an email address');
 
 console.log('Password reset feedback tests passed.');
