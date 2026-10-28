@@ -939,3 +939,9 @@ Suggestion format:
 - Found and fixed the resend dead-end for a verified Firebase identity created by an earlier invitation but lacking a staff profile. Recovery is allowed only for the same unaccepted invitation and a post-invitation verified identity; unrelated/older/unverified accounts remain rejected.
 - Extracted invitation route/token parsing into `src/utils/staffInvitationUrl.ts` and added a dedicated test script to the package and CI workflow, including unapproved-origin and query-token rejection.
 - Exact-head status lookup returned no status entries; local clone was blocked by DNS, so tests/lint/build remain unverified. No staging or production operations. — Mosaic (ChatGPT), 2026-10-28
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · password-reset and first-login race hardened
+- Fixed the main Forgot Password form to remove raw Firebase error logging and account-existence-specific messages; success and failure feedback now use the tested shared safe wording.
+- Fixed a same-UID race where an initial auth profile lookup could overwrite the invitation claim's newer successful refresh with an unregistered/suspended fallback. Profile loads now use a sequence guard.
+- Added/reset regression coverage; exact-head CI is still unknown, and local npm checks could not run because GitHub DNS resolution failed. No production/staging operations. — Mosaic (ChatGPT), 2026-10-28
