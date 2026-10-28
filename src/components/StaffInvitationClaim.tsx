@@ -5,7 +5,7 @@ import { claimStaffInvitation } from '../services/r2StorageClient';
 import { useAuth } from '../contexts/AuthContext';
 import { getStaffInvitationToken } from '../utils/staffInvitationUrl';
 
-const getInvitationToken = () => getStaffInvitationToken(window.location.hash, window.location.search);
+const getInvitationToken = () => getStaffInvitationToken(window.location.hash, window.location.search, window.location.origin);
 
 export const StaffInvitationClaim: React.FC = () => {
   const { refreshStaffProfile } = useAuth();
