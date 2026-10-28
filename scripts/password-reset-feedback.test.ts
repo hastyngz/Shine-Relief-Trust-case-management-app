@@ -6,7 +6,7 @@ const cases: Array<[string, string]> = [
   ['auth/too-many-requests', 'temporarily limited'],
   ['auth/network-request-failed', 'Check your connection'],
   ['auth/operation-not-allowed', 'not available for this sign-in method'],
-  ['auth/user-not-found', 'No password reset request could be completed'],
+  ['auth/user-not-found', 'If an account is eligible for password reset'],
 ];
 
 for (const [code, expectedText] of cases) {
