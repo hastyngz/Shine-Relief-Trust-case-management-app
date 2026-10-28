@@ -6,6 +6,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { handleAIRequest } from './aiBackend';
+import { handleStaffInvitationRequest } from './invitations.mjs';
 import { getStorageUploadValidationError } from '../../src/services/storageUploadValidation.ts';
 
 const VALID_TARGETS = new Set([
@@ -470,7 +471,8 @@ export default {
     if (origin && !cors) return json({ error: 'This origin is not allowed.' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors || {} });
     try {
-      const response = await handleRequest(request, env);
+      const invitationResponse = await handleStaffInvitationRequest(request, env);
+      const response = invitationResponse || await handleRequest(request, env);
       const headers = new Headers(response.headers);
       for (const [key, value] of Object.entries(cors || {})) headers.set(key, value);
       return new Response(response.body, { status: response.status, headers });
