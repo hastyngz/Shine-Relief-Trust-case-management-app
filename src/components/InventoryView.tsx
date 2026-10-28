@@ -24,6 +24,9 @@ const money = (value?: number) => typeof value === 'number' && Number.isFinite(v
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }) => {
   const { currentUser, staffProfile, isViewOnly } = useAuth();
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All categories');
+  const [locationFilter, setLocationFilter] = useState('All locations');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'expiry'>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [editingTarget, setEditingTarget] = useState<InventoryItem | null>(null);
   const [movementTarget, setMovementTarget] = useState<InventoryItem | null>(null);
@@ -44,9 +47,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return [...items].filter((item) => !term || [item.name, item.stockCode, item.category, item.location, item.supplier].some((value) => value?.toLowerCase().includes(term)))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, query]);
+    return [...items].filter((item) => {
+      const matchesQuery = !term || [item.name, item.stockCode, item.category, item.location, item.supplier].some((value) => value?.toLowerCase().includes(term));
+      const matchesCategory = categoryFilter === 'All categories' || item.category === categoryFilter;
+      const matchesLocation = locationFilter === 'All locations' || item.location === locationFilter;
+      const matchesStock = stockFilter === 'all'
+        || (stockFilter === 'low' && item.quantityOnHand <= item.minimumStockLevel)
+        || (stockFilter === 'expiry' && ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
+      return matchesQuery && matchesCategory && matchesLocation && matchesStock;
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, query, categoryFilter, locationFilter, stockFilter]);
   const lowStock = items.filter((item) => item.quantityOnHand <= item.minimumStockLevel);
   const expiryAlerts = items.filter((item) => ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
@@ -602,8 +612,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       {rejectedPendingId && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-semibold">This transaction was rejected and has not changed server stock. Review the error above. Discarding it removes only this local pending request; it does not alter server records.</p><button type="button" onClick={discardRejectedPendingMovement} disabled={saving} className="fx-press mt-3 min-h-11 rounded-lg border border-amber-700 px-4 py-2 font-bold text-amber-950 disabled:opacity-50">Discard rejected transaction</button></div>}
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Balances are calculated from recorded receipts and issues.</p></div><label className="flex min-h-10 w-full max-w-sm items-center gap-2 rounded-xl border border-stone-300 bg-white px-3"><Search className="h-4 w-4 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label></div>
-        {filtered.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><Boxes className="mx-auto h-9 w-9 text-stone-400" /><h3 className="mt-3 font-bold text-stone-800">{query ? 'No matching items' : 'No stock items yet'}</h3><p className="mt-1 text-sm text-stone-600">{query ? 'Try another search term.' : 'Add the first item to start a traceable stock register.'}</p></div> : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Showing {filtered.length} of {items.length} items. Narrow the register by category, storage location or alert status.</p></div><label className="flex min-h-10 w-full max-w-sm items-center gap-2 rounded-xl border border-stone-300 bg-white px-3"><Search className="h-4 w-4 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label></div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="text-xs font-semibold text-stone-600">Category<select aria-label="Filter by category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All categories</option>{categories.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="text-xs font-semibold text-stone-600">Storage location<select aria-label="Filter by storage location" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All locations</option>{locations.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="text-xs font-semibold text-stone-600">Stock alerts<select aria-label="Filter by stock alert" value={stockFilter} onChange={(e) => setStockFilter(e.target.value as 'all' | 'low' | 'expiry')} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option value="all">All stock</option><option value="low">At/below minimum</option><option value="expiry">Expired / expiring soon</option></select></label>
+          </div>
+          {(query || categoryFilter !== 'All categories' || locationFilter !== 'All locations' || stockFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategoryFilter('All categories'); setLocationFilter('All locations'); setStockFilter('all'); }} className="min-h-10 rounded-lg border border-stone-300 px-3 text-sm font-semibold text-stone-700">Clear filters</button>}
+        </div>
+        {filtered.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><Boxes className="mx-auto h-9 w-9 text-stone-400" /><h3 className="mt-3 font-bold text-stone-800">{items.length === 0 ? 'No stock items yet' : 'No matching items'}</h3><p className="mt-1 text-sm text-stone-600">{items.length === 0 ? 'Add the first item to start a traceable stock register.' : 'Try changing your search or clearing one or more filters.'}</p></div> : (
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {filtered.map((item) => {
               const low = item.quantityOnHand <= item.minimumStockLevel;
