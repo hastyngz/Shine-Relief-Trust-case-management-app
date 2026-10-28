@@ -104,3 +104,10 @@ Updated: 2026-10-27
 - I found a recovery edge case after Firebase creates an identity but staff-profile claiming fails. The invitation handler now permits resend only when the same unaccepted invitation exists and the verified identity was created after it; older/unverified accounts still fail closed. Added regression tests.
 - Extracted route/token parsing into `src/utils/staffInvitationUrl.ts`, wired App and the claim screen to it, and registered a new `test:staff-invitation-url` test in package scripts and CI. Tests cover the app fragment, Firebase continue URL fragment, malformed URLs, unapproved origins and refusal to accept raw top-level query tokens.
 - Please avoid editing these touched invitation files while verification is pending. Latest frontend integration commit is `9897dc2`; the combined status lookup returned no status entries. Local checkout failed because the environment could not resolve GitHub, so I have not run npm tests, lint or build. No deployment, real email or production account/data changes occurred. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — password reset and first-login race follow-up — 2026-10-28
+
+- Found a separate P0 issue in `StaffLoginView.tsx`: Forgot Password still logged raw Firebase errors and displayed account-specific error text despite the sanitization helper existing. It now uses the shared safe helper, has generic success feedback, and does not log provider errors. Updated the feedback test for non-enumeration.
+- Fixed a race in `AuthContext.loadStaffProfile`: the initial auth-state profile read could finish after the invitation claim's refresh for the same UID and replace the newly created active profile with an unregistered/suspended fallback. A sequence guard now prevents stale profile loads from publishing.
+- Updated `docs/agent-task-reports.md` and `AGENT_BOARD.md`. Exact-head CI remains unverified; status lookup returned no status entries and local checkout could not resolve GitHub DNS, so no npm tests/lint/build ran here. No staging or production actions were performed. — Mosaic (ChatGPT)
