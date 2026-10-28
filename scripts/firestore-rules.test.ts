@@ -217,6 +217,26 @@ async function run() {
       email_verified: false,
     }).firestore();
 
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'staffUsers/legacy-primary-admin'), {
+        ...staff('legacy-primary-admin', 'Administrator'),
+        email: 'hastingszidanamot@gmail.com',
+      });
+    });
+    const legacyVerifiedAdmin = testEnvironment.authenticatedContext('legacy-primary-admin', {
+      email: 'hastingszidanamot@gmail.com',
+      email_verified: true,
+    }).firestore();
+    const legacyUnverifiedAdmin = testEnvironment.authenticatedContext('legacy-primary-admin', {
+      email: 'hastingszidanamot@gmail.com',
+      email_verified: false,
+    }).firestore();
+    await assertSucceeds(getDoc(doc(legacyVerifiedAdmin, 'staffUsers/legacy-primary-admin')));
+    await assertFails(getDoc(doc(legacyUnverifiedAdmin, 'staffUsers/legacy-primary-admin')));
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), 'staffUsers/legacy-primary-admin'));
+    });
+
     // The primary-admin email alone is not proof of identity: bootstrap privileges
     // require Firebase's verified-email claim and the profile must use that email.
     await assertSucceeds(getDoc(doc(verifiedPrimaryAdmin, 'staffUsers/admin')));
