@@ -23,7 +23,7 @@ type ModuleCard = {
 };
 
 const modules: ModuleCard[] = [
-  { title: 'Staff & Personnel', description: 'Staff directory, contracts, personnel records and onboarding.', icon: Users, status: 'Available now', view: 'staff', group: 'People' },
+  { title: 'Staff & Personnel', description: 'Staff directory, employee records and contracts. Attendance, leave and onboarding checklists are not yet available.', icon: Users, status: 'Available now', view: 'staff', group: 'People' },
   { title: 'Payroll & Contracts', description: 'Open payroll records and review employee contract information.', icon: Wallet, status: 'Available now', view: 'payroll', group: 'People' },
   { title: 'Meetings & Minutes', description: 'Record meetings, minutes, decisions and follow-up actions.', icon: CalendarDays, status: 'Available now', view: 'operations', group: 'Coordination' },
   { title: 'Tasks & Planning', description: 'Review workplans, schedules and operational follow-ups.', icon: ClipboardList, status: 'Available now', view: 'planning', group: 'Coordination' },
