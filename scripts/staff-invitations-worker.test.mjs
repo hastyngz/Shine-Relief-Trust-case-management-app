@@ -213,6 +213,36 @@ try {
   {
     const f = setup();
     await f.invite();
+    const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'unknown-session'), f.env, f.deps);
+    assert.equal(response.status, 401, 'an invalid or missing authenticated identity must not claim an invitation');
+    assert.equal(f.staffByUid.size, 0);
+  }
+  {
+    const f = setup();
+    await f.invite();
+    f.identities.set('claim-token', {
+      uid: 'unverified-uid', email: 'new.staff@example.invalid', emailVerified: false,
+      createdAt: new Date(NOW + 1000).toISOString(),
+    });
+    const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'claim-token'), f.env, f.deps);
+    assert.equal(response.status, 403, 'an unverified email identity must not claim an invitation');
+    assert.equal(f.staffByUid.size, 0);
+  }
+  {
+    const f = setup();
+    await f.invite();
+    f.staffByEmail.set('new.staff@example.invalid', { uid: 'existing-staff-uid', email: 'new.staff@example.invalid' });
+    f.identities.set('claim-token', {
+      uid: 'new-uid', email: 'new.staff@example.invalid', emailVerified: true,
+      createdAt: new Date(NOW + 1000).toISOString(),
+    });
+    const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'claim-token'), f.env, f.deps);
+    assert.equal(response.status, 409, 'a duplicate staff profile must block invitation acceptance');
+    assert.equal(f.staffByUid.size, 0);
+  }
+  {
+    const f = setup();
+    await f.invite();
     f.identities.set('claim-token', {
       uid: 'old-uid', email: 'new.staff@example.invalid', emailVerified: true,
       createdAt: '2025-01-01T00:00:00.000Z',
