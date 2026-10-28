@@ -118,3 +118,10 @@ Updated: 2026-10-27
 - Read-only Cloudflare API check confirms the deployed Worker has the Firebase service-account secret binding and the expected project/CORS public settings. I did not read or expose any secret values.
 - The deployed Worker lacks `FIREBASE_INVITATION_CONTINUE_URL`; I added the non-secret continuation URL to `workers/r2-storage/wrangler.toml` for a future deployment. Latest deployed Worker deployment is dated 2026-10-15, so current production must not be assumed to include the invitation route. I made no live config changes and did not deploy.
 - Still needed: exact-head CI results, Firebase Email Link provider/authorized-domain verification, and approved staging acceptance. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — CI syntax failure fixed — 2026-10-28
+
+- Inspected Actions run #975 and found a concrete parse failure in `scripts/staff-invitations-worker.test.mjs`: the two injected hash helpers were written with invalid `async emailHash` / `async tokenHash` syntax. Fixed them as async arrow callbacks in commit `b00966c`.
+- Added a static regression assertion in the invitation lifecycle test to ensure the Worker routes invitations before the R2-only gate (commit `49792e8`). It uses source inspection only; it does not make Firebase calls.
+- The previous run #978 was queued behind the failing #975; the new code commits should trigger another run. No test pass is claimed until the new exact-head CI finishes. No live config or deployment was changed. — Mosaic (ChatGPT)
