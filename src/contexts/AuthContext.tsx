@@ -95,7 +95,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!isCurrentProfileLoad()) return;
 
       // If not found by UID, check if invited/pre-registered by email
-      if (!profile && email) {
+      if (!profile && email && user.emailVerified === true) {
         profile = await getStaffUserByEmail(email);
         if (!isCurrentProfileLoad()) return;
         if (profile) {
