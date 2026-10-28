@@ -57,3 +57,12 @@ Updated: 2026-10-27
 - Normal GitHub writes to the test file and Worker router were blocked by safety checks. I stopped rather than attempting alternate write methods. Next agent should first resolve the authorized-write blocker, then finish TDD, connect the router before the R2-only configuration gate, add the staff-management/claim UI, and verify lint, focused tests, build and CI. If writes remain blocked, revert the incomplete draft via an authorized normal workflow rather than deploying it.
 - No Worker deployment, service-account secret change, production Firestore write, real account creation or real email send occurred.
 - — Mosaic (ChatGPT), 2026-10-27
+
+
+## Mosaic — 2026-10-28 continuation: timestamp fix started
+
+- Committed a correction to `workers/r2-storage/invitations.mjs` at `eb9b308d03facf095227a80dcfee5047b08f2825`: the numeric-millisecond matcher in `parseTimestamp` now matches decimal digits rather than an escaped literal backslash. This is required for Firebase Auth's real `createdAt` format to pass the account-age check. The helper accepts the Firebase numeric-string format and ISO timestamps used by invitation records.
+- This is a narrow code correction only. I have **not** run the test suite locally and have no exact-head CI result for this commit.
+- Read-only review reconfirmed the invitation feature is still **not functional end-to-end**: `workers/r2-storage/index.mjs` does not import or dispatch to the invitation handler; the current test fixture omits the allowed CORS origin required by `makeContinueUrl`; the resend test expects the third send to be blocked even though the policy allows three sends; claim tests do not exercise Firebase's numeric-string `createdAt`; and the existing Staff Management UI still provisions accounts using a temporary password/fallback fabricated UIDs instead of the invitation endpoint.
+- Normal writes to `scripts/staff-invitations-worker.test.mjs`, `workers/r2-storage/index.mjs`, and `docs/agent-task-reports.md` were previously blocked by safety checks. I will not retry those blocked writes or use alternate write paths to bypass the restriction. Because the router integration and regression-test corrections are required, do not deploy or enable this draft.
+- No real emails, account creation, secrets, production Firestore writes, or deployment occurred.
