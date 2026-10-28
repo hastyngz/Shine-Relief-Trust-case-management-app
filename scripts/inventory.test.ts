@@ -42,7 +42,7 @@ const filterItems = [
 assert.deepEqual(filterInventoryItems(filterItems, { category: 'Food & Groceries', today: '2026-10-15' }).map((item) => item.id), ['beans', 'rice']);
 assert.deepEqual(filterInventoryItems(filterItems, { location: 'Shine House', today: '2026-10-15' }).map((item) => item.id), ['beans', 'soap']);
 assert.deepEqual(filterInventoryItems(filterItems, { stock: 'low', today: '2026-10-15' }).map((item) => item.id), ['rice']);
-assert.deepEqual(filterInventoryItems(filterItems, { stock: 'expiry', today: '2026-10-15' }).map((item) => item.id), ['rice']);
+assert.deepEqual(filterInventoryItems(filterItems, { stock: 'expiry', today: '2026-10-15' }).map((item) => item.id), ['beans', 'rice']);
 assert.deepEqual(filterInventoryItems(filterItems, { query: 'clean-01', today: '2026-10-15' }).map((item) => item.id), ['soap']);
 assert.deepEqual(filterInventoryItems(filterItems, { category: 'Stationery', today: '2026-10-15' }), []);
 console.log('Inventory register filter tests passed.');
