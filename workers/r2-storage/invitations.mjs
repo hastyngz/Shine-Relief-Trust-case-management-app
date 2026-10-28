@@ -22,7 +22,7 @@ function parseTimestamp(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
   if (typeof value !== 'string' || !value.trim()) return Number.NaN;
   const normalized = value.trim();
-  if (/^\\d{10,16}$/.test(normalized)) {
+  if (/^\d{10,16}$/.test(normalized)) {
     const milliseconds = Number(normalized);
     return Number.isFinite(milliseconds) ? milliseconds : Number.NaN;
   }
