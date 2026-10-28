@@ -3,6 +3,7 @@ import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
@@ -46,7 +47,7 @@ interface AuthContextType {
   auditActor: string;
   login: (email: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
-  setupInitialAdmin: (password: string, fullName?: string) => Promise<void>;
+  setupInitialAdmin: (password: string, fullName?: string) => Promise<'verification-sent' | 'initialized'>;
   sendResetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   createStaffAccount: (data: {
@@ -87,7 +88,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!isCurrentProfileLoad()) return;
 
     const email = user.email?.toLowerCase().trim() || '';
-    const isHastings = email === PRIMARY_ADMIN_EMAIL;
+    const isHastings = email === PRIMARY_ADMIN_EMAIL && user.emailVerified === true;
 
     try {
       let profile = await getStaffUserDoc(user.uid);
@@ -239,7 +240,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const isHastingsUser = currentUser?.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL;
+  const isHastingsUser = currentUser?.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL && currentUser.emailVerified === true;
   const isRegisteredStaff = isHastingsUser || (staffProfile !== null && staffProfile.createdBy !== 'Unregistered User');
   const role: StaffRole | null = staffProfile?.role || (isHastingsUser ? 'Administrator' : null);
   const isAdmin = role === 'Administrator' || isHastingsUser;
@@ -278,7 +279,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Dedicated first-time admin setup for Hastings
-  const setupInitialAdmin = async (password: string, fullName: string = 'Hastings Zidana') => {
+  const setupInitialAdmin = async (
+    password: string,
+    fullName: string = 'Hastings Zidana',
+  ): Promise<'verification-sent' | 'initialized'> => {
     const email = PRIMARY_ADMIN_EMAIL;
     if (password.length < 6) {
       throw new Error('Password must be at least 6 characters long.');
@@ -289,11 +293,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       userCredential = await createUserWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
-        // Account exists, try logging in
         userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
         throw err;
       }
+    }
+
+    // Never create the first Administrator profile for an unverified email/password
+    // identity. Verification proves control of the primary mailbox before bootstrap.
+    if (userCredential.user.emailVerified !== true) {
+      try {
+        await sendEmailVerification(userCredential.user);
+      } catch {
+        await signOut(auth).catch(() => undefined);
+        throw new Error('Could not send the verification email. Please retry later or use Google sign-in.');
+      }
+      await signOut(auth);
+      return 'verification-sent';
     }
 
     const uid = userCredential.user.uid;
@@ -315,6 +331,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await persistStaffUserToFirestore(adminDoc);
     setStaffProfile(adminDoc);
     setCurrentUser(userCredential.user);
+    return 'initialized';
   };
 
   // Password reset email
