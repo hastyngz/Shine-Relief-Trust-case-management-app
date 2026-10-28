@@ -15,7 +15,7 @@ export function getPasswordResetErrorMessage(error: unknown): string {
     case 'auth/operation-not-allowed':
       return 'Password reset is not available for this sign-in method. Contact the system Administrator.';
     case 'auth/user-not-found':
-      return 'No password reset request could be completed for this staff account. Verify its sign-in setup with an Administrator.';
+      return 'If an account is eligible for password reset, instructions will be sent. If the issue persists, contact the system Administrator.';
     default:
       return 'Could not request password reset instructions. No password was changed. Check your connection or sign-in setup and try again.';
   }
