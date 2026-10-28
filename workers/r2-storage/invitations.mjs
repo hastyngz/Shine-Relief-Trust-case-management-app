@@ -372,8 +372,10 @@ function makeContinueUrl(env, token) {
   if (url.protocol !== 'https:' || !allowed.includes(url.origin)) {
     throw new InvitationError('The invitation return address is not an approved SHINE app origin.', 503);
   }
-  url.searchParams.set('invitationToken', token);
-  url.hash = '/accept-invitation';
+  // Keep the bearer token in the URL fragment so it is not sent in the
+  // HTTP request to Firebase Hosting or ordinary origin access logs.
+  url.searchParams.delete('invitationToken');
+  url.hash = `/accept-invitation?invitationToken=${encodeURIComponent(token)}`;
   return url.toString();
 }
 
