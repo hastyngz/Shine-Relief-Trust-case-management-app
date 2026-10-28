@@ -245,17 +245,20 @@ async function defaultLookupIdentity(request, env) {
   };
 }
 
-async function defaultFindAuthAccountByEmail(email, env) {
-  if (!env.FIREBASE_WEB_API_KEY) throw new InvitationError('Staff invitations are not configured on the trusted server.', 503);
-  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${encodeURIComponent(env.FIREBASE_WEB_API_KEY)}`, {
+async function defaultFindAuthAccountByEmail(email, env, accessToken) {
+  if (!accessToken) throw new InvitationError('Staff invitations are not configured on the trusted server.', 503);
+  // Use the privileged Identity Toolkit lookup instead of accounts:createAuthUri.
+  // createAuthUri is unsuitable here because email-enumeration protection can
+  // hide provider/account existence and must never be disabled for invitations.
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId(env))}/accounts:lookup`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: email, continueUri: env.FIREBASE_INVITATION_CONTINUE_URL }),
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: [email] }),
   });
-  if (!response.ok) throw new InvitationError('Firebase could not verify whether this email already has an account.', 503);
+  if (!response.ok) throw new InvitationError('Firebase could not safely verify whether this email already has an account.', 503);
   const payload = await response.json();
-  if (typeof payload.registered !== 'boolean') throw new InvitationError('Firebase returned an incomplete account eligibility response.', 503);
-  return payload.registered ? { exists: true } : null;
+  if (!Array.isArray(payload.users)) throw new InvitationError('Firebase returned an incomplete account eligibility response.', 503);
+  return payload.users.some((user) => normalizeEmail(user.email) === email) ? { exists: true } : null;
 }
 
 async function defaultFindStaffByEmail(email, env, accessToken) {
@@ -428,7 +431,7 @@ export async function handleStaffInvitationRequest(request, env, injected = {}) 
       if (await deps.findStaffByEmail(email, env, accessToken)) {
         throw new InvitationError('A SHINE staff profile already exists for this email address.', 409);
       }
-      if (await deps.findAuthAccountByEmail(email, env)) {
+      if (await deps.findAuthAccountByEmail(email, env, accessToken)) {
         throw new InvitationError('A Firebase account already exists for this email address. Ask the person to use the approved account-recovery process.', 409);
       }
 
