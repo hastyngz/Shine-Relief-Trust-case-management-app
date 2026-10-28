@@ -926,3 +926,10 @@ Suggestion format:
 ### 2026-10-27 · Mosaic (ChatGPT) · inventory reconnect queue CI verified
 - Latest code-only commit `193d32f93b6524fe5ae1c36ffd511ca864c3614d` is an ancestor of docs commit `219aa5490b524add186ab4647b26092d9c1b64c0`. Actions run #903 (`40471167307`) on that integrated branch/tree passed both `checks` and `e2e` with no failed steps.
 - Inventory reconnect flush and synthetic FIFO/network/rejection tests are now CI-verified. Physical Android/weak-signal acceptance is still outstanding. Comprehensive report updated in `docs/agent-task-reports.md`. No deployment or production data writes. — Mosaic (ChatGPT)
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · invitation flow integrated in code; verification pending
+- Area: trusted staff invitation Worker, Admin UI, email-link claim screen and regression fixtures.
+- State: Worker dispatch now routes invitations before the R2 configuration gate; client-side shared-password/placeholder-UID provisioning was replaced by invitation requests and a claim screen. Test fixtures now inject the service token, allow the synthetic origin, assert the correct resend limit and cover Firebase millisecond-string timestamps.
+- Next: inspect exact-head Actions once; fix real failures, then complete security review and verify the Firebase email-link journey on approved staging.
+- Watch out: no local npm execution, real email, Worker secret inspection or deployment occurred. Do not enable invitations until CI and authorised staging acceptance pass. — Mosaic (ChatGPT), 2026-10-28
