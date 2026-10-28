@@ -147,3 +147,10 @@ Updated: 2026-10-27
 - Fixed all three boundaries to require a verified primary email. First-time email/password setup now sends a verification email and signs out without creating an Administrator profile until verification is complete; raw setup-provider errors are no longer logged/displayed.
 - Added Firestore emulator assertions for verified/unverified primary identities and for invitation records remaining server-only even to Administrators. Code commits: 0d86f66, 746575c, eb004a9, 91ce7bc, aa2f484.
 - CI run #993 on c2e178b passed TypeScript and invitation/password-reset-related tests plus existing Firestore rules, but was cancelled by a newer queued run before full completion. The new rules tests still need an exact-head full run. No live emails/accounts/config changes/deployment. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — verified-email gate added to staff profile linking — 2026-10-28
+
+- Further security review found the email-based staff-profile fallback could link a pre-registered profile before the identity's email was verified. Updated AuthContext to skip that lookup/link until emailVerified is true and tightened the Firestore read fallback to require the verified-email token claim.
+- Added Firestore emulator tests proving a verified synthetic email can read its matching pre-registered profile for linking, while the unverified identity cannot. Primary-admin bootstrap tests also cover verified/unverified identity behavior.
+- New commits: e4deb98, ecf0fcc, af9e4d0. Exact-head CI remains pending; the prior run passed the invitation-related tests but was cancelled before full completion. No live emails/accounts or deployment. — Mosaic (ChatGPT)
