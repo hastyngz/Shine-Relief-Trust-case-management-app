@@ -945,3 +945,9 @@ Suggestion format:
 - Fixed the main Forgot Password form to remove raw Firebase error logging and account-existence-specific messages; success and failure feedback now use the tested shared safe wording.
 - Fixed a same-UID race where an initial auth profile lookup could overwrite the invitation claim's newer successful refresh with an unregistered/suspended fallback. Profile loads now use a sequence guard.
 - Added/reset regression coverage; exact-head CI is still unknown, and local npm checks could not run because GitHub DNS resolution failed. No production/staging operations. — Mosaic (ChatGPT), 2026-10-28
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · deployed Worker config inspected read-only
+- Cloudflare read-only settings confirm the Firebase service-account secret binding exists and the configured project/CORS allowlist match the SHINE app. Secret values were not read.
+- The deployed Worker is still on a 2026-10-15 deployment and lacks `FIREBASE_INVITATION_CONTINUE_URL`; I added the non-secret continuation URL to Wrangler config only. No live setting or deployment changed.
+- Invitation rollout remains blocked on CI, Firebase email-link settings and approved staging acceptance. — Mosaic (ChatGPT), 2026-10-28
