@@ -19,6 +19,7 @@ function setup(options = {}) {
   const identities = new Map();
   const deps = {
     now: () => NOW,
+    getAccessToken: async () => 'synthetic-access-token',
     generateToken: () => `synthetic-token-${++serial}`,
     hashEmail: async emailHash,
     hashToken: async tokenHash,
@@ -62,7 +63,7 @@ function setup(options = {}) {
       return { profile: structuredClone(profile) };
     },
   };
-  const env = { FIREBASE_WEB_API_KEY: 'synthetic-key', FIREBASE_INVITATION_CONTINUE_URL: 'https://shine.example.invalid/?invitationToken=' };
+  const env = { FIREBASE_WEB_API_KEY: 'synthetic-key', FIREBASE_INVITATION_CONTINUE_URL: 'https://shine.example.invalid/', CORS_ALLOWED_ORIGINS: 'https://shine.example.invalid' };
   const request = (path, body, token = 'admin-token') => new Request(`https://worker.example.invalid${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -142,9 +143,10 @@ try {
     const f = setup();
     await f.invite();
     await f.invite();
+    await f.invite();
     const response = await f.invite();
-    assert.equal(response.status, 429, 'resends must be rate limited to three messages in the rolling window');
-    assert.equal(f.sent.length, 2, 'a rejected resend must not send email');
+    assert.equal(response.status, 429, 'the fourth message in a rolling window must be rejected');
+    assert.equal(f.sent.length, 3, 'a rejected resend must not send email');
   }
   {
     const f = setup();
@@ -181,6 +183,18 @@ try {
     const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'claim-token'), f.env, f.deps);
     assert.equal(response.status, 409, 'an Auth identity created before the invitation must not claim it');
     assert.equal(f.staffByUid.size, 0);
+  }
+  {
+    const f = setup();
+    await f.invite();
+    f.identities.set('claim-token', {
+      uid: 'new-uid', email: 'new.staff@example.invalid', emailVerified: true,
+      createdAt: String(NOW + 1000),
+      displayName: 'New Synthetic Staff',
+    });
+    const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'claim-token'), f.env, f.deps);
+    assert.equal(response.status, 200, 'Firebase Auth millisecond-string createdAt must be accepted');
+    assert.equal(f.staffByUid.size, 1);
   }
   {
     const f = setup();
