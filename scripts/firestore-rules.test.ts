@@ -35,6 +35,7 @@ async function seedData() {
     await setDoc(doc(firestore, 'staffUsers/manager'), staff('manager', 'Manager'));
     await setDoc(doc(firestore, 'staffUsers/viewer'), staff('viewer', 'View Only'));
     await setDoc(doc(firestore, 'staffUsers/worker'), staff('worker', 'Staff'));
+    await setDoc(doc(firestore, 'staffUsers/pre-registered'), staff('pre-registered', 'Staff'));
     await setDoc(doc(firestore, 'staffInvitations/synthetic-private-invitation'), {
       id: 'synthetic-private-invitation',
       email: 'invitee@example.test',
@@ -207,11 +208,21 @@ async function run() {
       email: 'hastingszidanamot@gmail.com',
       email_verified: false,
     }).firestore();
+    const verifiedPreRegistered = testEnvironment.authenticatedContext('pre-registered-verified', {
+      email: 'pre-registered@example.test',
+      email_verified: true,
+    }).firestore();
+    const unverifiedPreRegistered = testEnvironment.authenticatedContext('pre-registered-unverified', {
+      email: 'pre-registered@example.test',
+      email_verified: false,
+    }).firestore();
 
     // The primary-admin email alone is not proof of identity: bootstrap privileges
     // require Firebase's verified-email claim and the profile must use that email.
     await assertSucceeds(getDoc(doc(verifiedPrimaryAdmin, 'staffUsers/admin')));
     await assertFails(getDoc(doc(unverifiedPrimaryAdmin, 'staffUsers/admin')));
+    await assertSucceeds(getDoc(doc(verifiedPreRegistered, 'staffUsers/pre-registered')));
+    await assertFails(getDoc(doc(unverifiedPreRegistered, 'staffUsers/pre-registered')));
     await assertFails(setDoc(doc(unverifiedPrimaryAdmin, 'staffUsers/unverified-primary-admin'), {
       ...staff('unverified-primary-admin', 'Administrator'),
       email: 'hastingszidanamot@gmail.com',
