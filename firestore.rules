@@ -230,7 +230,7 @@ service cloud.firestore {
 
     // Staff Users Management collection
     match /staffUsers/{userId} {
-      // Active staff can view the roster; an unregistered user can only look up their own invitation.
+      // Active staff can view the roster; a verified, unregistered email can read only its matching pre-registered profile for UID linking.
       allow read: if isAdmin() || isStaffActive() || (
         isSignedIn() &&
         request.auth.token.email_verified == true &&
