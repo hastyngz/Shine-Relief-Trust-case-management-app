@@ -813,3 +813,11 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - The deployed Worker does **not** currently have `FIREBASE_INVITATION_CONTINUE_URL`. Added the non-secret approved SHINE web.app continuation URL to `workers/r2-storage/wrangler.toml` so a future owner-approved deployment carries it.
 - The latest deployed Worker deployment is dated 2026-10-15, before this invitation integration. The current deployed Worker therefore must not be assumed to contain the invitation route. No live configuration was changed and no deployment was made.
 - Still required before invitation use: exact-head GitHub Actions, Firebase Email Link sign-in/provider and authorized-domain verification, and a real approved staging journey. The service-account secret's existence alone does not prove its permissions or successful OAuth token exchange.
+
+
+### CI failure triage — invitation test syntax — 2026-10-28
+
+- Inspected Actions run #975 after it reported failure in `scripts/staff-invitations-worker.test.mjs` at lines 24–25: two injected hash helpers used invalid JavaScript syntax (`async emailHash` / `async tokenHash`). Corrected them to explicit async arrow callbacks in commit `b00966c`.
+- Added a regression guard in commit `49792e8` to assert that `workers/r2-storage/index.mjs` dispatches `handleStaffInvitationRequest` before the normal R2 request handler/configuration gate. This checks the integration ordering without contacting Firebase or creating accounts.
+- At the last Actions page inspection, run #978 for commit `ef74cb4` was queued behind #975; the latest test-fix commits should trigger a newer run. Do not treat any cancelled, queued or syntax-failing run as a pass. A new exact-head run still needs to finish.
+- No production deployment or live configuration change occurred.
