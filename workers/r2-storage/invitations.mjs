@@ -19,15 +19,20 @@ const nowIso = () => new Date().toISOString();
 // since the Unix epoch (not an ISO date). Invitation records use ISO strings.
 // Accept both formats explicitly and fail closed on malformed timestamps.
 function parseTimestamp(value) {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : Number.NaN;
+  }
   if (typeof value !== 'string' || !value.trim()) return Number.NaN;
   const normalized = value.trim();
-  if (/^\d{10,16}$/.test(normalized)) {
+  // Firebase Auth emits epoch milliseconds as a decimal string (normally 13 digits).
+  // Require a plausible millisecond-width value so a seconds timestamp is not
+  // accidentally interpreted as a date in January 1970.
+  if (/^\d{12,16}$/.test(normalized)) {
     const milliseconds = Number(normalized);
-    return Number.isFinite(milliseconds) ? milliseconds : Number.NaN;
+    return Number.isSafeInteger(milliseconds) && milliseconds > 0 ? milliseconds : Number.NaN;
   }
   const parsed = Date.parse(normalized);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : Number.NaN;
 }
 
 function decodeBase64Url(value) {
