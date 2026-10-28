@@ -207,7 +207,7 @@ try {
       createdAt: new Date(NOW + 1000).toISOString(),
     });
     const response = await handleStaffInvitationRequest(f.request('/api/staff-invitations/claim', { token: 'synthetic-token-1' }, 'claim-token'), f.env, f.deps);
-    assert.equal(response.status, 403, 'a different signed-in email must not claim the invitation');
+    assert.equal(response.status, 404, 'a different signed-in email must not claim the invitation or reveal whether another email has an invitation');
     assert.equal(f.staffByUid.size, 0);
   }
   {
