@@ -202,12 +202,7 @@ async function run() {
     // Invitation records contain private recipient addresses and token hashes.
     // They are server-only: even Administrators must use the trusted Worker API.
     const invitationPath = 'staffInvitations/synthetic-private-invitation';
-    for (const [role, context] of [
-      ['View Only', viewer],
-      ['Staff', worker],
-      ['Manager', manager],
-      ['Administrator', admin],
-    ] as const) {
+    for (const context of [viewer, worker, manager, admin]) {
       await assertFails(getDoc(doc(context, invitationPath)));
       await assertFails(getDocs(collection(context, 'staffInvitations')));
       await assertFails(setDoc(doc(context, 'staffInvitations/client-write'), {
