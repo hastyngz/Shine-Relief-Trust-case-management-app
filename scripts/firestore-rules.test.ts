@@ -208,18 +208,18 @@ async function run() {
       ['Manager', manager],
       ['Administrator', admin],
     ] as const) {
-      await assertFails(getDoc(doc(context, invitationPath)), `${role} must not read server-only invitation records`);
-      await assertFails(getDocs(collection(context, 'staffInvitations')), `${role} must not list invitation records`);
+      await assertFails(getDoc(doc(context, invitationPath)));
+      await assertFails(getDocs(collection(context, 'staffInvitations')));
       await assertFails(setDoc(doc(context, 'staffInvitations/client-write'), {
         id: 'client-write',
         email: 'attacker@example.test',
         tokenHash: 'client-controlled-hash',
         status: 'accepted',
-      }), `${role} must not create invitation records from the client`);
-      await assertFails(updateDoc(doc(context, invitationPath), { status: 'accepted' }), `${role} must not claim invitations through direct Firestore writes`);
-      await assertFails(deleteDoc(doc(context, invitationPath)), `${role} must not delete invitation records from the client`);
+      }));
+      await assertFails(updateDoc(doc(context, invitationPath), { status: 'accepted' }));
+      await assertFails(deleteDoc(doc(context, invitationPath)));
     }
-    await assertFails(getDoc(doc(anonymous, invitationPath)), 'anonymous clients must not read invitation records');
+    await assertFails(getDoc(doc(anonymous, invitationPath)));
 
     // Original import rows must be separate from staff-readable audit metadata.
     await assertSucceeds(setDoc(doc(worker, 'importAudits/audit-safe'), {
