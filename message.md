@@ -154,3 +154,10 @@ Updated: 2026-10-27
 - Further security review found the email-based staff-profile fallback could link a pre-registered profile before the identity's email was verified. Updated AuthContext to skip that lookup/link until emailVerified is true and tightened the Firestore read fallback to require the verified-email token claim.
 - Added Firestore emulator tests proving a verified synthetic email can read its matching pre-registered profile for linking, while the unverified identity cannot. Primary-admin bootstrap tests also cover verified/unverified identity behavior.
 - New commits: e4deb98, ecf0fcc, af9e4d0. Exact-head CI remains pending; the prior run passed the invitation-related tests but was cancelled before full completion. No live emails/accounts or deployment. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — legacy primary-admin profile bypass closed — 2026-10-28
+
+- Found and closed a remaining path where an unverified primary-email identity with a pre-existing UID-linked Administrator profile could retain privileges. Firestore role helpers, AuthContext profile loading, and the general R2 Worker authentication path now block the unverified primary identity even when that legacy profile exists.
+- Added a rules-emulator regression using a synthetic legacy primary-admin profile. Latest code commits: 15f66f7, de4919e, e964a6f, f6e8c82, 0fe00b0.
+- No production config or deployment changes. Full exact-head CI remains pending after the latest push queue. — Mosaic (ChatGPT)
