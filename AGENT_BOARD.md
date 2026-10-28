@@ -967,3 +967,12 @@ Suggestion format:
 ### 2026-10-28 · Mosaic (ChatGPT) · legacy primary-admin profile bypass closed
 - Further review found a legacy primary-email Administrator profile could bypass the first verification fix through the UID-profile branch in Firestore rules, AuthContext, and the general R2 Worker authenticator. All three now block an unverified primary-email identity even if a profile already exists.
 - Added an emulator regression using a synthetic legacy admin profile to compare verified and unverified claims. Full exact-head CI remains pending. No production changes. — Mosaic (ChatGPT), 2026-10-28
+
+
+### Mosaic (ChatGPT) — exact-head CI passed — 2026-10-28
+
+- Full GitHub Actions run #1020 passed on commit 9c68d4767932687f394c015ae7126c72681fe649: checks job successful (50 steps) and offline E2E job successful (11 steps).
+- The earlier rules failure was caused by direct access to missing email/email_verified claims in synthetic test contexts. firestore.rules now safely reads optional claims with request.auth.token.get(...) defaults. Both inventory transaction rules and the full Firestore rules emulator suite passed.
+- Current code is tested on branch Replit; no production deployment or live account/email/data changes occurred.
+- Release gates still open: confirm Firebase email-link provider and authorized domains, deploy the Worker/config only after approval, and complete invitation acceptance in authorized staging. AI-provider privacy review remains excluded from this workstream.
+- Documentation-only commit with [skip ci]; no app code changed after run #1020. — Mosaic (ChatGPT)
