@@ -68,3 +68,15 @@ Updated: 2026-10-27
 - No real emails, account creation, secrets, production Firestore writes, or deployment occurred.
 
 - Follow-up hardening committed at `ef32bb775d6b9043d7b03e7c12f4fe6fcc7587d3`: timestamp parsing now rejects non-positive/unsafe numeric values and avoids interpreting a seconds-based number as milliseconds. The exact-head automated test result remains unknown; the feature remains blocked on the previously identified router/test/UI integration and the write restrictions.
+
+
+## Mosaic (ChatGPT) — invitation backend hardening progress — 2026-10-28
+
+- Continued implementation on `Replit` in `workers/r2-storage/invitations.mjs`:
+  - Fixed claim-time timestamp parsing to accept Firebase Auth REST's millisecond-string `createdAt` format as well as the ISO timestamps used in app-side invitation records/tests. Malformed values still fail closed.
+  - Replaced the public `accounts:createAuthUri` account-existence check with the privileged Identity Toolkit `projects/{projectId}/accounts:lookup` request using the existing trusted service-account access token. This avoids relying on account-enumeration behavior that can be suppressed by Firebase's email-enumeration protection. Only the documented `USER_NOT_FOUND` result is treated as an available address; permission/configuration/other failures fail closed.
+  - Moved the raw invitation token into the SPA URL fragment (`#/accept-invitation?invitationToken=...`) rather than the request query string, so it is not sent in the app's normal HTTP request URL.
+- Commits made on `Replit`: `c1361f4`, `fec014d`, `13d4b63`, `7e2940a`, and `4e85431` (the last one contains the fragment-token change; subsequent concurrent branch updates may have changed the file blob SHA).
+- Local isolated spot checks passed for the timestamp parser and the no-match/error classification and fragment-token placement. These are **not** the project test suite and do not establish that the Worker module passes its lifecycle tests.
+- Still blocked from completing the critical integration: `workers/r2-storage/index.mjs` has not been changed to dispatch the invitation handler before the R2 configuration/auth gate; the existing invitation test file still needs corrected dependency injection, allowed-origin configuration, and a realistic Firebase millisecond timestamp case. The SPA has no invitation claim route/service yet. Earlier normal writes to the Worker router, invitation test file and `docs/agent-task-reports.md` were blocked by safety checks; I will not bypass those restrictions with alternate write paths.
+- No deployment, service-account secret change, production Firestore mutation, real account, or real email was used. Do not enable or describe the invitation workflow as available until router integration, frontend claim handling, regression tests, lint/build and CI are verified.
