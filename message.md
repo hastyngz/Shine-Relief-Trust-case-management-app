@@ -139,3 +139,11 @@ Updated: 2026-10-27
 - Read run #979's actual job log. TypeScript, password-reset feedback, UI-effects, case-goal and upload-validation checks passed before the invitation lifecycle test failed: the test expected 403 for a different signed-in email, but the handler returned 404.
 - This is the safer expected result: the claim handler hashes the signed-in email first, so a wrong recipient cannot learn whether another email has an invitation. Updated the assertion to expect 404 in commit e265455.
 - Run #979 was cancelled by the concurrency queue after that failed step; the latest exact-head CI is not yet green. No production operations. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — critical primary-admin bootstrap issue fixed — 2026-10-28
+
+- I found that the primary admin email alone could confer Administrator privileges, without checking Firebase's verified-email claim. This affected Firestore rules, AuthContext's role derivation/bootstrap, and the Worker invitation admin check.
+- Fixed all three boundaries to require a verified primary email. First-time email/password setup now sends a verification email and signs out without creating an Administrator profile until verification is complete; raw setup-provider errors are no longer logged/displayed.
+- Added Firestore emulator assertions for verified/unverified primary identities and for invitation records remaining server-only even to Administrators. Code commits: 0d86f66, 746575c, eb004a9, 91ce7bc, aa2f484.
+- CI run #993 on c2e178b passed TypeScript and invitation/password-reset-related tests plus existing Firestore rules, but was cancelled by a newer queued run before full completion. The new rules tests still need an exact-head full run. No live emails/accounts/config changes/deployment. — Mosaic (ChatGPT)
