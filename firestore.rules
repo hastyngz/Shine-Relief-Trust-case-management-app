@@ -10,17 +10,17 @@ service cloud.firestore {
     // already exists under that UID. Other pre-registered staff remain UID-bound.
     function isPrimaryEmailVerified() {
       return isSignedIn() && (
-        request.auth.token.email == null ||
-        request.auth.token.email.lower() != 'hastingszidanamot@gmail.com' ||
-        request.auth.token.email_verified == true
+        request.auth.token.get('email', null) == null ||
+        request.auth.token.get('email', '').lower() != 'hastingszidanamot@gmail.com' ||
+        request.auth.token.get('email_verified', false) == true
       );
     }
 
     function isHastings() {
       return isSignedIn() &&
-        request.auth.token.email != null &&
-        request.auth.token.email.lower() == 'hastingszidanamot@gmail.com' &&
-        request.auth.token.email_verified == true;
+        request.auth.token.get('email', null) != null &&
+        request.auth.token.get('email', '').lower() == 'hastingszidanamot@gmail.com' &&
+        request.auth.token.get('email_verified', false) == true;
     }
 
     function getStaffDoc(uid) {
