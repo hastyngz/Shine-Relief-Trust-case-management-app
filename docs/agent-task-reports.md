@@ -821,3 +821,12 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Added a regression guard in commit `49792e8` to assert that `workers/r2-storage/index.mjs` dispatches `handleStaffInvitationRequest` before the normal R2 request handler/configuration gate. This checks the integration ordering without contacting Firebase or creating accounts.
 - At the last Actions page inspection, run #978 for commit `ef74cb4` was queued behind #975; the latest test-fix commits should trigger a newer run. Do not treat any cancelled, queued or syntax-failing run as a pass. A new exact-head run still needs to finish.
 - No production deployment or live configuration change occurred.
+
+
+### Invitation claim error handling and final test coverage expansion — 2026-10-28
+
+- Added src/utils/staffInvitationFeedback.ts so Firebase SDK errors and trusted API failures are converted to safe, actionable invitation messages rather than displaying raw provider/server error text. src/components/StaffInvitationClaim.tsx now uses this helper.
+- Added scripts/staff-invitation-feedback.test.ts, registered test:staff-invitation-feedback in package.json, and added the step to .github/workflows/shine-checks.yml.
+- Expanded scripts/staff-invitations-worker.test.mjs to cover invalid authenticated identity, unverified email identity, duplicate staff profile rejection, and to assert invitation dispatch precedes the R2-only gate. The test-helper syntax failure identified in Actions run #975 was corrected in commit b00966c; router-order regression coverage was added in 49792e8; latest feedback test additions include b6165f8, 80e8d5a, 5ad0164, b58eab8, and 2c04daa.
+- No exact-head Actions run has yet been confirmed green. The workflow uses a concurrency group, and the branch received multiple file-level commits; prior runs were queued/cancelled while newer pushes arrived. The latest run must complete against the integrated branch head before test status can be reported.
+- No live Firebase email/account operations, production config mutation or deployment were performed.
