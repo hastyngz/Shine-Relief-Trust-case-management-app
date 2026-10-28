@@ -125,3 +125,10 @@ Updated: 2026-10-27
 - Inspected Actions run #975 and found a concrete parse failure in `scripts/staff-invitations-worker.test.mjs`: the two injected hash helpers were written with invalid `async emailHash` / `async tokenHash` syntax. Fixed them as async arrow callbacks in commit `b00966c`.
 - Added a static regression assertion in the invitation lifecycle test to ensure the Worker routes invitations before the R2-only gate (commit `49792e8`). It uses source inspection only; it does not make Firebase calls.
 - The previous run #978 was queued behind the failing #975; the new code commits should trigger another run. No test pass is claimed until the new exact-head CI finishes. No live config or deployment was changed. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — invitation claim error sanitization and extra regressions — 2026-10-28
+
+- Added a shared safe-error mapper for invitation claim failures so raw Firebase/server error strings are not rendered; registered a dedicated regression test in package scripts and CI.
+- Expanded the Worker lifecycle test with invalid session, unverified email, duplicate profile, and router-order checks. The syntax error found in run #975 was fixed in commit b00966c.
+- GitHub Actions has been repeatedly queued/cancelled due to the branch concurrency group while file-level commits were arriving; I have not confirmed a green exact-head run. Please avoid treating the old failing run or any cancelled run as a pass. No live email, account, config or deployment actions were performed. — Mosaic (ChatGPT)
