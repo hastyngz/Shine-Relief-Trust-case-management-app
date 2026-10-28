@@ -734,3 +734,45 @@ The focused helper test covers FIFO completion, stopping on a network failure, d
 The run's `checks` and `e2e` jobs both completed successfully with no failed steps. This verifies the inventory reconnect queue helper, synthetic FIFO/network/rejection tests, TypeScript/lint, production build, broader checks and offline Playwright E2E for the integrated code. The latest code-only change is `193d32f`; the passing run is on its descendant documentation commit `219aa54`, with no further code changes between them.
 
 **Remaining acceptance work:** physical Android testing and deliberate weak/no-signal testing are not possible through this GitHub connector and remain outstanding. Test scenarios should cover offline queue persistence after app close/reopen, reconnect flush in FIFO order, network interruption mid-queue, definitive 4xx review/discard, storage failure, and ensuring displayed stock remains server-authoritative. No production deployment or live-data writes occurred.
+
+
+# Staff invitation delivery and claim flow — 2026-10-28
+
+**Branch:** `Replit`  
+**Latest implementation commit at report time:** `11e0b1a48e62258e37ed468f08d95a0cae36eac3`  
+**Status:** IMPLEMENTED IN CODE; NOT YET VERIFIED OR DEPLOYED
+
+## Changes made
+
+- Connected `workers/r2-storage/index.mjs` to `handleStaffInvitationRequest` before the existing R2 credential/configuration gate. Invitation requests can therefore reach their own trusted-server configuration checks without needing R2 bucket credentials; existing storage, inventory and AI requests still pass through the original R2 gate and authentication path.
+- Corrected `scripts/staff-invitations-worker.test.mjs`: inject a synthetic service access token for claim tests, configure the approved synthetic continuation origin, correct the resend limit assertion (three messages are allowed; the fourth is rejected), and add a regression for Firebase Auth's decimal millisecond-string `createdAt`.
+- Added `createStaffInvitation` and `claimStaffInvitation` client helpers using the existing authenticated R2 API client and `VITE_R2_API_URL`.
+- Replaced client-side staff account creation in `src/contexts/AuthContext.tsx` with the trusted invitation endpoint. Removed the secondary Firebase app provisioning path, fabricated placeholder UIDs, shared/fallback initial passwords and the client-side profile creation step. The profile is now created by the trusted claim handler only after verified email, recipient match, token/expiry checks, account-age checks and duplicate checks.
+- Removed the temporary-password field and Administrator invitation option from `src/components/StaffManagement.tsx`; updated success and button copy to describe sending an invitation rather than claiming an account already exists.
+- Added `src/components/StaffInvitationClaim.tsx` to handle the Firebase email-link sign-in flow, extract the single-use token from the app fragment/continue URL, verify that the signed-in email matches the recipient, call the trusted claim endpoint, refresh the profile and show a success/error state.
+- Added an invitation entry route in `src/App.tsx` for the app fragment route and Firebase email-link action URLs.
+
+## Security properties intended by this change
+
+- No shared or temporary initial password is generated or displayed.
+- The administrator client does not receive the raw invitation token.
+- The token is carried in the URL fragment rather than the normal HTTP request query string.
+- The trusted Worker re-reads the active Administrator profile, rejects existing Auth identities/staff profiles, permits only Manager/Staff/View Only, limits resends, stores only a token hash, and atomically claims the invitation while creating a profile.
+- Existing Firestore/Storage rules and the separate external-AI processing workstream were not changed.
+
+## Verification and release status
+
+- GitHub contents API accepted the code changes on `Replit`; this is evidence of commits, **not** test execution.
+- The current connector did not execute local npm commands. Exact-head GitHub Actions results must be checked for the integrated branch head, including `npm run lint`, `npm run test:staff-invitations-worker`, `npm run build`, relevant routing tests and the full `checks` and offline E2E jobs.
+- No real email, real account, production Firestore mutation, Worker secret change or deployment was performed.
+- The Worker invitation flow requires approved Worker secrets/configuration, especially `FIREBASE_SERVICE_ACCOUNT_JSON`, `FIREBASE_WEB_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_INVITATION_CONTINUE_URL` and an allow-listed `CORS_ALLOWED_ORIGINS`. The repository's Wrangler vars do not establish that the required service-account secret is configured in the deployed Worker. Verify this through authorised read-only configuration inspection before any owner-approved deployment.
+- Firebase email-link behaviour and the complete browser journey still require end-to-end verification. Do not advertise invitations as production-ready until exact-head CI passes and an approved staging test verifies email delivery, email-link completion, expiry, replay, recipient mismatch, pre-existing accounts and the profile's first successful login.
+- Physical Android and weak/no-signal checks remain separate manual acceptance items. No production deployment or production data change is authorised by this report.
+
+## Next steps
+
+1. Inspect exact-head Actions once; if pending, continue independent review rather than repeatedly polling.
+2. If any check fails, inspect the failing step/log and correct the cause on `Replit`, then verify the new head.
+3. Review the full client route and Worker integration with the security skill, especially email-link URL handling, CORS/preflight, token leakage and account-switch behaviour.
+4. Verify approved Worker configuration without exposing secret values. If service-account credentials or delivery configuration are missing, leave the feature disabled and document the exact owner/deployment action required.
+5. Only after CI and staging acceptance, ask the owner for explicit approval before any production deployment.
