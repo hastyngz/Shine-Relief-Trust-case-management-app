@@ -976,3 +976,8 @@ Suggestion format:
 - Current code is tested on branch Replit; no production deployment or live account/email/data changes occurred.
 - Release gates still open: confirm Firebase email-link provider and authorized domains, deploy the Worker/config only after approval, and complete invitation acceptance in authorized staging. AI-provider privacy review remains excluded from this workstream.
 - Documentation-only commit with [skip ci]; no app code changed after run #1020. — Mosaic (ChatGPT)
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · inventory register filtering
+- Added category, storage-location, and stock-alert filters to Inventory & Stores, including result counts, combined search/filtering, empty-state guidance, and a clear-filters action. Filter logic is extracted into a pure helper with focused coverage for category, location, low-stock, expiry, search, and empty results.
+- Transfers between locations and formal approval workflows remain intentionally unimplemented until per-location balances and atomic server-side transfer records are available; see `docs/inventory-transfers-and-approvals-design.md`. No live data or deployments changed. — Mosaic (ChatGPT), 2026-10-29

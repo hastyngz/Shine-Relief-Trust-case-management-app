@@ -1,3 +1,5 @@
+import type { InventoryItem } from '../types';
+
 /** Create collision-resistant client-side IDs for inventory records and movements. */
 export function createInventoryId(prefix: string, cryptoApi: Pick<Crypto, 'randomUUID' | 'getRandomValues'> | undefined = globalThis.crypto): string {
   if (cryptoApi?.randomUUID) return `${prefix}_${cryptoApi.randomUUID()}`;
@@ -196,4 +198,34 @@ export async function flushPendingInventoryMovements(
     }
     processed += 1;
   }
+}
+
+
+export type InventoryStockFilter = 'all' | 'low' | 'expiry';
+
+export interface InventoryRegisterFilters {
+  query?: string;
+  category?: string;
+  location?: string;
+  stock?: InventoryStockFilter;
+  today?: string;
+}
+
+/** Apply the inventory register's search and alert filters consistently. */
+export function filterInventoryItems(items: InventoryItem[], filters: InventoryRegisterFilters = {}): InventoryItem[] {
+  const term = (filters.query || '').trim().toLowerCase();
+  const category = filters.category || 'All categories';
+  const location = filters.location || 'All locations';
+  const stock = filters.stock || 'all';
+  return [...items].filter((item) => {
+    const matchesQuery = !term || [item.name, item.stockCode, item.category, item.location, item.supplier]
+      .some((value) => value?.toLowerCase().includes(term));
+    const matchesCategory = category === 'All categories' || item.category === category;
+    const matchesLocation = location === 'All locations' || item.location === location;
+    const expiryStatus = getInventoryExpiryStatus(item.expiryDate, filters.today).status;
+    const matchesStock = stock === 'all'
+      || (stock === 'low' && item.quantityOnHand <= item.minimumStockLevel)
+      || (stock === 'expiry' && ['expired', 'expiring-soon'].includes(expiryStatus));
+    return matchesQuery && matchesCategory && matchesLocation && matchesStock;
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../src/utils/inventory';
+import type { InventoryItem } from '../src/types';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../src/utils/inventory';
 
 assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
 
@@ -25,3 +26,23 @@ console.log('Inventory helper tests passed.');
 assert.equal(resolveInventoryLocationForSave('Main Office', 'Farm', true), 'Main Office', 'editing details must not silently move stock');
 assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', true), 'Farm', 'legacy records without a location can be repaired');
 assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', false), 'Farm', 'new stock items retain their requested opening location');
+
+
+const inventoryFixture = (overrides: Partial<InventoryItem>): InventoryItem => ({
+  id: 'item', stockCode: 'CODE', name: 'Item', category: 'Food & Groceries', unit: 'bags',
+  quantityOnHand: 5, minimumStockLevel: 2, location: 'Main Office', movements: [],
+  createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
+const filterItems = [
+  inventoryFixture({ id: 'rice', name: 'Rice', stockCode: 'FOOD-01', category: 'Food & Groceries', location: 'Main Office', quantityOnHand: 1, minimumStockLevel: 3, expiryDate: '2026-10-20' }),
+  inventoryFixture({ id: 'soap', name: 'Soap', stockCode: 'CLEAN-01', category: 'Cleaning Supplies', location: 'Shine House', quantityOnHand: 20, minimumStockLevel: 4, expiryDate: '2026-12-30' }),
+  inventoryFixture({ id: 'beans', name: 'Beans', stockCode: 'FOOD-02', category: 'Food & Groceries', location: 'Shine House', quantityOnHand: 8, minimumStockLevel: 2, expiryDate: '2026-11-10' }),
+];
+assert.deepEqual(filterInventoryItems(filterItems, { category: 'Food & Groceries', today: '2026-10-15' }).map((item) => item.id), ['beans', 'rice']);
+assert.deepEqual(filterInventoryItems(filterItems, { location: 'Shine House', today: '2026-10-15' }).map((item) => item.id), ['beans', 'soap']);
+assert.deepEqual(filterInventoryItems(filterItems, { stock: 'low', today: '2026-10-15' }).map((item) => item.id), ['rice']);
+assert.deepEqual(filterInventoryItems(filterItems, { stock: 'expiry', today: '2026-10-15' }).map((item) => item.id), ['rice']);
+assert.deepEqual(filterInventoryItems(filterItems, { query: 'clean-01', today: '2026-10-15' }).map((item) => item.id), ['soap']);
+assert.deepEqual(filterInventoryItems(filterItems, { category: 'Stationery', today: '2026-10-15' }), []);
+console.log('Inventory register filter tests passed.');

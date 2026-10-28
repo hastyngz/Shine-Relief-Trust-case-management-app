@@ -5,7 +5,7 @@ import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -45,18 +45,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return [...items].filter((item) => {
-      const matchesQuery = !term || [item.name, item.stockCode, item.category, item.location, item.supplier].some((value) => value?.toLowerCase().includes(term));
-      const matchesCategory = categoryFilter === 'All categories' || item.category === categoryFilter;
-      const matchesLocation = locationFilter === 'All locations' || item.location === locationFilter;
-      const matchesStock = stockFilter === 'all'
-        || (stockFilter === 'low' && item.quantityOnHand <= item.minimumStockLevel)
-        || (stockFilter === 'expiry' && ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
-      return matchesQuery && matchesCategory && matchesLocation && matchesStock;
-    }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, query, categoryFilter, locationFilter, stockFilter]);
+  const filtered = useMemo(() => filterInventoryItems(items, {
+    query, category: categoryFilter, location: locationFilter, stock: stockFilter,
+  }), [items, query, categoryFilter, locationFilter, stockFilter]);
   const lowStock = items.filter((item) => item.quantityOnHand <= item.minimumStockLevel);
   const expiryAlerts = items.filter((item) => ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
