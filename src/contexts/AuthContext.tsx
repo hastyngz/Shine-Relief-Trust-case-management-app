@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import {
   User,
   signInWithEmailAndPassword,
@@ -68,37 +68,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [staffProfile, setStaffProfile] = useState<StaffUser | null>(null);
   const [allStaff, setAllStaff] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  // A later refresh for the same UID supersedes any older in-flight profile read.
+  const profileLoadSequence = useRef(0);
 
   // Load and refresh current user profile from Firestore
   const loadStaffProfile = async (user: User | null) => {
+    const requestSequence = ++profileLoadSequence.current;
     if (!user) {
       setStaffProfile(null);
       return;
     }
 
-    // Profile reads can overlap when accounts change quickly on a shared phone.
-    // An older request must not publish its role/profile after a newer user signs in.
-    const isStillCurrentUser = () => auth.currentUser?.uid === user.uid;
-    if (!isStillCurrentUser()) return;
+    // Profile reads can overlap both across account switches and when an email-link
+    // sign-in triggers an initial read while invitation claiming triggers a refresh.
+    // Only the newest read for the current UID may publish a role/profile.
+    const isCurrentProfileLoad = () =>
+      profileLoadSequence.current === requestSequence && auth.currentUser?.uid === user.uid;
+    if (!isCurrentProfileLoad()) return;
 
     const email = user.email?.toLowerCase().trim() || '';
     const isHastings = email === PRIMARY_ADMIN_EMAIL;
 
     try {
       let profile = await getStaffUserDoc(user.uid);
-      if (!isStillCurrentUser()) return;
+      if (!isCurrentProfileLoad()) return;
 
       // If not found by UID, check if invited/pre-registered by email
       if (!profile && email) {
         profile = await getStaffUserByEmail(email);
-        if (!isStillCurrentUser()) return;
+        if (!isCurrentProfileLoad()) return;
         if (profile) {
           // Link UID and update in Firestore only while this auth identity is current.
-          if (!isStillCurrentUser()) return;
+          if (!isCurrentProfileLoad()) return;
           profile.uid = user.uid;
           profile.id = user.uid;
           await persistStaffUserToFirestore(profile);
-          if (!isStillCurrentUser()) return;
+          if (!isCurrentProfileLoad()) return;
         }
       }
 
@@ -118,20 +123,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           createdBy: 'System Initializer',
           lastLoginAt: now,
         };
-        if (!isStillCurrentUser()) return;
+        if (!isCurrentProfileLoad()) return;
         await persistStaffUserToFirestore(initialHastingsDoc);
-        if (!isStillCurrentUser()) return;
+        if (!isCurrentProfileLoad()) return;
         profile = initialHastingsDoc;
       }
 
-      if (!isStillCurrentUser()) return;
+      if (!isCurrentProfileLoad()) return;
       if (profile) {
         // Update lastLoginAt at most once per calendar day. Every write to
         // staffUsers can fan out to the roster onSnapshot listener for every
         // active session, so writing on every login creates avoidable reads.
         if (profile.status === 'Active') {
           const now = new Date().toISOString();
-          if (profile.lastLoginAt?.slice(0, 10) !== now.slice(0, 10) && isStillCurrentUser()) {
+          if (profile.lastLoginAt?.slice(0, 10) !== now.slice(0, 10) && isCurrentProfileLoad()) {
             profile.lastLoginAt = now;
             persistStaffUserToFirestore(profile).catch((e) =>
               console.warn('Non-fatal: could not update lastLoginAt', e)
