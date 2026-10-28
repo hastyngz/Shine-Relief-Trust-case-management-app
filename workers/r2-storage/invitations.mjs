@@ -264,7 +264,7 @@ async function defaultFindAuthAccountByEmail(email, env, accessToken) {
     // The privileged lookup reports USER_NOT_FOUND as a 400 response when no
     // account matches. Treat only that documented condition as "available";
     // permission, configuration, and all other API failures must fail closed.
-    if (response.status === 400 && /\\bUSER_NOT_FOUND\\b/.test(`${apiMessage} ${nestedMessages}`)) return null;
+    if (response.status === 400 && /\bUSER_NOT_FOUND\b/.test(`${apiMessage} ${nestedMessages}`)) return null;
     throw new InvitationError('Firebase could not safely verify whether this email already has an account.', 503);
   }
   if (!Array.isArray(payload.users)) throw new InvitationError('Firebase returned an incomplete account eligibility response.', 503);
