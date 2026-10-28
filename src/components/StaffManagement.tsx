@@ -647,7 +647,6 @@ export const StaffManagement: React.FC = () => {
                   >
                     <option value="Staff">Staff (Standard)</option>
                     <option value="Manager">Manager (Operations)</option>
-                    <option value="Administrator">Administrator (Full Access)</option>
                     <option value="View Only">View Only (Auditor/Guest)</option>
                   </select>
                 </div>
@@ -685,7 +684,7 @@ export const StaffManagement: React.FC = () => {
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900">
                 <div className="font-bold flex items-center gap-1 text-amber-950 mb-0.5">
                   <Lock className="w-3.5 h-3.5" />
-                  Firebase Authentication Account Provisioning
+                  Secure email invitation
                 </div>
                 Firebase sends a sign-in link to the invited address. No shared or temporary password is created; the staff profile is saved only after the recipient verifies the email and accepts the single-use invitation.
               </div>
@@ -703,7 +702,7 @@ export const StaffManagement: React.FC = () => {
                   disabled={submitting}
                   className="px-5 py-2 bg-teal-900 hover:bg-teal-950 text-white font-bold text-xs rounded-xl shadow-xs transition-all disabled:opacity-50"
                 >
-                  {submitting ? 'Creating Account...' : 'Create Staff Member'}
+                  {submitting ? 'Sending invitation…' : 'Send invitation'}
                 </button>
               </div>
             </form>
