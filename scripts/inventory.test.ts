@@ -31,7 +31,7 @@ assert.equal(resolveInventoryLocationForSave(undefined, 'Farm', false), 'Farm', 
 const inventoryFixture = (overrides: Partial<InventoryItem>): InventoryItem => ({
   id: 'item', stockCode: 'CODE', name: 'Item', category: 'Food & Groceries', unit: 'bags',
   quantityOnHand: 5, minimumStockLevel: 2, location: 'Main Office', movements: [],
-  createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'Test User', updatedBy: 'Test User',
   ...overrides,
 });
 const filterItems = [
