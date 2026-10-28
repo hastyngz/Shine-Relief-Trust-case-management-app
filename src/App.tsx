@@ -49,6 +49,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { MessagingProvider } from './contexts/MessagingContext';
 import { useVisualSettings, VisualSettingsProvider } from './contexts/VisualSettingsContext';
 import { StaffLoginView } from './components/StaffLoginView';
+import { StaffInvitationClaim } from './components/StaffInvitationClaim';
 import { ShineLogo } from './components/ShineLogo';
 
 import { Header } from './components/Header';
@@ -125,7 +126,7 @@ function ViewSkeleton() {
   );
 }
 
-function AppContent() {
+function MainAppContent() {
   const { mobileViewMode, foundationLook, theme, glassEffect, animatedGlass } = useVisualSettings();
   const {
     currentUser,
@@ -1518,6 +1519,12 @@ function AppContent() {
       />
     </div>
   );
+}
+
+function AppContent() {
+  const isInvitationRoute = window.location.hash.replace(/^#\\/?/, '').split('?')[0] === 'accept-invitation'
+    || new URLSearchParams(window.location.search).get('mode') === 'signIn';
+  return isInvitationRoute ? <StaffInvitationClaim /> : <MainAppContent />;
 }
 
 export default function App() {
