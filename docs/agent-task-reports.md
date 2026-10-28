@@ -830,3 +830,10 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Expanded scripts/staff-invitations-worker.test.mjs to cover invalid authenticated identity, unverified email identity, duplicate staff profile rejection, and to assert invitation dispatch precedes the R2-only gate. The test-helper syntax failure identified in Actions run #975 was corrected in commit b00966c; router-order regression coverage was added in 49792e8; latest feedback test additions include b6165f8, 80e8d5a, 5ad0164, b58eab8, and 2c04daa.
 - No exact-head Actions run has yet been confirmed green. The workflow uses a concurrency group, and the branch received multiple file-level commits; prior runs were queued/cancelled while newer pushes arrived. The latest run must complete against the integrated branch head before test status can be reported.
 - No live Firebase email/account operations, production config mutation or deployment were performed.
+
+
+### Follow-up CI finding — wrong-recipient claim expectation — 2026-10-28
+
+- Read run #979's job log after it reached the invitation lifecycle test. TypeScript, password-reset feedback, UI-effects, case-goal and upload-validation checks passed on that SHA; the invitation lifecycle test failed because it expected HTTP 403 for a different email but the implementation correctly returned 404.
+- The claim handler hashes the signed-in email to find the invitation record before comparing the token. Returning 404 for an unrelated email avoids revealing whether another email address has an invitation. Updated the test expectation and wording to assert this privacy-preserving behavior in commit e265455.
+- Run #979 was cancelled by GitHub's branch concurrency queue after the failing step; this is not a full-suite pass. The updated exact-head CI still needs to complete.
