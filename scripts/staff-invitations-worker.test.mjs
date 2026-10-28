@@ -118,6 +118,34 @@ try {
   }
   {
     const f = setup();
+    await f.invite();
+    const original = f.invitations.get(await emailHash('new.staff@example.invalid')).data.tokenHash;
+    f.authAccounts.set('new.staff@example.invalid', {
+      uid: 'orphaned-invitation-uid',
+      createdAt: String(NOW + 1000),
+      emailVerified: true,
+    });
+    const response = await f.invite();
+    assert.equal(response.status, 202, 'a verified Auth identity created by opening an earlier invitation must be recoverable');
+    assert.equal(f.sent.length, 2);
+    const recovered = f.invitations.get(await emailHash('new.staff@example.invalid'));
+    assert.notEqual(recovered.data.tokenHash, original, 'recovery must rotate the single-use token');
+    assert.equal(recovered.data.status, 'pending');
+  }
+  {
+    const f = setup();
+    await f.invite();
+    f.authAccounts.set('new.staff@example.invalid', {
+      uid: 'unverified-orphan-uid',
+      createdAt: String(NOW + 1000),
+      emailVerified: false,
+    });
+    const response = await f.invite();
+    assert.equal(response.status, 409, 'unverified existing identities must not use the invitation recovery exception');
+    assert.equal(f.sent.length, 1);
+  }
+  {
+    const f = setup();
     const response = await f.invite();
     assert.equal(response.status, 202);
     const body = await response.json();
