@@ -805,3 +805,11 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Found a first-login race in `src/contexts/AuthContext.tsx`: the initial `onAuthStateChanged` profile lookup could overlap the invitation claim's explicit refresh for the same UID and publish its earlier "Unregistered User" fallback after the new profile was created. Added a monotonically increasing profile-load sequence guard so only the newest load for the current UID can publish its result.
 - Code commits include `c90a575`, `fb00be9`, `75e0723`, `a11841b`, `1836961`, `cb77644`, and `2007c09`.
 - Verification remains blocked: exact-head GitHub status lookup for `2007c09` returned no status entries, and a local checkout failed because this environment could not resolve `github.com`. No npm tests, lint or build were executed here. No production/staging auth flow or data was touched.
+
+
+### Read-only Cloudflare configuration inspection — 2026-10-28
+
+- Read-only Cloudflare API inspection found the deployed Worker has a `FIREBASE_SERVICE_ACCOUNT_JSON` secret binding and the expected public Firebase project ID/CORS allowlist. Secret values were not read or returned.
+- The deployed Worker does **not** currently have `FIREBASE_INVITATION_CONTINUE_URL`. Added the non-secret approved SHINE web.app continuation URL to `workers/r2-storage/wrangler.toml` so a future owner-approved deployment carries it.
+- The latest deployed Worker deployment is dated 2026-10-15, before this invitation integration. The current deployed Worker therefore must not be assumed to contain the invitation route. No live configuration was changed and no deployment was made.
+- Still required before invitation use: exact-head GitHub Actions, Firebase Email Link sign-in/provider and authorized-domain verification, and a real approved staging journey. The service-account secret's existence alone does not prove its permissions or successful OAuth token exchange.
