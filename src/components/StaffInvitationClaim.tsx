@@ -4,6 +4,7 @@ import { auth } from '../firebase';
 import { claimStaffInvitation } from '../services/r2StorageClient';
 import { useAuth } from '../contexts/AuthContext';
 import { getStaffInvitationToken } from '../utils/staffInvitationUrl';
+import { getStaffInvitationClaimErrorMessage } from '../utils/staffInvitationFeedback';
 
 const getInvitationToken = () => getStaffInvitationToken(window.location.hash, window.location.search, window.location.origin);
 
@@ -54,7 +55,7 @@ export const StaffInvitationClaim: React.FC = () => {
       await refreshStaffProfile();
       setComplete(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The invitation could not be accepted. Please try again or contact a SHINE Administrator.');
+      setError(getStaffInvitationClaimErrorMessage(cause));
     } finally {
       setBusy(false);
     }
