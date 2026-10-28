@@ -785,3 +785,14 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - The repository's `.github/workflows/shine-checks.yml` does include `npm run test:staff-invitations-worker`, so the focused lifecycle test is part of the checks job.
 - Read-only exact-SHA status lookup for code commit `d73109cbb22880dfc5c580460a89e2eb8542e8a4` returned no published status entries. This is **not** a pass or a failure; exact-head CI remains unverified. Per the board rule, continue independent review rather than repeatedly querying the same status.
 - Review limitation: the Firebase email-link browser journey has not been exercised in staging, and the deployed Worker secret/configuration state has not been verified. Keep production invitation use blocked until the actual CI results and approved staging journey are available.
+
+
+### Additional invitation recovery and URL test work — 2026-10-28
+
+- Found a recoverability gap: if a recipient opened the first email link and Firebase created their identity but the profile claim failed transiently, the Admin could not resend because the existing Auth identity was rejected before the invitation was checked.
+- Updated `workers/r2-storage/invitations.mjs` so the exception is narrow: resend is allowed only for the same unaccepted `pending`, `delivery_failed`, or `sending` invitation, with a verified Auth identity whose parsed creation time is strictly later than that invitation's creation time. Older, unverified, accepted, malformed-timestamp and unrelated existing accounts remain blocked. Added lifecycle regression tests for the recovery and unverified-account rejection.
+- Extracted URL handling into `src/utils/staffInvitationUrl.ts`; `src/App.tsx` and `StaffInvitationClaim.tsx` now use the shared helpers. The helper accepts the token from the app fragment or Firebase's `continueUrl` fragment, rejects malformed and unapproved-origin continuation URLs, and does not accept a token from an arbitrary top-level query parameter.
+- Added `scripts/staff-invitation-url.test.ts`, registered `test:staff-invitation-url` in `package.json`, and added it to `.github/workflows/shine-checks.yml`.
+- Code commits for this round include `e7208c0`, `3eb7509`, `2b525d1`, `b6a7f75`, `7eabfe7`, `beaa0e0`, `d4a3392`, `c81d658`, `5b321d8`, `c172ae0`, `0ee5f29`, and `9897dc2`.
+- Verification limitation: the GitHub combined-status lookup for `9897dc2` returned no status entries (not a pass or failure). A local checkout attempt failed because this environment could not resolve `github.com`, so no npm test, lint or build command was executed here. The newly added tests must be run by CI; do not claim they pass yet.
+- No live Firebase email, account, production Firestore mutation, secret/configuration change or deployment was performed. Production readiness remains blocked on exact-head CI and approved staging email-link acceptance.
