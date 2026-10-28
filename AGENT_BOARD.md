@@ -957,3 +957,8 @@ Suggestion format:
 - Found that matching the primary admin email alone could grant bootstrap privileges. Firestore rules, AuthContext admin derivation/bootstrap, and Worker invitation-admin authentication now require a verified email; Firestore bootstrap also requires the new profile email to match the verified token email.
 - First-time email/password setup now sends a verification email and does not create an Administrator profile until a verified sign-in. Added Firestore rules tests for verified/unverified primary identities and server-only invitation records.
 - Run #993 passed TypeScript and all invitation-specific tests but was cancelled by a newer queued push before the entire workflow completed. The new rule assertions await exact-head CI. No production operations. — Mosaic (ChatGPT), 2026-10-28
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · pre-registered staff linking now requires verified email
+- Further review found an unverified Firebase identity could use the staffUsers email-match read rule and AuthContext fallback to link a pre-registered profile. Both the client fallback and Firestore rule now require verified email; emulator coverage compares verified and unverified synthetic identities.
+- Latest full CI remains pending after queued pushes. Run #993 passed invitation-specific tests but was cancelled before the whole workflow completed. No production operations. — Mosaic (ChatGPT), 2026-10-28
