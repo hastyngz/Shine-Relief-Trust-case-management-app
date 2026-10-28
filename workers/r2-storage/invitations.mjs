@@ -15,6 +15,21 @@ class InvitationError extends Error {
 const normalizeEmail = (value) => typeof value === 'string' ? value.trim().toLowerCase() : '';
 const nowIso = () => new Date().toISOString();
 
+// Firebase Auth REST returns createdAt as a decimal string of milliseconds
+// since the Unix epoch (not an ISO date). Invitation records use ISO strings.
+// Accept both formats explicitly and fail closed on malformed timestamps.
+function parseTimestamp(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN;
+  if (typeof value !== 'string' || !value.trim()) return Number.NaN;
+  const normalized = value.trim();
+  if (/^\\d{10,16}$/.test(normalized)) {
+    const milliseconds = Number(normalized);
+    return Number.isFinite(milliseconds) ? milliseconds : Number.NaN;
+  }
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function decodeBase64Url(value) {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
@@ -495,8 +510,8 @@ export async function handleStaffInvitationRequest(request, env, injected = {}) 
         throw new InvitationError('This invitation has expired. Ask an Administrator to resend it.', 410);
       }
       if (email !== normalizeEmail(invitation.data.email)) throw new InvitationError('The signed-in email does not match the invitation recipient.', 403);
-      const authCreatedAt = Date.parse(identity.createdAt || '');
-      const inviteCreatedAt = Date.parse(invitation.data.createdAt || '');
+      const authCreatedAt = parseTimestamp(identity.createdAt);
+      const inviteCreatedAt = parseTimestamp(invitation.data.createdAt);
       if (!Number.isFinite(authCreatedAt) || !Number.isFinite(inviteCreatedAt) || authCreatedAt <= inviteCreatedAt) {
         throw new InvitationError('This Firebase account existed before the invitation. Ask an Administrator to resolve the existing account safely.', 409);
       }
