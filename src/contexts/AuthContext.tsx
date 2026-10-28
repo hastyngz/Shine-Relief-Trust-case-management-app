@@ -9,7 +9,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth';
-import { auth, firestore } from '../firebase';
+import { auth } from '../firebase';
 import { setActiveWorkspaceUid } from '../services/accountWorkspace';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
 import {
