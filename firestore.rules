@@ -9,7 +9,8 @@ service cloud.firestore {
     function isHastings() {
       return isSignedIn() &&
         request.auth.token.email != null &&
-        request.auth.token.email.lower() == 'hastingszidanamot@gmail.com';
+        request.auth.token.email.lower() == 'hastingszidanamot@gmail.com' &&
+        request.auth.token.email_verified == true;
     }
 
     function getStaffDoc(uid) {
@@ -240,7 +241,7 @@ service cloud.firestore {
       // All other staff creations MUST be performed by an existing Administrator.
       // Self-registration as Administrator by anyone else is strictly blocked.
       allow create: if isSignedIn() && (
-        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator') ||
+        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator' && request.resource.data.email is string && request.resource.data.email.lower() == request.auth.token.email.lower()) ||
         isAdmin()
       );
 
