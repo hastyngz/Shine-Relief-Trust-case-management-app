@@ -6,6 +6,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // The primary Administrator email must be verified even if a legacy profile
+    // already exists under that UID. Other pre-registered staff remain UID-bound.
+    function isPrimaryEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.email == null ||
+        request.auth.token.email.lower() != 'hastingszidanamot@gmail.com' ||
+        request.auth.token.email_verified == true
+      );
+    }
+
     function isHastings() {
       return isSignedIn() &&
         request.auth.token.email != null &&
@@ -18,7 +28,7 @@ service cloud.firestore {
     }
 
     function isStaffActive() {
-      return isSignedIn() && (
+      return isSignedIn() && isPrimaryEmailVerified() && (
         isHastings() ||
         (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
          getStaffDoc(request.auth.uid).data.status == 'Active')
@@ -26,7 +36,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
+      return isSignedIn() && isPrimaryEmailVerified() && (
         isHastings() ||
         (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
          getStaffDoc(request.auth.uid).data.role == 'Administrator' &&
@@ -35,7 +45,7 @@ service cloud.firestore {
     }
 
     function isManagerOrStaff() {
-      return isSignedIn() && (
+      return isSignedIn() && isPrimaryEmailVerified() && (
         isAdmin() ||
         (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
          (getStaffDoc(request.auth.uid).data.role == 'Manager' || getStaffDoc(request.auth.uid).data.role == 'Staff') &&
@@ -45,7 +55,7 @@ service cloud.firestore {
 
     function isManagerOrAdmin() {
       return isAdmin() || (
-        isSignedIn() &&
+        isSignedIn() && isPrimaryEmailVerified() &&
         exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
         getStaffDoc(request.auth.uid).data.role == 'Manager' &&
         getStaffDoc(request.auth.uid).data.status == 'Active'
