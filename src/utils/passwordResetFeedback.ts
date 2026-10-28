@@ -20,3 +20,9 @@ export function getPasswordResetErrorMessage(error: unknown): string {
       return 'Could not request password reset instructions. No password was changed. Check your connection or sign-in setup and try again.';
   }
 }
+
+
+/** Avoid confirming whether an email address has a Firebase account. */
+export function getPasswordResetSuccessMessage(): string {
+  return 'If an account is eligible for password reset, instructions will be sent to the email address provided. Check your inbox or spam folder. No password has been changed.';
+}
