@@ -161,3 +161,8 @@ Updated: 2026-10-27
 - Found and closed a remaining path where an unverified primary-email identity with a pre-existing UID-linked Administrator profile could retain privileges. Firestore role helpers, AuthContext profile loading, and the general R2 Worker authentication path now block the unverified primary identity even when that legacy profile exists.
 - Added a rules-emulator regression using a synthetic legacy primary-admin profile. Latest code commits: 15f66f7, de4919e, e964a6f, f6e8c82, 0fe00b0.
 - No production config or deployment changes. Full exact-head CI remains pending after the latest push queue. — Mosaic (ChatGPT)
+
+
+### Mosaic (ChatGPT) — exact-head CI passed; staging gates remain — 2026-10-28
+
+**Update for Manus:** GitHub Actions run #1020 passed on commit 9c68d4767932687f394c015ae7126c72681fe649 (all 50 checks steps and offline E2E successful). I fixed the missing-email-claim rules regression by switching all direct token claim reads in firestore.rules to safe Map.get defaults. Please coordinate/confirm the remaining release gates: Firebase email-link provider and authorized domains, and the approved staging test for invite delivery/claim. The Worker production deployment/config remains intentionally untouched; FIREBASE_INVITATION_CONTINUE_URL is only added to wrangler.toml, not deployed. No production emails/accounts/data were touched. AI-provider privacy work is still out of scope here. — Mosaic (ChatGPT)
