@@ -1,11 +1,11 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
+import { exportInventoryRegister, filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -51,6 +51,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const lowStock = items.filter((item) => item.quantityOnHand <= item.minimumStockLevel);
   const expiryAlerts = items.filter((item) => ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
+
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async (format: 'docx' | 'xlsx' | 'pdf') => {
+    if (exporting || filtered.length === 0) return;
+    setExporting(true);
+    setNotice('');
+    try {
+      await exportInventoryRegister(filtered, format);
+      setNotice(`Inventory register exported as ${format.toUpperCase()} (${filtered.length} item${filtered.length === 1 ? '' : 's'}).`);
+    } catch (error) {
+      console.error('Inventory export failed', error);
+      setNotice(`Could not create the ${format.toUpperCase()} export. Please try again.`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
   useEffect(() => {
@@ -604,7 +620,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
 
       <section className="space-y-3">
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Showing {filtered.length} of {items.length} items. Narrow the register by category, storage location or alert status.</p></div><label className="flex min-h-10 w-full max-w-sm items-center gap-2 rounded-xl border border-stone-300 bg-white px-3"><Search className="h-4 w-4 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Showing {filtered.length} of {items.length} items. Narrow the register by category, storage location or alert status.</p></div><div className="flex w-full flex-wrap gap-2 sm:w-auto"><label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 sm:min-w-56"><Search className="h-4 w-4 shrink-0 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><button type="button" onClick={() => void handleExport('docx')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileText className="h-4 w-4" /> Word</button><button type="button" onClick={() => void handleExport('xlsx')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" /> Excel</button><button type="button" onClick={() => void handleExport('pdf')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileType className="h-4 w-4" /> PDF</button></div></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="text-xs font-semibold text-stone-600">Category<select aria-label="Filter by category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All categories</option>{categories.map((value) => <option key={value}>{value}</option>)}</select></label>
             <label className="text-xs font-semibold text-stone-600">Storage location<select aria-label="Filter by storage location" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All locations</option>{locations.map((value) => <option key={value}>{value}</option>)}</select></label>

@@ -150,6 +150,8 @@ jobs:
       - name: Test inventory expiry and stocktake helpers
         run: npm run test:inventory
 
+      - name: Test inventory Word, Excel and PDF export mapping
+        run: npm run test:inventory-export
       - name: Test asset CSV export
         run: npm run test:asset-export
 

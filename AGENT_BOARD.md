@@ -981,3 +981,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · inventory register filtering
 - Added category, storage-location, and stock-alert filters to Inventory & Stores, including result counts, combined search/filtering, empty-state guidance, and a clear-filters action. Filter logic is extracted into a pure helper with focused coverage for category, location, low-stock, expiry, search, and empty results.
 - Transfers between locations and formal approval workflows remain intentionally unimplemented until per-location balances and atomic server-side transfer records are available; see `docs/inventory-transfers-and-approvals-design.md`. No live data or deployments changed. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · inventory export formats
+- Inventory register export choices are Word (.docx), Excel (.xlsx) and PDF only; no CSV export was added. Exports include the current filtered records and a shared tested column mapping. Excel includes an autofilter and adjusted column widths; UI disables exports for empty results and reports failures.
+- Added focused export mapping tests and wired them into CI. — Mosaic (ChatGPT), 2026-10-29
