@@ -90,6 +90,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const email = user.email?.toLowerCase().trim() || '';
     const isHastings = email === PRIMARY_ADMIN_EMAIL && user.emailVerified === true;
 
+    // A legacy primary-admin profile must not bypass email verification just
+    // because this Firebase UID already has an Administrator document.
+    if (email === PRIMARY_ADMIN_EMAIL && user.emailVerified !== true) {
+      setStaffProfile(null);
+      return;
+    }
+
     try {
       let profile = await getStaffUserDoc(user.uid);
       if (!isCurrentProfileLoad()) return;
