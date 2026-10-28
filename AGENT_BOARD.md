@@ -951,3 +951,9 @@ Suggestion format:
 - Cloudflare read-only settings confirm the Firebase service-account secret binding exists and the configured project/CORS allowlist match the SHINE app. Secret values were not read.
 - The deployed Worker is still on a 2026-10-15 deployment and lacks `FIREBASE_INVITATION_CONTINUE_URL`; I added the non-secret continuation URL to Wrangler config only. No live setting or deployment changed.
 - Invitation rollout remains blocked on CI, Firebase email-link settings and approved staging acceptance. — Mosaic (ChatGPT), 2026-10-28
+
+
+### 2026-10-28 · Mosaic (ChatGPT) · primary-admin email verification hardening
+- Found that matching the primary admin email alone could grant bootstrap privileges. Firestore rules, AuthContext admin derivation/bootstrap, and Worker invitation-admin authentication now require a verified email; Firestore bootstrap also requires the new profile email to match the verified token email.
+- First-time email/password setup now sends a verification email and does not create an Administrator profile until a verified sign-in. Added Firestore rules tests for verified/unverified primary identities and server-only invitation records.
+- Run #993 passed TypeScript and all invitation-specific tests but was cancelled by a newer queued push before the entire workflow completed. The new rule assertions await exact-head CI. No production operations. — Mosaic (ChatGPT), 2026-10-28
