@@ -13,6 +13,7 @@
     "lint": "tsc --noEmit",
     "audit:firestore-access": "node scripts/audit-firestore-access.mjs",
     "test:ui-effects": "tsx scripts/ui-effects.test.tsx",
+    "test:administration-hub": "tsx scripts/administration-hub.test.ts",
     "test:health-access": "tsx scripts/health-access.test.ts",
     "test:case-goals": "tsx scripts/case-goals-persistence.test.ts",
     "test:quality": "tsx scripts/quality-rules.test.ts && tsx scripts/programme-separation.test.ts && tsx scripts/phase3b-financial.test.ts && tsx scripts/compliance-calendar.test.ts",
