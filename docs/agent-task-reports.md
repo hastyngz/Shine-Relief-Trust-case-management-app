@@ -848,3 +848,13 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Extended `scripts/firestore-rules.test.ts` with verified versus unverified primary-email scenarios and cleanup of the synthetic bootstrap profile. The same rules test also asserts invitation records are unreadable and unwritable by client contexts, including Administrators, because the trusted Worker/service account is the only intended access path.
 - CI evidence from run #993 (commit c2e178b): TypeScript, password-reset feedback, staff invitation lifecycle, invitation URL parsing, invitation claim feedback, inventory transaction tests, health access, listener permissions and the existing Firestore rules test all passed before the run was cancelled by a newer queued push. The new verified-email and invitation-record rules assertions are not yet verified by a completed run.
 - Code commits for this hardening include `0d86f66`, `746575c`, `eb004a9`, `91ce7bc`, and `aa2f484`. No production deployment, live email or account operation occurred.
+
+
+### Follow-up: unverified email could link a pre-registered staff profile — 2026-10-28
+
+- A deeper review found the staff-profile-by-email fallback could still link a pre-registered profile before email verification. This was separate from the primary-admin bootstrap issue and could allow an unverified identity to adopt a matching staff profile.
+- Updated AuthContext to perform the email-based profile lookup/link only when Firebase reports emailVerified=true. Updated the Firestore staffUsers email-match read fallback to require the verified-email token claim as well.
+- Extended the Firestore rules emulator tests with a synthetic pre-registered staff profile and verified/unverified identities: the verified address can read its matching pre-registered profile to complete linking; the unverified address cannot. Existing primary-admin verified/unverified bootstrap tests remain.
+- Additional commits: e4deb98 (rules read guard), ecf0fcc (AuthContext link guard), af9e4d0 (rules regression test). These are in addition to the primary-admin hardening commits above.
+- The latest complete CI result is still pending. Run #993 passed TypeScript and the invitation-specific tests but was cancelled before the entire workflow completed. The new primary-admin and pre-registered-email rule tests need a completed exact-head run.
+- No production deployment, live emails, or real account changes were performed.
