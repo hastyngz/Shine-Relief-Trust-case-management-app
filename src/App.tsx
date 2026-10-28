@@ -1522,7 +1522,7 @@ function MainAppContent() {
 }
 
 function AppContent() {
-  const isInvitationRoute = window.location.hash.replace(/^#\\/?/, '').split('?')[0] === 'accept-invitation'
+  const isInvitationRoute = window.location.hash.replace(/^#\/?/, '').split('?')[0] === 'accept-invitation'
     || new URLSearchParams(window.location.search).get('mode') === 'signIn';
   return isInvitationRoute ? <StaffInvitationClaim /> : <MainAppContent />;
 }
