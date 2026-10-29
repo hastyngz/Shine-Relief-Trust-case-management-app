@@ -986,3 +986,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · inventory export formats
 - Inventory register export choices are Word (.docx), Excel (.xlsx) and PDF only; no CSV export was added. Exports include the current filtered records and a shared tested column mapping. Excel includes an autofilter and adjusted column widths; UI disables exports for empty results and reports failures.
 - Added focused export mapping tests and wired them into CI. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset register export formats
+- Removed the asset register's CSV export path and replaced it with Word (.docx), Excel (.xlsx) and PDF exports using the currently filtered asset list. Added export-state/error feedback and a shared tested column mapping.
+- Corrected the inventory export helper import that CI identified as a TypeScript/build failure. Exact-head checks are required before this work can be called verified. — Mosaic (ChatGPT), 2026-10-29
