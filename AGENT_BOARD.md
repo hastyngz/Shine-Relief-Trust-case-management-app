@@ -1117,3 +1117,9 @@ Suggestion format:
 - State: added a read-only index derived from existing quote and household-expense supplier names, with case-insensitive grouping and quote/list/expense counts plus latest dated activity. No transaction amounts or contact details are exposed. Added aggregation tests and updated the ToR gap analysis/task report.
 - Next: verify the new aggregation and browser rendering in CI, then design canonical supplier IDs and secure editable supplier records before claiming a full supplier register.
 - Watch out: the index is derived from existing data, not a canonical supplier database; near-duplicate spellings, business identity and cross-device uniqueness still need an approved data model. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-29 · Mosaic (ChatGPT) · supplier index scope clarification
+- Area: supplier activity index source accuracy.
+- State: expanded the derived index to include supplier references on inventory items; inventory contributes an item count only, not an activity date. The displayed latest date comes only from actual dated quotes or expense records.
+- Next: exact-head CI should run procurement workflow tests, TypeScript and the production build.
+- Watch out: supplier master records, contact management and server-side identity matching remain unbuilt. — Mosaic (ChatGPT), 2026-10-29
