@@ -139,3 +139,9 @@ The implemented changes listed above passed automated CI, but the broader Admini
 - Added an Asset Register filter for assets not verified this calendar year, verified this year, and latest verification outcomes of discrepancy or not located. Filters combine with existing search, status, condition, category, location, maintenance and warranty filters; disposed assets are excluded from the verification follow-up views.
 - Verification-year matching requires a valid date and uses the current local date already supplied by the view. Missing or malformed dates count as not verified this year; the filter does not alter asset records or claim an organisation-wide audit is complete.
 - Added synthetic regression cases for verification date/outcome and filter combinations. Automated verification of this change is pending; do not treat it as passed until the exact-head CI run finishes. No manual Android test or production deployment was performed.
+
+
+## Procurement receipt and finance stage filters (2026-10-29)
+
+- Added a lifecycle filter for purchased lists that are awaiting receipt, received but awaiting finance handover, or already handed to finance. It combines with the existing text search and Draft/Approved/Purchased filter.
+- This is a view over existing procurement timestamps only; it does not create payment records or grant finance approval authority. Regression coverage includes all three stages and combined search/filter behavior. Exact-head automated verification is pending.
