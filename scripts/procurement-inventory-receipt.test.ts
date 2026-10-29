@@ -171,6 +171,33 @@ async function main() {
     assert.equal(readProcurementReceiptIntent(storage, 'staff-b', 'PRC-1234567'), null, 'another account cannot read the saved intent');
   }
 
+  {
+    const storage = new MemoryStorage();
+    let calls = 0;
+    await assert.rejects(postProcurementReceiptMovements({
+      uid: 'staff-a', list: baseList(), choices, inventoryItems: inventoryItems(), storage, date: '2026-02-30',
+      postMovement: async (payload) => { calls += 1; return okResult(payload); },
+    }), /valid receipt date/);
+    assert.equal(calls, 0, 'an impossible receipt date must fail before any movement is posted');
+    assert.equal(storage.values.size, 0, 'an invalid date must not persist a retry intent');
+  }
+
+  {
+    const storage = new MemoryStorage();
+    storage.values.set('shine.procurement-receipt.v1:staff-a:PRC-1234567', JSON.stringify({
+      version: 1, uid: 'staff-a', procurementListId: 'PRC-1234567', date: '2026-02-30',
+      lines: [{ itemIndex: 0, inventoryItemId: 'stock-books', quantity: 12, unit: 'packs', reference: 'Synthetic reference', reason: 'Synthetic reason' }],
+    }));
+    assert.equal(readProcurementReceiptIntent(storage, 'staff-a', 'PRC-1234567'), null,
+      'a persisted intent with an impossible calendar date must be rejected');
+    let calls = 0;
+    await assert.rejects(postProcurementReceiptMovements({
+      uid: 'staff-a', list: baseList(), choices, inventoryItems: inventoryItems(), storage,
+      postMovement: async (payload) => { calls += 1; return okResult(payload); },
+    }), /Saved receipt retry details are invalid/);
+    assert.equal(calls, 0, 'corrupt date intent must never be silently replaced or posted');
+  }
+
   console.log('Procurement inventory receipt retry tests passed.');
 }
 
