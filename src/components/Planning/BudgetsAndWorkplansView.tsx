@@ -193,6 +193,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       const savedIntent = staffProfile?.uid && typeof window !== 'undefined'
         ? readProcurementReceiptIntent(window.localStorage, staffProfile.uid, list.id)
         : null;
+      if (staffProfile?.uid && typeof window !== 'undefined' && readProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id)) {
+        throw new Error('A partial delivery retry is pending for this list. Complete that exact delivery before attempting a full receipt.');
+      }
       const choices = list.items.map((_, itemIndex) => {
         const key = `${list.id}:${itemIndex}`;
         const persisted = savedIntent?.lines.find((line) => line.itemIndex === itemIndex);
