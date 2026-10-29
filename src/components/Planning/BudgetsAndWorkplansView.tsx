@@ -30,6 +30,7 @@ import {
   updateScheduleItem,
   deleteScheduleItem,
   updateProcurementList,
+  getDatabase,
 } from '../../utils/storage';
 import { formatMWK, formatDate } from '../../utils/export';
 import { useAuth } from '../../contexts/AuthContext';
@@ -66,7 +67,7 @@ import {
   readProcurementReceiptIntent,
 } from '../../services/procurementInventoryReceipt';
 import { clearProcurementDeliveryIntent, createProcurementDeliveryId, postProcurementDeliveryMovements, readProcurementDeliveryIntent } from '../../services/procurementDelivery';
-import { getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary, validateProcurementPayment } from '../../services/procurementLifecycle';
+import { appendValidatedProcurementPayment, getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary } from '../../services/procurementLifecycle';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
@@ -115,6 +116,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const canApproveProcurement = isAdmin || staffProfile?.role === 'Manager';
   const focusedQualityKey = useRef('');
   const deliveryLocks = useRef(new Set<string>());
+  const paymentLocks = useRef(new Set<string>());
 
   useEffect(() => {
     if (!initialProgrammeCreate) return;
@@ -301,17 +303,36 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     }
   };
   const recordProcurementPayment = (list: ProcurementList) => {
-    if (!canApproveProcurement || paymentPosting[list.id]) return;
+    if (!canApproveProcurement || paymentPosting[list.id] || paymentLocks.current.has(list.id)) return;
     const draft = paymentDrafts[list.id];
     if (!draft) { window.alert('Start a payment record first.'); return; }
-    const payment = { id: draft.id, date: draft.date, amountMWK: Number(draft.amount), reference: draft.reference.trim(), method: draft.method, notes: draft.notes.trim() || undefined, recordedAt: new Date().toISOString(), recordedBy: actorName };
-    const errors = validateProcurementPayment({ list, date: payment.date, amountMWK: payment.amountMWK, reference: payment.reference, paymentId: payment.id });
-    if (errors.length) { window.alert(errors.join('\n')); return; }
+    paymentLocks.current.add(list.id);
     setPaymentPosting((current) => ({ ...current, [list.id]: true }));
-    const saved = saveProcurementList(list, { payments: [...(list.payments || []), payment] });
-    setPaymentPosting((current) => ({ ...current, [list.id]: false }));
-    if (saved) {
-      setPaymentDrafts((current) => ({ ...current, [list.id]: { id: `payment_${createProcurementDeliveryId().slice(9)}`, date: new Date().toISOString().slice(0, 10), amount: '', reference: '', method: 'Cash', notes: '' } }));
+    try {
+      // Re-read the latest local copy before calculating the balance. This avoids
+      // appending against an older React render after another local update.
+      const currentList = (getDatabase().procurementLists || []).find((record) => record.id === list.id);
+      if (!currentList) throw new Error('This procurement list no longer exists. Refresh and try again.');
+      const payment = {
+        id: draft.id,
+        date: draft.date,
+        amountMWK: Number(draft.amount),
+        reference: draft.reference.trim(),
+        method: draft.method,
+        notes: draft.notes.trim() || undefined,
+        recordedAt: new Date().toISOString(),
+        recordedBy: actorName,
+      };
+      const updated = appendValidatedProcurementPayment(currentList, payment);
+      const saved = saveProcurementList(currentList, { payments: updated.payments });
+      if (saved) {
+        setPaymentDrafts((current) => ({ ...current, [list.id]: { id: `payment_${createProcurementDeliveryId().slice(9)}`, date: new Date().toISOString().slice(0, 10), amount: '', reference: '', method: 'Cash', notes: '' } }));
+      }
+    } catch (error) {
+      window.alert(`Payment was not recorded: ${error instanceof Error ? error.message : 'Please refresh and retry.'}`);
+    } finally {
+      paymentLocks.current.delete(list.id);
+      setPaymentPosting((current) => ({ ...current, [list.id]: false }));
     }
   };
   const handOverProcurementToFinance = (list: ProcurementList) => {

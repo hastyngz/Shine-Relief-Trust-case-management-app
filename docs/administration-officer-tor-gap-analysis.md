@@ -214,7 +214,7 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 ### Procurement module card accuracy (2026-10-29)
 - The Administration Hub description now reflects the existing quote collection/selection, manager approval, purchase-order reference, receipt and finance handover steps. It no longer says formal approvals and stock receipt integration are wholly planned.
-- Remaining procurement gaps are partial delivery quantities and reconciliation, a supplier master register/deduplication across devices, and payment reconciliation. Receiving inventory is not payment, and the Administration Officer must not gain payment authority.
+- Procurement now re-reads the latest local list before appending a payment, uses a per-list submission lock to prevent rapid duplicate submissions in one session, revalidates the outstanding balance, and retains the entered draft if local persistence fails. This protects same-device retries and stale component renders; cross-device atomic payment reconciliation still requires a server-authoritative transaction and remains outstanding. A supplier master register/deduplication across devices also remains outstanding. Receiving inventory is not payment, and the Administration Officer must not gain payment authority.
 
 
 ### Asset verification follow-up filters (2026-10-29)

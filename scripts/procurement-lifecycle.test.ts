@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { ProcurementList } from '../src/types';
-import { getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary, isProcurementFullyReceived, validateProcurementDelivery, validateProcurementPayment } from '../src/services/procurementLifecycle';
+import { appendValidatedProcurementPayment, getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary, isProcurementFullyReceived, validateProcurementDelivery, validateProcurementPayment } from '../src/services/procurementLifecycle';
 
 const base = (): ProcurementList => ({ id: 'PRC-SYNTHETIC', title: 'Synthetic supplies', purpose: 'Test only', items: [
   { description: 'Books', quantity: 12, unit: 'packs', priceStatus: 'quoted' },
@@ -21,4 +21,18 @@ assert.ok(validateProcurementDelivery({ list, date: '2026-10-29', reference: 'DN
 assert.deepEqual(validateProcurementPayment({ list, date: '2026-10-29', amountMWK: 7500, reference: 'PAY-2', paymentId: 'payment_0000002' }), []);
 assert.ok(validateProcurementPayment({ list, date: '2026-10-29', amountMWK: 7501, reference: 'PAY-2', paymentId: 'payment_0000002' }).some((e) => e.includes('exceeds the outstanding')));
 assert.ok(validateProcurementPayment({ list, date: '2026-02-30', amountMWK: 1, reference: 'PAY-2', paymentId: 'payment_0000002' }).some((e) => e.includes('valid payment date')));
+
+const paymentToAppend = {
+  id: 'payment_0000002', date: '2026-10-29', amountMWK: 7500, reference: 'PAY-2',
+  method: 'Bank transfer' as const, recordedAt: '2026-10-29T10:00:00Z', recordedBy: 'synthetic',
+};
+const paidList = appendValidatedProcurementPayment(list, paymentToAppend);
+assert.equal(paidList.payments?.length, 2);
+assert.equal(getProcurementPaymentSummary(paidList).outstandingMWK, 0);
+assert.equal(list.payments?.length, 1, 'append helper must not mutate the source list');
+assert.throws(() => appendValidatedProcurementPayment(paidList, {
+  ...paymentToAppend, id: 'payment_0000003', amountMWK: 1,
+}), /exceeds the outstanding amount/);
+assert.throws(() => appendValidatedProcurementPayment(paidList, paymentToAppend), /already been recorded/);
+
 console.log('Procurement lifecycle validation tests passed.');

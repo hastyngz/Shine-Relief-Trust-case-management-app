@@ -1093,3 +1093,8 @@ Suggestion format:
 - Added automatic next-occurrence creation when a recurring compliance obligation is completed. Stable series IDs and deterministic occurrence IDs make retries idempotent; month-end and leap-day anchors are preserved.
 - Added unit coverage for recurrence intervals/date boundaries and a browser E2E scenario for completing a monthly obligation. Updated the Administration Officer gap analysis; notifications and manager-only verification remain open.
 - Verification pending on exact-head CI; no deployment or live-data changes.
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement payment retry safety
+- Hardened payment recording to re-read the current local procurement list before balance validation, use a per-list in-flight lock, and retain the payment draft when saving fails. Added a pure append-and-revalidate helper with regression tests for duplicate IDs and overpayment.
+- This is a same-device stale-render/retry safeguard only. Cross-device atomic balance enforcement still needs a server-authoritative transaction; no production data or rules changed.

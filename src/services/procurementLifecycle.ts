@@ -61,6 +61,23 @@ export function validateProcurementPayment(args: {
   return errors;
 }
 
+
+/** Build a payment append from the freshest local procurement snapshot and revalidate its balance. */
+export function appendValidatedProcurementPayment(
+  list: ProcurementList,
+  payment: ProcurementPayment,
+): ProcurementList {
+  const errors = validateProcurementPayment({
+    list,
+    date: payment.date,
+    amountMWK: payment.amountMWK,
+    reference: payment.reference,
+    paymentId: payment.id,
+  });
+  if (errors.length) throw new Error(errors.join(' '));
+  return { ...list, payments: [...(list.payments || []), payment] };
+}
+
 export function isProcurementFullyReceived(list: ProcurementList): boolean {
   return list.items.every((item, index) => getProcurementOutstandingQuantity(list, index) === 0);
 }
