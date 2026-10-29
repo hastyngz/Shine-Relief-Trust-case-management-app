@@ -53,6 +53,11 @@
 - `AGENT_BOARD.md`
 - `docs/administration-officer-tor-gap-analysis.md`
 
+### Documents & Filing follow-up
+
+- Added category and linked-record-type filters to the existing permission-aware attachment index, plus a one-tap clear-all action. Filter options are derived only from the accessible attachment set returned by the existing service; this does not widen health or safeguarding access.
+- Added focused synthetic-data tests for search, file type, category, linked record type and empty results, and wired them into CI.
+
 ### Compliance & Deadlines follow-up
 
 - Added explicit Due soon and Cancelled filters to the compliance register, sharing the same date/status rules as the summary counts. Regression coverage includes overdue, due-soon, completed, cancelled and open states.

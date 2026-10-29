@@ -48,6 +48,9 @@ jobs:
       - name: Test administration hub module navigation
         run: npm run test:administration-hub
 
+      - name: Test document filing filters
+        run: npm run test:document-filing
+
       - name: Test password-reset feedback sanitization
         run: npx tsx scripts/password-reset-feedback.test.ts
 

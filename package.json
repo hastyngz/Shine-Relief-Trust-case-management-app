@@ -53,7 +53,8 @@
     "test:asset-export": "tsx scripts/asset-export.test.ts",
     "test:asset-verification": "tsx scripts/asset-verification.test.ts",
     "test:compliance": "tsx scripts/compliance-calendar.test.ts",
-    "test:inventory-export": "tsx scripts/inventory-export.test.ts"
+    "test:inventory-export": "tsx scripts/inventory-export.test.ts",
+    "test:document-filing": "tsx scripts/document-filing.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",

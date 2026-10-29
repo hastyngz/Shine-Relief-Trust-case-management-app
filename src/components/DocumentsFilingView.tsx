@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, ShieldCheck } from 'lucide-react';
 import type { AppDatabase, PhotoAttachment } from '../types';
+import { filterFilingAttachments, type FilingRecordType } from '../utils/documentFiling';
 import { useAuth } from '../contexts/AuthContext';
 import { getFilingAttachmentMetadata } from '../services/attachmentService';
 import { getStoredFile } from '../services/r2StorageClient';
@@ -41,6 +42,8 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   const [attachments, setAttachments] = useState<PhotoAttachment[]>([]);
   const [search, setSearch] = useState('');
   const [fileFilter, setFileFilter] = useState<FileFilter>('All files');
+  const [categoryFilter, setCategoryFilter] = useState('All categories');
+  const [recordTypeFilter, setRecordTypeFilter] = useState<FilingRecordType>('All record types');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -68,19 +71,11 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid, canViewHealthRecords]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return attachments.filter((item) => {
-      const image = isImage(item);
-      if (fileFilter === 'Images' && !image) return false;
-      if (fileFilter === 'Documents' && image) return false;
-      if (!term) return true;
-      return [
-        item.fileName, item.caption, item.category, item.targetType, item.targetId,
-        item.uploadedBy?.name, item.uploadedBy?.email, item.date,
-      ].some((value) => String(value || '').toLowerCase().includes(term));
-    });
-  }, [attachments, search, fileFilter]);
+  const categories = useMemo(() => [...new Set(attachments.map((item) => item.category).filter(Boolean))].sort(), [attachments]);
+  const recordTypes = useMemo(() => [...new Set(attachments.map((item) => item.targetType).filter(Boolean))].sort() as FilingRecordType[], [attachments]);
+  const filtered = useMemo(() => filterFilingAttachments(attachments, {
+    search, fileFilter, categoryFilter, recordTypeFilter,
+  }), [attachments, search, fileFilter, categoryFilter, recordTypeFilter]);
 
   const openFile = async (attachment: PhotoAttachment) => {
     setDownloadingId(attachment.id);
@@ -171,6 +166,19 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
           ))}
           <span className="ml-auto self-center text-xs text-stone-500">{filtered.length} shown</span>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-stone-700">Document category
+            <select aria-label="Filter by document category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="field mt-1 min-h-10 w-full">
+              <option>All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-stone-700">Linked record type
+            <select aria-label="Filter by linked record type" value={recordTypeFilter} onChange={(event) => setRecordTypeFilter(event.target.value as FilingRecordType)} className="field mt-1 min-h-10 w-full">
+              <option>All record types</option>{recordTypes.map((type) => <option key={type} value={type}>{targetLabel(type)}</option>)}
+            </select>
+          </label>
+        </div>
+        {(search || fileFilter !== 'All files' || categoryFilter !== 'All categories' || recordTypeFilter !== 'All record types') && <button type="button" onClick={() => { setSearch(''); setFileFilter('All files'); setCategoryFilter('All categories'); setRecordTypeFilter('All record types'); }} className="min-h-10 rounded-xl border border-stone-200 px-3 text-sm font-semibold text-stone-700 hover:bg-stone-50">Clear all filters</button>}
       </div>
 
       {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{error}</div>}

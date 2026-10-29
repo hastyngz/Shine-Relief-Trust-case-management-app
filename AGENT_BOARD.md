@@ -1001,3 +1001,7 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · administration follow-up and E2E repair
 - The last checks job passed TypeScript, focused inventory/asset export tests, and production build; the E2E job failed because the sensitive-data test still looked for the removed “CSV Export Centre” button. Updating the test to the Excel labels, not weakening the privacy assertions.
 - Added explicit Due soon and Cancelled compliance filters backed by the same pure helper as the dashboard date logic, with regression coverage. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · document filing usability
+- Extended the existing permission-aware document index with category and linked-record-type filters and clear-all filters. Options derive only from the attachment metadata already accessible to the current user; no additional records or signed URLs are requested. Added focused synthetic tests and CI wiring. — Mosaic (ChatGPT), 2026-10-29
