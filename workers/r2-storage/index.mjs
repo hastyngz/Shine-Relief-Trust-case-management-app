@@ -126,7 +126,15 @@ function validateInventoryMovementPayload(payload) {
     typeof payload.sourceId !== 'string' || !validId(payload.sourceId) ||
     !Number.isInteger(payload.sourceLineIndex) || payload.sourceLineIndex < 0 || payload.sourceLineIndex > 9999
   )) throw new ApiError('A valid procurement list and line reference are required.');
-  if (payload.sourceType === 'procurementReceipt' &&
+  if (payload.sourceDeliveryId !== undefined && (payload.sourceType !== 'procurementReceipt' || !validId(payload.sourceDeliveryId))) {
+    throw new ApiError('A valid procurement delivery ID is required.');
+  }
+  if (payload.sourceType === 'procurementReceipt' && payload.sourceDeliveryId !== undefined &&
+      (typeof payload.reference !== 'string' || !payload.reference.startsWith(`Delivery ${payload.sourceDeliveryId} ·`) ||
+       !payload.reference.includes(`procurement ${payload.sourceId} · line ${payload.sourceLineIndex + 1}`))) {
+    throw new ApiError('The delivery reference does not match the procurement list line.');
+  }
+  if (payload.sourceType === 'procurementReceipt' && payload.sourceDeliveryId === undefined &&
       (typeof payload.reference !== 'string' || !payload.reference.startsWith(`Procurement ${payload.sourceId} · line ${payload.sourceLineIndex + 1}`))) {
     throw new ApiError('The receipt reference does not match the procurement list line.');
   }
@@ -143,6 +151,7 @@ function validateInventoryMovementPayload(payload) {
     sourceType: payload.sourceType,
     sourceId: payload.sourceId,
     sourceLineIndex: payload.sourceLineIndex,
+    sourceDeliveryId: payload.sourceDeliveryId,
   };
 }
 
@@ -171,8 +180,16 @@ async function handleInventoryMovement(request, staff, idToken) {
       if (!procurementDocument) throw new ApiError('The purchased procurement list was not found on the server.', 404);
       const procurement = decodeFirestoreFields(procurementDocument.fields);
       procurementLine = Array.isArray(procurement.items) ? procurement.items[payload.sourceLineIndex] : undefined;
-      if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt || !procurementLine || procurementLine.quantity !== payload.quantity) {
-        throw new ApiError('This procurement line is not eligible for a full-quantity inventory receipt.', 409);
+      const receivedQuantities = Array.isArray(procurement.receivedQuantities)
+        ? procurement.receivedQuantities
+        : (Array.isArray(procurement.items) ? procurement.items.map(() => 0) : []);
+      const alreadyReceived = Number(receivedQuantities[payload.sourceLineIndex] || 0);
+      const outstanding = Number(procurementLine?.quantity) - alreadyReceived;
+      if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt ||
+          !procurementLine || !Number.isFinite(alreadyReceived) || alreadyReceived < 0 ||
+          !Number.isFinite(outstanding) || outstanding <= 0 || payload.quantity > outstanding ||
+          (payload.sourceDeliveryId === undefined && payload.quantity !== outstanding)) {
+        throw new ApiError('This procurement line exceeds the remaining receivable quantity or is already complete.', 409);
       }
     }
     const itemDocument = await firestoreGet(itemPath, idToken);
@@ -209,6 +226,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       ...(payload.destination ? { destination: payload.destination } : {}),
       ...(payload.reference ? { reference: payload.reference } : {}),
       ...(payload.sourceType ? { sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex } : {}),
+      ...(payload.sourceDeliveryId ? { sourceDeliveryId: payload.sourceDeliveryId } : {}),
       reason: payload.reason,
       recordedBy: staff.fullName,
       recordedByUid: staff.uid,
@@ -227,6 +245,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       ...(movement.destination ? { destination: movement.destination } : {}),
       ...(movement.reference ? { reference: movement.reference } : {}),
       ...(movement.sourceType ? { sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineIndex: movement.sourceLineIndex } : {}),
+      ...(movement.sourceDeliveryId ? { sourceDeliveryId: movement.sourceDeliveryId } : {}),
       reason: movement.reason,
       recordedBy: movement.recordedBy,
       recordedByUid: movement.recordedByUid,
@@ -243,24 +262,47 @@ async function handleInventoryMovement(request, staff, idToken) {
       updatedByUid: encodeFirestoreValue(staff.uid),
     };
     const movementFields = Object.fromEntries(Object.entries(movement).map(([key, value]) => [key, encodeFirestoreValue(value)]));
+    const writes = [
+      {
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/${itemPath}`,
+          fields: itemFields,
+        },
+        updateMask: { fieldPaths: Object.keys(itemFields) },
+        currentDocument: { updateTime: itemDocument.updateTime },
+      },
+      {
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/${movementPath}`,
+          fields: movementFields,
+        },
+        currentDocument: { exists: false },
+      },
+    ];
+    if (payload.sourceType === 'procurementReceipt') {
+      const procurementDocument = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
+      if (!procurementDocument) throw new ApiError('The purchased procurement list was not found on the server.', 404);
+      const procurement = decodeFirestoreFields(procurementDocument.fields);
+      const receivedQuantities = Array.isArray(procurement.receivedQuantities)
+        ? [...procurement.receivedQuantities]
+        : procurement.items.map(() => 0);
+      receivedQuantities[payload.sourceLineIndex] = Number(receivedQuantities[payload.sourceLineIndex] || 0) + payload.quantity;
+      const procurementFields = {
+        receivedQuantities: encodeFirestoreValue(receivedQuantities),
+        updatedAt: encodeFirestoreValue(now),
+        updatedBy: encodeFirestoreValue(staff.fullName),
+      };
+      writes.push({
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/procurementLists/${encodeURIComponent(payload.sourceId)}`,
+          fields: procurementFields,
+        },
+        updateMask: { fieldPaths: Object.keys(procurementFields) },
+        currentDocument: { updateTime: procurementDocument.updateTime },
+      });
+    }
     try {
-      await firestoreCommit([
-        {
-          update: {
-            name: `projects/shine-relief-trust-cms/databases/(default)/documents/${itemPath}`,
-            fields: itemFields,
-          },
-          updateMask: { fieldPaths: Object.keys(itemFields) },
-          currentDocument: { updateTime: itemDocument.updateTime },
-        },
-        {
-          update: {
-            name: `projects/shine-relief-trust-cms/databases/(default)/documents/${movementPath}`,
-            fields: movementFields,
-          },
-          currentDocument: { exists: false },
-        },
-      ], idToken);
+      await firestoreCommit(writes, idToken);
       return json({ ok: true, duplicate: false, quantityOnHand: nextQuantity, movement }, 200);
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 409) throw error;
