@@ -164,7 +164,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
             className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
           >
             <Download className="w-4 h-4 text-amber-300" />
-            <span>Export CSVs</span>
+            <span>Export Excel</span>
           </button>
         </div>
       </div>
@@ -276,7 +276,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
             }`}
           >
             <Download className="w-4 h-4" />
-            <span>CSV Export Centre</span>
+            <span>Excel Export Centre</span>
           </button>
         </div>
 
@@ -294,7 +294,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Girls CSV</span>
+                  <span>Export Girls Excel</span>
                 </button>
               </div>
 
@@ -507,7 +507,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Rent CSV</span>
+                  <span>Export Rent Excel</span>
                 </button>
               </div>
 
@@ -589,7 +589,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Expenses CSV</span>
+                  <span>Export Expenses Excel</span>
                 </button>
               </div>
 
@@ -640,7 +640,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   <button onClick={() => downloadCSV('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...visibleCaseActions.map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions CSV</button>
                   <button onClick={() => downloadCSV('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education history CSV</button>
                   <button onClick={() => downloadCSV('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education support CSV</button>
-                  {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups CSV</button>}
+                  {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups Excel</button>}
                   <button onClick={() => downloadCSV('SHINE_Attendance', [['Girl ID', 'Activity', 'Type', 'Location', 'Date', 'Status', 'Notes'], ...(db.attendanceRecords || []).map((item) => [item.girlId, item.activityName, item.activityType, item.location || '', item.date, item.status, item.notes || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Attendance CSV</button>
                   <button onClick={() => downloadCSV('SHINE_Leave_History', [['Girl ID', 'Type', 'Start', 'Expected Return', 'Actual Return', 'Reason', 'Approved By', 'Status'], ...(db.girlLeaves || []).map((item) => [item.girlId, item.leaveType, item.startDate, item.expectedReturnDate, item.actualReturnDate || '', item.reason, item.approvedBy, item.status])])} className="px-3 py-2 border rounded-md text-xs font-bold">Leave history CSV</button>
                   {canViewCaseReviews && <button onClick={() => downloadCSV('SHINE_Case_Reviews', [['Girl ID', 'Review Date', 'Progress', 'Challenges', 'Support Required', 'Action Plan', 'Next Review'], ...(db.caseReviews || []).map((item) => [item.girlId, item.reviewDate, item.progress || '', item.challenges || '', item.supportRequired || '', item.actionPlan || '', item.nextReviewDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Case reviews CSV</button>}
@@ -661,11 +661,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
             <ManagementReportsPanel db={reportDb} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
           )}
 
-          {/* TAB 7: CSV EXPORTS CENTRE */}
+          {/* TAB 7: EXCEL EXPORT CENTRE */}
           {activeTab === 'exports' && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-base font-bold text-stone-900">Official CSV Data Export Centre</h3>
+                <h3 className="text-base font-bold text-stone-900">Official Excel Export Centre</h3>
                 <p className="text-xs text-stone-500">
                   Export complete historical records for donor reporting, auditing, or offline analysis in Excel/Sheets.
                 </p>
@@ -686,7 +686,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Girls CSV</span>
+                    <span>Download Girls Excel</span>
                   </button>
                 </div>
 
@@ -704,7 +704,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Houses CSV</span>
+                    <span>Download Houses Excel</span>
                   </button>
                 </div>
 
@@ -722,7 +722,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Education CSV</span>
+                    <span>Download Education Excel</span>
                   </button>
                 </div>
 
@@ -739,7 +739,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-rose-800 hover:bg-rose-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Medical CSV</span>
+                    <span>Download Medical Excel</span>
                   </button>
                 </div>}
 
@@ -757,7 +757,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Family CSV</span>
+                    <span>Download Family Excel</span>
                   </button>
                 </div>
 
@@ -775,7 +775,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-purple-800 hover:bg-purple-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Activities CSV</span>
+                    <span>Download Activities Excel</span>
                   </button>
                 </div>
 
@@ -793,7 +793,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Rent CSV</span>
+                    <span>Download Rent Excel</span>
                   </button>
                 </div>
 
@@ -811,7 +811,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Expenses CSV</span>
+                    <span>Download Expenses Excel</span>
                   </button>
                 </div>
               </div>
