@@ -321,7 +321,7 @@ const completeCaseWorkbook = XLSX.read(await generateExcelWorkbook({
 for (const sheetName of ['Education History', 'Examinations', 'Attendance', 'Leave and Absence', 'Household Activities']) {
   assert.ok(completeCaseWorkbook.SheetNames.includes(sheetName), `${sheetName} worksheet should be exported`);
 }
-const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
+const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
   includeSections: { ...reportConfig.includeSections, photoGallery: true },
@@ -350,7 +350,7 @@ assert.ok(budgetSheet['!autofilter']);
 const reportImageFixture = new Uint8Array(readFileSync(new URL('../public/logo.png', import.meta.url)));
 const wordWithEmbeddedPhoto = await generateWordReport({
   ...reportDb,
-  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],

@@ -65,7 +65,7 @@
 ### Report export consistency and safeguarding boundary
 
 - Kept the shared Excel downloader dynamically imported to preserve lazy-loading and bundle-size boundaries. General report buttons now catch failures and display accessible success/error feedback instead of leaving an unhandled promise rejection.
-- Added a CI regression test that prevents a safeguarding export button or download helper from reappearing, and added a focused Excel download test. The broader existing `phase3d-management.test.ts` has a pre-existing assertion failure at its embedded-photo document-size check (line 360), before it reaches the download assertion; it is not used as a new CI gate to avoid conflating that unrelated failure with the export change.
+- Added a CI regression test that prevents a safeguarding export button or download helper from reappearing, and added a focused Excel download test. The first run of `phase3d-management.test.ts` exposed a fixture that omitted the required attachment consent flag, so the photo was correctly excluded from the generated report. The synthetic report fixtures now explicitly include consent, and the comprehensive management/report test has been restored as a CI gate alongside the focused XLSX test.
 
 - Renamed the shared report-download helper to `downloadExcel` and updated the general report centre's function names/visible labels to Excel; its generated file is an `.xlsx` workbook, not CSV.
 - Removed the safeguarding-record export button entirely. Safeguarding cases remain restricted to the permission-checked server endpoint and must not be exported, included in general reports or sent to AI, in line with `AGENTS.md`.

@@ -60,6 +60,9 @@ jobs:
       - name: Test Excel report file generation
         run: npm run test:report-export
 
+      - name: Test management report generation and Excel download
+        run: npx tsx scripts/phase3d-management.test.ts
+
 
       - name: Test password-reset feedback sanitization
         run: npx tsx scripts/password-reset-feedback.test.ts
