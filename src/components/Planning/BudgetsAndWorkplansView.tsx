@@ -66,7 +66,7 @@ import {
   readProcurementReceiptIntent,
 } from '../../services/procurementInventoryReceipt';
 import { clearProcurementDeliveryIntent, createProcurementDeliveryId, postProcurementDeliveryMovements, readProcurementDeliveryIntent } from '../../services/procurementDelivery';
-import { getProcurementOutstandingQuantity, getProcurementPaymentSummary, validateProcurementPayment } from '../../services/procurementLifecycle';
+import { getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary, validateProcurementPayment } from '../../services/procurementLifecycle';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
