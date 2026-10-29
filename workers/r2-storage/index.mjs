@@ -189,10 +189,10 @@ async function handleInventoryMovement(request, staff, idToken) {
       procurementForReceipt = decodeFirestoreFields(procurementDocumentForReceipt.fields);
       const procurement = procurementForReceipt;
       procurementLine = Array.isArray(procurement.items) ? procurement.items[payload.sourceLineIndex] : undefined;
-      const receivedQuantities = Array.isArray(procurement.receivedQuantities)
-        ? procurement.receivedQuantities
-        : (Array.isArray(procurement.items) ? procurement.items.map(() => 0) : []);
-      const alreadyReceived = Number(receivedQuantities[payload.sourceLineIndex] || 0);
+      const receivedQuantitiesByLine = procurement.receivedQuantitiesByLine && typeof procurement.receivedQuantitiesByLine === 'object'
+        ? procurement.receivedQuantitiesByLine
+        : {};
+      const alreadyReceived = Number(receivedQuantitiesByLine[String(payload.sourceLineIndex)] || 0);
       const outstanding = Number(procurementLine?.quantity) - alreadyReceived;
       if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt ||
           !procurementLine || !Number.isFinite(alreadyReceived) || alreadyReceived < 0 ||
@@ -289,12 +289,13 @@ async function handleInventoryMovement(request, staff, idToken) {
       },
     ];
     if (payload.sourceType === 'procurementReceipt' && procurementDocumentForReceipt && procurementForReceipt) {
-      const receivedQuantities = Array.isArray(procurementForReceipt.receivedQuantities)
-        ? [...procurementForReceipt.receivedQuantities]
-        : procurementForReceipt.items.map(() => 0);
-      receivedQuantities[payload.sourceLineIndex] = Number(receivedQuantities[payload.sourceLineIndex] || 0) + payload.quantity;
+      const receivedQuantitiesByLine = procurementForReceipt.receivedQuantitiesByLine && typeof procurementForReceipt.receivedQuantitiesByLine === 'object'
+        ? { ...procurementForReceipt.receivedQuantitiesByLine }
+        : {};
+      receivedQuantitiesByLine[String(payload.sourceLineIndex)] = Number(receivedQuantitiesByLine[String(payload.sourceLineIndex)] || 0) + payload.quantity;
       const procurementFields = {
-        receivedQuantities: encodeFirestoreValue(receivedQuantities),
+        receivedQuantitiesByLine: encodeFirestoreValue(receivedQuantitiesByLine),
+        lastReceiptMovementId: encodeFirestoreValue(payload.id),
         updatedAt: encodeFirestoreValue(now),
         updatedBy: encodeFirestoreValue(staff.fullName),
       };
