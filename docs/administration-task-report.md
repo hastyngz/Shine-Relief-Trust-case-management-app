@@ -49,3 +49,10 @@
 - The same workflow restores storage and retries, then checks that the verification appears in the asset history exactly once.
 - This is test coverage for the existing local-save failure handling; it does not add server-side audit guarantees or cross-device asset-tag uniqueness.
 - Verification is pending for the resulting Replit branch head. No local test/build is claimed in this environment. Do not mark the browser test passed until the exact-head CI E2E job completes successfully.
+
+## Supplier activity index (2026-10-29)
+- Added a read-only supplier activity index to the Procurement workspace, derived from supplier names already present in procurement quotes and household expenses.
+- Names are grouped case-insensitively; the index shows quote count, distinct procurement-list count, expense-record count and latest valid activity date. It deliberately does not expose transaction amounts or supplier contact details.
+- Added focused aggregation coverage to `scripts/procurement-workflow.test.ts` for case variants, distinct-list counts, expense records, date selection, ignored placeholder names and empty state.
+- The index is not a verified supplier master register. Canonical supplier IDs, editable contact/business details, due-diligence documents, delivery performance, conflict declarations and server-enforced duplicate prevention remain outstanding.
+- The test has not been run in this environment; exact-head CI verification remains pending. No production records or rules were changed.
