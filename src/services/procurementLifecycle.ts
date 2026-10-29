@@ -10,7 +10,7 @@ export function getProcurementDeliveredQuantity(list: ProcurementList, itemIndex
   const historyTotal = (list.deliveries || []).reduce((sum, delivery) => sum + delivery.lines.reduce(
     (lineSum, line) => lineSum + (line.itemIndex === itemIndex ? line.quantity : 0), 0), 0);
   const serverArrayTotal = Number(list.receivedQuantities?.[itemIndex] || 0);
-  const serverLedgerTotal = Number(list.receivedQuantitiesByLine?.[String(itemIndex)] || 0);
+  const serverLedgerTotal = Number(list.receivedQuantitiesByLine?.[`line_${itemIndex}`] || 0);
   const safeArrayTotal = Number.isFinite(serverArrayTotal) && serverArrayTotal >= 0 ? serverArrayTotal : 0;
   const safeLedgerTotal = Number.isFinite(serverLedgerTotal) && serverLedgerTotal >= 0 ? serverLedgerTotal : 0;
   return Math.max(historyTotal, safeArrayTotal, safeLedgerTotal);
