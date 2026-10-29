@@ -63,7 +63,6 @@ export function buildSupplierActivityIndex(
     const entry = ensure(item.supplier);
     if (!entry) continue;
     entry.inventoryItemCount += 1;
-    addDate(entry, item.updatedAt?.slice(0, 10));
   }
 
   return [...suppliers.values()]
