@@ -74,7 +74,7 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
     if (url.includes('/documents/procurementLists/proc-synthetic')) {
-      if (procurementList) return new Response(JSON.stringify({ fields: asFields(procurementList) }), { status: 200 });
+      if (procurementList) return new Response(JSON.stringify({ updateTime: '2026-10-26T10:00:00.000000Z', fields: asFields(procurementList) }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
     if (url.includes('/documents/inventoryItems/item-synthetic')) {
