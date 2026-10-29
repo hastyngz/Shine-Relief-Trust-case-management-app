@@ -31,7 +31,7 @@ export function formatDate(dateString?: string): string {
 }
 
 // Convert tabular report rows to an Excel workbook and trigger browser download.
-export async function downloadCSV(filename: string, rows: (string | number)[][]): Promise<void> {
+export async function downloadExcel(filename: string, rows: (string | number)[][]): Promise<void> {
   const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet(rows);
@@ -47,11 +47,11 @@ export async function downloadCSV(filename: string, rows: (string | number)[][])
   link.href = url;
   link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   document.body.appendChild(link); link.click(); link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // 1. Girls Export
-export function exportGirlsToCSV(girls: Girl[], households: Household[]): void {
+export function exportGirlsToExcel(girls: Girl[], households: Household[]): void {
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const headers = [
     'Profile ID',
@@ -85,15 +85,15 @@ export function exportGirlsToCSV(girls: Girl[], households: Household[]): void {
     g.guardianInfo.situationNotes || '',
   ]);
 
-  downloadCSV('SHINE_Relief_Girls_List', [headers, ...rows]);
+  downloadExcel('SHINE_Relief_Girls_List', [headers, ...rows]);
 }
 
-export function exportGirlsCSV(db: AppDatabase): void {
-  exportGirlsToCSV(db.girls, db.households);
+export function exportGirlsExcel(db: AppDatabase): void {
+  exportGirlsToExcel(db.girls, db.households);
 }
 
 // 2. Households Export
-export function exportHouseholdsToCSV(households: Household[], girls: Girl[]): void {
+export function exportHouseholdsToExcel(households: Household[], girls: Girl[]): void {
   const headers = [
     'House ID',
     'House Name',
@@ -121,15 +121,15 @@ export function exportHouseholdsToCSV(households: Household[], girls: Girl[]): v
     ];
   });
 
-  downloadCSV('SHINE_Relief_Households_List', [headers, ...rows]);
+  downloadExcel('SHINE_Relief_Households_List', [headers, ...rows]);
 }
 
-export function exportHouseholdsCSV(db: AppDatabase): void {
-  exportHouseholdsToCSV(db.households, db.girls);
+export function exportHouseholdsExcel(db: AppDatabase): void {
+  exportHouseholdsToExcel(db.households, db.girls);
 }
 
 // 3. Educational Follow-ups Export
-export function exportEducationalFollowUpsToCSV(
+export function exportEducationalFollowUpsToExcel(
   items: EducationalFollowUp[],
   girls: Girl[]
 ): void {
@@ -170,15 +170,15 @@ export function exportEducationalFollowUpsToCSV(
     item.recordedBy || '',
   ]);
 
-  downloadCSV('SHINE_Educational_FollowUps', [headers, ...rows]);
+  downloadExcel('SHINE_Educational_FollowUps', [headers, ...rows]);
 }
 
-export function exportEducationalFollowUpsCSV(db: AppDatabase): void {
-  exportEducationalFollowUpsToCSV(db.educationalFollowUps, db.girls);
+export function exportEducationalFollowUpsExcel(db: AppDatabase): void {
+  exportEducationalFollowUpsToExcel(db.educationalFollowUps, db.girls);
 }
 
 // 4. Health Follow-ups Export
-export function exportHealthFollowUpsToCSV(items: HealthFollowUp[], girls: Girl[]): void {
+export function exportHealthFollowUpsToExcel(items: HealthFollowUp[], girls: Girl[]): void {
   const girlMap = new Map(girls.map((g) => [g.id, g.fullName]));
   const headers = [
     'Record ID',
@@ -212,15 +212,15 @@ export function exportHealthFollowUpsToCSV(items: HealthFollowUp[], girls: Girl[
     item.recordedBy || '',
   ]);
 
-  downloadCSV('SHINE_Health_Medical_FollowUps', [headers, ...rows]);
+  downloadExcel('SHINE_Health_Medical_FollowUps', [headers, ...rows]);
 }
 
-export function exportHealthFollowUpsCSV(db: AppDatabase): void {
-  exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls);
+export function exportHealthFollowUpsExcel(db: AppDatabase): void {
+  exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls);
 }
 
 // 5. Family Follow-ups Export
-export function exportFamilyFollowUpsToCSV(items: FamilyFollowUp[], girls: Girl[]): void {
+export function exportFamilyFollowUpsToExcel(items: FamilyFollowUp[], girls: Girl[]): void {
   const girlMap = new Map(girls.map((g) => [g.id, g.fullName]));
   const headers = [
     'Record ID',
@@ -252,15 +252,15 @@ export function exportFamilyFollowUpsToCSV(items: FamilyFollowUp[], girls: Girl[
     item.recordedBy || '',
   ]);
 
-  downloadCSV('SHINE_Family_Guardian_FollowUps', [headers, ...rows]);
+  downloadExcel('SHINE_Family_Guardian_FollowUps', [headers, ...rows]);
 }
 
-export function exportFamilyFollowUpsCSV(db: AppDatabase): void {
-  exportFamilyFollowUpsToCSV(db.familyFollowUps, db.girls);
+export function exportFamilyFollowUpsExcel(db: AppDatabase): void {
+  exportFamilyFollowUpsToExcel(db.familyFollowUps, db.girls);
 }
 
 // 6. Household Group Activities Export
-export function exportHouseholdActivitiesToCSV(
+export function exportHouseholdActivitiesToExcel(
   items: HouseholdActivity[],
   households: Household[]
 ): void {
@@ -301,15 +301,15 @@ export function exportHouseholdActivitiesToCSV(
     item.recordedBy || '',
   ]);
 
-  downloadCSV('SHINE_Household_Activities_Log', [headers, ...rows]);
+  downloadExcel('SHINE_Household_Activities_Log', [headers, ...rows]);
 }
 
-export function exportHouseholdActivitiesCSV(db: AppDatabase): void {
-  exportHouseholdActivitiesToCSV(db.householdActivities, db.households);
+export function exportHouseholdActivitiesExcel(db: AppDatabase): void {
+  exportHouseholdActivitiesToExcel(db.householdActivities, db.households);
 }
 
 // 7. Expenses Export
-export function exportExpensesToCSV(items: HouseholdExpense[], households: Household[]): void {
+export function exportExpensesToExcel(items: HouseholdExpense[], households: Household[]): void {
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const headers = [
     'Expense ID',
@@ -339,15 +339,15 @@ export function exportExpensesToCSV(items: HouseholdExpense[], households: House
     exp.notes || '',
   ]);
 
-  downloadCSV('SHINE_Household_Expenditures', [headers, ...rows]);
+  downloadExcel('SHINE_Household_Expenditures', [headers, ...rows]);
 }
 
-export function exportExpensesCSV(db: AppDatabase): void {
-  exportExpensesToCSV(db.expenses, db.households);
+export function exportExpensesExcel(db: AppDatabase): void {
+  exportExpensesToExcel(db.expenses, db.households);
 }
 
 // 8. Rent Payments Export
-export function exportRentPaymentsToCSV(
+export function exportRentPaymentsToExcel(
   items: HouseholdRentPayment[],
   households: Household[]
 ): void {
@@ -376,11 +376,11 @@ export function exportRentPaymentsToCSV(
     r.notes || '',
   ]);
 
-  downloadCSV('SHINE_Rent_Payments_History', [headers, ...rows]);
+  downloadExcel('SHINE_Rent_Payments_History', [headers, ...rows]);
 }
 
-export function exportRentPaymentsCSV(db: AppDatabase): void {
-  exportRentPaymentsToCSV(db.rentPayments, db.households);
+export function exportRentPaymentsExcel(db: AppDatabase): void {
+  exportRentPaymentsToExcel(db.rentPayments, db.households);
 }
 
 // 9. Full JSON Backup

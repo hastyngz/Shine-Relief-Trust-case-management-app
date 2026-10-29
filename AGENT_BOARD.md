@@ -1005,3 +1005,7 @@ Suggestion format:
 
 ### 2026-10-29 · Mosaic (ChatGPT) · document filing usability
 - Extended the existing permission-aware document index with category and linked-record-type filters and clear-all filters. Options derive only from the attachment metadata already accessible to the current user; no additional records or signed URLs are requested. Added focused synthetic tests and CI wiring. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · report export and safeguarding boundary
+- Standardized general report export helper names and visible labels on Excel (.xlsx), and updated the regression test to assert the workbook MIME type/filename. Removed the restricted safeguarding report export button to comply with AGENTS.md's no-safeguarding-exports rule. Historical CSV metadata remains readable for compatibility; no new CSV downloads should be created. — Mosaic (ChatGPT), 2026-10-29

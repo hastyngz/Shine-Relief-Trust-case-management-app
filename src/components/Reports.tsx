@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { AppDatabase } from '../types';
 import {
-  exportGirlsToCSV,
-  exportHouseholdsToCSV,
-  exportEducationalFollowUpsToCSV,
-  exportHealthFollowUpsToCSV,
-  exportFamilyFollowUpsToCSV,
-  exportHouseholdActivitiesToCSV,
-  exportRentPaymentsToCSV,
-  exportExpensesToCSV,
+  exportGirlsToExcel,
+  exportHouseholdsToExcel,
+  exportEducationalFollowUpsToExcel,
+  exportHealthFollowUpsToExcel,
+  exportFamilyFollowUpsToExcel,
+  exportHouseholdActivitiesToExcel,
+  exportRentPaymentsToExcel,
+  exportExpensesToExcel,
   formatMWK,
   formatDate,
-  downloadCSV,
+  downloadExcel,
 } from '../utils/export';
 import {
   FileSpreadsheet,
@@ -290,7 +290,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   <p className="text-xs text-stone-500">Distribution across secondary schools in Malawi</p>
                 </div>
                 <button
-                  onClick={() => exportGirlsToCSV(db.girls, db.households)}
+                  onClick={() => exportGirlsToExcel(db.girls, db.households)}
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -503,7 +503,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   <p className="text-xs text-stone-500">Comparison of expected rent vs actual payments</p>
                 </div>
                 <button
-                  onClick={() => exportRentPaymentsToCSV(db.rentPayments, db.households)}
+                  onClick={() => exportRentPaymentsToExcel(db.rentPayments, db.households)}
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -585,7 +585,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   </p>
                 </div>
                 <button
-                  onClick={() => exportExpensesToCSV(db.expenses, db.households)}
+                  onClick={() => exportExpensesToExcel(db.expenses, db.households)}
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -637,13 +637,13 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-stone-700">Export records</h4>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => downloadCSV('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...visibleCaseActions.map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions Excel</button>
-                  <button onClick={() => downloadCSV('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education history Excel</button>
-                  <button onClick={() => downloadCSV('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education support Excel</button>
-                  {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups Excel</button>}
-                  <button onClick={() => downloadCSV('SHINE_Attendance', [['Girl ID', 'Activity', 'Type', 'Location', 'Date', 'Status', 'Notes'], ...(db.attendanceRecords || []).map((item) => [item.girlId, item.activityName, item.activityType, item.location || '', item.date, item.status, item.notes || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Attendance Excel</button>
-                  <button onClick={() => downloadCSV('SHINE_Leave_History', [['Girl ID', 'Type', 'Start', 'Expected Return', 'Actual Return', 'Reason', 'Approved By', 'Status'], ...(db.girlLeaves || []).map((item) => [item.girlId, item.leaveType, item.startDate, item.expectedReturnDate, item.actualReturnDate || '', item.reason, item.approvedBy, item.status])])} className="px-3 py-2 border rounded-md text-xs font-bold">Leave history Excel</button>
-                  {canViewCaseReviews && <button onClick={() => downloadCSV('SHINE_Case_Reviews', [['Girl ID', 'Review Date', 'Progress', 'Challenges', 'Support Required', 'Action Plan', 'Next Review'], ...(db.caseReviews || []).map((item) => [item.girlId, item.reviewDate, item.progress || '', item.challenges || '', item.supportRequired || '', item.actionPlan || '', item.nextReviewDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Case reviews Excel</button>}
+                  <button onClick={() => downloadExcel('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...visibleCaseActions.map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions Excel</button>
+                  <button onClick={() => downloadExcel('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education history Excel</button>
+                  <button onClick={() => downloadExcel('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education support Excel</button>
+                  {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups Excel</button>}
+                  <button onClick={() => downloadExcel('SHINE_Attendance', [['Girl ID', 'Activity', 'Type', 'Location', 'Date', 'Status', 'Notes'], ...(db.attendanceRecords || []).map((item) => [item.girlId, item.activityName, item.activityType, item.location || '', item.date, item.status, item.notes || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Attendance Excel</button>
+                  <button onClick={() => downloadExcel('SHINE_Leave_History', [['Girl ID', 'Type', 'Start', 'Expected Return', 'Actual Return', 'Reason', 'Approved By', 'Status'], ...(db.girlLeaves || []).map((item) => [item.girlId, item.leaveType, item.startDate, item.expectedReturnDate, item.actualReturnDate || '', item.reason, item.approvedBy, item.status])])} className="px-3 py-2 border rounded-md text-xs font-bold">Leave history Excel</button>
+                  {canViewCaseReviews && <button onClick={() => downloadExcel('SHINE_Case_Reviews', [['Girl ID', 'Review Date', 'Progress', 'Challenges', 'Support Required', 'Action Plan', 'Next Review'], ...(db.caseReviews || []).map((item) => [item.girlId, item.reviewDate, item.progress || '', item.challenges || '', item.supportRequired || '', item.actionPlan || '', item.nextReviewDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Case reviews Excel</button>}
                 </div>
               </div>
 
@@ -682,7 +682,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportGirlsToCSV(db.girls, db.households)}
+                    onClick={() => exportGirlsToExcel(db.girls, db.households)}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -700,7 +700,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportHouseholdsToCSV(db.households, db.girls)}
+                    onClick={() => exportHouseholdsToExcel(db.households, db.girls)}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -718,7 +718,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportEducationalFollowUpsToCSV(db.educationalFollowUps, db.girls)}
+                    onClick={() => exportEducationalFollowUpsToExcel(db.educationalFollowUps, db.girls)}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -735,7 +735,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)}
+                    onClick={() => exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls)}
                     className="w-full py-2 bg-rose-800 hover:bg-rose-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -753,7 +753,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportFamilyFollowUpsToCSV(db.familyFollowUps, db.girls)}
+                    onClick={() => exportFamilyFollowUpsToExcel(db.familyFollowUps, db.girls)}
                     className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -771,7 +771,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportHouseholdActivitiesToCSV(db.householdActivities, db.households)}
+                    onClick={() => exportHouseholdActivitiesToExcel(db.householdActivities, db.households)}
                     className="w-full py-2 bg-purple-800 hover:bg-purple-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -789,7 +789,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportRentPaymentsToCSV(db.rentPayments, db.households)}
+                    onClick={() => exportRentPaymentsToExcel(db.rentPayments, db.households)}
                     className="w-full py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -807,7 +807,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportExpensesToCSV(db.expenses, db.households)}
+                    onClick={() => exportExpensesToExcel(db.expenses, db.households)}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />

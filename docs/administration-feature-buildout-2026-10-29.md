@@ -53,6 +53,12 @@
 - `AGENT_BOARD.md`
 - `docs/administration-officer-tor-gap-analysis.md`
 
+### Report export consistency and safeguarding boundary
+
+- Renamed the shared report-download helper to `downloadExcel` and updated the general report centre's function names/visible labels to Excel; its generated file is an `.xlsx` workbook, not CSV.
+- Removed the safeguarding-record export button entirely. Safeguarding cases remain restricted to the permission-checked server endpoint and must not be exported, included in general reports or sent to AI, in line with `AGENTS.md`.
+- Updated the management regression test to assert the XLSX MIME type and `.xlsx` filename rather than the old CSV data URI.
+
 ### Documents & Filing follow-up
 
 - Added category and linked-record-type filters to the existing permission-aware attachment index, plus a one-tap clear-all action. Filter options are derived only from the accessible attachment set returned by the existing service; this does not widen health or safeguarding access.
