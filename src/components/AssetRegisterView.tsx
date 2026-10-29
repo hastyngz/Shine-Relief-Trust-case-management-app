@@ -1,11 +1,12 @@
 import React, { FormEvent, useMemo, useState } from 'react';
-import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
+import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
 import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
 import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
 import { AssetVerificationDialog } from './AssetVerificationDialog';
 import { getLocalDateInputValue } from '../utils/inventory';
+import { exportAssetRegister, type AssetExportFormat } from '../utils/assetExport';
 
 interface AssetRegisterViewProps {
   assets: AssetRecord[];
@@ -52,6 +53,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [maintenanceTarget, setMaintenanceTarget] = useState<AssetRecord | null>(null);
   const [verificationTarget, setVerificationTarget] = useState<AssetRecord | null>(null);
@@ -78,6 +80,19 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const locatedThisYear = checkedThisYear.filter((asset) => asset.verificationOutcome === 'Verified' || asset.verificationOutcome === 'Discrepancy');
   const notCheckedThisYear = activeAssets.length - checkedThisYear.length;
   const activeValue = activeAssets.reduce((sum, asset) => sum + (Number.isFinite(asset.acquisitionCostMWK) ? asset.acquisitionCostMWK || 0 : 0), 0);
+
+  const handleExport = async (format: AssetExportFormat) => {
+    if (exporting || filtered.length === 0) return;
+    setExporting(true); setError(''); setNotice('');
+    try {
+      await exportAssetRegister(filtered, format);
+      setNotice(`Asset register exported as ${format.toUpperCase()} (${filtered.length} asset${filtered.length === 1 ? '' : 's'}).`);
+    } catch {
+      setError(`Could not create the ${format.toUpperCase()} asset export. Please try again.`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const openNew = () => { setEditing(null); setForm(blankForm()); setError(''); setNotice(''); setShowForm(true); };
   const openEdit = (asset: AssetRecord) => {
@@ -186,6 +201,15 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
       <section className="fx-card space-y-4 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5" aria-label="Asset search and filters">
         <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" /><input aria-label="Search assets" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tag, name, serial number, location or assignee…" className="min-h-11 w-full rounded-xl border border-stone-300 pl-10 pr-3 text-sm" /></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-stone-600">Status<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'All' | AssetStatus)} className={inputClass}><option>All</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label><label className="text-xs font-bold text-stone-600">Condition<select value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value as 'All' | AssetCondition)} className={inputClass}><option>All</option>{conditions.map((condition) => <option key={condition}>{condition}</option>)}</select></label></div>
+      </section>
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white p-4" aria-label="Export asset register">
+        <div><h2 className="text-sm font-bold text-stone-900">Export asset register</h2><p className="mt-1 text-xs text-stone-600">Exports the current filtered list ({filtered.length} asset{filtered.length === 1 ? '' : 's'}). Word, Excel or PDF only.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={exporting || !filtered.length} onClick={() => void handleExport('docx')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-800 disabled:opacity-50"><FileText className="h-4 w-4" /> Word</button>
+          <button type="button" disabled={exporting || !filtered.length} onClick={() => void handleExport('xlsx')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-800 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" /> Excel</button>
+          <button type="button" disabled={exporting || !filtered.length} onClick={() => void handleExport('pdf')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-800 disabled:opacity-50"><FileType className="h-4 w-4" /> PDF</button>
+        </div>
       </section>
 
       {filtered.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><Archive className="mx-auto h-8 w-8 text-stone-400" /><h2 className="mt-3 font-bold text-stone-800">{assets.length ? 'No matching assets' : 'No assets registered yet'}</h2><p className="mt-1 text-sm text-stone-600">{assets.length ? 'Try a different search or filter.' : 'Register equipment or property to start the asset register.'}</p>{!isViewOnly && !assets.length && <button type="button" onClick={openNew} className="fx-press fx-btn-main mt-4 min-h-11 rounded-xl px-4 text-sm font-bold">Register first asset</button>}</div> : <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
