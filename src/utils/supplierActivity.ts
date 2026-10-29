@@ -47,7 +47,7 @@ export function buildSupplierActivityIndex(
         if (!entry) continue;
         entry.quoteCount += 1;
         if (list.id) entry.listIds.add(list.id);
-        addDate(entry, quote.quotedAt || list.updatedAt?.slice(0, 10));
+        addDate(entry, quote.quotedAt);
       }
     }
   }
