@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { FileSpreadsheet, FileText } from 'lucide-react';
 import type { AppDatabase, ReportHistoryRecord, SalaryHistoryRecord, StaffUser } from '../../types';
 import { MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportWorkbook } from '../../services/managementReports';
 import { ManagementFilters, canAccessManagementDashboard, projectManagementDatabase } from '../../services/managementAnalytics';
@@ -268,7 +268,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     return !!storagePath;
   };
 
-  const recordReportExport = async (format: 'docx' | 'xlsx' | 'csv', fileName: string, title: string, blob: Blob) => {
+  const recordReportExport = async (format: 'docx' | 'xlsx', fileName: string, title: string, blob: Blob) => {
     if (!currentUser) throw new Error('Sign in is required to record this report download.');
     await appendReportExport(await createReportExportRecord(blob, {
       reportType: reportId,
@@ -286,25 +286,6 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       draft: false,
       finalLocked: true,
     }));
-  };
-
-  const handleCsvExport = async () => {
-    if (!ensureQualityOverride()) return;
-    try {
-      const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.csv`;
-      const csvRows = [rows.headers, ...rows.rows, [''], ['Quality Issues'], ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'], ...qualityAnnexRows];
-      const csvContent = '\uFEFF' + csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-      const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
-      await recordReportExport('csv', fileName, title, blob);
-      saveBlob(blob, fileName);
-      const archived = await recordReportHistory('csv', fileName, title, blob);
-      if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'csv', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
-      setMessage(`${rows.rows.length} record(s) exported${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
-    } catch (error) {
-      console.error('Management CSV export failed:', error);
-      setMessage(error instanceof Error ? error.message : 'The spreadsheet could not be downloaded.');
-    }
   };
 
   const handleExcelExport = async () => {
@@ -478,7 +459,6 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       {salaryLoadFailed && reportId === 'gratuity' && <p className="text-xs text-amber-800">Salary history is unavailable, so gratuity liability cannot be calculated.</p>}
       {programme !== 'ALL' && <p className="text-[11px] text-amber-800">Programme filtering uses stored programme attribution only. Records without a programme are not assigned one.</p>}
       <div className="flex flex-wrap gap-2">
-        <button onClick={handleCsvExport} disabled={reportId === 'gratuity' && !salaryHistory} className="inline-flex items-center gap-2 rounded-md bg-teal-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Download className="h-4 w-4" />Export CSV</button>
         <button onClick={handleExcelExport} disabled={reportId === 'gratuity' && !salaryHistory} className="inline-flex items-center gap-2 rounded-md border border-emerald-700 bg-white px-3 py-2 text-xs font-bold text-emerald-900 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" />Export Excel workbook</button>
         <button onClick={handleWordSummary} className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-800"><FileText className="h-4 w-4" />Export Word report</button>
       </div>
@@ -486,7 +466,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       <div id="management-report-table" tabIndex={-1} className="overflow-x-auto rounded-lg border border-stone-200">
         <table className="min-w-full text-left text-xs"><thead className="bg-stone-50"><tr>{rows.headers.map((header) => <th key={header} className="whitespace-nowrap px-3 py-2 font-bold text-stone-600">{header}</th>)}</tr></thead><tbody className="divide-y divide-stone-100">{rows.rows.slice(0, 20).map((row, index) => <tr key={`${reportId}-${index}`}>{row.map((cell, cellIndex) => <td key={cellIndex} className="whitespace-nowrap px-3 py-2 text-stone-700">{cell}</td>)}</tr>)}</tbody></table>
         {rows.rows.length === 0 && <p className="p-4 text-center text-xs text-stone-500">No records match these filters.</p>}
-        {rows.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 of {rows.rows.length} rows. CSV includes every matching row.</p>}
+        {rows.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 of {rows.rows.length} rows. Excel includes every matching row.</p>}
       </div>
     </section>
   );
