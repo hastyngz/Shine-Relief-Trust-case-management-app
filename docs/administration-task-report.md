@@ -41,4 +41,5 @@
 - Added browser E2E coverage for registering a synthetic asset, recording a physical verification, confirming the register values remain unchanged, and checking that one history entry is recorded.
 - Procurement payment safeguards passed GitHub Actions run [40952928028](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40952928028). This verifies the configured checks for that earlier commit only; it does not establish cross-device atomic payment safety.
 - Asset-verification browser E2E initially failed because its page-heading locator matched both “Asset Register” and “Export asset register”. Corrected the locator to require an exact heading match in commit `9b6581200bad67cc68296e28166a74079bb1de08`.
-- The corrected exact-head CI run is pending; this change has not been tested locally because outbound GitHub access is unavailable.
+- Corrected the page-heading locator to require an exact accessible name in commit `9b6581200bad67cc68296e28166a74079bb1de08`.
+- CI for the corrected commit has not yet been confirmed. Local execution is unavailable because this environment cannot reach GitHub; do not mark the browser flow verified until the exact-head run passes.
