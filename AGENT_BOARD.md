@@ -1105,3 +1105,9 @@ Suggestion format:
 - Verification is pending on the combined exact-head CI run. No production data or rules changed.
 
 - Test review follow-up: scoped the asset-verification success assertion to its exact notice text because the page also exposes a separate status region for filtered counts. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification save recovery
+- Area: physical asset verification failure/retry workflow.
+- State: added a browser regression that forces SHINE's local database write to fail, checks the entered observation stays in the open dialog and is not shown as saved, then restores storage and retries successfully. Updated the Administration ToR gap analysis and task report.
+- Next: wait for exact-head CI on the new Replit commit; if it fails, inspect the E2E log and fix the test or product issue before calling the flow verified.
+- Watch out: the test uses synthetic asset data and a temporary browser-only storage failure. This does not establish server-authenticated audit history, cross-device uniqueness or Android acceptance. — Mosaic (ChatGPT), 2026-10-29
