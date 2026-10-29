@@ -888,6 +888,8 @@ export interface ProcurementList {
   receivedAt?: string;
   receivedBy?: string;
   deliveries?: ProcurementDelivery[];
+  /** Server-transactional cumulative receipt quantities, indexed by procurement line. */
+  receivedQuantities?: number[];
   financeHandedOverAt?: string;
   financeHandedOverBy?: string;
   financeReference?: string;
