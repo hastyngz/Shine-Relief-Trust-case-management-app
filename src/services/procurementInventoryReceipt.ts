@@ -100,7 +100,7 @@ function makeIntent(
   date: string,
 ): ProcurementReceiptIntent {
   if (!uid || list.status !== 'purchased' || list.receivedAt) throw new Error('Only an unreceived purchased list can be posted to inventory.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) throw new Error('A valid receipt date is required.');
+  if (!isValidCalendarDate(date)) throw new Error('A valid receipt date is required.');
   if (choices.length !== list.items.length) throw new Error('Choose whether every procurement line is tracked in inventory before confirming receipt.');
 
   const byIndex = new Map<number, ProcurementReceiptLineChoice>();
