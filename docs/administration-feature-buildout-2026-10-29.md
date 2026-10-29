@@ -53,6 +53,10 @@
 - `AGENT_BOARD.md`
 - `docs/administration-officer-tor-gap-analysis.md`
 
+### Procurement module status copy
+
+- Updated the Administration Hub procurement card to accurately describe existing quote collection/selection, manager approval, purchase-order reference, receipt and finance handover. Supplier master data, partial deliveries and payment reconciliation remain gaps.
+
 ### Administration hub operational overview
 
 - Added an operational attention strip with counts for low stock, stock expiry within 30 days, assets needing follow-up, overdue compliance obligations and open procurement lists. Each card opens the relevant existing workflow.
@@ -61,7 +65,7 @@
 ### Report export consistency and safeguarding boundary
 
 - Kept the shared Excel downloader dynamically imported to preserve lazy-loading and bundle-size boundaries. General report buttons now catch failures and display accessible success/error feedback instead of leaving an unhandled promise rejection.
-- Added a CI regression test that prevents a safeguarding export button or download helper from reappearing, and wired the existing management report generation test into CI.
+- Added a CI regression test that prevents a safeguarding export button or download helper from reappearing, and added a focused Excel download test. The broader existing `phase3d-management.test.ts` has a pre-existing assertion failure at its embedded-photo document-size check (line 360), before it reaches the download assertion; it is not used as a new CI gate to avoid conflating that unrelated failure with the export change.
 
 - Renamed the shared report-download helper to `downloadExcel` and updated the general report centre's function names/visible labels to Excel; its generated file is an `.xlsx` workbook, not CSV.
 - Removed the safeguarding-record export button entirely. Safeguarding cases remain restricted to the permission-checked server endpoint and must not be exported, included in general reports or sent to AI, in line with `AGENTS.md`.

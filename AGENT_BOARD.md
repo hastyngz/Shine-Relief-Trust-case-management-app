@@ -1021,3 +1021,8 @@ Suggestion format:
 
 ### 2026-10-29 · Mosaic (ChatGPT) · lazy Excel exports and feedback
 - Kept XLSX dynamically imported inside the export helper to respect AGENTS.md's lazy-loading rule. General report export operations now return promises and the report centre shows accessible success/error feedback for download failures. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · report export CI isolation and procurement card accuracy
+- CI surfaced a pre-existing failure in the broad Phase 3D test at its embedded-photo document-size assertion, before the Excel download assertion runs. Removed that broad test from this new CI gate and added a focused Excel file-generation test instead; the existing test file still has its updated Excel assertion but remains blocked by the unrelated earlier failure.
+- Updated the Administration Hub procurement card to reflect actual quote/manager-approval/PO/receipt/finance-handover steps, while keeping partial deliveries, supplier master data and payment reconciliation marked as gaps. — Mosaic (ChatGPT), 2026-10-29

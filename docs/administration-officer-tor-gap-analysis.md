@@ -210,3 +210,8 @@ A targeted code inspection found that the persistence architecture is not yet un
 - Asset Register now exports the filtered register to Word (.docx), Excel (.xlsx) and PDF. The prior CSV path has been removed; the export mapping test and CI step use the supported formats only.
 - Exact-head CI for these latest changes is pending at report time. Do not call either export flow verified until TypeScript, build, and relevant export tests pass on the same branch head.
 - This update does not close the broader administration ToR gaps listed above. Transfers/approvals, complete procurement-to-payment reconciliation, HR attendance/leave/onboarding, a full organisation-wide filing register, transport/logistics, and approved management KPI definitions remain separate work items. No production deployment or live data changes were made.
+
+
+### Procurement module card accuracy (2026-10-29)
+- The Administration Hub description now reflects the existing quote collection/selection, manager approval, purchase-order reference, receipt and finance handover steps. It no longer says formal approvals and stock receipt integration are wholly planned.
+- Remaining procurement gaps are partial delivery quantities and reconciliation, a supplier master register/deduplication across devices, and payment reconciliation. Receiving inventory is not payment, and the Administration Officer must not gain payment authority.

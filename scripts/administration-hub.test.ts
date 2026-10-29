@@ -8,6 +8,10 @@ assert.match(documentModuleLines[0], /title: 'Documents & Filing \(Phase 1\)'/);
 assert.match(documentModuleLines[0], /status: 'Available now'/);
 assert.match(documentModuleLines[0], /view: 'documents'/);
 assert.match(documentModuleLines[0], /version history are not yet available/);
+const procurementLine = hub.split('\n').find((line) => line.includes("title: 'Procurement Lists & Quotations'")) || '';
+assert.match(procurementLine, /manager approval/);
+assert.match(procurementLine, /receipts/);
+assert.doesNotMatch(procurementLine, /formal approvals and stock receipt integration remain planned/);
 assert.doesNotMatch(hub, /title: 'Document Index \(Phase 1\)'/, 'use one consistent label for the existing filing workflow');
 
 console.log('Administration hub module-link checks passed.');
