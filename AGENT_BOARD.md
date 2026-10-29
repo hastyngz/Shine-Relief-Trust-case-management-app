@@ -1111,3 +1111,9 @@ Suggestion format:
 - State: added a browser regression that forces SHINE's local database write to fail, checks the entered observation stays in the open dialog and is not shown as saved, then restores storage and retries successfully. Updated the Administration ToR gap analysis and task report.
 - Next: wait for exact-head CI on the new Replit commit; if it fails, inspect the E2E log and fix the test or product issue before calling the flow verified.
 - Watch out: the test uses synthetic asset data and a temporary browser-only storage failure. This does not establish server-authenticated audit history, cross-device uniqueness or Android acceptance. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-29 · Mosaic (ChatGPT) · supplier activity index
+- Area: supplier visibility within Procurement.
+- State: added a read-only index derived from existing quote and household-expense supplier names, with case-insensitive grouping and quote/list/expense counts plus latest dated activity. No transaction amounts or contact details are exposed. Added aggregation tests and updated the ToR gap analysis/task report.
+- Next: verify the new aggregation and browser rendering in CI, then design canonical supplier IDs and secure editable supplier records before claiming a full supplier register.
+- Watch out: the index is derived from existing data, not a canonical supplier database; near-duplicate spellings, business identity and cross-device uniqueness still need an approved data model. — Mosaic (ChatGPT), 2026-10-29
