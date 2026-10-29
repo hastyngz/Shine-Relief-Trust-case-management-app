@@ -1081,3 +1081,9 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · procurement receipt date validation
 - Hardened `src/services/procurementInventoryReceipt.ts` so impossible calendar dates are rejected both on new receipt submission and when reading saved retry intents. Added tests proving an invalid date creates no movement request and a corrupt saved intent is not silently replaced. Documented the limited scope: existing all-at-once receipts only; partial deliveries and payment reconciliation remain unimplemented.
 - Repository tests were not executable from this connected editing session; exact-head CI is still unconfirmed. Next step is a coherent partial-delivery design with per-delivery stable IDs and receipt history, not another status poll. No live data/deploy changes. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement lifecycle
+- Added delivery/payment record types, outstanding-quantity and payment-summary helpers, over-receipt/overpayment validation, and retry-safe per-delivery stock movement IDs.
+- Integrated partial-delivery history and payment-entry UI into `BudgetsAndWorkplansView.tsx`; added synthetic delivery and lifecycle tests to CI.
+- Verification is pending: no local test run, and the combined-status endpoint returned no checks for the workflow commit. Review concurrent offline edits to embedded delivery/payment arrays before treating this as production-ready.
