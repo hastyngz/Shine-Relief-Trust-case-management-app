@@ -30,25 +30,24 @@ export function formatDate(dateString?: string): string {
   }
 }
 
-// Convert data to CSV and trigger browser download
-export function downloadCSV(filename: string, rows: (string | number)[][]): void {
-  const processCell = (cell: string | number | undefined | null) => {
-    if (cell === undefined || cell === null) return '""';
-    const str = String(cell).replace(/"/g, '""');
-    return `"${str}"`;
-  };
-
-  const csvContent =
-    'data:text/csv;charset=utf-8,\uFEFF' +
-    rows.map((row) => row.map(processCell).join(',')).join('\r\n');
-
-  const encodedUri = encodeURI(csvContent);
+// Convert tabular report rows to an Excel workbook and trigger browser download.
+export async function downloadCSV(filename: string, rows: (string | number)[][]): Promise<void> {
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
+  sheet['!cols'] = (rows[0] || []).map((header, index) => ({
+    wch: Math.min(40, Math.max(String(header ?? '').length + 2, ...rows.slice(1, 30).map((row) => String(row[index] ?? '').length + 2))),
+  }));
+  XLSX.utils.book_append_sheet(workbook, sheet, 'SHINE Report');
+  const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  link.href = url;
+  link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // 1. Girls Export
