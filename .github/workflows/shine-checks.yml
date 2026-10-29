@@ -152,7 +152,7 @@ jobs:
 
       - name: Test inventory Word, Excel and PDF export mapping
         run: npm run test:inventory-export
-      - name: Test asset CSV export
+      - name: Test asset Word, Excel and PDF export mapping
         run: npm run test:asset-export
 
       - name: Test physical asset verification
