@@ -44,7 +44,13 @@ export async function postProcurementDeliveryMovements(args: {
   try { raw = args.storage.getItem(key); } catch { throw new Error('Saved delivery retry details could not be read. No inventory movement was submitted.'); }
   let intent = readProcurementDeliveryIntent(args.storage, args.uid, args.list.id);
   if (raw && !intent) throw new Error('Saved delivery retry details are invalid. No stock movement was submitted; contact an Administrator.');
-  const errors = validateProcurementDelivery({ list: args.list, date: args.date, reference: args.reference, quantities: args.quantities, deliveryId: args.deliveryId });
+  const validationList = intent ? {
+    ...args.list,
+    receivedQuantities: args.list.items.map((_, index) => Math.max(
+      0, Number(args.list.receivedQuantities?.[index] || 0) - Number(intent?.quantities[index] || 0),
+    )),
+  } : args.list;
+  const errors = validateProcurementDelivery({ list: validationList, date: args.date, reference: args.reference, quantities: args.quantities, deliveryId: args.deliveryId });
   if (errors.length) throw new Error(errors.join(' '));
   if (args.choices.length !== args.list.items.length || args.choices.some((choice, index) => choice.itemIndex !== index)) throw new Error('Choose an inventory link for every line before posting.');
   const inventoryById = new Map(args.inventoryItems.map((item) => [item.id, item]));
