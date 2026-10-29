@@ -1560,7 +1560,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                             <span><strong className="text-stone-900">{supplier.procurementListCount}</strong> lists</span>
                             <span><strong className="text-stone-900">{supplier.expenseRecordCount}</strong> expense records</span>
                             <span><strong className="text-stone-900">{supplier.inventoryItemCount}</strong> inventory items</span>
-                            <span>Last activity: <strong className="text-stone-900">{supplier.lastActivityDate || 'Not dated'}</strong></span>
+                            <span>Latest quote/expense: <strong className="text-stone-900">{supplier.lastActivityDate || 'Not dated'}</strong></span>
                           </div>
                         </article>
                       ))}
