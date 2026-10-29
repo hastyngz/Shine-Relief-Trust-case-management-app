@@ -1045,3 +1045,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · procurement list filters
 - Added procurement search across title/purpose, item details, quote suppliers, PO and finance references; added status filter and clear-all. Existing approval, receipt and finance handover actions remain unchanged.
 - Added synthetic tests and CI wiring. Exact-head run [#40862102846](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862102846) passed both checks and E2E on code/test commit `229e48071bacde174e8818f0cae22223577cb715`. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset service/warranty filters
+- Added asset-register follow-up filters for overdue service, service due within 30 days, expired warranties and warranties expiring within 30 days. Uses local-date input from the existing app helper; malformed/missing dates do not falsely match. Tests use a fixed date and cover intersections.
+- Exact-head run [#40862541195](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862541195) passed checks and E2E on code/test commit `2e4fd2447b79855e98b5f433a5d86bcc5217fa23`. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
