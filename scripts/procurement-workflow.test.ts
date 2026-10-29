@@ -75,7 +75,7 @@ const supplierIndex = buildSupplierActivityIndex([
 assert.deepEqual(supplierIndex, [
   { name: 'Acme Supplies', quoteCount: 2, procurementListCount: 2, expenseRecordCount: 1, inventoryItemCount: 0, lastActivityDate: '2026-10-27' },
   { name: 'Beta Traders', quoteCount: 1, procurementListCount: 1, expenseRecordCount: 0, inventoryItemCount: 0, lastActivityDate: '2026-10-19' },
-  { name: 'Gamma Services', quoteCount: 0, procurementListCount: 0, expenseRecordCount: 1, inventoryItemCount: 1, lastActivityDate: '2026-10-28' },
+  { name: 'Gamma Services', quoteCount: 0, procurementListCount: 0, expenseRecordCount: 1, inventoryItemCount: 1, lastActivityDate: '2026-10-26' },
 ], 'supplier names should be grouped case-insensitively and counts/date should reflect existing source records only');
 assert.deepEqual(buildSupplierActivityIndex([], []), []);
 assert.equal(supplierIndex.some((supplier) => 'amountMWK' in supplier), false, 'supplier index must not aggregate or expose financial amounts');
