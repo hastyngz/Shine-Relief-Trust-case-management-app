@@ -1622,7 +1622,6 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                               {list.status === 'purchased' && !list.receivedAt && (
                                 <p className="mt-2 text-[11px] text-stone-600">Received so far: {getProcurementDeliveredQuantity(list, index)} / {item.quantity} {item.unit}. Outstanding: {getProcurementOutstandingQuantity(list, index)} {item.unit}.</p>
                               )}
-                              )}
                             </div>
                             <div className="text-xs">
                               <p className={`font-bold ${item.priceStatus === 'quoted' ? 'text-stone-800' : 'text-amber-900'}`}>
