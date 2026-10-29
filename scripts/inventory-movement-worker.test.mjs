@@ -175,6 +175,36 @@ try {
   }
 
   {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload({
+      id: 'prcd_12345678_0', quantity: 1, sourceDeliveryId: 'delivery_12345678',
+      reference: 'Delivery delivery_12345678 · DN-SYNTHETIC · procurement proc-synthetic · line 1',
+    }));
+    const body = await response.json();
+    assert.equal(response.status, 200, 'partial deliveries should be accepted when within the outstanding quantity');
+    assert.equal(body.movement.sourceDeliveryId, 'delivery_12345678');
+    assert.equal(mock.writes[0].length, 3, 'stock balance, movement, and cumulative procurement receipt must commit atomically');
+    assert.deepEqual(decode(mock.writes[0][2].update.fields.receivedQuantities), [1]);
+  }
+
+  {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
+      receivedQuantities: [2],
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload({
+      id: 'prcd_87654321_0', quantity: 2, sourceDeliveryId: 'delivery_87654321',
+      reference: 'Delivery delivery_87654321 · DN-OVER · procurement proc-synthetic · line 1',
+    }));
+    assert.equal(response.status, 409, 'cumulative receipt quantity must not exceed the ordered quantity');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
     const mock = setup();
     const response = await send(procurementPayload({ type: 'Issued' }));
     assert.equal(response.status, 400, 'procurement provenance is restricted to receipt movements');
