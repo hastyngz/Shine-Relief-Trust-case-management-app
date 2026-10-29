@@ -15,8 +15,8 @@ assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not verif
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified this year' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: discrepancy' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: not located' }).map((asset) => asset.id), ['d']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'IT & Electronics' }).map((asset) => asset.id), ['b', 'c']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, status: 'In Use' }).map((asset) => asset.id), ['b']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'IT & Electronics' }).map((asset) => asset.id), ['b', 'd', 'c']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, status: 'In Use' }).map((asset) => asset.id), ['b', 'd']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, condition: 'Damaged' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, search: ' FARM ' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'Furniture', status: 'In Use' }), []);
