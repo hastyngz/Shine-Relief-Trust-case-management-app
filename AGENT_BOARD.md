@@ -1098,3 +1098,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · procurement payment retry safety
 - Hardened payment recording to re-read the current local procurement list before balance validation, use a per-list in-flight lock, and retain the payment draft when saving fails. Added a pure append-and-revalidate helper with regression tests for duplicate IDs and overpayment.
 - This is a same-device stale-render/retry safeguard only. Cross-device atomic balance enforcement still needs a server-authoritative transaction; no production data or rules changed.
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification submission guard
+- Added a saving guard and disabled/loading state to physical asset verification; added a browser test covering registration, verification history and the non-mutating observation rule using synthetic records.
+- Verification is pending on the combined exact-head CI run. No production data or rules changed.

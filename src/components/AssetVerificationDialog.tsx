@@ -20,11 +20,14 @@ export const AssetVerificationDialog: React.FC<AssetVerificationDialogProps> = (
   const [observedCondition, setObservedCondition] = useState<AssetCondition | ''>(asset.condition);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const inputClass = 'mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm font-normal text-stone-900';
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (saving) return;
     setError('');
+    setSaving(true);
     try {
       const updated = recordAssetVerification(asset, {
         date,
@@ -37,6 +40,8 @@ export const AssetVerificationDialog: React.FC<AssetVerificationDialogProps> = (
       onSaved(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not record this physical verification.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -55,7 +60,7 @@ export const AssetVerificationDialog: React.FC<AssetVerificationDialogProps> = (
           <label className="block text-sm font-semibold text-stone-700">Observed location<input value={observedLocation} onChange={(event) => setObservedLocation(event.target.value)} className={inputClass} placeholder="Where you physically found it" /></label>
           <label className="block text-sm font-semibold text-stone-700">Observed condition<select value={observedCondition} onChange={(event) => setObservedCondition(event.target.value as AssetCondition | '')} className={inputClass}><option value="">Not assessed</option>{conditions.map((condition) => <option key={condition}>{condition}</option>)}</select></label>
           <label className="block text-sm font-semibold text-stone-700">Notes {outcome !== 'Verified' ? '*' : '(optional)'}<textarea rows={3} required={outcome !== 'Verified'} value={note} onChange={(event) => setNote(event.target.value)} className="mt-1 w-full rounded-xl border border-stone-300 p-3 font-normal" placeholder="Record discrepancy, missing asset details, or verification notes" /></label>
-          <div className="flex flex-col-reverse gap-2 border-t border-stone-200 pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Cancel</button><button type="submit" className="fx-press fx-btn-main min-h-11 rounded-xl px-5 text-sm font-bold">Save verification</button></div>
+          <div className="flex flex-col-reverse gap-2 border-t border-stone-200 pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Cancel</button><button type="submit" disabled={saving} className="fx-press fx-btn-main min-h-11 rounded-xl px-5 text-sm font-bold disabled:opacity-50">{saving ? 'Saving…' : 'Save verification'}</button></div>
         </form>
       </section>
     </div>
