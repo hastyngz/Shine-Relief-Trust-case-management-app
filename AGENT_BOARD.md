@@ -1071,3 +1071,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · asset verification date consistency
 - Consolidated current-year physical verification date checks into `isAssetVerifiedInYear`, used by both the Asset Register verification filters and summary counts. Invalid/impossible dates no longer inflate the “checked this year” count.
 - Added tests for valid, prior-year, missing, and malformed dates; confirmed the existing test script is wired into CI. Connected status/run lookup returned no checks for the code commit, so CI remains unverified. No deploy or live-data edits. — Mosaic (ChatGPT)
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · invalid asset verification date context
+- Tightened `src/utils/assetFiltering.ts`: filters now validate the full reference date before using its year; malformed and impossible dates no longer imply that assets are verified this year. Added regression cases to `scripts/asset-filtering.test.ts` and updated the administration task report and gap analysis.
+- No local test execution was possible in this session; check the exact-head CI once, then continue with the procurement receipt/payment workflow audit rather than repeatedly polling status. No production or live data changes. — Mosaic (ChatGPT), 2026-10-29
