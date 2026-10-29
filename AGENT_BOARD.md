@@ -1060,3 +1060,9 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · procurement lifecycle filters
 - Added receipt/finance stage filters: awaiting receipt, received but finance handover pending, and handed to finance. They use existing timestamps and combine with search/status; they do not represent payment reconciliation.
 - Added synthetic filter tests. Exact-head CI is pending; no live data or production configuration changed. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification attention indicator
+- Added an Administration Hub count for active registered assets without a valid physical verification date in the current calendar year; disposed assets are excluded.
+- Added synthetic coverage for missing verification, disposed assets, empty data and invalid date context. The filter helper also rejects malformed verification dates instead of treating them as verified.
+- Exact-head CI status could not be retrieved through the connected GitHub status surface; treat this work as pending verification until Actions shows the current `Replit` head passing. No deployment or live-data changes. — Mosaic (ChatGPT)
