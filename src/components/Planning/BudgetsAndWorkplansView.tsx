@@ -114,6 +114,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [deliveryPosting, setDeliveryPosting] = useState<Record<string, boolean>>({});
   const canApproveProcurement = isAdmin || staffProfile?.role === 'Manager';
   const focusedQualityKey = useRef('');
+  const deliveryLocks = useRef(new Set<string>());
 
   useEffect(() => {
     if (!initialProgrammeCreate) return;
@@ -237,7 +238,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     }
   };
   const recordProcurementDelivery = async (list: ProcurementList) => {
-    if (!canEdit || list.status !== 'purchased' || deliveryPosting[list.id] || !staffProfile?.uid || typeof window === 'undefined') return;
+    if (!canEdit || list.status !== 'purchased' || deliveryPosting[list.id] || deliveryLocks.current.has(list.id) || !staffProfile?.uid || typeof window === 'undefined') return;
+    deliveryLocks.current.add(list.id);
     setDeliveryPosting((current) => ({ ...current, [list.id]: true }));
     try {
       const pending = readProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
@@ -290,6 +292,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     } catch (error) {
       setReceiptPostingStatus((current) => ({ ...current, [list.id]: error instanceof Error ? error.message : 'Delivery could not be recorded. Retry the same delivery details.' }));
     } finally {
+      deliveryLocks.current.delete(list.id);
       setDeliveryPosting((current) => ({ ...current, [list.id]: false }));
     }
   };
