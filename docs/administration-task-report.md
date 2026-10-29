@@ -39,7 +39,6 @@
 ## Additional administration UI hardening
 - The physical asset verification dialog now disables its submit control while saving and shows a saving state. Existing error handling keeps the dialog and entered observations available if local persistence fails.
 - Added browser E2E coverage for registering a synthetic asset, recording a physical verification, confirming the register values remain unchanged, and checking that one history entry is recorded.
-- This new E2E and the procurement payment change above require the latest exact-head CI result; they are not yet verified locally.
-
-
-- Browser test locator reviewed to avoid ambiguity with the separate asset-filter count status region. The exact-head CI result remains pending.
+- Procurement payment safeguards passed GitHub Actions run [40952928028](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40952928028). This verifies the configured checks for that earlier commit only; it does not establish cross-device atomic payment safety.
+- Asset-verification browser E2E initially failed because its page-heading locator matched both “Asset Register” and “Export asset register”. Corrected the locator to require an exact heading match in commit `9b6581200bad67cc68296e28166a74079bb1de08`.
+- The corrected exact-head CI run is pending; this change has not been tested locally because outbound GitHub access is unavailable.
