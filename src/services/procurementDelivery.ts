@@ -77,7 +77,7 @@ export async function postProcurementDeliveryMovements(args: {
     try {
       result = await args.postMovement({ id, itemId: choice.inventoryItemId, type: 'Received', quantity, date: intent.date,
         reason: `Partial procurement delivery: ${args.list.title}`.slice(0, 1000),
-        reference: `Delivery ${intent.reference} · procurement ${args.list.id} · line ${index + 1}`.slice(0, 250),
+        reference: `Delivery ${intent.deliveryId} · ${intent.reference} · procurement ${args.list.id} · line ${index + 1}`.slice(0, 250),
         sourceType: 'procurementReceipt', sourceId: args.list.id, sourceLineIndex: index, sourceDeliveryId: intent.deliveryId });
     } catch (error) {
       throw new Error(`Delivery posting stopped after ${movementIds.length} stock movement(s). Retry this exact delivery; stable movement IDs prevent duplicate stock additions. ${error instanceof Error ? error.message : 'The server did not confirm the movement.'}`);
