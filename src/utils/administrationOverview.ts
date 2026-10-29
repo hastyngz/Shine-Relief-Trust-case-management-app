@@ -5,6 +5,7 @@ export interface AdministrationAttentionSummary {
   lowStockItems: number;
   stockExpiryAlerts: number;
   assetsNeedingAttention: number;
+  assetsNotVerifiedThisYear: number;
   overdueCompliance: number;
   openProcurementLists: number;
 }
@@ -36,6 +37,9 @@ export function getAdministrationAttention(db: AppDatabase, today: string): Admi
       asset.condition === 'Damaged' || asset.condition === 'Needs Repair' ||
       withinNext30Days(asset.warrantyExpiryDate, today) || withinNext30Days(asset.nextServiceDate, today)
     )).length,
+    assetsNotVerifiedThisYear: isValidDate(today) ? assets.filter((asset) => asset.status !== 'Disposed' && (
+      !isValidDate(asset.verificationDate) || !asset.verificationDate.startsWith(today.slice(0, 4))
+    )).length : 0,
     overdueCompliance: schedules.filter((item) => Boolean(item.complianceCategory) && isComplianceOverdue(item, today)).length,
     openProcurementLists: (db.procurementLists || []).filter((item) => item.status === 'draft' || item.status === 'approved').length,
   };
