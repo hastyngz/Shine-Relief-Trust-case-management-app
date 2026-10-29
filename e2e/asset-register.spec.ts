@@ -5,7 +5,7 @@ test('staff can register an asset and record physical verification without chang
   logPageErrors(page);
   await signIn(page);
   await page.evaluate(() => { window.location.hash = '#/assets'; });
-  await expect(page.getByRole('heading', { name: 'Asset Register' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Asset Register', exact: true })).toBeVisible();
 
   const suffix = Date.now().toString();
   const assetTag = `E2E-ASSET-${suffix}`;
