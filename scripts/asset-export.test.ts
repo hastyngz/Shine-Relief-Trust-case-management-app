@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
-import { buildAssetsCsv, escapeAssetCsvCell } from '../src/utils/assetExport';
+import { assetExportRows, ASSET_EXPORT_COLUMNS } from '../src/utils/assetExport';
 import type { AssetRecord } from '../src/types';
-
-assert.equal(escapeAssetCsvCell('plain'), '"plain"');
-assert.equal(escapeAssetCsvCell('quote " value'), '"quote "" value"');
-assert.equal(escapeAssetCsvCell('=HYPERLINK("https://example.com")'), '"\'=HYPERLINK(""https://example.com"")"');
-assert.equal(escapeAssetCsvCell('  @SUM(A1:A2)'), '"\'  @SUM(A1:A2)"');
 
 const asset: AssetRecord = {
   id: 'asset-1', assetTag: 'SHINE-001', name: 'Laptop, office', category: 'IT & Electronics',
@@ -13,9 +8,13 @@ const asset: AssetRecord = {
   createdAt: '2026-10-15T00:00:00.000Z', updatedAt: '2026-10-15T00:00:00.000Z',
   createdBy: 'Admin', updatedBy: 'Admin',
 };
-const csv = buildAssetsCsv([asset]);
-assert.ok(csv.includes('"Laptop, office"'));
-assert.ok(csv.startsWith('"Asset tag","Name"'));
-assert.ok(csv.endsWith('\r\n'));
-assert.equal(buildAssetsCsv([]).split('\r\n').length, 2);
-console.log('Asset export tests passed.');
+const rows = assetExportRows([asset]);
+assert.equal(rows.length, 2);
+assert.equal(rows[0][0], 'Asset tag');
+assert.equal(rows[0][10], 'Acquisition cost (MWK)');
+assert.equal(rows[1][0], 'SHINE-001');
+assert.equal(rows[1][1], 'Laptop, office');
+assert.equal(rows[1][5], 'Main Office');
+assert.equal(ASSET_EXPORT_COLUMNS.length, rows[0].length);
+assert.equal(assetExportRows([]).length, 1);
+console.log('Asset Word/Excel/PDF export mapping tests passed.');
