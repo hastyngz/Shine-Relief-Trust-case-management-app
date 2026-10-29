@@ -43,3 +43,9 @@
 - Asset-verification browser E2E initially failed because its page-heading locator matched both “Asset Register” and “Export asset register”. Corrected the locator to require an exact heading match in commit `9b6581200bad67cc68296e28166a74079bb1de08`.
 - Corrected the page-heading locator to require an exact accessible name in commit `9b6581200bad67cc68296e28166a74079bb1de08`.
 - CI for the corrected commit has not yet been confirmed. Local execution is unavailable because this environment cannot reach GitHub; do not mark the browser flow verified until the exact-head run passes.
+
+## Asset verification recovery regression (2026-10-29)
+- Added a browser workflow that registers a synthetic asset, enters a physical-check discrepancy, forces the browser's SHINE database storage write to fail, and verifies that the dialog remains open with the observed location and note intact and that the register shows no false verification.
+- The same workflow restores storage and retries, then checks that the verification appears in the asset history exactly once.
+- This is test coverage for the existing local-save failure handling; it does not add server-side audit guarantees or cross-device asset-tag uniqueness.
+- Verification is pending for the resulting Replit branch head. No local test/build is claimed in this environment. Do not mark the browser test passed until the exact-head CI E2E job completes successfully.
