@@ -133,6 +133,9 @@ jobs:
       - name: Test procurement quote and approval workflow
         run: npm run test:procurement
 
+      - name: Test procurement list filters
+        run: npm run test:procurement-filtering
+
       - name: Test internal procurement report aggregates
         run: npm run test:management-procurement-report
 
