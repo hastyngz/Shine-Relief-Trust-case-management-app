@@ -9,8 +9,11 @@ export function isValidProcurementDate(value: unknown): value is string {
 export function getProcurementDeliveredQuantity(list: ProcurementList, itemIndex: number): number {
   const historyTotal = (list.deliveries || []).reduce((sum, delivery) => sum + delivery.lines.reduce(
     (lineSum, line) => lineSum + (line.itemIndex === itemIndex ? line.quantity : 0), 0), 0);
-  const serverTotal = Number(list.receivedQuantities?.[itemIndex] || 0);
-  return Math.max(historyTotal, Number.isFinite(serverTotal) && serverTotal >= 0 ? serverTotal : 0);
+  const serverArrayTotal = Number(list.receivedQuantities?.[itemIndex] || 0);
+  const serverLedgerTotal = Number(list.receivedQuantitiesByLine?.[String(itemIndex)] || 0);
+  const safeArrayTotal = Number.isFinite(serverArrayTotal) && serverArrayTotal >= 0 ? serverArrayTotal : 0;
+  const safeLedgerTotal = Number.isFinite(serverLedgerTotal) && serverLedgerTotal >= 0 ? serverLedgerTotal : 0;
+  return Math.max(historyTotal, safeArrayTotal, safeLedgerTotal);
 }
 
 export function getProcurementOutstandingQuantity(list: ProcurementList, itemIndex: number): number {
