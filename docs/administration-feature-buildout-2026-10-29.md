@@ -4,7 +4,7 @@
 **Repository:** `hastyngz/Shine-Relief-Trust-case-management-app`  
 **Branch:** `Replit`  
 **Scope:** Administration Hub operational indicators, inventory and asset register filtering/exports, general report export consistency, document filing filters, compliance status filters, safeguarding export boundary, and regression coverage.  
-**Status:** Application code and regression tests passed exact-head GitHub Actions run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on code/test commit `14d43246f195d709a783b4cf3ab11bbcd2388de7`. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
+**Status:** The prior administration build-out passed run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on `14d43246f195d709a783b4cf3ab11bbcd2388de7`. The follow-up asset category/location filtering and regression tests passed run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730) on exact code/test commit `070a3b1f364282915791ddf6a7761785db9a582d`; both `checks` and `e2e` jobs succeeded. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
 
 ## User requirements and constraints
 
@@ -26,9 +26,10 @@
 ### Asset Register
 
 - Replaced the previous CSV export utility with Word, Excel and PDF exports.
-- Exports use the current search/status/condition filtered list and share one tested column mapping.
-- Added progress/disabled state and visible error/success feedback.
-- Updated the CI step to test the supported export mapping; no CSV export is intended.
+- Exports use the current search/category/location/status/condition filtered list and share one tested column mapping.
+- Added category and location dropdown filters, a result count, and a one-tap clear-all action for the search and filters.
+- Added a focused filtering helper and synthetic regression tests for category, location, status, condition, case-insensitive search, empty intersections and input immutability; wired the test into CI.
+- Added progress/disabled state and visible error/success feedback for exports; no CSV export is intended.
 
 ### General reporting exports
 
@@ -62,6 +63,10 @@
 - `scripts/compliance-calendar.test.ts`
 - `scripts/document-filing.test.ts`
 - `scripts/inventory-export.test.ts`
+- `src/utils/assetFiltering.ts`
+- `scripts/asset-filtering.test.ts`
+- `src/utils/assetFiltering.ts`
+- `scripts/asset-filtering.test.ts`
 - `scripts/asset-export.test.ts`
 - `scripts/inventory.test.ts`
 - `scripts/report-export.test.ts`
