@@ -53,6 +53,11 @@
 - `AGENT_BOARD.md`
 - `docs/administration-officer-tor-gap-analysis.md`
 
+### Compliance & Deadlines follow-up
+
+- Added explicit Due soon and Cancelled filters to the compliance register, sharing the same date/status rules as the summary counts. Regression coverage includes overdue, due-soon, completed, cancelled and open states.
+- Updated the sensitive-data end-to-end test selectors to match the new Excel export labels; the existing test had been waiting for the old CSV button name, causing the previous E2E job to time out even though the checks job passed.
+
 ## Verification
 
 - GitHub Actions run `40786347247` exposed a real TypeScript/build error: `exportInventoryRegister` was imported from `src/utils/inventory.ts`, where it is not exported. This was corrected in a later commit.

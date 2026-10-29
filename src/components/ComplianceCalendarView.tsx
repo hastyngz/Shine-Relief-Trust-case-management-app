@@ -4,7 +4,7 @@ import type { ScheduleItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { addScheduleItemWithSaveResult, updateScheduleItemWithSaveResult } from '../utils/storage';
 import { getLocalDateInputValue } from '../utils/inventory';
-import { isComplianceDueSoon, isComplianceOverdue } from '../utils/compliance';
+import { isComplianceDueSoon, isComplianceOverdue, matchesComplianceStatus, type ComplianceStatusFilter } from '../utils/compliance';
 
 interface ComplianceCalendarViewProps {
   schedules: ScheduleItem[];
@@ -33,7 +33,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ComplianceForm>(() => blankForm(currentUser?.uid || ''));
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'Overdue' | 'Completed'>('All');
+  const [statusFilter, setStatusFilter] = useState<ComplianceStatusFilter>('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [completionTarget, setCompletionTarget] = useState<ScheduleItem | null>(null);
   const [completionNote, setCompletionNote] = useState('');
@@ -47,10 +47,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     return [...records].filter((item) => {
       const textMatches = !term || [item.title, item.description, item.assignedStaffName, item.notes, item.evidenceReference]
         .some((value) => value?.toLowerCase().includes(term));
-      const statusMatches = statusFilter === 'All'
-        || (statusFilter === 'Completed' ? item.status === 'Completed'
-          : statusFilter === 'Overdue' ? isComplianceOverdue(item, today)
-            : item.status !== 'Completed' && item.status !== 'Cancelled');
+      const statusMatches = matchesComplianceStatus(item, statusFilter, today);
       return textMatches && statusMatches && (categoryFilter === 'All' || item.complianceCategory === categoryFilter);
     }).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.title.localeCompare(b.title));
   }, [records, query, statusFilter, categoryFilter, today]);
@@ -171,7 +168,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     <div className="grid gap-2 sm:grid-cols-3">
       <input aria-label="Search compliance obligations" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, owner or evidence" className="field" />
       <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="field">
-        <option>All</option><option>Open</option><option>Overdue</option><option>Completed</option>
+        <option>All</option><option>Open</option><option>Due soon</option><option>Overdue</option><option>Completed</option><option>Cancelled</option>
       </select>
       <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="field">
         <option>All</option>{categories.map((category) => <option key={category}>{category}</option>)}

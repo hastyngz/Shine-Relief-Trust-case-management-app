@@ -9,9 +9,9 @@ test('ordinary staff cannot open database backup or export restricted medical re
   await expect(page.locator('#data-backup-btn')).toHaveCount(0);
 
   await page.evaluate(() => { window.location.hash = '#/reports'; });
-  await page.getByRole('button', { name: 'CSV Export Centre' }).click();
+  await page.getByRole('button', { name: 'Excel Export Centre' }).click();
 
   // Medical exports must remain hidden even if a stale local snapshot exists.
-  await expect(page.getByRole('button', { name: 'Download Medical CSV' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Health follow-ups CSV' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download Medical Excel' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Health follow-ups Excel' })).toHaveCount(0);
 });
