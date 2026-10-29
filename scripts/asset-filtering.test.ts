@@ -26,10 +26,10 @@ assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Service due s
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Warranty expired' }).map((asset) => asset.id), ['a', 'c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Warranty expiring soon' }).map((asset) => asset.id), ['b']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Service overdue', status: 'In Use' }), []);
-assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Never verified' }).map((asset) => asset.id), ['a']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified' }).map((asset) => asset.id), ['b']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not located' }).map((asset) => asset.id), ['c']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Discrepancy' }), []);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not verified this year' }).map((asset) => asset.id), ['a']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified this year' }).map((asset) => asset.id), ['b']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: not located' }).map((asset) => asset.id), ['c']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: discrepancy' }), []);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not located', location: 'Office' }), []);
 
 assert.deepEqual(assets.map((asset) => asset.id), ['a', 'b', 'c', 'd', 'e'], 'filtering must not mutate the input list');
