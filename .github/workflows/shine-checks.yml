@@ -91,6 +91,12 @@ jobs:
       - name: Test procurement receipt to inventory linkage
         run: npx tsx scripts/procurement-inventory-receipt.test.ts
 
+      - name: Test partial procurement delivery retry and quantity safeguards
+        run: npx tsx scripts/procurement-delivery.test.ts
+
+      - name: Test procurement lifecycle validation
+        run: npx tsx scripts/procurement-lifecycle.test.ts
+
       - name: Test durable inventory retry persistence
         run: npm run test:inventory-pending-retry
 
