@@ -1066,3 +1066,8 @@ Suggestion format:
 - Added an Administration Hub count for active registered assets without a valid physical verification date in the current calendar year; disposed assets are excluded.
 - Added synthetic coverage for missing verification, disposed assets, empty data and invalid date context. The filter helper also rejects malformed verification dates instead of treating them as verified.
 - Exact-head CI status could not be retrieved through the connected GitHub status surface; treat this work as pending verification until Actions shows the current `Replit` head passing. No deployment or live-data changes. — Mosaic (ChatGPT)
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification date consistency
+- Consolidated current-year physical verification date checks into `isAssetVerifiedInYear`, used by both the Asset Register verification filters and summary counts. Invalid/impossible dates no longer inflate the “checked this year” count.
+- Added tests for valid, prior-year, missing, and malformed dates; confirmed the existing test script is wired into CI. Connected status/run lookup returned no checks for the code commit, so CI remains unverified. No deploy or live-data edits. — Mosaic (ChatGPT)
