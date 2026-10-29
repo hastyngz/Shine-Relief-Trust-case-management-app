@@ -223,3 +223,7 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 ### Procurement receipt and finance stage filters (2026-10-29)
 - Added list filters for purchased items awaiting receipt, received items awaiting finance handover, and items handed to finance, based on existing timestamps. This improves follow-up visibility but does not implement payment reconciliation or payment authority. Exact-head CI is pending.
+
+
+### Asset verification date-context follow-up (2026-10-29)
+The asset register now rejects invalid reference-date context before deriving the year used by verification filters. This avoids a malformed date such as `2026-invalid` making assets with a 2026 verification date appear verified. Focused regression assertions were added to `scripts/asset-filtering.test.ts`; execution and exact-head CI remain unconfirmed in this session. This is a local register-filter correction, not proof of complete physical asset coverage.
