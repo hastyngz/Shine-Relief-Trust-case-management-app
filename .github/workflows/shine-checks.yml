@@ -48,6 +48,9 @@ jobs:
       - name: Test administration hub module navigation
         run: npm run test:administration-hub
 
+      - name: Test administration operational attention summaries
+        run: npm run test:administration-overview
+
       - name: Test document filing filters
         run: npm run test:document-filing
 

@@ -1013,3 +1013,7 @@ Suggestion format:
 
 ### 2026-10-29 · Mosaic (ChatGPT) · export reliability and privacy regression tests
 - The shared Excel downloader is synchronous again (XLSX is an existing dependency) so report click handlers do not leave rejected dynamic-import promises unhandled. Added a source-level safeguarding export boundary test and included the existing management-report generation/download test in CI. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · administration overview signals
+- Added a small operational-attention section to the Administration Hub: low stock, expired/near-expiry stock, asset maintenance/warranty/missing status, overdue compliance, and open procurement list counts. Cards route to existing modules. Counts are explicitly local-snapshot indicators, not assurance that unrecorded work is absent. Added synthetic tests and CI step. — Mosaic (ChatGPT), 2026-10-29

@@ -1,12 +1,14 @@
 import React from 'react';
 import {
-  Archive, Boxes, ClipboardCheck, FileText, Users, CalendarDays, Truck,
+  Archive, Boxes, ClipboardCheck, FileText, Users, CalendarDays, Truck, AlertTriangle,
   ShoppingCart, ShieldCheck, ClipboardList, BarChart3, Wallet, BriefcaseBusiness,
   ArrowUpRight, CheckCircle2, Clock3,
 } from 'lucide-react';
 import type { AppDatabase } from '../types';
 import type { AppView } from '../routing/appRoutes';
 import { useAuth } from '../contexts/AuthContext';
+import { getLocalDateInputValue } from '../utils/inventory';
+import { getAdministrationAttention } from '../utils/administrationOverview';
 
 interface AdministrationHubProps {
   db: AppDatabase;
@@ -49,6 +51,14 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
   const meetingCount = db.meetings?.length || 0;
   const scheduleCount = db.schedules?.length || 0;
   const groups = Array.from(new Set(visibleModules.map((item) => item.group)));
+  const attention = getAdministrationAttention(db, getLocalDateInputValue());
+  const attentionCards = [
+    { label: 'Low-stock items', count: attention.lowStockItems, detail: 'At or below minimum stock', view: 'inventory' as AppView, icon: Boxes },
+    { label: 'Stock expiry alerts', count: attention.stockExpiryAlerts, detail: 'Expired or due within 30 days', view: 'inventory' as AppView, icon: AlertTriangle },
+    { label: 'Assets needing follow-up', count: attention.assetsNeedingAttention, detail: 'Missing, repair, warranty or service', view: 'assets' as AppView, icon: Archive },
+    { label: 'Overdue compliance', count: attention.overdueCompliance, detail: 'Open obligations past their due date', view: 'compliance' as AppView, icon: ShieldCheck },
+    { label: 'Open procurement lists', count: attention.openProcurementLists, detail: 'Draft or approved lists not yet received', view: 'planning' as AppView, icon: ShoppingCart },
+  ];
 
   return (
     <section className="mx-auto max-w-7xl space-y-6 px-1 pb-8" aria-labelledby="admin-hub-title">
@@ -70,6 +80,20 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
           <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{availableCount}/{visibleModules.length}</p><p className="text-xs text-stone-600">Existing app links</p></div>
         </div>
       </div>
+
+      <section aria-labelledby="admin-attention-title" className="space-y-3">
+        <div><h2 id="admin-attention-title" className="text-lg font-bold text-stone-900">Operational attention</h2><p className="mt-1 text-sm text-stone-600">Live counts from the records currently loaded on this device. A zero count is not proof that unrecorded or unsynchronised work does not exist.</p></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {attentionCards.map((item) => {
+            const Icon = item.icon;
+            return <button key={item.label} type="button" onClick={() => onNavigate(item.view)} className="fx-press flex min-h-24 items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-left hover:border-teal-700 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700">
+              <span className="rounded-xl bg-amber-50 p-2 text-amber-900"><Icon className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-stone-900">{item.label}</span><span className="mt-1 block text-xs leading-5 text-stone-600">{item.detail}</span></span>
+              <span className="text-2xl font-black tabular-nums text-stone-900">{item.count}</span>
+            </button>;
+          })}
+        </div>
+      </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-bold text-stone-900">Administration workspace</h2><p className="mt-1 text-sm text-stone-600">Open an existing SHINE workflow or review the next modules planned from the Administration Officer ToR.</p></div>

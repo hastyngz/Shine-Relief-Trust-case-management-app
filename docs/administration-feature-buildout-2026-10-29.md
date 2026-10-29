@@ -53,6 +53,11 @@
 - `AGENT_BOARD.md`
 - `docs/administration-officer-tor-gap-analysis.md`
 
+### Administration hub operational overview
+
+- Added an operational attention strip with counts for low stock, stock expiry within 30 days, assets needing follow-up, overdue compliance obligations and open procurement lists. Each card opens the relevant existing workflow.
+- Counts are derived from the current local database snapshot, and the UI explicitly warns that zero is not proof that unsynchronised or unrecorded work is absent. The summary excludes disposed assets and ignores invalid date values. Added focused synthetic-data tests and CI wiring.
+
 ### Report export consistency and safeguarding boundary
 
 - Made the shared Excel downloader synchronous after importing the already-used `xlsx` dependency in the report route. This avoids unhandled promise rejections from existing click handlers after changing the former CSV download into an XLSX generator.

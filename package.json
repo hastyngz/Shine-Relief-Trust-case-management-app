@@ -55,7 +55,8 @@
     "test:compliance": "tsx scripts/compliance-calendar.test.ts",
     "test:inventory-export": "tsx scripts/inventory-export.test.ts",
     "test:document-filing": "tsx scripts/document-filing.test.ts",
-    "test:safeguarding-export-boundary": "tsx scripts/safeguarding-export-boundary.test.ts"
+    "test:safeguarding-export-boundary": "tsx scripts/safeguarding-export-boundary.test.ts",
+    "test:administration-overview": "tsx scripts/administration-overview.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",
