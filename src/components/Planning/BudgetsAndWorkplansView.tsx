@@ -1570,15 +1570,21 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         const draftKey = `${list.id}:${index}`;
                         const draft = quoteDrafts[draftKey] || { supplier: '', amount: '' };
                         let savedReceiptIntent = null;
+                        let savedDeliveryIntent = null;
                         try {
                           if (staffProfile?.uid && typeof window !== 'undefined') {
                             savedReceiptIntent = readProcurementReceiptIntent(window.localStorage, staffProfile.uid, list.id);
+                            savedDeliveryIntent = readProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
                           }
                         } catch { /* Receipt submission will fail closed if browser storage is unavailable. */ }
                         const savedReceiptLine = savedReceiptIntent?.lines.find((line) => line.itemIndex === index);
+                        const savedDeliveryLine = savedDeliveryIntent?.choices.find((line) => line.itemIndex === index);
                         const receiptChoiceKey = `${list.id}:${index}`;
-                        const receiptChoice = receiptLineChoices[receiptChoiceKey] ??
-                          (savedReceiptLine ? (savedReceiptLine.inventoryItemId || NOT_INVENTORY_TRACKED) : '');
+                        const receiptChoice = savedReceiptLine
+                          ? (savedReceiptLine.inventoryItemId || NOT_INVENTORY_TRACKED)
+                          : savedDeliveryLine
+                            ? (savedDeliveryLine.inventoryItemId || NOT_INVENTORY_TRACKED)
+                            : receiptLineChoices[receiptChoiceKey] ?? '';
                         return (
                           <div key={`${list.id}-${item.itemNumber || index}`} className="grid gap-2 p-4 lg:grid-cols-[1.2fr_0.6fr_0.9fr_1fr]">
                             <div className="min-w-0">
@@ -1593,7 +1599,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                   <select
                                     aria-label={`Inventory receipt link for ${item.description}`}
                                     className="field mt-1 w-full"
-                                    disabled={!canEdit || Boolean(savedReceiptIntent) || Boolean(receiptPosting[list.id])}
+                                    disabled={!canEdit || Boolean(savedReceiptIntent) || Boolean(savedDeliveryIntent) || Boolean(receiptPosting[list.id]) || Boolean(deliveryPosting[list.id])}
                                     value={receiptChoice}
                                     onChange={(event) => setReceiptLineChoices((current) => ({ ...current, [receiptChoiceKey]: event.target.value }))}
                                   >
@@ -1603,7 +1609,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                       <option key={stockItem.id} value={stockItem.id} disabled={stockItem.unit !== item.unit}>{stockItem.stockCode} · {stockItem.name} ({stockItem.unit}){stockItem.unit !== item.unit ? ' · unit mismatch' : ''}</option>
                                     ))}
                                   </select>
-                                  {savedReceiptIntent && <span className="mt-1 block font-normal text-amber-900">Saved full-receipt retry intent; keep this selection unchanged until it completes.</span>}
+                                  {savedReceiptIntent && <span className="mt-1 block font-normal text-amber-900">Saved receipt retry intent; keep this selection unchanged until it completes.</span>}
                                 </label>
                               )}
                               {list.status === 'purchased' && !list.receivedAt && (
