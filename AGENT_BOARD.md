@@ -1087,3 +1087,9 @@ Suggestion format:
 - Added delivery/payment record types, outstanding-quantity and payment-summary helpers, over-receipt/overpayment validation, and retry-safe per-delivery stock movement IDs.
 - Integrated partial-delivery history and payment-entry UI into `BudgetsAndWorkplansView.tsx`; added synthetic delivery and lifecycle tests to CI.
 - Verification is pending: no local test run, and the combined-status endpoint returned no checks for the workflow commit. Review concurrent offline edits to embedded delivery/payment arrays before treating this as production-ready.
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · compliance recurrence
+- Added automatic next-occurrence creation when a recurring compliance obligation is completed. Stable series IDs and deterministic occurrence IDs make retries idempotent; month-end and leap-day anchors are preserved.
+- Added unit coverage for recurrence intervals/date boundaries and a browser E2E scenario for completing a monthly obligation. Updated the Administration Officer gap analysis; notifications and manager-only verification remain open.
+- Verification pending on exact-head CI; no deployment or live-data changes.

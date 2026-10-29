@@ -961,6 +961,10 @@ export interface ScheduleItem {
   complianceCategory?: string;
   compliancePriority?: 'Low' | 'Medium' | 'High' | 'Urgent';
   complianceRecurrence?: 'One-off' | 'Monthly' | 'Quarterly' | 'Every 6 months' | 'Annually';
+  /** Stable identifier shared by recurring compliance occurrences. */
+  complianceSeriesId?: string;
+  /** Original due date used to preserve month-end and leap-day recurrence anchors. */
+  complianceAnchorDate?: string;
   evidenceReference?: string;
   completionNote?: string;
   complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened'; actor: string; at: string; note?: string }>;

@@ -1458,13 +1458,24 @@ export function addProjectProjection(
 export function addScheduleItemWithSaveResult(
   item: Omit<ScheduleItem, 'id' | 'createdAt'>,
   auditActor?: string,
+  idOverride?: string,
 ): { item: ScheduleItem; savedLocally: boolean } {
   const db = getDatabase();
   if (!db.schedules) db.schedules = [];
+  if (idOverride) {
+    const existing = db.schedules.find((schedule) => schedule.id === idOverride);
+    if (existing) {
+      const sameOccurrence = existing.title === item.title &&
+        existing.scheduledDate === item.scheduledDate &&
+        existing.complianceCategory === item.complianceCategory &&
+        existing.complianceSeriesId === item.complianceSeriesId;
+      return { item: existing, savedLocally: sameOccurrence };
+    }
+  }
   const now = new Date().toISOString();
   const newItem: ScheduleItem = {
     ...item,
-    id: generateFollowUpId('SCH'),
+    id: idOverride || generateFollowUpId('SCH'),
     createdAt: now,
     updatedAt: now,
     createdBy: auditActor || item.createdBy || 'SHINE Staff',

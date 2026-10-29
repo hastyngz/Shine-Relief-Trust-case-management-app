@@ -115,6 +115,9 @@ jobs:
       - name: Test existing quality rules
         run: npm run test:quality
 
+      - name: Test compliance recurring occurrence generation
+        run: npx tsx scripts/compliance-recurrence.test.ts
+
       - name: Test report-writing guidance coverage
         run: npm run test:report-writing-help
 
