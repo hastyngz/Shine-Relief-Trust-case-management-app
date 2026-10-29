@@ -4,7 +4,7 @@
 **Repository:** `hastyngz/Shine-Relief-Trust-case-management-app`  
 **Branch:** `Replit`  
 **Scope:** Administration Hub operational indicators, inventory and asset register filtering/exports, general report export consistency, document filing filters, compliance status filters, safeguarding export boundary, and regression coverage.  
-**Status:** The prior administration build-out passed run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on `14d43246f195d709a783b4cf3ab11bbcd2388de7`. Asset category/location filtering passed run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730) on `070a3b1f364282915791ddf6a7761785db9a582d`. Procurement search/status filtering passed exact-head run [#40862102846](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862102846) on `229e48071bacde174e8818f0cae22223577cb715`; both `checks` and `e2e` jobs succeeded. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
+**Status:** The prior administration build-out passed run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on `14d43246f195d709a783b4cf3ab11bbcd2388de7`. Asset category/location filtering passed run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730) on `070a3b1f364282915791ddf6a7761785db9a582d`. Procurement search/status filtering passed exact-head run [#40862102846](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862102846) on `229e48071bacde174e8818f0cae22223577cb715`; both `checks` and `e2e` jobs succeeded. Asset service/warranty follow-up filters passed exact-head run [#40862541195](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862541195) on `2e4fd2447b79855e98b5f433a5d86bcc5217fa23`; both jobs succeeded. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
 
 ## User requirements and constraints
 
@@ -24,6 +24,8 @@
 - Added a shared export column mapping test and CI step.
 
 ### Asset Register
+
+- Added asset maintenance/warranty filters for overdue service, service due within 30 days, expired warranties and warranties expiring within 30 days; tests use a fixed date and cover combined filters.
 
 - Replaced the previous CSV export utility with Word, Excel and PDF exports.
 - Exports use the current search/category/location/status/condition filtered list and share one tested column mapping.
