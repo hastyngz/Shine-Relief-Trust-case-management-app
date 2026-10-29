@@ -1050,3 +1050,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · asset service/warranty filters
 - Added asset-register follow-up filters for overdue service, service due within 30 days, expired warranties and warranties expiring within 30 days. Uses local-date input from the existing app helper; malformed/missing dates do not falsely match. Tests use a fixed date and cover intersections.
 - Exact-head run [#40862541195](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862541195) passed checks and E2E on code/test commit `2e4fd2447b79855e98b5f433a5d86bcc5217fa23`. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification filters
+- Added Asset Register filters for not verified this year, verified this year, and latest outcome: discrepancy/not located; they combine with existing filters and exclude disposed assets from follow-up lists.
+- Added synthetic date/outcome test cases. Exact-head CI is pending; do not treat this as verified until the run completes. No production or live-data changes. — Mosaic (ChatGPT), 2026-10-29
