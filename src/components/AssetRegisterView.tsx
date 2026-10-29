@@ -7,7 +7,7 @@ import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
 import { AssetVerificationDialog } from './AssetVerificationDialog';
 import { getLocalDateInputValue } from '../utils/inventory';
 import { exportAssetRegister, type AssetExportFormat } from '../utils/assetExport';
-import { filterAssetRegister, type AssetFollowUpFilter, type AssetVerificationFilter } from '../utils/assetFiltering';
+import { filterAssetRegister, isAssetVerifiedInYear, type AssetFollowUpFilter, type AssetVerificationFilter } from '../utils/assetFiltering';
 
 interface AssetRegisterViewProps {
   assets: AssetRecord[];
@@ -76,7 +76,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const warrantyDue = assets.filter((asset) => { const days = daysFromToday(asset.warrantyExpiryDate); return days !== null && days <= 30 && asset.status !== 'Disposed'; });
   const activeAssets = assets.filter((asset) => asset.status !== 'Disposed');
   const currentYear = getLocalDateInputValue().slice(0, 4);
-  const checkedThisYear = activeAssets.filter((asset) => asset.verificationDate?.startsWith(currentYear));
+  const checkedThisYear = activeAssets.filter((asset) => isAssetVerifiedInYear(asset, currentYear));
   const locatedThisYear = checkedThisYear.filter((asset) => asset.verificationOutcome === 'Verified' || asset.verificationOutcome === 'Discrepancy');
   const notCheckedThisYear = activeAssets.length - checkedThisYear.length;
   const activeValue = activeAssets.reduce((sum, asset) => sum + (Number.isFinite(asset.acquisitionCostMWK) ? asset.acquisitionCostMWK || 0 : 0), 0);
