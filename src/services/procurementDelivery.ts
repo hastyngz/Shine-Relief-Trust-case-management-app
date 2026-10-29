@@ -44,27 +44,27 @@ export async function postProcurementDeliveryMovements(args: {
   try { raw = args.storage.getItem(key); } catch { throw new Error('Saved delivery retry details could not be read. No inventory movement was submitted.'); }
   let intent = readProcurementDeliveryIntent(args.storage, args.uid, args.list.id);
   if (raw && !intent) throw new Error('Saved delivery retry details are invalid. No stock movement was submitted; contact an Administrator.');
+  const errors = validateProcurementDelivery({ list: args.list, date: args.date, reference: args.reference, quantities: args.quantities, deliveryId: args.deliveryId });
+  if (errors.length) throw new Error(errors.join(' '));
+  if (args.choices.length !== args.list.items.length || args.choices.some((choice, index) => choice.itemIndex !== index)) throw new Error('Choose an inventory link for every line before posting.');
+  const inventoryById = new Map(args.inventoryItems.map((item) => [item.id, item]));
+  for (let i = 0; i < args.list.items.length; i++) {
+    const quantity = args.quantities[i];
+    const choice = args.choices[i];
+    if (quantity > 0 && choice.inventoryItemId !== null) {
+      const stock = inventoryById.get(choice.inventoryItemId);
+      if (!stock) throw new Error(`The selected inventory item for line ${i + 1} is no longer available.`);
+      if (stock.unit !== args.list.items[i].unit) throw new Error(`Unit mismatch on line ${i + 1}; convert the quantity explicitly before posting.`);
+    }
+  }
   if (intent) {
     if (intent.deliveryId !== proposed.deliveryId || intent.date !== proposed.date || intent.reference !== proposed.reference ||
       JSON.stringify(intent.quantities) !== JSON.stringify(proposed.quantities) || JSON.stringify(intent.choices) !== JSON.stringify(proposed.choices)) {
       throw new Error('A previous delivery attempt is pending. Retry its saved details before starting another delivery.');
     }
   } else {
-    const errors = validateProcurementDelivery({ list: args.list, date: args.date, reference: args.reference, quantities: args.quantities, deliveryId: args.deliveryId });
-    if (errors.length) throw new Error(errors.join(' '));
-    if (args.choices.length !== args.list.items.length || args.choices.some((choice, index) => choice.itemIndex !== index)) throw new Error('Choose an inventory link for every line before posting.');
-    const inventoryById = new Map(args.inventoryItems.map((item) => [item.id, item]));
-    for (let i = 0; i < args.list.items.length; i++) {
-      const quantity = args.quantities[i];
-      const choice = args.choices[i];
-      if (quantity > 0 && choice.inventoryItemId !== null) {
-        const stock = inventoryById.get(choice.inventoryItemId);
-        if (!stock) throw new Error(`The selected inventory item for line ${i + 1} is no longer available.`);
-        if (stock.unit !== args.list.items[i].unit) throw new Error(`Unit mismatch on line ${i + 1}; convert the quantity explicitly before posting.`);
-      }
-    }
     intent = proposed;
-    try { args.storage.setItem(key, JSON.stringify(intent)); } catch { throw new Error('Delivery retry details could not be saved on this device. No stock movement was submitted.'); }
+    try { args.storage.setItem(key, JSON.stringify(intent)); } catch { throw new Error('Delivery retry details could not be saved on this device. No inventory movement was submitted.'); }
   }
   const movementIds: string[] = [];
   let duplicateCount = 0;
