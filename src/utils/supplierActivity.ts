@@ -1,4 +1,4 @@
-import type { HouseholdExpense, ProcurementList } from '../types';
+import type { HouseholdExpense, InventoryItem, ProcurementList } from '../types';
 
 export interface SupplierActivity {
   /** Display name retained from the first encountered source record. */
@@ -6,6 +6,7 @@ export interface SupplierActivity {
   quoteCount: number;
   procurementListCount: number;
   expenseRecordCount: number;
+  inventoryItemCount: number;
   lastActivityDate?: string;
 }
 
@@ -17,6 +18,7 @@ export interface SupplierActivity {
 export function buildSupplierActivityIndex(
   procurementLists: ProcurementList[],
   expenses: HouseholdExpense[],
+  inventoryItems: InventoryItem[] = [],
 ): SupplierActivity[] {
   const suppliers = new Map<string, SupplierActivity & { listIds: Set<string> }>();
   const ensure = (rawName: unknown): (SupplierActivity & { listIds: Set<string> }) | null => {
@@ -26,7 +28,7 @@ export function buildSupplierActivityIndex(
     const key = name.toLocaleLowerCase();
     let entry = suppliers.get(key);
     if (!entry) {
-      entry = { name, quoteCount: 0, procurementListCount: 0, expenseRecordCount: 0, listIds: new Set<string>() };
+      entry = { name, quoteCount: 0, procurementListCount: 0, expenseRecordCount: 0, inventoryItemCount: 0, listIds: new Set<string>() };
       suppliers.set(key, entry);
     }
     return entry;
@@ -55,6 +57,13 @@ export function buildSupplierActivityIndex(
     if (!entry) continue;
     entry.expenseRecordCount += 1;
     addDate(entry, expense.date);
+  }
+
+  for (const item of inventoryItems || []) {
+    const entry = ensure(item.supplier);
+    if (!entry) continue;
+    entry.inventoryItemCount += 1;
+    addDate(entry, item.updatedAt?.slice(0, 10));
   }
 
   return [...suppliers.values()]
