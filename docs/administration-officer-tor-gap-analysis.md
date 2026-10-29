@@ -202,3 +202,11 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 - Approval validation retains the three-quote requirement when an originally missing/unclear price becomes quoted, preventing a single below-threshold quote from bypassing the price-discovery gate.
 - The UI keeps the three-quote counter visible after selecting the first quote for an originally unpriced item, and the E2E test exercises that state transition.
+
+
+## Administration export and stock-filter update (2026-10-29)
+
+- Inventory & Stores now supports combined text, category, location, low-stock and expiry filters, plus Word (.docx), Excel (.xlsx) and PDF exports of the filtered register. The export mapping has a focused regression test wired into CI.
+- Asset Register now exports the filtered register to Word (.docx), Excel (.xlsx) and PDF. The prior CSV path has been removed; the export mapping test and CI step use the supported formats only.
+- Exact-head CI for these latest changes is pending at report time. Do not call either export flow verified until TypeScript, build, and relevant export tests pass on the same branch head.
+- This update does not close the broader administration ToR gaps listed above. Transfers/approvals, complete procurement-to-payment reconciliation, HR attendance/leave/onboarding, a full organisation-wide filing register, transport/logistics, and approved management KPI definitions remain separate work items. No production deployment or live data changes were made.
