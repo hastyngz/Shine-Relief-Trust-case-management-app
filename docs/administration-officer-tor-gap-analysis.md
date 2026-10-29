@@ -215,3 +215,7 @@ A targeted code inspection found that the persistence architecture is not yet un
 ### Procurement module card accuracy (2026-10-29)
 - The Administration Hub description now reflects the existing quote collection/selection, manager approval, purchase-order reference, receipt and finance handover steps. It no longer says formal approvals and stock receipt integration are wholly planned.
 - Remaining procurement gaps are partial delivery quantities and reconciliation, a supplier master register/deduplication across devices, and payment reconciliation. Receiving inventory is not payment, and the Administration Officer must not gain payment authority.
+
+
+### Asset verification follow-up filters (2026-10-29)
+- The asset register now includes filters for not verified this year, verified this year, and latest verification outcome of discrepancy or not located. These combine with existing filters and exclude disposed assets from follow-up results. Synthetic regression coverage was added; exact-head CI verification is pending.
