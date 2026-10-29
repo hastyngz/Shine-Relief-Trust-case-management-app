@@ -34,3 +34,62 @@ test('staff can register an asset and record physical verification without chang
   await expect(asset.getByText('Physical Verification', { exact: true })).toHaveCount(1);
   await expect(asset).toContainText('Synthetic E2E physical check.');
 });
+
+test('asset verification stays open and preserves observations when device storage rejects the save', async ({ page }) => {
+  logPageErrors(page);
+  await signIn(page);
+  await page.evaluate(() => { window.location.hash = '#/assets'; });
+  await expect(page.getByRole('heading', { name: 'Asset Register', exact: true })).toBeVisible();
+
+  const suffix = Date.now().toString();
+  const assetTag = `E2E-ASSET-RETRY-${suffix}`;
+  const assetName = `E2E verification retry ${suffix}`;
+  await page.getByRole('button', { name: 'Register asset' }).first().click();
+  const register = page.getByRole('dialog', { name: 'Register asset' });
+  await register.getByLabel(/Asset tag \/ register number/).fill(assetTag);
+  await register.getByLabel('Asset name').fill(assetName);
+  await register.getByLabel('Location').selectOption({ label: 'Main Office' });
+  await register.getByRole('button', { name: 'Register asset' }).click();
+
+  const asset = page.locator('article').filter({ has: page.getByRole('heading', { name: assetName, exact: true }) });
+  await expect(asset).toBeVisible();
+  await asset.getByRole('button', { name: 'Verify physically' }).click();
+  const verify = page.getByRole('dialog', { name: 'Physical asset verification' });
+  await verify.getByLabel('Outcome').selectOption({ label: 'Found, but a discrepancy exists' });
+  await verify.getByLabel('Observed location').fill('Shine House');
+  await verify.getByLabel('Notes').fill('Synthetic retry test: location needs register correction.');
+
+  await page.evaluate(() => {
+    const storagePrototype = Storage.prototype as Storage & { __shineOriginalSetItem?: Storage['setItem'] };
+    if (!storagePrototype.__shineOriginalSetItem) {
+      storagePrototype.__shineOriginalSetItem = Storage.prototype.setItem;
+    }
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.includes('shine_relief_trust_prod_v1')) throw new DOMException('Synthetic storage failure', 'QuotaExceededError');
+      return storagePrototype.__shineOriginalSetItem!.call(this, key, value);
+    };
+  });
+
+  await verify.getByRole('button', { name: 'Save verification' }).click();
+  await expect(verify.getByRole('alert')).toContainText('Could not save asset changes on this device');
+  await expect(verify).toBeVisible();
+  await expect(verify.getByLabel('Observed location')).toHaveValue('Shine House');
+  await expect(verify.getByLabel('Notes')).toHaveValue('Synthetic retry test: location needs register correction.');
+  await expect(asset).toContainText('No physical verification recorded yet');
+
+  await page.evaluate(() => {
+    const storagePrototype = Storage.prototype as Storage & { __shineOriginalSetItem?: Storage['setItem'] };
+    if (storagePrototype.__shineOriginalSetItem) {
+      Storage.prototype.setItem = storagePrototype.__shineOriginalSetItem;
+      delete storagePrototype.__shineOriginalSetItem;
+    }
+  });
+
+  await verify.getByRole('button', { name: 'Save verification' }).click();
+  await expect(verify).toHaveCount(0);
+  await expect(page.getByText(`Physical verification recorded for ${assetTag}`, { exact: true })).toBeVisible();
+  await expect(asset).toContainText('Discrepancy');
+  await asset.getByRole('button', { name: /History/ }).click();
+  await expect(asset).toContainText('Synthetic retry test: location needs register correction.');
+});
+
