@@ -58,6 +58,7 @@ import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
 import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, selectProcurementQuote } from '../../services/procurementWorkflow';
 import { postInventoryMovement } from '../../services/r2StorageClient';
+import { filterProcurementLists } from '../../utils/procurementFiltering';
 import {
   clearProcurementReceiptIntent,
   NOT_INVENTORY_TRACKED,
@@ -99,6 +100,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [quoteDrafts, setQuoteDrafts] = useState<Record<string, { supplier: string; amount: string }>>({});
   const [purchaseOrderDrafts, setPurchaseOrderDrafts] = useState<Record<string, string>>({});
   const [financeReferenceDrafts, setFinanceReferenceDrafts] = useState<Record<string, string>>({});
+  const [procurementSearch, setProcurementSearch] = useState('');
+  const [procurementStatusFilter, setProcurementStatusFilter] = useState<'All' | ProcurementList['status']>('All');
   const [receiptLineChoices, setReceiptLineChoices] = useState<Record<string, string>>({});
   const [receiptPosting, setReceiptPosting] = useState<Record<string, boolean>>({});
   const [receiptPostingStatus, setReceiptPostingStatus] = useState<Record<string, string>>({});
@@ -139,6 +142,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const workplans = db.workplans || [];
   const schedules = db.schedules || [];
   const procurementLists = db.procurementLists || [];
+  const filteredProcurementLists = useMemo(() => filterProcurementLists(procurementLists, {
+    search: procurementSearch, status: procurementStatusFilter,
+  }), [procurementLists, procurementSearch, procurementStatusFilter]);
 
   const saveProcurementList = (list: ProcurementList, updates: Partial<ProcurementList>) => {
     try { const saved = updateProcurementList(list.id, updates, actorName); if (!saved) throw new Error('This procurement list no longer exists. Refresh and try again.'); onRefresh(); return true; }
@@ -1414,11 +1420,36 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                     Unclear and missing prices remain flagged. Configure the quote threshold for each list; items above it should have three supplier quotes before approval.
                   </p>
                 </div>
+                {procurementLists.length > 0 && (
+                  <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+                      <label className="text-xs font-semibold text-stone-700">Search procurement
+                        <input aria-label="Search procurement lists" value={procurementSearch} onChange={(event) => setProcurementSearch(event.target.value)} placeholder="Title, item, supplier, PO or finance reference" className="field mt-1 w-full" />
+                      </label>
+                      <label className="text-xs font-semibold text-stone-700">Workflow status
+                        <select aria-label="Filter procurement by status" value={procurementStatusFilter} onChange={(event) => setProcurementStatusFilter(event.target.value as 'All' | ProcurementList['status'])} className="field mt-1 w-full">
+                          <option value="All">All statuses</option>
+                          <option value="draft">Draft</option>
+                          <option value="approved">Approved</option>
+                          <option value="purchased">Purchased</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p role="status" className="text-xs text-stone-500">{filteredProcurementLists.length} of {procurementLists.length} procurement lists shown</p>
+                      {(procurementSearch || procurementStatusFilter !== 'All') && <button type="button" onClick={() => { setProcurementSearch(''); setProcurementStatusFilter('All'); }} className="min-h-10 rounded-lg border border-stone-300 px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50">Clear filters</button>}
+                    </div>
+                  </div>
+                )}
                 {procurementLists.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-sm text-stone-600">
                     No procurement lists have been imported yet.
                   </div>
-                ) : procurementLists.map((list) => (
+                ) : filteredProcurementLists.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-stone-600">
+                    No procurement lists match these filters. Clear the filters or try another search.
+                  </div>
+                ) : filteredProcurementLists.map((list) => (
                   <article key={list.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
                     <header className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 p-4">
                       <div>
