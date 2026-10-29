@@ -7,8 +7,10 @@ export function isValidProcurementDate(value: unknown): value is string {
 }
 
 export function getProcurementDeliveredQuantity(list: ProcurementList, itemIndex: number): number {
-  return (list.deliveries || []).reduce((sum, delivery) => sum + delivery.lines.reduce(
+  const historyTotal = (list.deliveries || []).reduce((sum, delivery) => sum + delivery.lines.reduce(
     (lineSum, line) => lineSum + (line.itemIndex === itemIndex ? line.quantity : 0), 0), 0);
+  const serverTotal = Number(list.receivedQuantities?.[itemIndex] || 0);
+  return Math.max(historyTotal, Number.isFinite(serverTotal) && serverTotal >= 0 ? serverTotal : 0);
 }
 
 export function getProcurementOutstandingQuantity(list: ProcurementList, itemIndex: number): number {
