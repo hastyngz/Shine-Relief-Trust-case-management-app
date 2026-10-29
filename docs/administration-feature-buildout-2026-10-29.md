@@ -4,7 +4,7 @@
 **Repository:** `hastyngz/Shine-Relief-Trust-case-management-app`  
 **Branch:** `Replit`  
 **Scope:** Administration Hub operational indicators, inventory and asset register filtering/exports, general report export consistency, document filing filters, compliance status filters, safeguarding export boundary, and regression coverage.  
-**Status:** The prior administration build-out passed run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on `14d43246f195d709a783b4cf3ab11bbcd2388de7`. The follow-up asset category/location filtering and regression tests passed run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730) on exact code/test commit `070a3b1f364282915791ddf6a7761785db9a582d`; both `checks` and `e2e` jobs succeeded. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
+**Status:** The prior administration build-out passed run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on `14d43246f195d709a783b4cf3ab11bbcd2388de7`. Asset category/location filtering passed run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730) on `070a3b1f364282915791ddf6a7761785db9a582d`. Procurement search/status filtering passed exact-head run [#40862102846](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862102846) on `229e48071bacde174e8818f0cae22223577cb715`; both `checks` and `e2e` jobs succeeded. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
 
 ## User requirements and constraints
 
