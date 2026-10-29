@@ -171,6 +171,9 @@ jobs:
       - name: Test asset Word, Excel and PDF export mapping
         run: npm run test:asset-export
 
+      - name: Test asset register filters
+        run: npm run test:asset-filtering
+
       - name: Test physical asset verification
         run: npm run test:asset-verification
 
