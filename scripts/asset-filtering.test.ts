@@ -8,15 +8,16 @@ const assets: AssetRecord[] = [
   { id: 'c', assetTag: 'AST-03', name: 'Tablet', category: 'IT & Electronics', location: 'Farm', nextServiceDate: '2026-11-01', warrantyExpiryDate: '2026-10-01', condition: 'Damaged', status: 'Under Repair', verificationDate: '2026-10-20', verificationOutcome: 'Discrepancy', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
   { id: 'd', assetTag: 'AST-04', name: 'Printer', category: 'IT & Electronics', location: 'Office', condition: 'Good', status: 'In Use', verificationDate: '2025-12-20', verificationOutcome: 'Not Located', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
   { id: 'e', assetTag: 'AST-05', name: 'Chair', category: 'Furniture', location: 'Office', condition: 'Good', status: 'Disposed', verificationDate: '2025-02-01', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
+  { id: 'f', assetTag: 'AST-06', name: 'Monitor', category: 'IT & Electronics', location: 'Office', condition: 'Good', status: 'In Use', verificationDate: '2026-99-99', verificationOutcome: 'Verified', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
 ];
 const base = { search: '', status: 'All' as const, condition: 'All' as const, category: 'All' as const, location: 'All' as const, followUp: 'All' as const, verification: 'All' as const, today: '2026-10-29' };
-assert.deepEqual(filterAssetRegister(assets, base).map((asset) => asset.id), ['e', 'a', 'b', 'd', 'c']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not verified this year' }).map((asset) => asset.id), ['a', 'd']);
+assert.deepEqual(filterAssetRegister(assets, base).map((asset) => asset.id), ['e', 'a', 'b', 'f', 'd', 'c']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not verified this year' }).map((asset) => asset.id), ['a', 'f', 'd']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified this year' }).map((asset) => asset.id), ['b', 'c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: discrepancy' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: not located' }).map((asset) => asset.id), ['d']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'IT & Electronics' }).map((asset) => asset.id), ['b', 'd', 'c']);
-assert.deepEqual(filterAssetRegister(assets, { ...base, status: 'In Use' }).map((asset) => asset.id), ['b', 'd']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'IT & Electronics' }).map((asset) => asset.id), ['b', 'f', 'd', 'c']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, status: 'In Use' }).map((asset) => asset.id), ['b', 'f', 'd']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, condition: 'Damaged' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, search: ' FARM ' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'Furniture', status: 'In Use' }), []);
@@ -26,5 +27,5 @@ assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Service due s
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Warranty expired' }).map((asset) => asset.id), ['a', 'c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Warranty expiring soon' }).map((asset) => asset.id), ['b']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Service overdue', status: 'In Use' }), []);
-assert.deepEqual(assets.map((asset) => asset.id), ['a', 'b', 'c', 'd', 'e'], 'filtering must not mutate the input list');
+assert.deepEqual(assets.map((asset) => asset.id), ['a', 'b', 'c', 'd', 'e', 'f'], 'filtering must not mutate the input list');
 console.log('Asset register filter tests passed.');
