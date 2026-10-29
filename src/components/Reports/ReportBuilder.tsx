@@ -347,7 +347,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
         </button>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void exportExcel()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
-            <Download className="h-4 w-4" /> Export CSV
+            <Download className="h-4 w-4" /> Export Excel
           </button>
           <button type="button" onClick={printReport} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
             <Printer className="h-4 w-4" /> Print / Save PDF
