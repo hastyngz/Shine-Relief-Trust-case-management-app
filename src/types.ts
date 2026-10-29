@@ -890,6 +890,8 @@ export interface ProcurementList {
   deliveries?: ProcurementDelivery[];
   /** Server-transactional cumulative receipt quantities, indexed by procurement line. */
   receivedQuantities?: number[];
+  receivedQuantitiesByLine?: Record<string, number>;
+  lastReceiptMovementId?: string;
   financeHandedOverAt?: string;
   financeHandedOverBy?: string;
   financeReference?: string;
