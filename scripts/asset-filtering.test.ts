@@ -4,8 +4,8 @@ import { filterAssetRegister } from '../src/utils/assetFiltering';
 
 const assets: AssetRecord[] = [
   { id: 'a', assetTag: 'AST-02', name: 'Desk', category: 'Furniture', location: 'Office', nextServiceDate: '2026-10-28', warrantyExpiryDate: '2026-10-28', condition: 'Fair', status: 'In Storage', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
-  { id: 'b', assetTag: 'AST-01', name: 'Laptop', category: 'IT & Electronics', location: 'Office', nextServiceDate: '2026-11-10', warrantyExpiryDate: '2026-11-10', condition: 'Good', status: 'In Use', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
-  { id: 'c', assetTag: 'AST-03', name: 'Tablet', category: 'IT & Electronics', location: 'Farm', nextServiceDate: '2026-11-01', warrantyExpiryDate: '2026-10-01', condition: 'Damaged', status: 'Under Repair', verificationDate: '2026-10-20', verificationOutcome: 'Discrepancy', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
+  { id: 'b', assetTag: 'AST-01', name: 'Laptop', category: 'IT & Electronics', location: 'Office', verificationDate: '2026-10-20', verificationOutcome: 'Verified', nextServiceDate: '2026-11-10', warrantyExpiryDate: '2026-11-10', condition: 'Good', status: 'In Use', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
+  { id: 'c', assetTag: 'AST-03', name: 'Tablet', category: 'IT & Electronics', location: 'Farm', verificationDate: '2026-10-21', verificationOutcome: 'Not Located', nextServiceDate: '2026-11-01', warrantyExpiryDate: '2026-10-01', condition: 'Damaged', status: 'Under Repair', verificationDate: '2026-10-20', verificationOutcome: 'Discrepancy', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
   { id: 'd', assetTag: 'AST-04', name: 'Printer', category: 'IT & Electronics', location: 'Office', condition: 'Good', status: 'In Use', verificationDate: '2025-12-20', verificationOutcome: 'Not Located', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
   { id: 'e', assetTag: 'AST-05', name: 'Chair', category: 'Furniture', location: 'Office', condition: 'Good', status: 'Disposed', verificationDate: '2025-02-01', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
 ];
@@ -26,6 +26,11 @@ assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Service due s
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Warranty expired' }).map((asset) => asset.id), ['a', 'c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Warranty expiring soon' }).map((asset) => asset.id), ['b']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, followUp: 'Service overdue', status: 'In Use' }), []);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Never verified' }).map((asset) => asset.id), ['a']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified' }).map((asset) => asset.id), ['b']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not located' }).map((asset) => asset.id), ['c']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Discrepancy' }), []);
+assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not located', location: 'Office' }), []);
 
 assert.deepEqual(assets.map((asset) => asset.id), ['a', 'b', 'c', 'd', 'e'], 'filtering must not mutate the input list');
 console.log('Asset register filter tests passed.');
