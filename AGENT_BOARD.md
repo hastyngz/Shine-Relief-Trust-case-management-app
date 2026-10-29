@@ -1040,3 +1040,8 @@ Suggestion format:
 - Added category and location filters to the asset register, with combined search/status/condition filtering, result counts and clear-all. Word/Excel/PDF exports continue to use the filtered result set.
 - Added synthetic unit tests for filter combinations and input immutability; test is wired into CI.
 - Verified exact code/test commit `070a3b1f364282915791ddf6a7761785db9a582d` in Actions run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730); both checks and E2E jobs passed. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement list filters
+- Added procurement search across title/purpose, item details, quote suppliers, PO and finance references; added status filter and clear-all. Existing approval, receipt and finance handover actions remain unchanged.
+- Added synthetic tests and CI wiring. Exact-head run [#40862102846](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862102846) passed both checks and E2E on code/test commit `229e48071bacde174e8818f0cae22223577cb715`. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
