@@ -2,7 +2,6 @@ import type { AssetCondition, AssetRecord, AssetStatus } from '../types';
 
 export type AssetFollowUpFilter = 'All' | 'Service overdue' | 'Service due soon' | 'Warranty expired' | 'Warranty expiring soon';
 export type AssetVerificationFilter = 'All' | 'Not verified this year' | 'Verified this year' | 'Latest outcome: discrepancy' | 'Latest outcome: not located';
-export type AssetVerificationFilter = 'All' | 'Not verified this year' | 'Verified this year' | 'Latest outcome: discrepancy' | 'Latest outcome: not located';
 
 export interface AssetRegisterFilters {
   search: string;
