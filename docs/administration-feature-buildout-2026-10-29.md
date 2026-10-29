@@ -159,3 +159,9 @@ The implemented changes listed above passed automated CI, but the broader Admini
 - Asset verification filters now validate the reference date itself before deriving its calendar year. An impossible date (for example `2026-02-30`) or malformed date (for example `2026-invalid`) no longer makes records appear verified in a year inferred from a partial string.
 - Consolidated strict date-only validation for the register's date-based service/warranty filters and added regression assertions for invalid reference dates. Existing physical-verification history, storage and permission flows are unchanged.
 - The tests were added to the existing `test:asset-filtering` script already wired into CI. They have **not** been executed in this session because a local checkout/runtime for the repository is unavailable; exact-head CI must be checked once after this change. No deployment or live-data operation was performed.
+
+
+## Procurement receipt date validation hardening (2026-10-29)
+- The procurement-to-inventory receipt service now uses strict date-only validation for receipt dates and for saved retry intents. Dates that parse only through JavaScript date normalization (for example `2026-02-30`) are rejected rather than accepted as a real calendar day.
+- Added regression tests for invalid proposed dates and corrupted persisted retry intents; tests assert no stock-movement request is sent and a corrupt intent is not silently replaced.
+- This is a reliability hardening of the existing all-at-once receipt flow, **not** partial-delivery support or payment reconciliation. The receipt retry test is included in the existing SHINE checks workflow. This session did not execute repository tests locally; exact-head CI is unconfirmed. No deployment or live-data change was made.
