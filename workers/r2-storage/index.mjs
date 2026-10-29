@@ -192,7 +192,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       const receivedQuantitiesByLine = procurement.receivedQuantitiesByLine && typeof procurement.receivedQuantitiesByLine === 'object'
         ? procurement.receivedQuantitiesByLine
         : {};
-      const alreadyReceived = Number(receivedQuantitiesByLine[String(payload.sourceLineIndex)] || 0);
+      const alreadyReceived = Number(receivedQuantitiesByLine[`line_${payload.sourceLineIndex}`] || 0);
       const outstanding = Number(procurementLine?.quantity) - alreadyReceived;
       if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt ||
           !procurementLine || !Number.isFinite(alreadyReceived) || alreadyReceived < 0 ||
