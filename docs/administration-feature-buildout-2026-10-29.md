@@ -153,3 +153,9 @@ The implemented changes listed above passed automated CI, but the broader Admini
 ## Asset verification date consistency correction (2026-10-29)
 - Asset Register summary cards and verification filters now use the same strict calendar-date validation. Malformed dates such as `2026-99-99` and impossible dates such as `2026-02-30` no longer count as a completed current-year check.
 - Added focused assertions for valid, prior-year, missing and malformed verification dates. The relevant test script and workflow wiring were confirmed in the repository; exact-head CI could not be retrieved through the connected GitHub status interface, so the change remains pending CI confirmation.
+
+
+## Asset verification filter date-context hardening (2026-10-29)
+- Asset verification filters now validate the reference date itself before deriving its calendar year. An impossible date (for example `2026-02-30`) or malformed date (for example `2026-invalid`) no longer makes records appear verified in a year inferred from a partial string.
+- Consolidated strict date-only validation for the register's date-based service/warranty filters and added regression assertions for invalid reference dates. Existing physical-verification history, storage and permission flows are unchanged.
+- The tests were added to the existing `test:asset-filtering` script already wired into CI. They have **not** been executed in this session because a local checkout/runtime for the repository is unavailable; exact-head CI must be checked once after this change. No deployment or live-data operation was performed.
