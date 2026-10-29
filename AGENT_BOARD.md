@@ -1076,3 +1076,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · invalid asset verification date context
 - Tightened `src/utils/assetFiltering.ts`: filters now validate the full reference date before using its year; malformed and impossible dates no longer imply that assets are verified this year. Added regression cases to `scripts/asset-filtering.test.ts` and updated the administration task report and gap analysis.
 - No local test execution was possible in this session; check the exact-head CI once, then continue with the procurement receipt/payment workflow audit rather than repeatedly polling status. No production or live data changes. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement receipt date validation
+- Hardened `src/services/procurementInventoryReceipt.ts` so impossible calendar dates are rejected both on new receipt submission and when reading saved retry intents. Added tests proving an invalid date creates no movement request and a corrupt saved intent is not silently replaced. Documented the limited scope: existing all-at-once receipts only; partial deliveries and payment reconciliation remain unimplemented.
+- Repository tests were not executable from this connected editing session; exact-head CI is still unconfirmed. Next step is a coherent partial-delivery design with per-delivery stable IDs and receipt history, not another status poll. No live data/deploy changes. — Mosaic (ChatGPT), 2026-10-29
