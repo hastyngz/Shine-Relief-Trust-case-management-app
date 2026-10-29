@@ -55,8 +55,6 @@ assert.throws(() => normalizeImportedProcurementItems([{ description: 'Duplicate
 
 assert.throws(() => selectProcurementQuote(baseItem, { supplier: 'Supplier', amountMWK: 0 }), /positive MWK amount/);
 assert.throws(() => selectProcurementQuote({ ...baseItem, quantity: 0 }, quotes[0]), /valid item quantity/);
-console.log('Procurement workflow tests passed.');
-
 const supplierIndex = buildSupplierActivityIndex([
   { ...baseList, id: 'PRC-TEST-001', updatedAt: '2026-10-20T10:00:00.000Z', items: [
     { ...baseItem, quotes: [
@@ -79,4 +77,4 @@ assert.deepEqual(supplierIndex, [
 ], 'supplier names should be grouped case-insensitively and counts/date should reflect existing source records only');
 assert.deepEqual(buildSupplierActivityIndex([], []), []);
 assert.equal(supplierIndex.some((supplier) => 'amountMWK' in supplier), false, 'supplier index must not aggregate or expose financial amounts');
-
+console.log('Procurement workflow and supplier activity index tests passed.');
