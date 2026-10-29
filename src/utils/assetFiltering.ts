@@ -25,6 +25,14 @@ const dateDaysFrom = (date: string | undefined, today: string): number | null =>
   return Math.round((timestamp - todayTimestamp) / 86400000);
 };
 
+/** True only when a valid calendar date records a physical check in the supplied year. */
+export function isAssetVerifiedInYear(asset: Pick<AssetRecord, 'verificationDate'>, year: string): boolean {
+  const date = asset.verificationDate;
+  if (!/^\\d{4}$/.test(year) || typeof date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
+  const timestamp = Date.parse(date + 'T00:00:00Z');
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date && date.startsWith(year);
+}
+
 /** Filter the asset register without mutating the source records. */
 export function filterAssetRegister(assets: AssetRecord[], filters: AssetRegisterFilters): AssetRecord[] {
   const term = filters.search.trim().toLocaleLowerCase('en-US');
@@ -34,11 +42,7 @@ export function filterAssetRegister(assets: AssetRecord[], filters: AssetRegiste
     ].some((value) => String(value || '').toLocaleLowerCase('en-US').includes(term));
     const serviceDays = dateDaysFrom(asset.nextServiceDate, filters.today);
     const warrantyDays = dateDaysFrom(asset.warrantyExpiryDate, filters.today);
-    const verificationYear = filters.today.slice(0, 4);
-    const hasValidVerificationDate = typeof asset.verificationDate === 'string'
-      && /^\d{4}-\d{2}-\d{2}$/.test(asset.verificationDate)
-      && Number.isFinite(Date.parse(asset.verificationDate + 'T00:00:00Z'))
-      && new Date(Date.parse(asset.verificationDate + 'T00:00:00Z')).toISOString().slice(0, 10) === asset.verificationDate;
+    const verifiedThisYear = isAssetVerifiedInYear(asset, filters.today.slice(0, 4));
     const verifiedThisYear = hasValidVerificationDate && asset.verificationDate!.startsWith(verificationYear);
     let matchesVerification = true;
     if (filters.verification === 'Not verified this year') matchesVerification = asset.status !== 'Disposed' && !verifiedThisYear;
