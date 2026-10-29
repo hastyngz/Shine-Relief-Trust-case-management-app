@@ -15,17 +15,19 @@ export interface AssetRegisterFilters {
 }
 
 
+function isValidCalendarDate(value: string | undefined): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const timestamp = Date.parse(value + 'T00:00:00Z');
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
 const dateDaysFrom = (date: string | undefined, today: string): number | null => {
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return null;
+  if (!isValidCalendarDate(date) || !isValidCalendarDate(today)) return null;
   const timestamp = Date.parse(date + 'T00:00:00Z');
   const todayTimestamp = Date.parse(today + 'T00:00:00Z');
-  if (!Number.isFinite(timestamp) || !Number.isFinite(todayTimestamp)
-    || new Date(timestamp).toISOString().slice(0, 10) !== date
-    || new Date(todayTimestamp).toISOString().slice(0, 10) !== today) return null;
   return Math.round((timestamp - todayTimestamp) / 86400000);
 };
 
-/** True only when a valid calendar date records a physical check in the supplied year. */
 /** True only when a valid calendar date records a physical check in the supplied year. */
 export function isAssetVerifiedInYear(asset: Pick<AssetRecord, 'verificationDate'>, year: string): boolean {
   const date = asset.verificationDate;
@@ -43,7 +45,8 @@ export function filterAssetRegister(assets: AssetRecord[], filters: AssetRegiste
     ].some((value) => String(value || '').toLocaleLowerCase('en-US').includes(term));
     const serviceDays = dateDaysFrom(asset.nextServiceDate, filters.today);
     const warrantyDays = dateDaysFrom(asset.warrantyExpiryDate, filters.today);
-    const verifiedThisYear = isAssetVerifiedInYear(asset, filters.today.slice(0, 4));
+    const verificationYear = isValidCalendarDate(filters.today) ? filters.today.slice(0, 4) : '';
+    const verifiedThisYear = isAssetVerifiedInYear(asset, verificationYear);
     let matchesVerification = true;
     if (filters.verification === 'Not verified this year') matchesVerification = asset.status !== 'Disposed' && !verifiedThisYear;
     if (filters.verification === 'Verified this year') matchesVerification = asset.status !== 'Disposed' && verifiedThisYear;
