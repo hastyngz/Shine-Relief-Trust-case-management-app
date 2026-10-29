@@ -132,3 +132,10 @@ This is a focused completed code change, not a claim that all administration fea
 ## Release decision
 
 The implemented changes listed above passed automated CI, but the broader Administration Officer ToR remains incomplete. Do not treat the outstanding workflows below as operational, and do not infer that a manual Android/weak-signal check or production deployment occurred.
+
+
+## Physical asset verification follow-up filters (2026-10-29)
+
+- Added an Asset Register filter for assets not verified this calendar year, verified this year, and latest verification outcomes of discrepancy or not located. Filters combine with existing search, status, condition, category, location, maintenance and warranty filters; disposed assets are excluded from the verification follow-up views.
+- Verification-year matching requires a valid date and uses the current local date already supplied by the view. Missing or malformed dates count as not verified this year; the filter does not alter asset records or claim an organisation-wide audit is complete.
+- Added synthetic regression cases for verification date/outcome and filter combinations. Automated verification of this change is pending; do not treat it as passed until the exact-head CI run finishes. No manual Android test or production deployment was performed.
