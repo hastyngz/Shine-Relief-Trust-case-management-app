@@ -279,9 +279,13 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         })).filter((line) => line.quantity > 0),
       };
       const deliveries = [...(list.deliveries || []), delivery];
-      const fullyReceived = list.items.every((_, index) => deliveries.reduce((sum, row) => sum + row.lines.filter((line) => line.itemIndex === index).reduce((s, line) => s + line.quantity, 0), 0) >= list.items[index].quantity);
+      const receivedQuantities = list.items.map((_, index) => Math.max(
+        Number(list.receivedQuantities?.[index] || 0),
+        deliveries.reduce((sum, row) => sum + row.lines.filter((line) => line.itemIndex === index).reduce((s, line) => s + line.quantity, 0), 0),
+      ));
+      const fullyReceived = list.items.every((item, index) => receivedQuantities[index] >= item.quantity);
       const saved = saveProcurementList(list, {
-        deliveries,
+        deliveries, receivedQuantities,
         ...(fullyReceived ? { receivedAt: new Date().toISOString(), receivedBy: actorName } : {}),
       });
       if (!saved) throw new Error('Stock movements were confirmed, but delivery history could not be saved. Retry this exact delivery; stable movement IDs prevent duplicate stock additions.');
