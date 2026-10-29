@@ -69,11 +69,13 @@ const supplierIndex = buildSupplierActivityIndex([
   { id: 'EXP-1', supplier: 'Acme Supplies', date: '2026-10-27' },
   { id: 'EXP-2', supplier: 'Gamma Services', date: '2026-10-26' },
   { id: 'EXP-3', supplier: 'N/A', date: '2026-10-28' },
-] as unknown as import('../src/types').HouseholdExpense[]);
+] as unknown as import('../src/types').HouseholdExpense[], [
+  { id: 'INV-1', supplier: 'Gamma Services', updatedAt: '2026-10-28T12:00:00.000Z' },
+] as unknown as import('../src/types').InventoryItem[]);
 assert.deepEqual(supplierIndex, [
-  { name: 'Acme Supplies', quoteCount: 2, procurementListCount: 2, expenseRecordCount: 1, lastActivityDate: '2026-10-27' },
-  { name: 'Beta Traders', quoteCount: 1, procurementListCount: 1, expenseRecordCount: 0, lastActivityDate: '2026-10-19' },
-  { name: 'Gamma Services', quoteCount: 0, procurementListCount: 0, expenseRecordCount: 1, lastActivityDate: '2026-10-26' },
+  { name: 'Acme Supplies', quoteCount: 2, procurementListCount: 2, expenseRecordCount: 1, inventoryItemCount: 0, lastActivityDate: '2026-10-27' },
+  { name: 'Beta Traders', quoteCount: 1, procurementListCount: 1, expenseRecordCount: 0, inventoryItemCount: 0, lastActivityDate: '2026-10-19' },
+  { name: 'Gamma Services', quoteCount: 0, procurementListCount: 0, expenseRecordCount: 1, inventoryItemCount: 1, lastActivityDate: '2026-10-28' },
 ], 'supplier names should be grouped case-insensitively and counts/date should reflect existing source records only');
 assert.deepEqual(buildSupplierActivityIndex([], []), []);
 assert.equal(supplierIndex.some((supplier) => 'amountMWK' in supplier), false, 'supplier index must not aggregate or expose financial amounts');
