@@ -4,7 +4,7 @@ import { getAdministrationAttention } from '../src/utils/administrationOverview'
 
 const empty = {} as AppDatabase;
 assert.deepEqual(getAdministrationAttention(empty, '2026-10-15'), {
-  lowStockItems: 0, stockExpiryAlerts: 0, assetsNeedingAttention: 0, overdueCompliance: 0, openProcurementLists: 0,
+  lowStockItems: 0, stockExpiryAlerts: 0, assetsNeedingAttention: 0, assetsNotVerifiedThisYear: 0, overdueCompliance: 0, openProcurementLists: 0,
 });
 const db = {
   inventoryItems: [
@@ -28,9 +28,9 @@ const db = {
   ],
 } as unknown as AppDatabase;
 assert.deepEqual(getAdministrationAttention(db, '2026-10-15'), {
-  lowStockItems: 1, stockExpiryAlerts: 2, assetsNeedingAttention: 3, overdueCompliance: 1, openProcurementLists: 2,
+  lowStockItems: 1, stockExpiryAlerts: 2, assetsNeedingAttention: 3, assetsNotVerifiedThisYear: 3, overdueCompliance: 1, openProcurementLists: 2,
 });
 assert.deepEqual(getAdministrationAttention(db, 'invalid'), {
-  lowStockItems: 1, stockExpiryAlerts: 0, assetsNeedingAttention: 2, overdueCompliance: 0, openProcurementLists: 2,
+  lowStockItems: 1, stockExpiryAlerts: 0, assetsNeedingAttention: 2, assetsNotVerifiedThisYear: 0, overdueCompliance: 0, openProcurementLists: 2,
 });
 console.log('Administration operational attention summary tests passed.');
