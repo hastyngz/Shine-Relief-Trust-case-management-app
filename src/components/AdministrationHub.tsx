@@ -56,6 +56,7 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
     { label: 'Low-stock items', count: attention.lowStockItems, detail: 'At or below minimum stock', view: 'inventory' as AppView, icon: Boxes },
     { label: 'Stock expiry alerts', count: attention.stockExpiryAlerts, detail: 'Expired or due within 30 days', view: 'inventory' as AppView, icon: AlertTriangle },
     { label: 'Assets needing follow-up', count: attention.assetsNeedingAttention, detail: 'Missing, repair, warranty or service', view: 'assets' as AppView, icon: Archive },
+    { label: 'Assets not verified this year', count: attention.assetsNotVerifiedThisYear, detail: 'Active registered assets without a valid current-year physical check', view: 'assets' as AppView, icon: ClipboardCheck },
     { label: 'Overdue compliance', count: attention.overdueCompliance, detail: 'Open obligations past their due date', view: 'compliance' as AppView, icon: ShieldCheck },
     { label: 'Open procurement lists', count: attention.openProcurementLists, detail: 'Draft or approved lists not yet received', view: 'planning' as AppView, icon: ShoppingCart },
   ];
