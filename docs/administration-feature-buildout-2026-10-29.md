@@ -149,3 +149,7 @@ The implemented changes listed above passed automated CI, but the broader Admini
 ## Current-year asset verification attention (2026-10-29)
 - The Administration Hub now counts active registered assets that lack a valid physical verification date in the current calendar year. Disposed assets are excluded; invalid current-date context yields zero rather than a misleading calculated count.
 - This is a local loaded-record indicator, not proof that every physical asset is registered or that a complete independent audit occurred. Focused tests cover empty records, missing verification, disposed assets and invalid date context; exact-head CI remains unverified from this session.
+
+## Asset verification date consistency correction (2026-10-29)
+- Asset Register summary cards and verification filters now use the same strict calendar-date validation. Malformed dates such as `2026-99-99` and impossible dates such as `2026-02-30` no longer count as a completed current-year check.
+- Added focused assertions for valid, prior-year, missing and malformed verification dates. The relevant test script and workflow wiring were confirmed in the repository; exact-head CI could not be retrieved through the connected GitHub status interface, so the change remains pending CI confirmation.
