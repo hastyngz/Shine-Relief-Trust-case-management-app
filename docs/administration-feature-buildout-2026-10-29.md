@@ -145,3 +145,7 @@ The implemented changes listed above passed automated CI, but the broader Admini
 
 - Added a lifecycle filter for purchased lists that are awaiting receipt, received but awaiting finance handover, or already handed to finance. It combines with the existing text search and Draft/Approved/Purchased filter.
 - This is a view over existing procurement timestamps only; it does not create payment records or grant finance approval authority. Regression coverage includes all three stages and combined search/filter behavior. Exact-head automated verification is pending.
+
+## Current-year asset verification attention (2026-10-29)
+- The Administration Hub now counts active registered assets that lack a valid physical verification date in the current calendar year. Disposed assets are excluded; invalid current-date context yields zero rather than a misleading calculated count.
+- This is a local loaded-record indicator, not proof that every physical asset is registered or that a complete independent audit occurred. Focused tests cover empty records, missing verification, disposed assets and invalid date context; exact-head CI remains unverified from this session.
