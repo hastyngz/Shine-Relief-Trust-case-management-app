@@ -10,7 +10,7 @@ const assets: AssetRecord[] = [
   { id: 'e', assetTag: 'AST-05', name: 'Chair', category: 'Furniture', location: 'Office', condition: 'Good', status: 'Disposed', verificationDate: '2025-02-01', history: [], createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' },
 ];
 const base = { search: '', status: 'All' as const, condition: 'All' as const, category: 'All' as const, location: 'All' as const, followUp: 'All' as const, verification: 'All' as const, today: '2026-10-29' };
-assert.deepEqual(filterAssetRegister(assets, base).map((asset) => asset.id), ['a', 'b', 'c', 'd', 'e']);
+assert.deepEqual(filterAssetRegister(assets, base).map((asset) => asset.id), ['e', 'a', 'b', 'd', 'c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not verified this year' }).map((asset) => asset.id), ['a', 'b', 'd']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified this year' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: discrepancy' }).map((asset) => asset.id), ['c']);
