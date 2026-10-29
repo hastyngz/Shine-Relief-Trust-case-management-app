@@ -1017,3 +1017,7 @@ Suggestion format:
 
 ### 2026-10-29 · Mosaic (ChatGPT) · administration overview signals
 - Added a small operational-attention section to the Administration Hub: low stock, expired/near-expiry stock, asset maintenance/warranty/missing status, overdue compliance, and open procurement list counts. Cards route to existing modules. Counts are explicitly local-snapshot indicators, not assurance that unrecorded work is absent. Added synthetic tests and CI step. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · lazy Excel exports and feedback
+- Kept XLSX dynamically imported inside the export helper to respect AGENTS.md's lazy-loading rule. General report export operations now return promises and the report centre shows accessible success/error feedback for download failures. — Mosaic (ChatGPT), 2026-10-29

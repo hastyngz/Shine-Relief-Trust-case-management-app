@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   Girl,
@@ -32,7 +31,8 @@ export function formatDate(dateString?: string): string {
 }
 
 // Convert tabular report rows to an Excel workbook and trigger browser download.
-export function downloadExcel(filename: string, rows: (string | number)[][]): void {
+export async function downloadExcel(filename: string, rows: (string | number)[][]): Promise<void> {
+  const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet(rows);
   if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
@@ -51,7 +51,7 @@ export function downloadExcel(filename: string, rows: (string | number)[][]): vo
 }
 
 // 1. Girls Export
-export function exportGirlsToExcel(girls: Girl[], households: Household[]): void {
+export async function exportGirlsToExcel(girls: Girl[], households: Household[]): Promise<void> {
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const headers = [
     'Profile ID',
@@ -85,15 +85,15 @@ export function exportGirlsToExcel(girls: Girl[], households: Household[]): void
     g.guardianInfo.situationNotes || '',
   ]);
 
-  downloadExcel('SHINE_Relief_Girls_List', [headers, ...rows]);
+  await downloadExcel('SHINE_Relief_Girls_List', [headers, ...rows]);
 }
 
-export function exportGirlsExcel(db: AppDatabase): void {
-  exportGirlsToExcel(db.girls, db.households);
+export function exportGirlsExcel(db: AppDatabase): Promise<void> {
+  return exportGirlsToExcel(db.girls, db.households);
 }
 
 // 2. Households Export
-export function exportHouseholdsToExcel(households: Household[], girls: Girl[]): void {
+export async function exportHouseholdsToExcel(households: Household[], girls: Girl[]): Promise<void> {
   const headers = [
     'House ID',
     'House Name',
@@ -121,18 +121,18 @@ export function exportHouseholdsToExcel(households: Household[], girls: Girl[]):
     ];
   });
 
-  downloadExcel('SHINE_Relief_Households_List', [headers, ...rows]);
+  await downloadExcel('SHINE_Relief_Households_List', [headers, ...rows]);
 }
 
-export function exportHouseholdsExcel(db: AppDatabase): void {
-  exportHouseholdsToExcel(db.households, db.girls);
+export function exportHouseholdsExcel(db: AppDatabase): Promise<void> {
+  return exportHouseholdsToExcel(db.households, db.girls);
 }
 
 // 3. Educational Follow-ups Export
-export function exportEducationalFollowUpsToExcel(
+export async function exportEducationalFollowUpsToExcel(
   items: EducationalFollowUp[],
   girls: Girl[]
-): void {
+): Promise<void> {
   const girlMap = new Map(girls.map((g) => [g.id, g.fullName]));
   const headers = [
     'Record ID',
@@ -170,15 +170,15 @@ export function exportEducationalFollowUpsToExcel(
     item.recordedBy || '',
   ]);
 
-  downloadExcel('SHINE_Educational_FollowUps', [headers, ...rows]);
+  await downloadExcel('SHINE_Educational_FollowUps', [headers, ...rows]);
 }
 
-export function exportEducationalFollowUpsExcel(db: AppDatabase): void {
-  exportEducationalFollowUpsToExcel(db.educationalFollowUps, db.girls);
+export function exportEducationalFollowUpsExcel(db: AppDatabase): Promise<void> {
+  return exportEducationalFollowUpsToExcel(db.educationalFollowUps, db.girls);
 }
 
 // 4. Health Follow-ups Export
-export function exportHealthFollowUpsToExcel(items: HealthFollowUp[], girls: Girl[]): void {
+export async function exportHealthFollowUpsToExcel(items: HealthFollowUp[], girls: Girl[]): Promise<void> {
   const girlMap = new Map(girls.map((g) => [g.id, g.fullName]));
   const headers = [
     'Record ID',
@@ -212,15 +212,15 @@ export function exportHealthFollowUpsToExcel(items: HealthFollowUp[], girls: Gir
     item.recordedBy || '',
   ]);
 
-  downloadExcel('SHINE_Health_Medical_FollowUps', [headers, ...rows]);
+  await downloadExcel('SHINE_Health_Medical_FollowUps', [headers, ...rows]);
 }
 
-export function exportHealthFollowUpsExcel(db: AppDatabase): void {
-  exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls);
+export function exportHealthFollowUpsExcel(db: AppDatabase): Promise<void> {
+  return exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls);
 }
 
 // 5. Family Follow-ups Export
-export function exportFamilyFollowUpsToExcel(items: FamilyFollowUp[], girls: Girl[]): void {
+export async function exportFamilyFollowUpsToExcel(items: FamilyFollowUp[], girls: Girl[]): Promise<void> {
   const girlMap = new Map(girls.map((g) => [g.id, g.fullName]));
   const headers = [
     'Record ID',
@@ -252,18 +252,18 @@ export function exportFamilyFollowUpsToExcel(items: FamilyFollowUp[], girls: Gir
     item.recordedBy || '',
   ]);
 
-  downloadExcel('SHINE_Family_Guardian_FollowUps', [headers, ...rows]);
+  await downloadExcel('SHINE_Family_Guardian_FollowUps', [headers, ...rows]);
 }
 
-export function exportFamilyFollowUpsExcel(db: AppDatabase): void {
-  exportFamilyFollowUpsToExcel(db.familyFollowUps, db.girls);
+export function exportFamilyFollowUpsExcel(db: AppDatabase): Promise<void> {
+  return exportFamilyFollowUpsToExcel(db.familyFollowUps, db.girls);
 }
 
 // 6. Household Group Activities Export
-export function exportHouseholdActivitiesToExcel(
+export async function exportHouseholdActivitiesToExcel(
   items: HouseholdActivity[],
   households: Household[]
-): void {
+): Promise<void> {
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const headers = [
     'Activity ID',
@@ -301,15 +301,15 @@ export function exportHouseholdActivitiesToExcel(
     item.recordedBy || '',
   ]);
 
-  downloadExcel('SHINE_Household_Activities_Log', [headers, ...rows]);
+  await downloadExcel('SHINE_Household_Activities_Log', [headers, ...rows]);
 }
 
-export function exportHouseholdActivitiesExcel(db: AppDatabase): void {
-  exportHouseholdActivitiesToExcel(db.householdActivities, db.households);
+export function exportHouseholdActivitiesExcel(db: AppDatabase): Promise<void> {
+  return exportHouseholdActivitiesToExcel(db.householdActivities, db.households);
 }
 
 // 7. Expenses Export
-export function exportExpensesToExcel(items: HouseholdExpense[], households: Household[]): void {
+export async function exportExpensesToExcel(items: HouseholdExpense[], households: Household[]): Promise<void> {
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const headers = [
     'Expense ID',
@@ -339,18 +339,18 @@ export function exportExpensesToExcel(items: HouseholdExpense[], households: Hou
     exp.notes || '',
   ]);
 
-  downloadExcel('SHINE_Household_Expenditures', [headers, ...rows]);
+  await downloadExcel('SHINE_Household_Expenditures', [headers, ...rows]);
 }
 
-export function exportExpensesExcel(db: AppDatabase): void {
-  exportExpensesToExcel(db.expenses, db.households);
+export function exportExpensesExcel(db: AppDatabase): Promise<void> {
+  return exportExpensesToExcel(db.expenses, db.households);
 }
 
 // 8. Rent Payments Export
-export function exportRentPaymentsToExcel(
+export async function exportRentPaymentsToExcel(
   items: HouseholdRentPayment[],
   households: Household[]
-): void {
+): Promise<void> {
   const houseMap = new Map(households.map((h) => [h.id, h.name]));
   const headers = [
     'Payment ID',
@@ -376,11 +376,11 @@ export function exportRentPaymentsToExcel(
     r.notes || '',
   ]);
 
-  downloadExcel('SHINE_Rent_Payments_History', [headers, ...rows]);
+  await downloadExcel('SHINE_Rent_Payments_History', [headers, ...rows]);
 }
 
-export function exportRentPaymentsExcel(db: AppDatabase): void {
-  exportRentPaymentsToExcel(db.rentPayments, db.households);
+export function exportRentPaymentsExcel(db: AppDatabase): Promise<void> {
+  return exportRentPaymentsToExcel(db.rentPayments, db.households);
 }
 
 // 9. Full JSON Backup

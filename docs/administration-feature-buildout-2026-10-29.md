@@ -60,7 +60,7 @@
 
 ### Report export consistency and safeguarding boundary
 
-- Made the shared Excel downloader synchronous after importing the already-used `xlsx` dependency in the report route. This avoids unhandled promise rejections from existing click handlers after changing the former CSV download into an XLSX generator.
+- Kept the shared Excel downloader dynamically imported to preserve lazy-loading and bundle-size boundaries. General report buttons now catch failures and display accessible success/error feedback instead of leaving an unhandled promise rejection.
 - Added a CI regression test that prevents a safeguarding export button or download helper from reappearing, and wired the existing management report generation test into CI.
 
 - Renamed the shared report-download helper to `downloadExcel` and updated the general report centre's function names/visible labels to Excel; its generated file is an `.xlsx` workbook, not CSV.
