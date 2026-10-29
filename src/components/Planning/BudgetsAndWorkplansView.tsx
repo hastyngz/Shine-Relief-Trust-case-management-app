@@ -65,6 +65,8 @@ import {
   postProcurementReceiptMovements,
   readProcurementReceiptIntent,
 } from '../../services/procurementInventoryReceipt';
+import { clearProcurementDeliveryIntent, createProcurementDeliveryId, postProcurementDeliveryMovements, readProcurementDeliveryIntent } from '../../services/procurementDelivery';
+import { getProcurementOutstandingQuantity, getProcurementPaymentSummary, isProcurementFullyReceived, validateProcurementPayment } from '../../services/procurementLifecycle';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
@@ -106,6 +108,10 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [receiptLineChoices, setReceiptLineChoices] = useState<Record<string, string>>({});
   const [receiptPosting, setReceiptPosting] = useState<Record<string, boolean>>({});
   const [receiptPostingStatus, setReceiptPostingStatus] = useState<Record<string, string>>({});
+  const [deliveryDrafts, setDeliveryDrafts] = useState<Record<string, { id: string; date: string; reference: string; quantities: string[] }>>({});
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { id: string; date: string; amount: string; reference: string; method: 'Cash' | 'Bank transfer' | 'Mobile money' | 'Cheque' | 'Other'; notes: string }>>({});
+  const [paymentPosting, setPaymentPosting] = useState<Record<string, boolean>>({});
+  const [deliveryPosting, setDeliveryPosting] = useState<Record<string, boolean>>({});
   const canApproveProcurement = isAdmin || staffProfile?.role === 'Manager';
   const focusedQualityKey = useRef('');
 
@@ -225,6 +231,71 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       }));
     } finally {
       setReceiptPosting((current) => ({ ...current, [list.id]: false }));
+    }
+  };
+  const recordProcurementDelivery = async (list: ProcurementList) => {
+    if (!canEdit || list.status !== 'purchased' || deliveryPosting[list.id] || !staffProfile?.uid || typeof window === 'undefined') return;
+    setDeliveryPosting((current) => ({ ...current, [list.id]: true }));
+    try {
+      const pending = readProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
+      const draft = deliveryDrafts[list.id];
+      const quantities = pending?.quantities || (draft?.quantities || list.items.map(() => '0')).map((value) => Number(value || 0));
+      const date = pending?.date || draft?.date || new Date().toISOString().slice(0, 10);
+      const reference = pending?.reference || draft?.reference?.trim() || '';
+      const deliveryId = pending?.deliveryId || draft?.id || '';
+      const choices = list.items.map((_, itemIndex) => {
+        const key = `${list.id}:${itemIndex}`;
+        const persisted = pending?.choices.find((choice) => choice.itemIndex === itemIndex);
+        const value = persisted ? (persisted.inventoryItemId || NOT_INVENTORY_TRACKED) : (receiptLineChoices[key] || '');
+        return { itemIndex, inventoryItemId: value === NOT_INVENTORY_TRACKED ? null : value || null };
+      });
+      if (choices.some((choice, index) => quantities[index] > 0 && !choice.inventoryItemId &&
+        !pending?.choices.some((line) => line.itemIndex === index && line.inventoryItemId === null) &&
+        receiptLineChoices[`${list.id}:${index}`] !== NOT_INVENTORY_TRACKED)) {
+        throw new Error('Choose an inventory item or explicitly mark every received line as not inventory tracked.');
+      }
+      if (!deliveryId) throw new Error('Start a new delivery attempt before recording quantities.');
+      const result = await postProcurementDeliveryMovements({
+        uid: staffProfile.uid, list, deliveryId, date, reference, quantities, choices,
+        inventoryItems: db.inventoryItems || [], storage: window.localStorage, postMovement: postInventoryMovement,
+      });
+      const delivery = {
+        id: result.intent.deliveryId, date: result.intent.date, reference: result.intent.reference,
+        recordedAt: new Date().toISOString(), recordedBy: actorName,
+        lines: result.intent.quantities.map((quantity, itemIndex) => ({
+          itemIndex, quantity, inventoryItemId: result.intent.choices[itemIndex]?.inventoryItemId ?? null,
+          movementId: result.movementIds.find((id) => id.endsWith(`_${itemIndex}`)),
+        })).filter((line) => line.quantity > 0),
+      };
+      const deliveries = [...(list.deliveries || []), delivery];
+      const fullyReceived = list.items.every((_, index) => deliveries.reduce((sum, row) => sum + row.lines.filter((line) => line.itemIndex === index).reduce((s, line) => s + line.quantity, 0), 0) >= list.items[index].quantity);
+      const saved = saveProcurementList(list, {
+        deliveries,
+        ...(fullyReceived ? { receivedAt: new Date().toISOString(), receivedBy: actorName } : {}),
+      });
+      if (!saved) throw new Error('Stock movements were confirmed, but delivery history could not be saved. Retry this exact delivery; stable movement IDs prevent duplicate stock additions.');
+      clearProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
+      setDeliveryDrafts((current) => ({ ...current, [list.id]: { id: createProcurementDeliveryId(), date: new Date().toISOString().slice(0, 10), reference: '', quantities: list.items.map(() => '0') } }));
+      setReceiptPostingStatus((current) => ({ ...current, [list.id]: `Delivery recorded: ${result.movementIds.length} stock movement(s), ${result.duplicateCount} safely confirmed duplicate(s).` }));
+      onRefresh();
+    } catch (error) {
+      setReceiptPostingStatus((current) => ({ ...current, [list.id]: error instanceof Error ? error.message : 'Delivery could not be recorded. Retry the same delivery details.' }));
+    } finally {
+      setDeliveryPosting((current) => ({ ...current, [list.id]: false }));
+    }
+  };
+  const recordProcurementPayment = (list: ProcurementList) => {
+    if (!canApproveProcurement || paymentPosting[list.id]) return;
+    const draft = paymentDrafts[list.id];
+    if (!draft) { window.alert('Start a payment record first.'); return; }
+    const payment = { id: draft.id, date: draft.date, amountMWK: Number(draft.amount), reference: draft.reference.trim(), method: draft.method, notes: draft.notes.trim() || undefined, recordedAt: new Date().toISOString(), recordedBy: actorName };
+    const errors = validateProcurementPayment({ list, date: payment.date, amountMWK: payment.amountMWK, reference: payment.reference, paymentId: payment.id });
+    if (errors.length) { window.alert(errors.join('\n')); return; }
+    setPaymentPosting((current) => ({ ...current, [list.id]: true }));
+    const saved = saveProcurementList(list, { payments: [...(list.payments || []), payment] });
+    setPaymentPosting((current) => ({ ...current, [list.id]: false }));
+    if (saved) {
+      setPaymentDrafts((current) => ({ ...current, [list.id]: { id: `payment_${createProcurementDeliveryId().slice(9)}`, date: new Date().toISOString().slice(0, 10), amount: '', reference: '', method: 'Cash', notes: '' } }));
     }
   };
   const handOverProcurementToFinance = (list: ProcurementList) => {
