@@ -3,8 +3,8 @@
 **Date:** 2026-10-29  
 **Repository:** `hastyngz/Shine-Relief-Trust-case-management-app`  
 **Branch:** `Replit`  
-**Scope:** Administration & Operations follow-up: inventory filtering and register exports, asset register export formats, regression coverage and status documentation.  
-**Status at writing:** Changes committed; exact-head CI pending. This report does not claim the entire Administration Officer ToR is complete.
+**Scope:** Administration Hub operational indicators, inventory and asset register filtering/exports, general report export consistency, document filing filters, compliance status filters, safeguarding export boundary, and regression coverage.  
+**Status:** Application code and regression tests passed exact-head GitHub Actions run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on code/test commit `14d43246f195d709a783b4cf3ab11bbcd2388de7`. This report update is documentation-only. The entire Administration Officer ToR is not yet complete.
 
 ## User requirements and constraints
 
@@ -42,16 +42,37 @@
 
 ## Files changed in this workstream
 
+- `src/components/AdministrationHub.tsx`
 - `src/components/InventoryView.tsx`
-- `src/utils/inventoryExport.ts`
-- `scripts/inventory-export.test.ts`
 - `src/components/AssetRegisterView.tsx`
+- `src/components/ComplianceCalendarView.tsx`
+- `src/components/DocumentsFilingView.tsx`
+- `src/components/Reports.tsx`
+- `src/components/Reports/ReportBuilder.tsx`
+- `src/components/Reports/ManagementReportsPanel.tsx`
+- `src/components/SafeguardingView.tsx`
+- `src/utils/administrationOverview.ts`
+- `src/utils/compliance.ts`
+- `src/utils/documentFiling.ts`
+- `src/utils/inventoryExport.ts`
 - `src/utils/assetExport.ts`
+- `src/utils/export.ts`
+- `scripts/administration-overview.test.ts`
+- `scripts/administration-hub.test.ts`
+- `scripts/compliance-calendar.test.ts`
+- `scripts/document-filing.test.ts`
+- `scripts/inventory-export.test.ts`
 - `scripts/asset-export.test.ts`
 - `scripts/inventory.test.ts`
+- `scripts/report-export.test.ts`
+- `scripts/safeguarding-export-boundary.test.ts`
+- `scripts/phase3d-management.test.ts`
+- `e2e/sensitive-data-access.spec.ts`
+- `package.json`
 - `.github/workflows/shine-checks.yml`
 - `AGENT_BOARD.md`
 - `docs/administration-officer-tor-gap-analysis.md`
+- `docs/administration-feature-buildout-2026-10-29.md`
 
 ### Procurement module status copy
 
@@ -83,9 +104,11 @@
 
 ## Verification
 
-- GitHub Actions run `40786347247` exposed a real TypeScript/build error: `exportInventoryRegister` was imported from `src/utils/inventory.ts`, where it is not exported. This was corrected in a later commit.
-- The newest observed exact-head Actions run at report time was `40792178782`, for commit `1176dc366ff119b0f3d657af0242c5fa4a36dbb7`; it was still pending when checked. It is **not a pass**.
-- Local `npm run lint`, focused tests and `npm run build` were not run in this session because a working local repository checkout was unavailable.
+- **Passed:** GitHub Actions run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) on code/test commit `14d43246f195d709a783b4cf3ab11bbcd2388de7`. Both the `checks` and `e2e` jobs succeeded.
+- **Checks job:** TypeScript, administration overview and navigation tests, document filing filters, compliance logic, safeguarding export boundary, Excel report-download test, comprehensive Phase 3D management/report generation test, existing procurement/payroll/offline/security/rules tests, Firestore access audit, and production build passed.
+- **Browser E2E:** 10/10 tests passed, including offline app-shell caching, compliance registration/completion, quote collection, account isolation, offline conflict handling, offline write durability, and the ordinary-staff sensitive-data restriction test.
+- Earlier failures were corrected before this passing run: the inventory export import pointed to the wrong module; the management report photo fixtures omitted `consent: true`; and the asynchronous Excel download assertion needed to be awaited.
+- Local `npm run lint` and `npm run build` were not run separately because a working local checkout was unavailable; the CI equivalents passed.
 - No manual Android/weak-signal test was performed.
 - No production deployment, Firebase rule change, or live-data operation was performed.
 
@@ -101,4 +124,4 @@ This is a focused completed code change, not a claim that all administration fea
 
 ## Release decision
 
-Do not describe these export changes as verified until the exact current `Replit` head passes TypeScript, the relevant export and inventory tests, production build and applicable E2E checks. Do not deploy automatically from this report.
+The implemented changes listed above passed automated CI, but the broader Administration Officer ToR remains incomplete. Do not treat the outstanding workflows below as operational, and do not infer that a manual Android/weak-signal check or production deployment occurred.
