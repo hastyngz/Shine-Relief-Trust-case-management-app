@@ -72,7 +72,7 @@ export function readProcurementReceiptIntent(
     const raw = storage.getItem(intentKey(uid, procurementListId));
     if (!raw) return null;
     const value = JSON.parse(raw) as ProcurementReceiptIntent;
-    if (value.version !== 1 || value.uid !== uid || value.procurementListId !== procurementListId || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) || !Number.isFinite(Date.parse(`${value.date}T00:00:00Z`)) || !Array.isArray(value.lines)) return null;
+    if (value.version !== 1 || value.uid !== uid || value.procurementListId !== procurementListId || !isValidCalendarDate(value.date) || !Array.isArray(value.lines)) return null;
     if (!value.lines.every((line) => Number.isInteger(line.itemIndex) && line.itemIndex >= 0 &&
         (line.inventoryItemId === null || (typeof line.inventoryItemId === 'string' && line.inventoryItemId.length > 0)) &&
         Number.isFinite(line.quantity) && line.quantity > 0 && typeof line.unit === 'string' && line.unit.length > 0 &&
