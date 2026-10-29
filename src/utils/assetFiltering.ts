@@ -26,9 +26,10 @@ const dateDaysFrom = (date: string | undefined, today: string): number | null =>
 };
 
 /** True only when a valid calendar date records a physical check in the supplied year. */
+/** True only when a valid calendar date records a physical check in the supplied year. */
 export function isAssetVerifiedInYear(asset: Pick<AssetRecord, 'verificationDate'>, year: string): boolean {
   const date = asset.verificationDate;
-  if (!/^\\d{4}$/.test(year) || typeof date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
+  if (!/^\d{4}$/.test(year) || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const timestamp = Date.parse(date + 'T00:00:00Z');
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date && date.startsWith(year);
 }
@@ -43,7 +44,6 @@ export function filterAssetRegister(assets: AssetRecord[], filters: AssetRegiste
     const serviceDays = dateDaysFrom(asset.nextServiceDate, filters.today);
     const warrantyDays = dateDaysFrom(asset.warrantyExpiryDate, filters.today);
     const verifiedThisYear = isAssetVerifiedInYear(asset, filters.today.slice(0, 4));
-    const verifiedThisYear = hasValidVerificationDate && asset.verificationDate!.startsWith(verificationYear);
     let matchesVerification = true;
     if (filters.verification === 'Not verified this year') matchesVerification = asset.status !== 'Disposed' && !verifiedThisYear;
     if (filters.verification === 'Verified this year') matchesVerification = asset.status !== 'Disposed' && verifiedThisYear;
