@@ -843,6 +843,33 @@ export interface ProcurementListItem {
   quoteRequirementReason?: 'threshold' | 'price-unknown';
 }
 
+export interface ProcurementDeliveryLine {
+  itemIndex: number;
+  quantity: number;
+  inventoryItemId: string | null;
+  movementId?: string;
+}
+
+export interface ProcurementDelivery {
+  id: string;
+  date: string;
+  reference: string;
+  recordedAt: string;
+  recordedBy: string;
+  lines: ProcurementDeliveryLine[];
+}
+
+export interface ProcurementPayment {
+  id: string;
+  date: string;
+  amountMWK: number;
+  reference: string;
+  method?: 'Cash' | 'Bank transfer' | 'Mobile money' | 'Cheque' | 'Other';
+  recordedAt: string;
+  recordedBy: string;
+  notes?: string;
+}
+
 export interface ProcurementList {
   id: string;
   title: string;
@@ -857,11 +884,14 @@ export interface ProcurementList {
   purchaseOrderReference?: string;
   orderedAt?: string;
   orderedBy?: string;
+  /** Legacy full-receipt summary; delivery history is authoritative when present. */
   receivedAt?: string;
   receivedBy?: string;
+  deliveries?: ProcurementDelivery[];
   financeHandedOverAt?: string;
   financeHandedOverBy?: string;
   financeReference?: string;
+  payments?: ProcurementPayment[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
