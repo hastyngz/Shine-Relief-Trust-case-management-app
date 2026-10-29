@@ -58,7 +58,7 @@ import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
 import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, selectProcurementQuote } from '../../services/procurementWorkflow';
 import { postInventoryMovement } from '../../services/r2StorageClient';
-import { filterProcurementLists } from '../../utils/procurementFiltering';
+import { filterProcurementLists, type ProcurementStageFilter } from '../../utils/procurementFiltering';
 import {
   clearProcurementReceiptIntent,
   NOT_INVENTORY_TRACKED,
@@ -102,6 +102,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [financeReferenceDrafts, setFinanceReferenceDrafts] = useState<Record<string, string>>({});
   const [procurementSearch, setProcurementSearch] = useState('');
   const [procurementStatusFilter, setProcurementStatusFilter] = useState<'All' | ProcurementList['status']>('All');
+  const [procurementStageFilter, setProcurementStageFilter] = useState<ProcurementStageFilter>('All');
   const [receiptLineChoices, setReceiptLineChoices] = useState<Record<string, string>>({});
   const [receiptPosting, setReceiptPosting] = useState<Record<string, boolean>>({});
   const [receiptPostingStatus, setReceiptPostingStatus] = useState<Record<string, string>>({});
@@ -144,7 +145,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const procurementLists = db.procurementLists || [];
   const filteredProcurementLists = useMemo(() => filterProcurementLists(procurementLists, {
     search: procurementSearch, status: procurementStatusFilter,
-  }), [procurementLists, procurementSearch, procurementStatusFilter]);
+    stage: procurementStageFilter,
+  }), [procurementLists, procurementSearch, procurementStatusFilter, procurementStageFilter]);
 
   const saveProcurementList = (list: ProcurementList, updates: Partial<ProcurementList>) => {
     try { const saved = updateProcurementList(list.id, updates, actorName); if (!saved) throw new Error('This procurement list no longer exists. Refresh and try again.'); onRefresh(); return true; }
@@ -1434,10 +1436,19 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           <option value="purchased">Purchased</option>
                         </select>
                       </label>
+                      <label className="text-xs font-semibold text-stone-700">
+                        Receipt &amp; finance stage
+                        <select aria-label="Filter procurement by receipt and finance stage" value={procurementStageFilter} onChange={(event) => setProcurementStageFilter(event.target.value as ProcurementStageFilter)} className="field mt-1 w-full">
+                          <option value="All">All receipt stages</option>
+                          <option value="Awaiting receipt">Awaiting receipt</option>
+                          <option value="Received - finance pending">Received · finance handover pending</option>
+                          <option value="Handed to finance">Handed to finance</option>
+                        </select>
+                      </label>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p role="status" className="text-xs text-stone-500">{filteredProcurementLists.length} of {procurementLists.length} procurement lists shown</p>
-                      {(procurementSearch || procurementStatusFilter !== 'All') && <button type="button" onClick={() => { setProcurementSearch(''); setProcurementStatusFilter('All'); }} className="min-h-10 rounded-lg border border-stone-300 px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50">Clear filters</button>}
+                      {(procurementSearch || procurementStatusFilter !== 'All' || procurementStageFilter !== 'All') && <button type="button" onClick={() => { setProcurementSearch(''); setProcurementStatusFilter('All'); setProcurementStageFilter('All'); }} className="min-h-10 rounded-lg border border-stone-300 px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50">Clear filters</button>}
                     </div>
                   </div>
                 )}
