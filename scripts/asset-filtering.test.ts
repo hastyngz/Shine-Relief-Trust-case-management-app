@@ -20,6 +20,8 @@ const base = { search: '', status: 'All' as const, condition: 'All' as const, ca
 assert.deepEqual(filterAssetRegister(assets, base).map((asset) => asset.id), ['e', 'a', 'b', 'f', 'd', 'c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Not verified this year' }).map((asset) => asset.id), ['a', 'f', 'd']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Verified this year' }).map((asset) => asset.id), ['b', 'c']);
+assert.deepEqual(filterAssetRegister(assets, { ...base, today: '2026-02-30', verification: 'Verified this year' }), [], 'an impossible reference date must not mark assets verified');
+assert.deepEqual(filterAssetRegister(assets, { ...base, today: '2026-invalid', verification: 'Verified this year' }), [], 'an invalid reference date must not mark assets verified');
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: discrepancy' }).map((asset) => asset.id), ['c']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, verification: 'Latest outcome: not located' }).map((asset) => asset.id), ['d']);
 assert.deepEqual(filterAssetRegister(assets, { ...base, category: 'IT & Electronics' }).map((asset) => asset.id), ['b', 'f', 'd', 'c']);
