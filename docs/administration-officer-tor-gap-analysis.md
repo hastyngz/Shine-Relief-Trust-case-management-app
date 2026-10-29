@@ -219,3 +219,7 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 ### Asset verification follow-up filters (2026-10-29)
 - The asset register now includes filters for not verified this year, verified this year, and latest verification outcome of discrepancy or not located. These combine with existing filters and exclude disposed assets from follow-up results. Synthetic regression coverage was added; exact-head CI verification is pending.
+
+
+### Procurement receipt and finance stage filters (2026-10-29)
+- Added list filters for purchased items awaiting receipt, received items awaiting finance handover, and items handed to finance, based on existing timestamps. This improves follow-up visibility but does not implement payment reconciliation or payment authority. Exact-head CI is pending.
