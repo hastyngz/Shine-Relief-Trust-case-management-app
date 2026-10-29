@@ -30,6 +30,11 @@
 - Added progress/disabled state and visible error/success feedback.
 - Updated the CI step to test the supported export mapping; no CSV export is intended.
 
+### General reporting exports
+
+- The legacy report export centre now creates Excel workbooks instead of CSV files while retaining the existing role/record filters. Sponsor/donor report export was changed to XLSX with its quality annex, and the duplicate management CSV button was removed because the Excel workbook export already includes all rows and quality findings.
+- Visible export labels now say Excel; no CSV download is intended in the Administration/Reports workflows. Existing stored CSV report-history entries remain legacy metadata and are not rewritten.
+
 ### Correctness follow-up
 
 - CI identified that the inventory component imported the export function from the wrong utility module. The import was corrected to `src/utils/inventoryExport.ts`.

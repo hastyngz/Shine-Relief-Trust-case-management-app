@@ -991,3 +991,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · asset register export formats
 - Removed the asset register's CSV export path and replaced it with Word (.docx), Excel (.xlsx) and PDF exports using the currently filtered asset list. Added export-state/error feedback and a shared tested column mapping.
 - Corrected the inventory export helper import that CI identified as a TypeScript/build failure. Exact-head checks are required before this work can be called verified. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · report exports standardized
+- Converted the general report export helper to produce Excel workbooks and updated visible export labels. Sponsor report export now writes XLSX; management reports use the existing full Excel workbook rather than a duplicate CSV export. Asset and inventory registers offer Word/Excel/PDF only.
+- Exact-head CI is still required; no tests are claimed passed from this session. — Mosaic (ChatGPT), 2026-10-29
