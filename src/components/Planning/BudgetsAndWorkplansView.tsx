@@ -60,6 +60,7 @@ import { PlanningModals } from './PlanningModals';
 import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, selectProcurementQuote } from '../../services/procurementWorkflow';
 import { postInventoryMovement } from '../../services/r2StorageClient';
 import { filterProcurementLists, type ProcurementStageFilter } from '../../utils/procurementFiltering';
+import { buildSupplierActivityIndex } from '../../utils/supplierActivity';
 import {
   clearProcurementReceiptIntent,
   NOT_INVENTORY_TRACKED,
@@ -104,6 +105,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [purchaseOrderDrafts, setPurchaseOrderDrafts] = useState<Record<string, string>>({});
   const [financeReferenceDrafts, setFinanceReferenceDrafts] = useState<Record<string, string>>({});
   const [procurementSearch, setProcurementSearch] = useState('');
+  const [supplierSearch, setSupplierSearch] = useState('');
   const [procurementStatusFilter, setProcurementStatusFilter] = useState<'All' | ProcurementList['status']>('All');
   const [procurementStageFilter, setProcurementStageFilter] = useState<ProcurementStageFilter>('All');
   const [receiptLineChoices, setReceiptLineChoices] = useState<Record<string, string>>({});
@@ -156,6 +158,11 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     search: procurementSearch, status: procurementStatusFilter,
     stage: procurementStageFilter,
   }), [procurementLists, procurementSearch, procurementStatusFilter, procurementStageFilter]);
+  const supplierActivity = useMemo(() => buildSupplierActivityIndex(procurementLists, db.expenses || []), [procurementLists, db.expenses]);
+  const filteredSupplierActivity = useMemo(() => {
+    const term = supplierSearch.trim().toLocaleLowerCase();
+    return term ? supplierActivity.filter((supplier) => supplier.name.toLocaleLowerCase().includes(term)) : supplierActivity;
+  }, [supplierActivity, supplierSearch]);
 
   const saveProcurementList = (list: ProcurementList, updates: Partial<ProcurementList>) => {
     try { const saved = updateProcurementList(list.id, updates, actorName); if (!saved) throw new Error('This procurement list no longer exists. Refresh and try again.'); onRefresh(); return true; }
@@ -1530,6 +1537,35 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                     Unclear and missing prices remain flagged. Configure the quote threshold for each list; items above it should have three supplier quotes before approval.
                   </p>
                 </div>
+                <section aria-labelledby="supplier-activity-title" className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 id="supplier-activity-title" className="text-sm font-bold text-stone-900">Supplier activity index</h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-stone-600">A read-only directory derived from supplier names already recorded in procurement quotes and household expenses. Similar spellings are grouped for display; this is not yet a verified supplier master register.</p>
+                    </div>
+                    <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-900">{supplierActivity.length} suppliers found</span>
+                  </div>
+                  <label className="block text-xs font-semibold text-stone-700">Find supplier
+                    <input aria-label="Search supplier activity" value={supplierSearch} onChange={(event) => setSupplierSearch(event.target.value)} placeholder="Search supplier name…" className="field mt-1 min-h-10 w-full" />
+                  </label>
+                  {filteredSupplierActivity.length === 0 ? (
+                    <p className="rounded-lg bg-stone-50 p-4 text-center text-xs text-stone-500">{supplierActivity.length ? 'No suppliers match this search.' : 'Supplier names will appear here after quotes or supplier expenses have been recorded.'}</p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {filteredSupplierActivity.map((supplier) => (
+                        <article key={supplier.name.toLocaleLowerCase()} className="rounded-lg border border-stone-200 p-3">
+                          <h4 className="break-words text-sm font-bold text-stone-900">{supplier.name}</h4>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-stone-600">
+                            <span><strong className="text-stone-900">{supplier.quoteCount}</strong> quotes</span>
+                            <span><strong className="text-stone-900">{supplier.procurementListCount}</strong> lists</span>
+                            <span><strong className="text-stone-900">{supplier.expenseRecordCount}</strong> expense records</span>
+                            <span>Last activity: <strong className="text-stone-900">{supplier.lastActivityDate || 'Not dated'}</strong></span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
                 {procurementLists.length > 0 && (
                   <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
