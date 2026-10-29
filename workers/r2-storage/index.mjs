@@ -100,12 +100,18 @@ async function firestoreCommit(writes, idToken) {
   return response.json();
 }
 
+function isValidCalendarDate(value) {
+  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
 function validateInventoryMovementPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new ApiError('A stock movement is required.');
   const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
   if (!validId(payload.id) || !validId(payload.itemId)) throw new ApiError('A valid item and movement ID are required.');
   if (!['Received', 'Issued', 'Adjustment'].includes(payload.type)) throw new ApiError('This stock movement type is not supported.');
-  if (typeof payload.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date) || !Number.isFinite(Date.parse(`${payload.date}T00:00:00Z`))) {
+  if (!isValidCalendarDate(payload.date)) {
     throw new ApiError('Enter a valid movement date.');
   }
   if (typeof payload.reason !== 'string' || !payload.reason.trim() || payload.reason.trim().length > 1000) throw new ApiError('A reason of up to 1,000 characters is required.');
