@@ -192,7 +192,14 @@ async function handleInventoryMovement(request, staff, idToken) {
       const receivedQuantitiesByLine = procurement.receivedQuantitiesByLine && typeof procurement.receivedQuantitiesByLine === 'object'
         ? procurement.receivedQuantitiesByLine
         : {};
-      const alreadyReceived = Number(receivedQuantitiesByLine[`line_${payload.sourceLineIndex}`] || 0);
+      const legacyReceived = Array.isArray(procurement.receivedQuantities)
+        ? Number(procurement.receivedQuantities[payload.sourceLineIndex] || 0)
+        : 0;
+      const ledgerReceived = Number(
+        receivedQuantitiesByLine[`line_${payload.sourceLineIndex}`] ??
+        receivedQuantitiesByLine[String(payload.sourceLineIndex)] ?? 0,
+      );
+      const alreadyReceived = Math.max(legacyReceived, ledgerReceived);
       const outstanding = Number(procurementLine?.quantity) - alreadyReceived;
       if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt ||
           !procurementLine || !Number.isFinite(alreadyReceived) || alreadyReceived < 0 ||
@@ -292,7 +299,13 @@ async function handleInventoryMovement(request, staff, idToken) {
       const receivedQuantitiesByLine = procurementForReceipt.receivedQuantitiesByLine && typeof procurementForReceipt.receivedQuantitiesByLine === 'object'
         ? { ...procurementForReceipt.receivedQuantitiesByLine }
         : {};
-      receivedQuantitiesByLine[String(payload.sourceLineIndex)] = Number(receivedQuantitiesByLine[String(payload.sourceLineIndex)] || 0) + payload.quantity;
+      const ledgerKey = `line_${payload.sourceLineIndex}`;
+      const legacyReceived = Array.isArray(procurementForReceipt.receivedQuantities)
+        ? Number(procurementForReceipt.receivedQuantities[payload.sourceLineIndex] || 0)
+        : 0;
+      const priorLedger = Number(receivedQuantitiesByLine[ledgerKey] ?? receivedQuantitiesByLine[String(payload.sourceLineIndex)] ?? 0);
+      receivedQuantitiesByLine[ledgerKey] = Math.max(legacyReceived, priorLedger) + payload.quantity;
+      delete receivedQuantitiesByLine[String(payload.sourceLineIndex)];
       const procurementFields = {
         receivedQuantitiesByLine: encodeFirestoreValue(receivedQuantitiesByLine),
         lastReceiptMovementId: encodeFirestoreValue(payload.id),

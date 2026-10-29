@@ -187,7 +187,7 @@ try {
     assert.equal(response.status, 200, 'partial deliveries should be accepted when within the outstanding quantity');
     assert.equal(body.movement.sourceDeliveryId, 'delivery_12345678');
     assert.equal(mock.writes[0].length, 3, 'stock balance, movement, and cumulative procurement receipt must commit atomically');
-    assert.deepEqual(decode(mock.writes[0][2].update.fields.receivedQuantities), [1]);
+    assert.deepEqual(decode(mock.writes[0][2].update.fields.receivedQuantitiesByLine), { line_0: 1 });
   }
 
   {
