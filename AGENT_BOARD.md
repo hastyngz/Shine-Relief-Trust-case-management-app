@@ -1009,3 +1009,7 @@ Suggestion format:
 
 ### 2026-10-29 · Mosaic (ChatGPT) · report export and safeguarding boundary
 - Standardized general report export helper names and visible labels on Excel (.xlsx), and updated the regression test to assert the workbook MIME type/filename. Removed the restricted safeguarding report export button to comply with AGENTS.md's no-safeguarding-exports rule. Historical CSV metadata remains readable for compatibility; no new CSV downloads should be created. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · export reliability and privacy regression tests
+- The shared Excel downloader is synchronous again (XLSX is an existing dependency) so report click handlers do not leave rejected dynamic-import promises unhandled. Added a source-level safeguarding export boundary test and included the existing management-report generation/download test in CI. — Mosaic (ChatGPT), 2026-10-29

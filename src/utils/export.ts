@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   Girl,
@@ -31,8 +32,7 @@ export function formatDate(dateString?: string): string {
 }
 
 // Convert tabular report rows to an Excel workbook and trigger browser download.
-export async function downloadExcel(filename: string, rows: (string | number)[][]): Promise<void> {
-  const XLSX = await import('xlsx');
+export function downloadExcel(filename: string, rows: (string | number)[][]): void {
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet(rows);
   if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };

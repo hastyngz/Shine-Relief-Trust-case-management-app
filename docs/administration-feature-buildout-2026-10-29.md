@@ -55,6 +55,9 @@
 
 ### Report export consistency and safeguarding boundary
 
+- Made the shared Excel downloader synchronous after importing the already-used `xlsx` dependency in the report route. This avoids unhandled promise rejections from existing click handlers after changing the former CSV download into an XLSX generator.
+- Added a CI regression test that prevents a safeguarding export button or download helper from reappearing, and wired the existing management report generation test into CI.
+
 - Renamed the shared report-download helper to `downloadExcel` and updated the general report centre's function names/visible labels to Excel; its generated file is an `.xlsx` workbook, not CSV.
 - Removed the safeguarding-record export button entirely. Safeguarding cases remain restricted to the permission-checked server endpoint and must not be exported, included in general reports or sent to AI, in line with `AGENTS.md`.
 - Updated the management regression test to assert the XLSX MIME type and `.xlsx` filename rather than the old CSV data URI.

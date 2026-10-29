@@ -51,6 +51,12 @@ jobs:
       - name: Test document filing filters
         run: npm run test:document-filing
 
+      - name: Test safeguarding export boundary
+        run: npm run test:safeguarding-export-boundary
+
+      - name: Test management report generation and Excel download
+        run: npx tsx scripts/phase3d-management.test.ts
+
       - name: Test password-reset feedback sanitization
         run: npx tsx scripts/password-reset-feedback.test.ts
 

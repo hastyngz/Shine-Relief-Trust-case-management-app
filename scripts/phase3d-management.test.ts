@@ -405,7 +405,7 @@ globalThis.document = { createElement: () => mockLink, body: { appendChild: () =
 URL.createObjectURL = ((blob: Blob) => { excelBlobType = blob.type; return 'blob:shine-test'; }) as typeof URL.createObjectURL;
 URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
 try {
-  await downloadExcel('phase3d-test', [['Budget', 'Actual'], [100, 120]]);
+  downloadExcel('phase3d-test', [['Budget', 'Actual'], [100, 120]]);
 } finally {
   globalThis.document = originalDocument;
   URL.createObjectURL = originalCreateObjectURL;
