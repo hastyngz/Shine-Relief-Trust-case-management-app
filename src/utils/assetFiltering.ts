@@ -36,7 +36,7 @@ export function filterAssetRegister(assets: AssetRecord[], filters: AssetRegiste
     const warrantyDays = dateDaysFrom(asset.warrantyExpiryDate, filters.today);
     const verificationYear = filters.today.slice(0, 4);
     const hasValidVerificationDate = typeof asset.verificationDate === 'string'
-      && /^\\d{4}-\\d{2}-\\d{2}$/.test(asset.verificationDate)
+      && /^\d{4}-\d{2}-\d{2}$/.test(asset.verificationDate)
       && Number.isFinite(Date.parse(asset.verificationDate + 'T00:00:00Z'))
       && new Date(Date.parse(asset.verificationDate + 'T00:00:00Z')).toISOString().slice(0, 10) === asset.verificationDate;
     const verifiedThisYear = hasValidVerificationDate && asset.verificationDate!.startsWith(verificationYear);
