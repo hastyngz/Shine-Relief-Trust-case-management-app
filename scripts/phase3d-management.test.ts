@@ -360,7 +360,7 @@ const wordWithEmbeddedPhoto = await generateWordReport({
 assert.ok(wordWithEmbeddedPhoto.size > wordReport.size);
 const pdfWithEmbeddedPhoto = await generatePdfReport({
   ...reportDb,
-  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
