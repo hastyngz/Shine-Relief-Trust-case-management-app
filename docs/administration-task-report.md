@@ -40,3 +40,6 @@
 - The physical asset verification dialog now disables its submit control while saving and shows a saving state. Existing error handling keeps the dialog and entered observations available if local persistence fails.
 - Added browser E2E coverage for registering a synthetic asset, recording a physical verification, confirming the register values remain unchanged, and checking that one history entry is recorded.
 - This new E2E and the procurement payment change above require the latest exact-head CI result; they are not yet verified locally.
+
+
+- Browser test locator reviewed to avoid ambiguity with the separate asset-filter count status region. The exact-head CI result remains pending.

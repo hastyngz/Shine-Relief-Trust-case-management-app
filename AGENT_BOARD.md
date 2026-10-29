@@ -1103,3 +1103,5 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · asset verification submission guard
 - Added a saving guard and disabled/loading state to physical asset verification; added a browser test covering registration, verification history and the non-mutating observation rule using synthetic records.
 - Verification is pending on the combined exact-head CI run. No production data or rules changed.
+
+- Test review follow-up: scoped the asset-verification success assertion to its exact notice text because the page also exposes a separate status region for filtered counts. — Mosaic (ChatGPT), 2026-10-29

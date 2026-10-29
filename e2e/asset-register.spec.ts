@@ -27,7 +27,7 @@ test('staff can register an asset and record physical verification without chang
   await verify.getByLabel('Notes').fill('Synthetic E2E physical check.');
   await verify.getByRole('button', { name: 'Save verification' }).click();
 
-  await expect(page.getByRole('status')).toContainText(`Physical verification recorded for ${assetTag}`);
+  await expect(page.getByText(`Physical verification recorded for ${assetTag}`, { exact: true })).toBeVisible();
   await expect(asset).toContainText('Verified');
   await expect(asset).toContainText('E2E Test Staff');
   await asset.getByRole('button', { name: /History/ }).click();
