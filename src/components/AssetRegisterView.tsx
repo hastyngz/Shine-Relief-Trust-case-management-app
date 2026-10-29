@@ -7,7 +7,7 @@ import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
 import { AssetVerificationDialog } from './AssetVerificationDialog';
 import { getLocalDateInputValue } from '../utils/inventory';
 import { exportAssetRegister, type AssetExportFormat } from '../utils/assetExport';
-import { filterAssetRegister, type AssetFollowUpFilter } from '../utils/assetFiltering';
+import { filterAssetRegister, type AssetFollowUpFilter, type AssetVerificationFilter } from '../utils/assetFiltering';
 
 interface AssetRegisterViewProps {
   assets: AssetRecord[];
@@ -51,6 +51,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const [categoryFilter, setCategoryFilter] = useState<'All' | string>('All');
   const [locationFilter, setLocationFilter] = useState<'All' | string>('All');
   const [followUpFilter, setFollowUpFilter] = useState<AssetFollowUpFilter>('All');
+  const [verificationFilter, setVerificationFilter] = useState<AssetVerificationFilter>('All');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AssetRecord | null>(null);
   const [form, setForm] = useState<AssetForm>(blankForm());
@@ -64,8 +65,8 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
 
   const filtered = useMemo(() => filterAssetRegister(assets, {
     search, status: statusFilter, condition: conditionFilter, category: categoryFilter, location: locationFilter,
-    followUp: followUpFilter, today: getLocalDateInputValue(),
-  }), [assets, search, statusFilter, conditionFilter, categoryFilter, locationFilter, followUpFilter]);
+    followUp: followUpFilter, verification: verificationFilter, today: getLocalDateInputValue(),
+  }), [assets, search, statusFilter, conditionFilter, categoryFilter, locationFilter, followUpFilter, verificationFilter]);
 
   const serviceDue = assets.filter((asset) => {
     const days = daysFromToday(asset.nextServiceDate);
@@ -207,10 +208,13 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
           <label className="text-xs font-bold text-stone-600">Maintenance &amp; warranty<select aria-label="Filter assets by maintenance and warranty" value={followUpFilter} onChange={(e) => setFollowUpFilter(e.target.value as AssetFollowUpFilter)} className={inputClass}>
             <option value="All">All follow-up</option><option value="Service overdue">Service overdue</option><option value="Service due soon">Service due within 30 days</option><option value="Warranty expired">Warranty expired</option><option value="Warranty expiring soon">Warranty expires within 30 days</option>
           </select></label>
+          <label className="text-xs font-bold text-stone-600">Physical verification<select aria-label="Filter assets by physical verification" value={verificationFilter} onChange={(e) => setVerificationFilter(e.target.value as AssetVerificationFilter)} className={inputClass}>
+            <option value="All">All verification</option><option value="Not verified this year">Not verified this year</option><option value="Verified this year">Verified this year</option><option value="Latest outcome: discrepancy">Latest outcome: discrepancy</option><option value="Latest outcome: not located">Latest outcome: not located</option>
+          </select></label>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-stone-500" role="status">{filtered.length} of {assets.length} assets shown</p>
-          {(search || statusFilter !== 'All' || conditionFilter !== 'All' || categoryFilter !== 'All' || locationFilter !== 'All' || followUpFilter !== 'All') && <button type="button" onClick={() => { setSearch(''); setStatusFilter('All'); setConditionFilter('All'); setCategoryFilter('All'); setLocationFilter('All'); setFollowUpFilter('All'); }} className="min-h-10 rounded-xl border border-stone-300 px-3 text-sm font-semibold text-stone-700 hover:bg-stone-50">Clear all filters</button>}
+          {(search || statusFilter !== 'All' || conditionFilter !== 'All' || categoryFilter !== 'All' || locationFilter !== 'All' || followUpFilter !== 'All' || verificationFilter !== 'All') && <button type="button" onClick={() => { setSearch(''); setStatusFilter('All'); setConditionFilter('All'); setCategoryFilter('All'); setLocationFilter('All'); setFollowUpFilter('All'); setVerificationFilter('All'); }} className="min-h-10 rounded-xl border border-stone-300 px-3 text-sm font-semibold text-stone-700 hover:bg-stone-50">Clear all filters</button>}
         </div>
       </section>
 
