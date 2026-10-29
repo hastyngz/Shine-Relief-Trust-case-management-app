@@ -5,6 +5,7 @@ export interface AssetRegisterFilters {
   status: 'All' | AssetStatus;
   condition: 'All' | AssetCondition;
   category: 'All' | string;
+  location: 'All' | string;
 }
 
 /** Filter the asset register without mutating the source records. */
@@ -17,6 +18,7 @@ export function filterAssetRegister(assets: AssetRecord[], filters: AssetRegiste
     return matchesText
       && (filters.status === 'All' || asset.status === filters.status)
       && (filters.condition === 'All' || asset.condition === filters.condition)
-      && (filters.category === 'All' || asset.category === filters.category);
+      && (filters.category === 'All' || asset.category === filters.category)
+      && (filters.location === 'All' || asset.location === filters.location);
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
