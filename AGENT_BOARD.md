@@ -1055,3 +1055,8 @@ Suggestion format:
 ### 2026-10-29 · Mosaic (ChatGPT) · asset verification filters
 - Added Asset Register filters for not verified this year, verified this year, and latest outcome: discrepancy/not located; they combine with existing filters and exclude disposed assets from follow-up lists.
 - Added synthetic date/outcome test cases. Exact-head CI is pending; do not treat this as verified until the run completes. No production or live-data changes. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement lifecycle filters
+- Added receipt/finance stage filters: awaiting receipt, received but finance handover pending, and handed to finance. They use existing timestamps and combine with search/status; they do not represent payment reconciliation.
+- Added synthetic filter tests. Exact-head CI is pending; no live data or production configuration changed. — Mosaic (ChatGPT), 2026-10-29
