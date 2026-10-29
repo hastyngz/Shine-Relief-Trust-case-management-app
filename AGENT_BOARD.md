@@ -1034,3 +1034,9 @@ Suggestion format:
 
 ### 2026-10-29 · Mosaic (ChatGPT) · exact-head administration CI passed
 - GitHub Actions run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) passed on code/test commit `14d43246f195d709a783b4cf3ab11bbcd2388de7`: checks job and offline E2E job both successful; 10/10 browser tests passed. Added administration overview, document filing filters, compliance Due soon/Cancelled filters, standardized Excel exports and safeguarding export-boundary coverage. No deployment or manual Android test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset register filtering
+- Added category and location filters to the asset register, with combined search/status/condition filtering, result counts and clear-all. Word/Excel/PDF exports continue to use the filtered result set.
+- Added synthetic unit tests for filter combinations and input immutability; test is wired into CI.
+- Verified exact code/test commit `070a3b1f364282915791ddf6a7761785db9a582d` in Actions run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730); both checks and E2E jobs passed. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
