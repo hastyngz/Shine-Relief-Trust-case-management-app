@@ -175,10 +175,13 @@ async function handleInventoryMovement(request, staff, idToken) {
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let procurementLine;
+    let procurementDocumentForReceipt;
+    let procurementForReceipt;
     if (payload.sourceType === 'procurementReceipt') {
-      const procurementDocument = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
-      if (!procurementDocument) throw new ApiError('The purchased procurement list was not found on the server.', 404);
-      const procurement = decodeFirestoreFields(procurementDocument.fields);
+      procurementDocumentForReceipt = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
+      if (!procurementDocumentForReceipt) throw new ApiError('The purchased procurement list was not found on the server.', 404);
+      procurementForReceipt = decodeFirestoreFields(procurementDocumentForReceipt.fields);
+      const procurement = procurementForReceipt;
       procurementLine = Array.isArray(procurement.items) ? procurement.items[payload.sourceLineIndex] : undefined;
       const receivedQuantities = Array.isArray(procurement.receivedQuantities)
         ? procurement.receivedQuantities
@@ -279,13 +282,10 @@ async function handleInventoryMovement(request, staff, idToken) {
         currentDocument: { exists: false },
       },
     ];
-    if (payload.sourceType === 'procurementReceipt') {
-      const procurementDocument = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
-      if (!procurementDocument) throw new ApiError('The purchased procurement list was not found on the server.', 404);
-      const procurement = decodeFirestoreFields(procurementDocument.fields);
-      const receivedQuantities = Array.isArray(procurement.receivedQuantities)
-        ? [...procurement.receivedQuantities]
-        : procurement.items.map(() => 0);
+    if (payload.sourceType === 'procurementReceipt' && procurementDocumentForReceipt && procurementForReceipt) {
+      const receivedQuantities = Array.isArray(procurementForReceipt.receivedQuantities)
+        ? [...procurementForReceipt.receivedQuantities]
+        : procurementForReceipt.items.map(() => 0);
       receivedQuantities[payload.sourceLineIndex] = Number(receivedQuantities[payload.sourceLineIndex] || 0) + payload.quantity;
       const procurementFields = {
         receivedQuantities: encodeFirestoreValue(receivedQuantities),
@@ -298,7 +298,7 @@ async function handleInventoryMovement(request, staff, idToken) {
           fields: procurementFields,
         },
         updateMask: { fieldPaths: Object.keys(procurementFields) },
-        currentDocument: { updateTime: procurementDocument.updateTime },
+        currentDocument: { updateTime: procurementDocumentForReceipt.updateTime },
       });
     }
     try {
