@@ -1617,7 +1617,10 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         Three-quote threshold (MWK)
                         <input
                           type="number"
-                          min="0"
+                          min="1"
+                          step="1"
+                          inputMode="numeric"
+                          aria-label="Three-quote procurement threshold in MWK"
                           disabled={!canEdit || list.status !== 'draft'}
                           className="field mt-1 w-44"
                           value={list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK}
