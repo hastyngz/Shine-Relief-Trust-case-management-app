@@ -1201,3 +1201,10 @@ Suggestion format:
 - Watch out: no automatic threshold reset or policy mutation. Exact-head CI remains unconfirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30
 
 - Follow-up: threshold editor now requests a positive whole-number MWK amount with native numeric constraints and an accessible label; service-side validation remains authoritative.
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · attachment deletion recovery
+- Area: private attachment lifecycle.
+- State: `deletePhotoAttachment` no longer swallows R2 errors. It removes Firestore metadata only after storage deletion succeeds; Worker authorization still depends on the extant metadata. Missing R2 objects are safe to retry because S3/R2 DeleteObject is idempotent. Gallery now surfaces a retry message rather than only logging errors.
+- Caveat: if Firestore metadata deletion fails after R2 deletion, the metadata remains but a retry can complete because object deletion is idempotent. No policy/rules/retention changes.
+- Next: add/execute targeted regression coverage, verify typecheck/build/browser and inspect asset register lifecycle. No CI pass claimed; no deployment. — Mosaic (ChatGPT), 2026-10-30
