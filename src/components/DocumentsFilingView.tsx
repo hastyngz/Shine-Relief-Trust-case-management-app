@@ -72,7 +72,8 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   }, [currentUser?.uid, canViewHealthRecords]);
 
   const categories = useMemo(() => [...new Set(attachments.map((item) => item.category).filter(Boolean))].sort(), [attachments]);
-  const recordTypes = useMemo(() => [...new Set(attachments.map((item) => item.targetType).filter(Boolean))].sort() as Fi  const filtered = useMemo(() => sortFilingAttachmentsNewestFirst(filterFilingAttachments(attachments, {
+  const recordTypes = useMemo(() => [...new Set(attachments.map((item) => item.targetType).filter(Boolean))].sort() as FilingRecordType[], [attachments]);
+  const filtered = useMemo(() => sortFilingAttachmentsNewestFirst(filterFilingAttachments(attachments, {
     search, fileFilter, categoryFilter, recordTypeFilter,
   })), [attachments, search, fileFilter, categoryFilter, recordTypeFilter]);
 
