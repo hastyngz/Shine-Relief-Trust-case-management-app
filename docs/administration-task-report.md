@@ -139,3 +139,7 @@
 ### Asset form duplicate-submit guard (2026-10-30)
 - Added synchronous in-flight save locks to asset registration/edit, maintenance logging and physical verification forms. The locks close the small window before React state updates disable the submit button, preventing a rapid repeated submit from appending duplicate local asset-history entries. Locks release in `finally` on success or failure; existing saving-state feedback remains.
 - This is client-side same-device protection only; it does not claim cross-device or server-atomic deduplication. Automated execution and browser verification remain outstanding.
+
+
+### Compliance deadline validation (2026-10-30)
+- New compliance obligations now validate the due date with the shared real-calendar-date helper before local persistence. This prevents impossible dates from entering the obligation register and recurring schedule calculation, even if a browser date control is bypassed. Existing compliance date tests cover impossible date rejection in status calculations; direct UI/browser validation remains unexecuted.
