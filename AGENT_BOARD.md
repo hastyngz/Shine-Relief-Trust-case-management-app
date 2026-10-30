@@ -1208,3 +1208,10 @@ Suggestion format:
 - State: `deletePhotoAttachment` no longer swallows R2 errors. It removes Firestore metadata only after storage deletion succeeds; Worker authorization still depends on the extant metadata. Missing R2 objects are safe to retry because S3/R2 DeleteObject is idempotent. Gallery now surfaces a retry message rather than only logging errors.
 - Caveat: if Firestore metadata deletion fails after R2 deletion, the metadata remains but a retry can complete because object deletion is idempotent. No policy/rules/retention changes.
 - Next: add/execute targeted regression coverage, verify typecheck/build/browser and inspect asset register lifecycle. No CI pass claimed; no deployment. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · asset date validation
+- Area: asset register and maintenance history.
+- State: registration/edit now validates optional acquisition, warranty and next-service dates; maintenance logging validates its service date and optional next-service date using `isValidInventoryDate` shared with inventory. Existing inventory tests cover Gregorian dates/leap years/impossible dates.
+- Next: add targeted component-level tests if current harness permits, run CI, then continue asset lifecycle review.
+- Watch out: no invented chronology constraints; no schema/rules/offline changes. CI not yet confirmed. — Mosaic (ChatGPT), 2026-10-30
