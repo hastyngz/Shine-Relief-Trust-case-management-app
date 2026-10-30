@@ -29,6 +29,7 @@
     "test:phase5": "tsx scripts/phase5-intelligence.test.ts && tsx scripts/phase5-case-intelligence.test.ts",
     "test:phase5-e2e": "tsx scripts/phase5-e2e.test.ts",
     "test:phase2": "tsx scripts/phase2-import-ai.test.ts",
+    "test:import-ai-mapping": "tsx scripts/import-ai-mapping.test.ts && tsx scripts/import-duplicate-item-numbers.test.ts",
     "test:offline": "tsx scripts/offline-sync.test.ts",
     "test:offline-perf": "tsx scripts/offline-sync-perf.test.ts",
     "test:storage": "tsx scripts/storage-failures.test.ts && tsx scripts/firestore-reset-policy.test.ts && tsx scripts/backup-restore-coverage.test.ts",
