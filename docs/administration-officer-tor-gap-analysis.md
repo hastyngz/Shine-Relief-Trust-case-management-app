@@ -278,3 +278,7 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Procurement import consistency correction (2026-10-30)
 - Corrected selected-supplier import normalization to collapse repeated whitespace consistently with quote entry, selection and approval. Added a regression fixture for a selected quote with spacing differences. Exact-head CI remains unconfirmed.
+
+
+### Procurement threshold operator feedback (2026-10-30)
+- Invalid custom thresholds now appear as an explicit item-level warning and keep the three-quote collection state conservative, consistent with the approval block. Staff must correct the configured threshold; the UI does not silently reset it. Browser verification and exact-head CI remain outstanding.
