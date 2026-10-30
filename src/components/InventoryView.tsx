@@ -5,7 +5,7 @@ import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, isValidInventoryDate, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../utils/inventory';
 import { exportInventoryRegister } from '../utils/inventoryExport';
 
 interface InventoryViewProps {
@@ -296,6 +296,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Enter a quantity greater than zero.');
       return;
     }
+    if (!isValidInventoryDate(movement.date)) {
+      setError('Enter a valid movement date in YYYY-MM-DD format.');
+      return;
+    }
     if (!movement.reason.trim()) {
       setError('Add a reason for this stock movement.');
       return;
@@ -390,6 +394,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const counted = Number(stocktake.countedQuantity);
     if (!Number.isFinite(counted) || counted < 0) {
       setError('The counted quantity must be zero or greater.');
+      return;
+    }
+    if (!isValidInventoryDate(stocktake.date)) {
+      setError('Enter a valid stocktake date in YYYY-MM-DD format.');
       return;
     }
     if (!stocktake.reason.trim()) {
@@ -525,6 +533,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           const item = items.find((entry) => entry.id === pending.itemId);
           if (!item) throw new Error('The queued stock item is not available in the current register. Refresh before retrying.');
           const payload = pending.payload;
+          const queuedDate = String(payload.date || '');
+          if (!isValidInventoryDate(queuedDate)) {
+            const invalidDate = new Error('The saved stock transaction has an invalid date and needs review before it can be sent.') as Error & { status: number };
+            invalidDate.status = 400;
+            throw invalidDate;
+          }
           const response = pending.mode === 'movement'
             ? await postInventoryMovement({
               id: pending.id,
