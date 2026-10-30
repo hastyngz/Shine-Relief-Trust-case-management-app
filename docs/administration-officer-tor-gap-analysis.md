@@ -237,3 +237,8 @@ The asset register now rejects invalid reference-date context before deriving th
 ### Inventory expiry visibility update (2026-10-30)
 - The register summary now breaks the existing expiry-alert total into expired and due-within-30-days counts. Missing or invalid legacy dates are separately counted as not tracked by the helper and are not presented as safe stock.
 - Focused tests cover expired, due-soon, safe, missing and invalid date cases. This is an informational summary only; quarantine, disposal, batch/lot tracking and formal approval remain outside the current workflow. Verification is pending on the exact Replit head.
+
+
+### 2026-10-30 · Inventory movement date integrity
+- The stock movement and stocktake forms now reject malformed or impossible calendar dates before queueing/submission. The offline FIFO retry path revalidates persisted dates and routes corrupt entries to the existing needs-review state rather than sending them.
+- Regression coverage added for ISO format, leap-year handling and impossible dates. This is client-side validation; server-side validation remains authoritative and must continue to reject malformed requests.
