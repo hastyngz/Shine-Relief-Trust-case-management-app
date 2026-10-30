@@ -6,6 +6,11 @@ const baseItem: ProcurementListItem = { description: 'Synthetic stationery pack'
 const baseList: ProcurementList = { id: 'PRC-TEST-001', title: 'Synthetic stationery purchase', purpose: 'Automated test fixture only', items: [baseItem], totalMWK: 120000, status: 'draft', quoteThresholdMWK: 500000, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'synthetic-test', updatedBy: 'synthetic-test' };
 assert.equal(checkProcurementApproval(baseList).allowed, true);
 assert.equal(checkProcurementApproval({ ...baseList, items: [] }).allowed, false);
+for (const invalidThreshold of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '500000'] as unknown[]) {
+  const invalidThresholdCheck = checkProcurementApproval({ ...baseList, quoteThresholdMWK: invalidThreshold as number });
+  assert.equal(invalidThresholdCheck.allowed, false, 'invalid quote thresholds must block approval');
+  assert.ok(invalidThresholdCheck.blockers.some((message) => message.includes('threshold is invalid')));
+}
 const expensiveItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 100000, totalMWK: 1000000 };
 const missingQuotes = checkProcurementApproval({ ...baseList, items: [expensiveItem] });
 assert.equal(missingQuotes.allowed, false); assert.ok(missingQuotes.blockers.some((message) => message.includes('three supplier quotes')));
