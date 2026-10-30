@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
 import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
 import { AssetVerificationDialog } from './AssetVerificationDialog';
-import { getLocalDateInputValue } from '../utils/inventory';
+import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
 import { exportAssetRegister, type AssetExportFormat } from '../utils/assetExport';
 import { filterAssetRegister, isAssetVerifiedInYear, type AssetFollowUpFilter, type AssetVerificationFilter } from '../utils/assetFiltering';
 
@@ -118,6 +118,15 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
     }
     if (assets.some((asset) => asset.id !== editing?.id && asset.assetTag.trim().toLowerCase() === form.assetTag.trim().toLowerCase())) {
       setError('That asset tag is already in use. Choose a unique tag.'); return;
+    }
+    const datedFields: Array<{ label: string; value: string }> = [
+      { label: 'Acquisition date', value: form.acquisitionDate },
+      { label: 'Warranty expiry date', value: form.warrantyExpiryDate },
+      { label: 'Next service date', value: form.nextServiceDate },
+    ];
+    const invalidDate = datedFields.find(({ value }) => value && !isValidInventoryDate(value));
+    if (invalidDate) {
+      setError(`${invalidDate.label} must be a real calendar date.`); return;
     }
     const cost = form.acquisitionCostMWK.trim() ? Number(form.acquisitionCostMWK) : undefined;
     if (cost !== undefined && (!Number.isFinite(cost) || cost < 0)) {
