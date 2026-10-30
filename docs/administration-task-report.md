@@ -129,3 +129,8 @@
 ### Asset date integrity (2026-10-30)
 - Asset registration/edit now validates optional acquisition, warranty-expiry and next-service dates using the shared strict Gregorian calendar validator before saving locally. Maintenance logging applies the same validation to the work date and optional next-service date. This rejects impossible dates such as 31 February even if malformed values bypass browser date controls.
 - The shared validator already has focused unit coverage for ISO formatting, leap years and impossible dates in `scripts/inventory.test.ts`. The asset screens now consume that tested helper. No chronology policy (for example, whether a warranty can predate acquisition) has been imposed. Automated execution and browser verification remain outstanding.
+
+
+### Document filing permission-transition race (2026-10-30)
+- The filing view now clears the previous result set immediately when the signed-in user or health-record permission changes. Each metadata load has a request generation guard; a slower response from an earlier account/permission scope cannot overwrite the newer view, and in-flight updates are invalidated on unmount. This addresses a sensitive-data presentation race without changing Firestore rules, query scope or Worker authorization.
+- Existing filing metadata queries remain role-filtered, exclude safeguarding attachments from general filing, and download bytes only after the user selects a file. A dedicated component-level race test and browser verification are still outstanding.
