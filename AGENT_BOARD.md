@@ -1142,3 +1142,9 @@ Suggestion format:
 - Added strict date validation for new stock movements and physical stocktakes, plus a second check before offline queued transactions are sent. Corrupt queued dates stop the FIFO and require staff review.
 - Added helper regression tests; exact-head CI pending. No production data, Firestore rules, Worker endpoints or sync protocol changed.
 - Next: continue with inventory accountability and supplier/document-control gaps; avoid repeated CI polling.
+
+
+### 2026-10-30 · Inventory/supplier data-quality follow-up (Mosaic)
+- Inventory dashboard now counts untracked/invalid expiry dates and labels each item card so missing dates are visible. Worker tests assert malformed dates are rejected before stock reads/writes; supplier activity tests cover impossible quote/expense dates.
+- Exact-head CI has not yet been confirmed. No deployment or live data changes.
+- Next: continue broad administration reliability review; keep supplier index read-only until canonical identity/contact permissions are designed.
