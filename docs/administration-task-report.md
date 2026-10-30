@@ -59,5 +59,5 @@
 
 ## Budget scope and document filing improvements (2026-10-30)
 - Clarified the budget allocation KPI's scope: when no period is selected it covers all years (subject to the active category filter); when a period is selected it reports that period. The monthly monitoring panel continues to show its separately selected summary year. This is a labelling correction, not a change to budget calculations.
-- The document index now sorts its already permission-filtered attachments newest-first by upload timestamp. Legacy records with invalid/missing timestamps remain visible after dated files, preserving their original relative order. The sort helper is shared and has focused assertions for ordering, invalid dates and non-mutation.
+- The document index now sorts its already permission-filtered attachments newest-first by upload timestamp. Legacy records with invalid/missing timestamps remain visible after dated files, preserving their original relative order. The sort helper is shared and has focused assertions for ordering, invalid dates and non-mutation. The result count now explicitly labels the order as “newest first”.
 - These changes have not been run locally in this environment. Exact-head GitHub Actions verification remains required before calling them tested. No permission, storage, upload, or production-data behaviour was changed.
