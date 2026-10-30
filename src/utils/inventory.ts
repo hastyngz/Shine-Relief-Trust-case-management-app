@@ -43,6 +43,24 @@ export function getInventoryExpiryStatus(expiryDate?: string, today = getLocalDa
   return { status: 'ok', daysRemaining };
 }
 
+
+export interface InventoryExpirySummary {
+  expired: number;
+  expiringSoon: number;
+  notTracked: number;
+}
+
+/** Count date-tracked inventory alerts using the same local calendar-day rules as the register filter. */
+export function summarizeInventoryExpiry(items: InventoryItem[], today = getLocalDateInputValue()): InventoryExpirySummary {
+  return items.reduce<InventoryExpirySummary>((summary, item) => {
+    const status = getInventoryExpiryStatus(item.expiryDate, today).status;
+    if (status === 'expired') summary.expired += 1;
+    else if (status === 'expiring-soon') summary.expiringSoon += 1;
+    else if (status === 'not-tracked') summary.notTracked += 1;
+    return summary;
+  }, { expired: 0, expiringSoon: 0, notTracked: 0 });
+}
+
 export interface InventoryStocktakeAdjustment {
   previousQuantity: number;
   countedQuantity: number;
