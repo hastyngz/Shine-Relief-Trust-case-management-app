@@ -1185,3 +1185,10 @@ Suggestion format:
 - State: reused the shared supplier identity normalizer in the quote-entry UI, so case/spacing variants are rejected immediately and cannot be entered as duplicate suppliers then discovered only at approval.
 - Next: run procurement workflow tests, TypeScript, production build and procurement browser flow on the exact Replit head.
 - Watch out: supplier legal identity remains unverified; no supplier master records or quote history were changed. Exact-head CI remains unconfirmed. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · selected supplier import normalization
+- Area: procurement import integrity.
+- State: source review caught an over-escaped whitespace regex in imported selected supplier labels. Corrected the pattern and added a regression case showing spacing variants resolve to the same recorded quote.
+- Next: verify procurement workflow test, TypeScript, build and browser flow on exact Replit head.
+- Watch out: code review and test additions only; no local execution or CI pass claimed. No deployment or production-data changes. — Mosaic (ChatGPT), 2026-10-30
