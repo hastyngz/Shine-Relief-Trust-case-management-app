@@ -285,13 +285,12 @@ export async function uploadPhotoAttachment(
 export async function deletePhotoAttachment(
   attachment: PhotoAttachment
 ): Promise<void> {
-  // 1. Delete file from R2
-  try {
-    await deleteStoredFile(attachment.storagePath);
-  } catch (err: any) {
-    // If already missing from storage, proceed to delete Firestore metadata
-    console.warn('Storage delete notice (file may not exist):', err.message || err);
-  }
+  // 1. Delete file from R2 first. The Worker authorizes deletion against the
+  // still-present Firestore metadata and R2 DeleteObject is idempotent for a
+  // missing object. If storage deletion fails for any other reason (network,
+  // authorization, configuration), preserve the metadata so staff can retry
+  // instead of silently orphaning a private file.
+  await deleteStoredFile(attachment.storagePath);
 
   // 2. Delete metadata doc from Firestore
   try {
