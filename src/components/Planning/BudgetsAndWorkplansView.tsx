@@ -900,12 +900,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       {activeSubTab === 'budgets' && (
         <div className="space-y-5">
           {/* KPI Cards */}
+          <p className="text-xs text-stone-500">KPI reporting scope: {budgetPeriodFilter === 'ALL' ? 'All years' : `Period ${budgetPeriodFilter}`} · {budgetCategoryFilter === 'ALL' ? 'All categories' : budgetCategoryFilter}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
               <p className="text-xs font-medium text-stone-500">Total Budget Allocation</p>
               <p className="text-xl font-extrabold text-teal-900 mt-1">{formatMWK(totalBudgeted)}</p>
               <span className="text-[11px] text-stone-500 mt-1 block">{filteredBudgets.length} budget line items</span>
-              <span className="text-[10px] text-stone-400 mt-1 block">{budgetPeriodFilter === 'ALL' ? 'All years · active category filter' : `Period: ${budgetPeriodFilter} · active category filter`}</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
