@@ -57,7 +57,7 @@ import { filterBudgetLines, filterBudgetLinesByYear } from '../../services/finan
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
 import { PlanningModals } from './PlanningModals';
-import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, selectProcurementQuote } from '../../services/procurementWorkflow';
+import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, normalizeProcurementSupplierIdentity, selectProcurementQuote } from '../../services/procurementWorkflow';
 import { postInventoryMovement } from '../../services/r2StorageClient';
 import { filterProcurementLists, type ProcurementStageFilter } from '../../utils/procurementFiltering';
 import { buildSupplierActivityIndex } from '../../utils/supplierActivity';
@@ -181,7 +181,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     if (!supplier || !Number.isFinite(amountMWK) || amountMWK <= 0) { window.alert('Enter a supplier name and a positive quote amount in MWK.'); return; }
     const item = list.items[itemIndex]; const quotes = item.quotes || [];
     if (quotes.length >= 3) { window.alert('Three quotes are already recorded for this item.'); return; }
-    if (quotes.some((quote) => quote.supplier.trim().toLocaleLowerCase() === supplier.toLocaleLowerCase())) { window.alert('That supplier already has a quote for this item.'); return; }
+    if (quotes.some((quote) => normalizeProcurementSupplierIdentity(quote.supplier) === normalizeProcurementSupplierIdentity(supplier))) { window.alert('That supplier already has a quote for this item. Check the spelling and spacing before adding another quote.'); return; }
     updateProcurementItem(list, itemIndex, { quotes: [...quotes, { supplier, amountMWK, quotedAt: new Date().toISOString().slice(0, 10) }] });
     setQuoteDrafts((current) => ({ ...current, [draftKey]: { supplier: '', amount: '' } }));
   };
