@@ -75,7 +75,17 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   const recordTypes = useMemo(() => [...new Set(attachments.map((item) => item.targetType).filter(Boolean))].sort() as FilingRecordType[], [attachments]);
   const filtered = useMemo(() => filterFilingAttachments(attachments, {
     search, fileFilter, categoryFilter, recordTypeFilter,
-  }), [attachments, search, fileFilter, categoryFilter, recordTypeFilter]);
+  }).map((attachment, index) => ({
+    attachment,
+    index,
+    uploadedAt: Date.parse(attachment.createdAt),
+  })).sort((a, b) => {
+    const aValid = Number.isFinite(a.uploadedAt);
+    const bValid = Number.isFinite(b.uploadedAt);
+    if (aValid && bValid && a.uploadedAt !== b.uploadedAt) return b.uploadedAt - a.uploadedAt;
+    if (aValid !== bValid) return aValid ? -1 : 1;
+    return a.index - b.index;
+  }).map(({ attachment }) => attachment), [attachments, search, fileFilter, categoryFilter, recordTypeFilter]);
 
   const openFile = async (attachment: PhotoAttachment) => {
     setDownloadingId(attachment.id);
