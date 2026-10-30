@@ -61,3 +61,9 @@
 - Added a shared reporting-scope label above the budget KPI cards: when no period is selected they cover all years; otherwise they cover the selected period. The label also states the active category scope. The monthly monitoring panel continues to show its separately selected summary year. This is a labelling correction, not a change to budget calculations.
 - The document index now sorts its already permission-filtered attachments newest-first by upload timestamp. Legacy records with invalid/missing timestamps remain visible after dated files, preserving their original relative order. The sort helper is shared and has focused assertions for ordering, invalid dates and non-mutation. The result count now explicitly labels the order as “newest first”.
 - These changes have not been run locally in this environment. Exact-head GitHub Actions verification remains required before calling them tested. No permission, storage, upload, or production-data behaviour was changed.
+
+
+## Inventory expiry visibility (2026-10-30)
+- The Inventory & Stores summary now separates expired stock from items expiring within 30 days while retaining the combined alert total and existing filter behaviour.
+- Added a shared expiry-summary helper and focused regression assertions for expired, due-soon, safe, missing and invalid legacy expiry dates. Missing/invalid dates are counted as not tracked, not silently treated as safe.
+- This is visibility only: it does not quarantine stock, change quantities or introduce expiry enforcement. Exact-head CI and local lint/build/test have not been run here; verification remains pending.
