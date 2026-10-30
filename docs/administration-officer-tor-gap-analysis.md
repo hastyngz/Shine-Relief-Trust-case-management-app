@@ -227,3 +227,8 @@ A targeted code inspection found that the persistence architecture is not yet un
 
 ### Asset verification date-context follow-up (2026-10-29)
 The asset register now rejects invalid reference-date context before deriving the year used by verification filters. This avoids a malformed date such as `2026-invalid` making assets with a 2026 verification date appear verified. Focused regression assertions were added to `scripts/asset-filtering.test.ts`; execution and exact-head CI remain unconfirmed in this session. This is a local register-filter correction, not proof of complete physical asset coverage.
+
+### Budget reporting scope and document filing order (2026-10-30)
+- The budget allocation KPI now states whether its total covers all years or the selected period, while retaining the active category filter. The monthly monitoring panel has its own summary-year selector, so users can distinguish the reporting scopes without changing calculation behaviour.
+- The existing access-aware document index now orders permitted attachments newest-first using upload timestamps. Records with invalid legacy timestamps remain listed after dated records; no attachments are deleted or rewritten.
+- This does not add document expiry/version control, document owner assignment, or compliance reminders. Those remain separate requirements requiring an agreed metadata model and workflow.
