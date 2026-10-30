@@ -106,3 +106,8 @@
 ### Procurement quote-entry consistency (2026-10-30)
 - The supplier identity normalizer is now shared by the quote-entry screen, quote selection, import validation and approval checks. The UI warns immediately when a new quote repeats a supplier under a case/spacing variant, instead of allowing a duplicate that only fails later at approval.
 - This complements the threshold fail-closed validation above; no supplier records are merged and no quote history is rewritten. Exact-head CI remains unconfirmed.
+
+
+### Procurement import normalization correction (2026-10-30)
+- A focused review found that imported *selected supplier* labels still used an over-escaped whitespace pattern, unlike the shared supplier identity helper. Corrected it so imported selected supplier labels collapse repeated whitespace as intended, and added a regression case proving a selected quote still matches when the imported label contains extra spaces.
+- This was a source-review correction; tests have been added but have not been executed locally. Exact-head CI remains unconfirmed.
