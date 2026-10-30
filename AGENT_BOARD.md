@@ -1129,3 +1129,10 @@ Suggestion format:
 - State: added a shared scope label above the budget KPI cards to distinguish all-years totals from selected-period totals and show the active category filter. Added newest-first sorting to the existing permission-filtered document index, with invalid legacy upload timestamps retained at the end in stable order. Extracted the sorter to a shared utility and added focused assertions.
 - Next: verify focused document-filing and existing budget/procurement checks, TypeScript, production build and browser flow on the exact Replit head.
 - Watch out: this does not change budget calculations or implement document versioning, expiry, ownership or compliance reminders. No production data, permissions or storage paths were changed. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · inventory expiry visibility
+- Area: Inventory & Stores.
+- State: split the existing expiry-alert KPI into expired and due-within-30-days counts; added a shared helper and tests that distinguish missing/invalid legacy dates from safe stock.
+- Next: run inventory tests, lint, TypeScript/build and relevant browser checks on the exact Replit head.
+- Watch out: this is visibility only, not quarantine/disposal or batch-level expiry control. No stock balances, movements, permissions or production records changed. — Mosaic (ChatGPT), 2026-10-30
