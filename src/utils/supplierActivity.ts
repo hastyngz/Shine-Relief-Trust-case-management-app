@@ -23,7 +23,7 @@ export function buildSupplierActivityIndex(
   const suppliers = new Map<string, SupplierActivity & { listIds: Set<string> }>();
   const ensure = (rawName: unknown): (SupplierActivity & { listIds: Set<string> }) | null => {
     if (typeof rawName !== 'string') return null;
-    const name = rawName.trim();
+    const name = rawName.trim().replace(/\\s+/g, ' ');
     if (!name || /^(n\/?a|none|unknown)$/i.test(name)) return null;
     const key = name.toLocaleLowerCase();
     let entry = suppliers.get(key);
