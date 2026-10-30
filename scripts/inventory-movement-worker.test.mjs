@@ -131,6 +131,15 @@ try {
     assert.equal(mock.writes[1][0].currentDocument.updateTime, '2026-10-26T10:00:02.000000Z');
   }
 
+  // The Worker must reject impossible calendar dates before reading or writing stock.
+  for (const invalidDate of ['2026-02-29', '2026-02-31', '31/10/2026', '']) {
+    const mock = setup();
+    const response = await send(requestPayload({ date: invalidDate }));
+    assert.equal(response.status, 400, `invalid movement date should be rejected: ${invalidDate || '(empty)'}`);
+    assert.equal(mock.writes.length, 0, 'invalid dates must never change stock');
+    assert.equal(mock.getCounts().itemReads, 0, 'invalid dates should be rejected before reading the item');
+  }
+
   {
     const mock = setup({ item: { ...baseItem(), quantityOnHand: 2 } });
     const response = await send(requestPayload({ type: 'Issued', quantity: 3 }));
