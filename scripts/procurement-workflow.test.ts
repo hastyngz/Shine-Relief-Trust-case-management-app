@@ -70,6 +70,11 @@ const imported = normalizeImportedProcurementItems([
 assert.equal(imported.totalMWK, 2400);
 assert.equal(imported.items[0].totalMWK, 2400);
 assert.equal(imported.items[1].priceStatus, 'missing');
+const normalizedSelectedSupplierImport = normalizeImportedProcurementItems([{ description: 'Selected supplier normalization', quantity: 1, unit: 'item', unitPriceMWK: 1000, priceStatus: 'quoted', quotes: [
+  { supplier: 'North Star Supplies', amountMWK: 1000 },
+], selectedQuoteSupplier: ' North  Star Supplies ', selectedQuoteAmountMWK: 1000 }]);
+assert.equal(normalizedSelectedSupplierImport.items[0].selectedQuoteSupplier, 'North Star Supplies',
+  'imported selected supplier labels should collapse whitespace consistently with quote identity checks');
 assert.throws(() => normalizeImportedProcurementItems([]), /at least one item/);
 assert.throws(() => normalizeImportedProcurementItems([{ description: 'Invalid quantity', quantity: 0, unit: 'box' }]), /quantity greater than zero/);
 assert.throws(() => normalizeImportedProcurementItems([{ description: 'Boolean quantity', quantity: true, unit: 'box' }]), /quantity greater than zero/);
