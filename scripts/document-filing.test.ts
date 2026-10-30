@@ -6,7 +6,8 @@ const makeAttachment = (overrides: Partial<PhotoAttachment> = {}): PhotoAttachme
   id: 'att-1', targetType: 'household', targetId: 'house-1', fileName: 'receipt.pdf',
   fileSize: 100, contentType: 'application/pdf', storagePath: 'synthetic/receipt.pdf',
   downloadUrl: '', category: 'Receipt', date: '2026-10-20',
-  uploadedBy: { uid: 'staff-1', name: 'Test Staff', email: 'test@example.invalid' }, createdAt: '2026-10-20T00:00:00Z',
+  uploadedBy: { uid: 'staff-1', name: 'Test Staff', email: 'test@example.invalid' },
+  createdAt: '2026-10-20T00:00:00Z',
   ...overrides,
 });
 const receipt = makeAttachment();
@@ -21,7 +22,9 @@ assert.deepEqual(filterFilingAttachments(attachments, { ...base, categoryFilter:
 assert.deepEqual(filterFilingAttachments(attachments, { ...base, recordTypeFilter: 'educationalFollowUp' }).map((a) => a.id), ['att-3']);
 assert.deepEqual(filterFilingAttachments(attachments, { ...base, search: 'TEST STAFF' }).map((a) => a.id), ['att-1', 'att-2', 'att-3']);
 assert.deepEqual(filterFilingAttachments(attachments, { ...base, search: 'no-match' }), []);
-assert.deepEqual(filterconst older = makeAttachment({ id: 'att-older', createdAt: '2026-10-18T00:00:00Z' });
+assert.deepEqual(filterFilingAttachments([], base), []);
+
+const older = makeAttachment({ id: 'att-older', createdAt: '2026-10-18T00:00:00Z' });
 const newer = makeAttachment({ id: 'att-newer', createdAt: '2026-10-22T00:00:00Z' });
 const invalidDate = makeAttachment({ id: 'att-invalid', createdAt: 'not-a-date' });
 const unsorted = [older, newer, invalidDate, receipt];
