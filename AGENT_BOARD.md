@@ -1136,3 +1136,9 @@ Suggestion format:
 - State: split the existing expiry-alert KPI into expired and due-within-30-days counts; added a shared helper and tests that distinguish missing/invalid legacy dates from safe stock.
 - Next: run inventory tests, lint, TypeScript/build and relevant browser checks on the exact Replit head.
 - Watch out: this is visibility only, not quarantine/disposal or batch-level expiry control. No stock balances, movements, permissions or production records changed. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Inventory date validation (Mosaic)
+- Added strict date validation for new stock movements and physical stocktakes, plus a second check before offline queued transactions are sent. Corrupt queued dates stop the FIFO and require staff review.
+- Added helper regression tests; exact-head CI pending. No production data, Firestore rules, Worker endpoints or sync protocol changed.
+- Next: continue with inventory accountability and supplier/document-control gaps; avoid repeated CI polling.
