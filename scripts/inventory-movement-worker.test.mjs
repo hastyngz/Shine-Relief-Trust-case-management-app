@@ -74,7 +74,7 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
     if (url.includes('/documents/procurementLists/proc-synthetic')) {
-      if (procurementList) return new Response(JSON.stringify({ fields: asFields(procurementList) }), { status: 200 });
+      if (procurementList) return new Response(JSON.stringify({ updateTime: '2026-10-26T10:00:00.000000Z', fields: asFields(procurementList) }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
     if (url.includes('/documents/inventoryItems/item-synthetic')) {
@@ -131,6 +131,15 @@ try {
     assert.equal(mock.writes[1][0].currentDocument.updateTime, '2026-10-26T10:00:02.000000Z');
   }
 
+  // The Worker must reject impossible calendar dates before reading or writing stock.
+  for (const invalidDate of ['2026-02-29', '2026-02-31', '31/10/2026', '']) {
+    const mock = setup();
+    const response = await send(requestPayload({ date: invalidDate }));
+    assert.equal(response.status, 400, `invalid movement date should be rejected: ${invalidDate || '(empty)'}`);
+    assert.equal(mock.writes.length, 0, 'invalid dates must never change stock');
+    assert.equal(mock.getCounts().itemReads, 0, 'invalid dates should be rejected before reading the item');
+  }
+
   {
     const mock = setup({ item: { ...baseItem(), quantityOnHand: 2 } });
     const response = await send(requestPayload({ type: 'Issued', quantity: 3 }));
@@ -172,6 +181,36 @@ try {
     assert.equal(decode(mock.writes[0][1].update.fields.sourceId), 'proc-synthetic');
     assert.equal(decode(mock.writes[0][1].update.fields.sourceLineIndex), 0);
     assert.equal(decode(mock.writes[0][0].update.fields.movements)[0].inventoryItemId, 'item-synthetic');
+  }
+
+  {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload({
+      id: 'prcd_12345678_0', quantity: 1, sourceDeliveryId: 'delivery_12345678',
+      reference: 'Delivery delivery_12345678 · DN-SYNTHETIC · procurement proc-synthetic · line 1',
+    }));
+    const body = await response.json();
+    assert.equal(response.status, 200, 'partial deliveries should be accepted when within the outstanding quantity');
+    assert.equal(body.movement.sourceDeliveryId, 'delivery_12345678');
+    assert.equal(mock.writes[0].length, 3, 'stock balance, movement, and cumulative procurement receipt must commit atomically');
+    assert.deepEqual(decode(mock.writes[0][2].update.fields.receivedQuantitiesByLine), { line_0: 1 });
+  }
+
+  {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
+      receivedQuantities: [2],
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload({
+      id: 'prcd_87654321_0', quantity: 2, sourceDeliveryId: 'delivery_87654321',
+      reference: 'Delivery delivery_87654321 · DN-OVER · procurement proc-synthetic · line 1',
+    }));
+    assert.equal(response.status, 409, 'cumulative receipt quantity must not exceed the ordered quantity');
+    assert.equal(mock.writes.length, 0);
   }
 
   {

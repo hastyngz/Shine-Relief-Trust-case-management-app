@@ -4,7 +4,8 @@ import type { ScheduleItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { addScheduleItemWithSaveResult, updateScheduleItemWithSaveResult } from '../utils/storage';
 import { getLocalDateInputValue } from '../utils/inventory';
-import { isComplianceDueSoon, isComplianceOverdue } from '../utils/compliance';
+import { isComplianceDueSoon, isComplianceOverdue, matchesComplianceStatus, type ComplianceStatusFilter } from '../utils/compliance';
+import { buildNextComplianceOccurrence } from '../services/complianceRecurrence';
 
 interface ComplianceCalendarViewProps {
   schedules: ScheduleItem[];
@@ -33,7 +34,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ComplianceForm>(() => blankForm(currentUser?.uid || ''));
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'Overdue' | 'Completed'>('All');
+  const [statusFilter, setStatusFilter] = useState<ComplianceStatusFilter>('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [completionTarget, setCompletionTarget] = useState<ScheduleItem | null>(null);
   const [completionNote, setCompletionNote] = useState('');
@@ -47,10 +48,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     return [...records].filter((item) => {
       const textMatches = !term || [item.title, item.description, item.assignedStaffName, item.notes, item.evidenceReference]
         .some((value) => value?.toLowerCase().includes(term));
-      const statusMatches = statusFilter === 'All'
-        || (statusFilter === 'Completed' ? item.status === 'Completed'
-          : statusFilter === 'Overdue' ? isComplianceOverdue(item, today)
-            : item.status !== 'Completed' && item.status !== 'Cancelled');
+      const statusMatches = matchesComplianceStatus(item, statusFilter, today);
       return textMatches && statusMatches && (categoryFilter === 'All' || item.complianceCategory === categoryFilter);
     }).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.title.localeCompare(b.title));
   }, [records, query, statusFilter, categoryFilter, today]);
@@ -75,6 +73,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       setError('Choose an active staff member responsible for this obligation.');
       return;
     }
+    const seriesId = form.recurrence === 'One-off' ? undefined : makeId();
     const saveResult = addScheduleItemWithSaveResult({
       type: 'other',
       title: form.title.trim(),
@@ -89,6 +88,8 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       complianceCategory: form.category,
       compliancePriority: form.priority,
       complianceRecurrence: form.recurrence,
+      complianceSeriesId: seriesId,
+      complianceAnchorDate: seriesId ? form.dueDate : undefined,
       evidenceReference: form.evidenceReference.trim() || undefined,
       complianceHistory: [{ id: makeId(), action: 'Created', actor, at: new Date().toISOString(), note: 'Compliance obligation registered.' }],
     }, actor);
@@ -124,11 +125,17 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     if (!completionTarget) return;
     if (!completionNote.trim()) { setError('Add a short completion note before closing this obligation.'); return; }
     const target = completionTarget;
+    const now = new Date().toISOString();
+    const recurrence = target.complianceRecurrence || 'One-off';
+    const seriesId = recurrence === 'One-off' ? target.complianceSeriesId : target.complianceSeriesId || target.id;
+    const anchorDate = recurrence === 'One-off' ? target.complianceAnchorDate : target.complianceAnchorDate || target.scheduledDate;
     const result = updateScheduleItemWithSaveResult(target.id, {
       status: 'Completed',
-      completedAt: new Date().toISOString(),
+      completedAt: now,
       completionNote: completionNote.trim(),
       evidenceReference: completionEvidence.trim() || target.evidenceReference,
+      complianceSeriesId: seriesId,
+      complianceAnchorDate: anchorDate,
       complianceHistory: appendHistory(target, 'Completed', completionNote.trim()),
     }, actor);
     if (!result.item) { setError('This compliance record could not be found. Refresh and try again.'); return; }
@@ -136,12 +143,33 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       setError('SHINE could not save completion to device storage. Your completion note has been kept in the form so you can retry after resolving the storage warning.');
       return;
     }
+
+    let nextDate: string | undefined;
+    if (recurrence !== 'One-off') {
+      const next = buildNextComplianceOccurrence({
+        ...result.item,
+        complianceSeriesId: seriesId,
+        complianceAnchorDate: anchorDate,
+      }, actor, now);
+      if (!next) {
+        setError('The obligation was marked complete, but its next recurring date could not be calculated. Check the due date and retry.');
+        onRefresh();
+        return;
+      }
+      const nextResult = addScheduleItemWithSaveResult(next.item, actor, next.id);
+      if (!nextResult.savedLocally) {
+        setError('Completion is saved, but the next recurring occurrence could not be saved on this device. Keep this dialog open and retry after resolving the storage warning. The stable occurrence ID prevents duplicate records.');
+        onRefresh();
+        return;
+      }
+      nextDate = next.item.scheduledDate;
+    }
+
     setCompletionTarget(null); setCompletionNote(''); setCompletionEvidence('');
     setError('');
-    setNotice(`“${target.title}” marked complete. This records completion; it does not imply external approval.`);
+    setNotice(`“${target.title}” marked complete. This records completion; it does not imply external approval.${nextDate ? ` Next occurrence scheduled for ${nextDate}.` : ''}`);
     onRefresh();
   };
-
 
 
   return <section className="mx-auto max-w-7xl space-y-5 pb-8" aria-labelledby="compliance-title">
@@ -171,7 +199,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     <div className="grid gap-2 sm:grid-cols-3">
       <input aria-label="Search compliance obligations" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, owner or evidence" className="field" />
       <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="field">
-        <option>All</option><option>Open</option><option>Overdue</option><option>Completed</option>
+        <option>All</option><option>Open</option><option>Due soon</option><option>Overdue</option><option>Completed</option><option>Cancelled</option>
       </select>
       <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="field">
         <option>All</option>{categories.map((category) => <option key={category}>{category}</option>)}
@@ -182,6 +210,17 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
       {filtered.map((item) => {
         const overdueItem = isComplianceOverdue(item, today);
         const dueSoonItem = isComplianceDueSoon(item, today);
+        const seriesId = item.complianceSeriesId || item.id;
+        const nextOccurrence = item.complianceRecurrence && item.complianceRecurrence !== 'One-off'
+          ? records.filter((candidate) => candidate.id !== item.id &&
+              (candidate.complianceSeriesId || candidate.id) === seriesId &&
+              candidate.scheduledDate > item.scheduledDate)
+            .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))[0]
+          : undefined;
+        const recurrenceLabel = item.complianceRecurrence || 'One-off';
+        const recurrenceDetail = recurrenceLabel === 'One-off' ? '' : nextOccurrence
+          ? ` · Next due ${nextOccurrence.scheduledDate}`
+          : item.status === 'Completed' ? ' · Next occurrence not confirmed' : ' · Next occurrence created on completion';
         return <article key={item.id} className="fx-card rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
@@ -195,7 +234,7 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
                 <span><strong>Due:</strong> {item.scheduledDate}</span>
                 <span><strong>Owner:</strong> {item.assignedStaffName || 'Not assigned'}</span>
                 <span><strong>Priority:</strong> {item.compliancePriority || 'Medium'}</span>
-                <span><strong>Recurrence:</strong> {item.complianceRecurrence || 'One-off'} (next occurrence is not auto-created)</span>
+                <span><strong>Recurrence:</strong> {recurrenceLabel}{recurrenceDetail}</span>
               </div>
               {item.evidenceReference && <p className="mt-2 break-words text-xs text-stone-600"><strong>Evidence/reference:</strong> {item.evidenceReference}</p>}
               {item.completionNote && <p className="mt-2 text-xs text-stone-700"><strong>Completion note:</strong> {item.completionNote}</p>}

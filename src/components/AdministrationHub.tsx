@@ -1,12 +1,14 @@
 import React from 'react';
 import {
-  Archive, Boxes, ClipboardCheck, FileText, Users, CalendarDays, Truck,
+  Archive, Boxes, ClipboardCheck, FileText, Users, CalendarDays, Truck, AlertTriangle,
   ShoppingCart, ShieldCheck, ClipboardList, BarChart3, Wallet, BriefcaseBusiness,
   ArrowUpRight, CheckCircle2, Clock3,
 } from 'lucide-react';
 import type { AppDatabase } from '../types';
 import type { AppView } from '../routing/appRoutes';
 import { useAuth } from '../contexts/AuthContext';
+import { getLocalDateInputValue } from '../utils/inventory';
+import { getAdministrationAttention } from '../utils/administrationOverview';
 
 interface AdministrationHubProps {
   db: AppDatabase;
@@ -23,17 +25,17 @@ type ModuleCard = {
 };
 
 const modules: ModuleCard[] = [
-  { title: 'Staff & Personnel', description: 'Staff directory, contracts, personnel records and onboarding.', icon: Users, status: 'Available now', view: 'staff', group: 'People' },
+  { title: 'Staff & Personnel', description: 'Staff directory, employee records and contracts. Attendance, leave and onboarding checklists are not yet available.', icon: Users, status: 'Available now', view: 'staff', group: 'People' },
   { title: 'Payroll & Contracts', description: 'Open payroll records and review employee contract information.', icon: Wallet, status: 'Available now', view: 'payroll', group: 'People' },
   { title: 'Meetings & Minutes', description: 'Record meetings, minutes, decisions and follow-up actions.', icon: CalendarDays, status: 'Available now', view: 'operations', group: 'Coordination' },
   { title: 'Tasks & Planning', description: 'Review workplans, schedules and operational follow-ups.', icon: ClipboardList, status: 'Available now', view: 'planning', group: 'Coordination' },
   { title: 'Reports & Accountability', description: 'Generate organisational reports and export existing records.', icon: BarChart3, status: 'Available now', view: 'reports', group: 'Records' },
   { title: 'Document Ingestion', description: 'Bring supported documents into SHINE’s existing import workflow.', icon: FileText, status: 'Available now', view: 'import', group: 'Records' },
-  { title: 'Document Index (Phase 1)', description: 'Search existing accessible attachments, download files and jump back to their linked records. Advanced filing metadata and version control remain planned.', icon: FileText, status: 'Available now', view: 'documents', group: 'Records' },
+  { title: 'Documents & Filing (Phase 1)', description: 'Search existing accessible attachments, download files and return to linked records. Filing references, expiry metadata and controlled version history are not yet available.', icon: FileText, status: 'Available now', view: 'documents', group: 'Records' },
   { title: 'Inventory & Stores', description: 'Register stock, record receipts and issues, monitor minimum levels and review movement history.', icon: Boxes, status: 'Available now', view: 'inventory', group: 'Resources' },
   { title: 'Asset Register', description: 'Register equipment and property, locations, assigned users, condition, warranties and service dates.', icon: Archive, status: 'Available now', view: 'assets', group: 'Resources' },
-  { title: 'Procurement Lists & Quotations', description: 'Open the existing procurement-list and quotation workflow. Supplier register, formal approvals and stock receipt integration remain planned.', icon: ShoppingCart, status: 'Available now', view: 'planning', group: 'Resources' },
-  { title: 'Documents & Filing', description: 'A searchable central filing system with linked records, version history and access controls.', icon: FileText, status: 'Build next', group: 'Records' },
+  { title: 'Procurement Lists & Quotations', description: 'Create procurement lists, collect and compare supplier quotes, review the derived supplier activity index, route for manager approval, record purchase orders and receipts, and hand supporting references to finance. A verified supplier master register, partial-delivery reconciliation and payment reconciliation remain planned.', icon: ShoppingCart, status: 'Available now', view: 'planning', group: 'Resources' },
+  
   { title: 'Compliance Calendar', description: 'Register obligations, assign an owner, track deadlines and completion evidence. Independent management verification is not yet available.', icon: ShieldCheck, status: 'Available now', view: 'compliance', group: 'Compliance' },
   { title: 'Transport & Logistics', description: 'Coordinate journeys, vehicle records, fuel, servicing and activity logistics.', icon: Truck, status: 'Build next', group: 'Operations' },
   { title: 'Administrative Performance', description: 'Measure agreed service targets using verified records and clear calculation rules.', icon: ClipboardCheck, status: 'Build next', group: 'Oversight' },
@@ -49,6 +51,15 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
   const meetingCount = db.meetings?.length || 0;
   const scheduleCount = db.schedules?.length || 0;
   const groups = Array.from(new Set(visibleModules.map((item) => item.group)));
+  const attention = getAdministrationAttention(db, getLocalDateInputValue());
+  const attentionCards = [
+    { label: 'Low-stock items', count: attention.lowStockItems, detail: 'At or below minimum stock', view: 'inventory' as AppView, icon: Boxes },
+    { label: 'Stock expiry alerts', count: attention.stockExpiryAlerts, detail: 'Expired or due within 30 days', view: 'inventory' as AppView, icon: AlertTriangle },
+    { label: 'Assets needing follow-up', count: attention.assetsNeedingAttention, detail: 'Missing, repair, warranty or service', view: 'assets' as AppView, icon: Archive },
+    { label: 'Assets not verified this year', count: attention.assetsNotVerifiedThisYear, detail: 'Active registered assets without a valid current-year physical check', view: 'assets' as AppView, icon: ClipboardCheck },
+    { label: 'Overdue compliance', count: attention.overdueCompliance, detail: 'Open obligations past their due date', view: 'compliance' as AppView, icon: ShieldCheck },
+    { label: 'Open procurement lists', count: attention.openProcurementLists, detail: 'Draft or approved lists not yet received', view: 'planning' as AppView, icon: ShoppingCart },
+  ];
 
   return (
     <section className="mx-auto max-w-7xl space-y-6 px-1 pb-8" aria-labelledby="admin-hub-title">
@@ -70,6 +81,20 @@ export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavi
           <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-3 text-2xl font-bold text-stone-900">{availableCount}/{visibleModules.length}</p><p className="text-xs text-stone-600">Existing app links</p></div>
         </div>
       </div>
+
+      <section aria-labelledby="admin-attention-title" className="space-y-3">
+        <div><h2 id="admin-attention-title" className="text-lg font-bold text-stone-900">Operational attention</h2><p className="mt-1 text-sm text-stone-600">Live counts from the records currently loaded on this device. A zero count is not proof that unrecorded or unsynchronised work does not exist.</p></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {attentionCards.map((item) => {
+            const Icon = item.icon;
+            return <button key={item.label} type="button" onClick={() => onNavigate(item.view)} className="fx-press flex min-h-24 items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-left hover:border-teal-700 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700">
+              <span className="rounded-xl bg-amber-50 p-2 text-amber-900"><Icon className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-stone-900">{item.label}</span><span className="mt-1 block text-xs leading-5 text-stone-600">{item.detail}</span></span>
+              <span className="text-2xl font-black tabular-nums text-stone-900">{item.count}</span>
+            </button>;
+          })}
+        </div>
+      </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="text-lg font-bold text-stone-900">Administration workspace</h2><p className="mt-1 text-sm text-stone-600">Open an existing SHINE workflow or review the next modules planned from the Administration Officer ToR.</p></div>

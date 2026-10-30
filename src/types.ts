@@ -843,6 +843,33 @@ export interface ProcurementListItem {
   quoteRequirementReason?: 'threshold' | 'price-unknown';
 }
 
+export interface ProcurementDeliveryLine {
+  itemIndex: number;
+  quantity: number;
+  inventoryItemId: string | null;
+  movementId?: string;
+}
+
+export interface ProcurementDelivery {
+  id: string;
+  date: string;
+  reference: string;
+  recordedAt: string;
+  recordedBy: string;
+  lines: ProcurementDeliveryLine[];
+}
+
+export interface ProcurementPayment {
+  id: string;
+  date: string;
+  amountMWK: number;
+  reference: string;
+  method?: 'Cash' | 'Bank transfer' | 'Mobile money' | 'Cheque' | 'Other';
+  recordedAt: string;
+  recordedBy: string;
+  notes?: string;
+}
+
 export interface ProcurementList {
   id: string;
   title: string;
@@ -857,11 +884,18 @@ export interface ProcurementList {
   purchaseOrderReference?: string;
   orderedAt?: string;
   orderedBy?: string;
+  /** Legacy full-receipt summary; delivery history is authoritative when present. */
   receivedAt?: string;
   receivedBy?: string;
+  deliveries?: ProcurementDelivery[];
+  /** Server-transactional cumulative receipt quantities, indexed by procurement line. */
+  receivedQuantities?: number[];
+  receivedQuantitiesByLine?: Record<string, number>;
+  lastReceiptMovementId?: string;
   financeHandedOverAt?: string;
   financeHandedOverBy?: string;
   financeReference?: string;
+  payments?: ProcurementPayment[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -927,6 +961,10 @@ export interface ScheduleItem {
   complianceCategory?: string;
   compliancePriority?: 'Low' | 'Medium' | 'High' | 'Urgent';
   complianceRecurrence?: 'One-off' | 'Monthly' | 'Quarterly' | 'Every 6 months' | 'Annually';
+  /** Stable identifier shared by recurring compliance occurrences. */
+  complianceSeriesId?: string;
+  /** Original due date used to preserve month-end and leap-day recurrence anchors. */
+  complianceAnchorDate?: string;
   evidenceReference?: string;
   completionNote?: string;
   complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened'; actor: string; at: string; note?: string }>;

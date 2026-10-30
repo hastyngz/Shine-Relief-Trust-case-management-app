@@ -1,11 +1,12 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, isValidInventoryDate, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../utils/inventory';
+import { exportInventoryRegister } from '../utils/inventoryExport';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -24,6 +25,9 @@ const money = (value?: number) => typeof value === 'number' && Number.isFinite(v
 export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }) => {
   const { currentUser, staffProfile, isViewOnly } = useAuth();
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All categories');
+  const [locationFilter, setLocationFilter] = useState('All locations');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'expiry'>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [editingTarget, setEditingTarget] = useState<InventoryItem | null>(null);
   const [movementTarget, setMovementTarget] = useState<InventoryItem | null>(null);
@@ -42,14 +46,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return [...items].filter((item) => !term || [item.name, item.stockCode, item.category, item.location, item.supplier].some((value) => value?.toLowerCase().includes(term)))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, query]);
+  const filtered = useMemo(() => filterInventoryItems(items, {
+    query, category: categoryFilter, location: locationFilter, stock: stockFilter,
+  }), [items, query, categoryFilter, locationFilter, stockFilter]);
   const lowStock = items.filter((item) => item.quantityOnHand <= item.minimumStockLevel);
-  const expiryAlerts = items.filter((item) => ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
+  const expirySummary = summarizeInventoryExpiry(items);
+  const expiryAlerts = expirySummary.expired + expirySummary.expiringSoon;
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
+
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async (format: 'docx' | 'xlsx' | 'pdf') => {
+    if (exporting || filtered.length === 0) return;
+    setExporting(true);
+    setNotice('');
+    try {
+      await exportInventoryRegister(filtered, format);
+      setNotice(`Inventory register exported as ${format.toUpperCase()} (${filtered.length} item${filtered.length === 1 ? '' : 's'}).`);
+    } catch (error) {
+      console.error('Inventory export failed', error);
+      setNotice(`Could not create the ${format.toUpperCase()} export. Please try again.`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
   useEffect(() => {
@@ -277,6 +296,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Enter a quantity greater than zero.');
       return;
     }
+    if (!isValidInventoryDate(movement.date)) {
+      setError('Enter a valid movement date in YYYY-MM-DD format.');
+      return;
+    }
     if (!movement.reason.trim()) {
       setError('Add a reason for this stock movement.');
       return;
@@ -371,6 +394,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const counted = Number(stocktake.countedQuantity);
     if (!Number.isFinite(counted) || counted < 0) {
       setError('The counted quantity must be zero or greater.');
+      return;
+    }
+    if (!isValidInventoryDate(stocktake.date)) {
+      setError('Enter a valid stocktake date in YYYY-MM-DD format.');
       return;
     }
     if (!stocktake.reason.trim()) {
@@ -506,6 +533,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           const item = items.find((entry) => entry.id === pending.itemId);
           if (!item) throw new Error('The queued stock item is not available in the current register. Refresh before retrying.');
           const payload = pending.payload;
+          const queuedDate = String(payload.date || '');
+          if (!isValidInventoryDate(queuedDate)) {
+            const invalidDate = new Error('The saved stock transaction has an invalid date and needs review before it can be sent.') as Error & { status: number };
+            invalidDate.status = 400;
+            throw invalidDate;
+          }
           const response = pending.mode === 'movement'
             ? await postInventoryMovement({
               id: pending.id,
@@ -591,7 +624,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <div className="rounded-2xl bg-stone-50 p-4"><Boxes className="h-5 w-5 text-teal-800" /><p className="mt-2 text-2xl font-bold">{items.length}</p><p className="text-xs text-stone-600">Registered items</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><AlertTriangle className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{lowStock.length}</p><p className="text-xs text-stone-600">At/below minimum</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><ClipboardList className="h-5 w-5 text-teal-800" /><p className="mt-2 text-2xl font-bold">{items.reduce((sum, item) => sum + (item.movements?.length || 0), 0)}</p><p className="text-xs text-stone-600">Recorded movements</p></div>
-          <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{expiryAlerts.length}</p><p className="text-xs text-stone-600">Expired / due within 30 days</p></div>
+          <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{expiryAlerts}</p><p className="text-xs text-stone-600">Expired / due within 30 days</p><p className="mt-1 text-[11px] text-stone-500">{expirySummary.expired} expired · {expirySummary.expiringSoon} due soon</p><p className="mt-1 text-[11px] text-stone-500">{expirySummary.notTracked} without a valid expiry date</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-2 text-lg font-bold">{money(totalValue)}</p><p className="text-xs text-stone-600">Estimated stock value</p></div>
         </div>
       </header>
@@ -602,8 +635,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       {rejectedPendingId && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-semibold">This transaction was rejected and has not changed server stock. Review the error above. Discarding it removes only this local pending request; it does not alter server records.</p><button type="button" onClick={discardRejectedPendingMovement} disabled={saving} className="fx-press mt-3 min-h-11 rounded-lg border border-amber-700 px-4 py-2 font-bold text-amber-950 disabled:opacity-50">Discard rejected transaction</button></div>}
 
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Balances are calculated from recorded receipts and issues.</p></div><label className="flex min-h-10 w-full max-w-sm items-center gap-2 rounded-xl border border-stone-300 bg-white px-3"><Search className="h-4 w-4 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label></div>
-        {filtered.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><Boxes className="mx-auto h-9 w-9 text-stone-400" /><h3 className="mt-3 font-bold text-stone-800">{query ? 'No matching items' : 'No stock items yet'}</h3><p className="mt-1 text-sm text-stone-600">{query ? 'Try another search term.' : 'Add the first item to start a traceable stock register.'}</p></div> : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Showing {filtered.length} of {items.length} items. Narrow the register by category, storage location or alert status.</p></div><div className="flex w-full flex-wrap gap-2 sm:w-auto"><label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 sm:min-w-56"><Search className="h-4 w-4 shrink-0 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><button type="button" onClick={() => void handleExport('docx')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileText className="h-4 w-4" /> Word</button><button type="button" onClick={() => void handleExport('xlsx')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" /> Excel</button><button type="button" onClick={() => void handleExport('pdf')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileType className="h-4 w-4" /> PDF</button></div></div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="text-xs font-semibold text-stone-600">Category<select aria-label="Filter by category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All categories</option>{categories.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="text-xs font-semibold text-stone-600">Storage location<select aria-label="Filter by storage location" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All locations</option>{locations.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="text-xs font-semibold text-stone-600">Stock alerts<select aria-label="Filter by stock alert" value={stockFilter} onChange={(e) => setStockFilter(e.target.value as 'all' | 'low' | 'expiry')} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option value="all">All stock</option><option value="low">At/below minimum</option><option value="expiry">Expired / expiring soon</option></select></label>
+          </div>
+          {(query || categoryFilter !== 'All categories' || locationFilter !== 'All locations' || stockFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategoryFilter('All categories'); setLocationFilter('All locations'); setStockFilter('all'); }} className="min-h-10 rounded-lg border border-stone-300 px-3 text-sm font-semibold text-stone-700">Clear filters</button>}
+        </div>
+        {filtered.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><Boxes className="mx-auto h-9 w-9 text-stone-400" /><h3 className="mt-3 font-bold text-stone-800">{items.length === 0 ? 'No stock items yet' : 'No matching items'}</h3><p className="mt-1 text-sm text-stone-600">{items.length === 0 ? 'Add the first item to start a traceable stock register.' : 'Try changing your search or clearing one or more filters.'}</p></div> : (
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {filtered.map((item) => {
               const low = item.quantityOnHand <= item.minimumStockLevel;
@@ -611,7 +652,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
                 <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">{item.stockCode} · {item.category}</p><h3 className="mt-1 break-words text-lg font-bold text-stone-900">{item.name}</h3><p className="mt-1 text-sm text-stone-600">{item.location} · {item.unit}</p>{item.condition && <p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${item.condition === 'Damaged' || item.condition === 'Expired' ? 'bg-red-100 text-red-800' : item.condition === 'Fair' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>Condition: {item.condition}</p>}</div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${low ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>{low ? 'Reorder / check' : 'In stock'}</span></div>
                 <div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-stone-50 p-3"><p className="text-xs text-stone-600">Quantity on hand</p><p className="mt-1 text-xl font-bold">{item.quantityOnHand} <span className="text-xs font-medium text-stone-500">{item.unit}</span></p></div><div className="rounded-xl bg-stone-50 p-3"><p className="text-xs text-stone-600">Minimum level</p><p className="mt-1 text-xl font-bold">{item.minimumStockLevel} <span className="text-xs font-medium text-stone-500">{item.unit}</span></p></div></div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600"><span>Supplier: {item.supplier || 'Not recorded'}</span><span>Unit cost: {money(item.unitCostMWK)}</span></div>
-                {item.expiryDate && (() => { const expiry = getInventoryExpiryStatus(item.expiryDate); return <p className={`mt-2 rounded-lg px-3 py-2 text-xs font-semibold ${expiry.status === 'expired' ? 'bg-red-100 text-red-800' : expiry.status === 'expiring-soon' ? 'bg-amber-100 text-amber-900' : 'bg-stone-50 text-stone-600'}`}>Expiry: {item.expiryDate}{expiry.status === 'expired' ? ' · EXPIRED' : expiry.status === 'expiring-soon' ? ` · Expires in ${expiry.daysRemaining} day${expiry.daysRemaining === 1 ? '' : 's'}` : ''}</p>; })()}
+                {(() => { const expiry = getInventoryExpiryStatus(item.expiryDate); return <p className={`mt-2 rounded-lg px-3 py-2 text-xs font-semibold ${expiry.status === 'expired' ? 'bg-red-100 text-red-800' : expiry.status === 'expiring-soon' ? 'bg-amber-100 text-amber-900' : expiry.status === 'not-tracked' ? 'bg-stone-100 text-stone-700' : 'bg-stone-50 text-stone-600'}`}>Expiry: {item.expiryDate || 'Not recorded'}{expiry.status === 'expired' ? ' · EXPIRED' : expiry.status === 'expiring-soon' ? ` · Expires in ${expiry.daysRemaining} day${expiry.daysRemaining === 1 ? '' : 's'}` : expiry.status === 'not-tracked' ? ' · Add/check date' : ''}</p>; })()}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {!isViewOnly && <><button type="button" disabled={saving} onClick={() => { setError(''); setStocktakeTarget(item); setStocktake({ countedQuantity: String(item.quantityOnHand), date: getLocalDateInputValue(), reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"><ClipboardCheck className="h-4 w-4" /> Stocktake</button><button type="button" disabled={saving} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Received', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><ArrowDownToLine className="h-4 w-4" /> Receive stock</button><button type="button" disabled={saving || item.quantityOnHand <= 0} onClick={() => { setError(''); setMovementTarget(item); setMovement({ type: 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' }); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-xs font-bold text-stone-800 disabled:opacity-50"><ArrowUpFromLine className="h-4 w-4" /> Issue stock</button></>}
                   {!isViewOnly && <button type="button" disabled={saving} onClick={() => { setError(''); setEditingTarget(item); setNewItem({ name: item.name, stockCode: item.stockCode, category: item.category, unit: item.unit, quantity: String(item.quantityOnHand), minimum: String(item.minimumStockLevel), location: item.location, supplier: item.supplier || '', unitCost: item.unitCostMWK === undefined ? '' : String(item.unitCostMWK), expiryDate: item.expiryDate || '', condition: item.condition || 'Good', notes: item.notes || '' }); setShowAdd(true); }} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700 disabled:opacity-50"><Pencil className="h-4 w-4" /> Edit details</button>}

@@ -19,3 +19,21 @@ export function isComplianceDueSoon(item: Pick<ScheduleItem, 'status' | 'schedul
   const current = Date.parse(today + 'T00:00:00Z');
   return due >= current && due - current <= 30 * 86400000;
 }
+
+export type ComplianceStatusFilter = 'All' | 'Open' | 'Overdue' | 'Due soon' | 'Completed' | 'Cancelled';
+
+/** Shared status filtering for the compliance register; keep date boundaries identical to the summary tiles. */
+export function matchesComplianceStatus(
+  item: Pick<ScheduleItem, 'status' | 'scheduledDate'>,
+  filter: ComplianceStatusFilter,
+  today: string,
+): boolean {
+  switch (filter) {
+    case 'All': return true;
+    case 'Open': return item.status !== 'Completed' && item.status !== 'Cancelled';
+    case 'Overdue': return isComplianceOverdue(item, today);
+    case 'Due soon': return isComplianceDueSoon(item, today);
+    case 'Completed': return item.status === 'Completed';
+    case 'Cancelled': return item.status === 'Cancelled';
+  }
+}

@@ -45,6 +45,12 @@ export interface ProcurementReceiptResult {
   duplicateCount: number;
 }
 
+function isValidCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
 function intentKey(uid: string, procurementListId: string): string {
   return `${INTENT_PREFIX}:${encodeURIComponent(uid)}:${encodeURIComponent(procurementListId)}`;
 }
@@ -66,7 +72,7 @@ export function readProcurementReceiptIntent(
     const raw = storage.getItem(intentKey(uid, procurementListId));
     if (!raw) return null;
     const value = JSON.parse(raw) as ProcurementReceiptIntent;
-    if (value.version !== 1 || value.uid !== uid || value.procurementListId !== procurementListId || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) || !Number.isFinite(Date.parse(`${value.date}T00:00:00Z`)) || !Array.isArray(value.lines)) return null;
+    if (value.version !== 1 || value.uid !== uid || value.procurementListId !== procurementListId || !isValidCalendarDate(value.date) || !Array.isArray(value.lines)) return null;
     if (!value.lines.every((line) => Number.isInteger(line.itemIndex) && line.itemIndex >= 0 &&
         (line.inventoryItemId === null || (typeof line.inventoryItemId === 'string' && line.inventoryItemId.length > 0)) &&
         Number.isFinite(line.quantity) && line.quantity > 0 && typeof line.unit === 'string' && line.unit.length > 0 &&
@@ -94,7 +100,7 @@ function makeIntent(
   date: string,
 ): ProcurementReceiptIntent {
   if (!uid || list.status !== 'purchased' || list.receivedAt) throw new Error('Only an unreceived purchased list can be posted to inventory.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) throw new Error('A valid receipt date is required.');
+  if (!isValidCalendarDate(date)) throw new Error('A valid receipt date is required.');
   if (choices.length !== list.items.length) throw new Error('Choose whether every procurement line is tracked in inventory before confirming receipt.');
 
   const byIndex = new Map<number, ProcurementReceiptLineChoice>();

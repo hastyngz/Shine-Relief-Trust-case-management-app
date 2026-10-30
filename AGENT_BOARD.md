@@ -982,3 +982,192 @@ Suggestion format:
 - Current code is tested on branch Replit; no production deployment or live account/email/data changes occurred.
 - Release gates still open: confirm Firebase email-link provider and authorized domains, deploy the Worker/config only after approval, and complete invitation acceptance in authorized staging. AI-provider privacy review remains excluded from this workstream.
 - Documentation-only commit with [skip ci]; no app code changed after run #1020. — Mosaic (ChatGPT)
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · inventory register filtering
+- Added category, storage-location, and stock-alert filters to Inventory & Stores, including result counts, combined search/filtering, empty-state guidance, and a clear-filters action. Filter logic is extracted into a pure helper with focused coverage for category, location, low-stock, expiry, search, and empty results.
+- Transfers between locations and formal approval workflows remain intentionally unimplemented until per-location balances and atomic server-side transfer records are available; see `docs/inventory-transfers-and-approvals-design.md`. No live data or deployments changed. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · inventory export formats
+- Inventory register export choices are Word (.docx), Excel (.xlsx) and PDF only; no CSV export was added. Exports include the current filtered records and a shared tested column mapping. Excel includes an autofilter and adjusted column widths; UI disables exports for empty results and reports failures.
+- Added focused export mapping tests and wired them into CI. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset register export formats
+- Removed the asset register's CSV export path and replaced it with Word (.docx), Excel (.xlsx) and PDF exports using the currently filtered asset list. Added export-state/error feedback and a shared tested column mapping.
+- Corrected the inventory export helper import that CI identified as a TypeScript/build failure. Exact-head checks are required before this work can be called verified. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · report exports standardized
+- Converted the general report export helper to produce Excel workbooks and updated visible export labels. Sponsor report export now writes XLSX; management reports use the existing full Excel workbook rather than a duplicate CSV export. Asset and inventory registers offer Word/Excel/PDF only.
+- Exact-head CI is still required; no tests are claimed passed from this session. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · administration follow-up and E2E repair
+- The last checks job passed TypeScript, focused inventory/asset export tests, and production build; the E2E job failed because the sensitive-data test still looked for the removed “CSV Export Centre” button. Updating the test to the Excel labels, not weakening the privacy assertions.
+- Added explicit Due soon and Cancelled compliance filters backed by the same pure helper as the dashboard date logic, with regression coverage. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · document filing usability
+- Extended the existing permission-aware document index with category and linked-record-type filters and clear-all filters. Options derive only from the attachment metadata already accessible to the current user; no additional records or signed URLs are requested. Added focused synthetic tests and CI wiring. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · report export and safeguarding boundary
+- Standardized general report export helper names and visible labels on Excel (.xlsx), and updated the regression test to assert the workbook MIME type/filename. Removed the restricted safeguarding report export button to comply with AGENTS.md's no-safeguarding-exports rule. Historical CSV metadata remains readable for compatibility; no new CSV downloads should be created. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · export reliability and privacy regression tests
+- The shared Excel downloader is synchronous again (XLSX is an existing dependency) so report click handlers do not leave rejected dynamic-import promises unhandled. Added a source-level safeguarding export boundary test and included the existing management-report generation/download test in CI. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · administration overview signals
+- Added a small operational-attention section to the Administration Hub: low stock, expired/near-expiry stock, asset maintenance/warranty/missing status, overdue compliance, and open procurement list counts. Cards route to existing modules. Counts are explicitly local-snapshot indicators, not assurance that unrecorded work is absent. Added synthetic tests and CI step. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · lazy Excel exports and feedback
+- Kept XLSX dynamically imported inside the export helper to respect AGENTS.md's lazy-loading rule. General report export operations now return promises and the report centre shows accessible success/error feedback for download failures. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · report export CI isolation and procurement card accuracy
+- CI surfaced a pre-existing failure in the broad Phase 3D test at its embedded-photo document-size assertion, before the Excel download assertion runs. Removed that broad test from this new CI gate and added a focused Excel file-generation test instead; the existing test file still has its updated Excel assertion but remains blocked by the unrelated earlier failure.
+- Updated the Administration Hub procurement card to reflect actual quote/manager-approval/PO/receipt/finance-handover steps, while keeping partial deliveries, supplier master data and payment reconciliation marked as gaps. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · management report test fixture corrected
+- Investigated the Phase 3D report test failure rather than leaving it excluded: the synthetic photo attachments omitted `consent: true`, so the report generator correctly filtered them out. Corrected the fixtures and restored the broader management report generation/download test to CI. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · exact-head administration CI passed
+- GitHub Actions run [#40843049949](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40843049949) passed on code/test commit `14d43246f195d709a783b4cf3ab11bbcd2388de7`: checks job and offline E2E job both successful; 10/10 browser tests passed. Added administration overview, document filing filters, compliance Due soon/Cancelled filters, standardized Excel exports and safeguarding export-boundary coverage. No deployment or manual Android test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset register filtering
+- Added category and location filters to the asset register, with combined search/status/condition filtering, result counts and clear-all. Word/Excel/PDF exports continue to use the filtered result set.
+- Added synthetic unit tests for filter combinations and input immutability; test is wired into CI.
+- Verified exact code/test commit `070a3b1f364282915791ddf6a7761785db9a582d` in Actions run [#40859874730](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40859874730); both checks and E2E jobs passed. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement list filters
+- Added procurement search across title/purpose, item details, quote suppliers, PO and finance references; added status filter and clear-all. Existing approval, receipt and finance handover actions remain unchanged.
+- Added synthetic tests and CI wiring. Exact-head run [#40862102846](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862102846) passed both checks and E2E on code/test commit `229e48071bacde174e8818f0cae22223577cb715`. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset service/warranty filters
+- Added asset-register follow-up filters for overdue service, service due within 30 days, expired warranties and warranties expiring within 30 days. Uses local-date input from the existing app helper; malformed/missing dates do not falsely match. Tests use a fixed date and cover intersections.
+- Exact-head run [#40862541195](https://github.com/hastyngz/Shine-Relief-Trust-case-management-app/actions/runs/40862541195) passed checks and E2E on code/test commit `2e4fd2447b79855e98b5f433a5d86bcc5217fa23`. No deployment or manual phone test. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification filters
+- Added Asset Register filters for not verified this year, verified this year, and latest outcome: discrepancy/not located; they combine with existing filters and exclude disposed assets from follow-up lists.
+- Added synthetic date/outcome test cases. Exact-head CI is pending; do not treat this as verified until the run completes. No production or live-data changes. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement lifecycle filters
+- Added receipt/finance stage filters: awaiting receipt, received but finance handover pending, and handed to finance. They use existing timestamps and combine with search/status; they do not represent payment reconciliation.
+- Added synthetic filter tests. Exact-head CI is pending; no live data or production configuration changed. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification attention indicator
+- Added an Administration Hub count for active registered assets without a valid physical verification date in the current calendar year; disposed assets are excluded.
+- Added synthetic coverage for missing verification, disposed assets, empty data and invalid date context. The filter helper also rejects malformed verification dates instead of treating them as verified.
+- Exact-head CI status could not be retrieved through the connected GitHub status surface; treat this work as pending verification until Actions shows the current `Replit` head passing. No deployment or live-data changes. — Mosaic (ChatGPT)
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification date consistency
+- Consolidated current-year physical verification date checks into `isAssetVerifiedInYear`, used by both the Asset Register verification filters and summary counts. Invalid/impossible dates no longer inflate the “checked this year” count.
+- Added tests for valid, prior-year, missing, and malformed dates; confirmed the existing test script is wired into CI. Connected status/run lookup returned no checks for the code commit, so CI remains unverified. No deploy or live-data edits. — Mosaic (ChatGPT)
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · invalid asset verification date context
+- Tightened `src/utils/assetFiltering.ts`: filters now validate the full reference date before using its year; malformed and impossible dates no longer imply that assets are verified this year. Added regression cases to `scripts/asset-filtering.test.ts` and updated the administration task report and gap analysis.
+- No local test execution was possible in this session; check the exact-head CI once, then continue with the procurement receipt/payment workflow audit rather than repeatedly polling status. No production or live data changes. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement receipt date validation
+- Hardened `src/services/procurementInventoryReceipt.ts` so impossible calendar dates are rejected both on new receipt submission and when reading saved retry intents. Added tests proving an invalid date creates no movement request and a corrupt saved intent is not silently replaced. Documented the limited scope: existing all-at-once receipts only; partial deliveries and payment reconciliation remain unimplemented.
+- Repository tests were not executable from this connected editing session; exact-head CI is still unconfirmed. Next step is a coherent partial-delivery design with per-delivery stable IDs and receipt history, not another status poll. No live data/deploy changes. — Mosaic (ChatGPT), 2026-10-29
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement lifecycle
+- Added delivery/payment record types, outstanding-quantity and payment-summary helpers, over-receipt/overpayment validation, and retry-safe per-delivery stock movement IDs.
+- Integrated partial-delivery history and payment-entry UI into `BudgetsAndWorkplansView.tsx`; added synthetic delivery and lifecycle tests to CI.
+- Verification is pending: no local test run, and the combined-status endpoint returned no checks for the workflow commit. Review concurrent offline edits to embedded delivery/payment arrays before treating this as production-ready.
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · compliance recurrence
+- Added automatic next-occurrence creation when a recurring compliance obligation is completed. Stable series IDs and deterministic occurrence IDs make retries idempotent; month-end and leap-day anchors are preserved.
+- Added unit coverage for recurrence intervals/date boundaries and a browser E2E scenario for completing a monthly obligation. Updated the Administration Officer gap analysis; notifications and manager-only verification remain open.
+- Verification pending on exact-head CI; no deployment or live-data changes.
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · procurement payment retry safety
+- Hardened payment recording to re-read the current local procurement list before balance validation, use a per-list in-flight lock, and retain the payment draft when saving fails. Added a pure append-and-revalidate helper with regression tests for duplicate IDs and overpayment.
+- This is a same-device stale-render/retry safeguard only. Cross-device atomic balance enforcement still needs a server-authoritative transaction; no production data or rules changed.
+
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification submission guard
+- Added a saving guard and disabled/loading state to physical asset verification; added a browser test covering registration, verification history and the non-mutating observation rule using synthetic records.
+- Verification is pending on the combined exact-head CI run. No production data or rules changed.
+
+- Test review follow-up: scoped the asset-verification success assertion to its exact notice text because the page also exposes a separate status region for filtered counts. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-29 · Mosaic (ChatGPT) · asset verification save recovery
+- Area: physical asset verification failure/retry workflow.
+- State: added a browser regression that forces SHINE's local database write to fail, checks the entered observation stays in the open dialog and is not shown as saved, then restores storage and retries successfully. Updated the Administration ToR gap analysis and task report.
+- Next: wait for exact-head CI on the new Replit commit; if it fails, inspect the E2E log and fix the test or product issue before calling the flow verified.
+- Watch out: the test uses synthetic asset data and a temporary browser-only storage failure. This does not establish server-authenticated audit history, cross-device uniqueness or Android acceptance. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-29 · Mosaic (ChatGPT) · supplier activity index
+- Area: supplier visibility within Procurement.
+- State: added a read-only index derived from existing quote and household-expense supplier names, with case-insensitive grouping and quote/list/expense counts plus latest dated activity. No transaction amounts or contact details are exposed. Added aggregation tests and updated the ToR gap analysis/task report.
+- Next: verify the new aggregation and browser rendering in CI, then design canonical supplier IDs and secure editable supplier records before claiming a full supplier register.
+- Watch out: the index is derived from existing data, not a canonical supplier database; near-duplicate spellings, business identity and cross-device uniqueness still need an approved data model. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-29 · Mosaic (ChatGPT) · supplier index scope clarification
+- Area: supplier activity index source accuracy.
+- State: expanded the derived index to include supplier references on inventory items; inventory contributes an item count only, not an activity date. The displayed latest date comes only from actual dated quotes or expense records.
+- Next: exact-head CI should run procurement workflow tests, TypeScript and the production build.
+- Watch out: supplier master records, contact management and server-side identity matching remain unbuilt. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-30 · Mosaic (ChatGPT) · budget scope and document filing order
+- Area: administration budget reporting and document index usability.
+- State: added a shared scope label above the budget KPI cards to distinguish all-years totals from selected-period totals and show the active category filter. Added newest-first sorting to the existing permission-filtered document index, with invalid legacy upload timestamps retained at the end in stable order. Extracted the sorter to a shared utility and added focused assertions.
+- Next: verify focused document-filing and existing budget/procurement checks, TypeScript, production build and browser flow on the exact Replit head.
+- Watch out: this does not change budget calculations or implement document versioning, expiry, ownership or compliance reminders. No production data, permissions or storage paths were changed. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · inventory expiry visibility
+- Area: Inventory & Stores.
+- State: split the existing expiry-alert KPI into expired and due-within-30-days counts; added a shared helper and tests that distinguish missing/invalid legacy dates from safe stock.
+- Next: run inventory tests, lint, TypeScript/build and relevant browser checks on the exact Replit head.
+- Watch out: this is visibility only, not quarantine/disposal or batch-level expiry control. No stock balances, movements, permissions or production records changed. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Inventory date validation (Mosaic)
+- Added strict date validation for new stock movements and physical stocktakes, plus a second check before offline queued transactions are sent. Corrupt queued dates stop the FIFO and require staff review.
+- Added helper regression tests; exact-head CI pending. No production data, Firestore rules, Worker endpoints or sync protocol changed.
+- Next: continue with inventory accountability and supplier/document-control gaps; avoid repeated CI polling.
+
+
+### 2026-10-30 · Inventory/supplier data-quality follow-up (Mosaic)
+- Inventory dashboard now counts untracked/invalid expiry dates and labels each item card so missing dates are visible. Worker tests assert malformed dates are rejected before stock reads/writes; supplier activity tests cover impossible quote/expense dates.
+- Exact-head CI has not yet been confirmed. No deployment or live data changes.
+- Next: continue broad administration reliability review; keep supplier index read-only until canonical identity/contact permissions are designed.
+
+
+### 2026-10-30 · Inventory integrity audit date checks
+- Extended the privacy-preserving inventory snapshot audit to count missing/impossible movement dates separately and include them in malformed-entry findings. It still returns aggregate counts only and does not expose record IDs or personal data.
+- Added synthetic regression coverage for empty and impossible dates. This is an offline export audit only; it does not repair records or reconcile historical balances.
+
+
+### 2026-10-30 · Supplier activity display normalization
+- Supplier activity grouping now collapses repeated internal whitespace and trims leading/trailing spaces before case-insensitive grouping. This reduces obvious duplicate display rows without asserting legal/business identity or merging unrelated entities by fuzzy matching.
+- Existing synthetic procurement test fixture now covers repeated whitespace; exact-head CI remains unverified.
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · procurement quote integrity
+- Area: procurement approvals and import validation.
+- State: normalized supplier labels consistently across quote selection and approval (trim/collapse whitespace + case-insensitive comparison), preventing spacing variants from counting as separate suppliers. Imported quote dates now reject impossible Gregorian dates. Added focused synthetic regression cases for duplicate spacing variants, leap-day validity and the exact MWK 500,000 threshold boundary.
+- Next: verify procurement workflow tests, TypeScript, build and browser procurement flow on the exact Replit head.
+- Watch out: this does not create a verified supplier master register, due-diligence workflow or legal identity matching. Existing MWK 500,000 default threshold and three-distinct-supplier rule are retained. CI is not yet confirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30

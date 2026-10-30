@@ -1,11 +1,13 @@
 import React, { FormEvent, useMemo, useState } from 'react';
-import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, Pencil, Plus, Search, X } from 'lucide-react';
+import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
 import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
 import { AssetMaintenanceDialog } from './AssetMaintenanceDialog';
 import { AssetVerificationDialog } from './AssetVerificationDialog';
 import { getLocalDateInputValue } from '../utils/inventory';
+import { exportAssetRegister, type AssetExportFormat } from '../utils/assetExport';
+import { filterAssetRegister, isAssetVerifiedInYear, type AssetFollowUpFilter, type AssetVerificationFilter } from '../utils/assetFiltering';
 
 interface AssetRegisterViewProps {
   assets: AssetRecord[];
@@ -46,25 +48,25 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | AssetStatus>('All');
   const [conditionFilter, setConditionFilter] = useState<'All' | AssetCondition>('All');
+  const [categoryFilter, setCategoryFilter] = useState<'All' | string>('All');
+  const [locationFilter, setLocationFilter] = useState<'All' | string>('All');
+  const [followUpFilter, setFollowUpFilter] = useState<AssetFollowUpFilter>('All');
+  const [verificationFilter, setVerificationFilter] = useState<AssetVerificationFilter>('All');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AssetRecord | null>(null);
   const [form, setForm] = useState<AssetForm>(blankForm());
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [maintenanceTarget, setMaintenanceTarget] = useState<AssetRecord | null>(null);
   const [verificationTarget, setVerificationTarget] = useState<AssetRecord | null>(null);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return [...assets].filter((asset) => {
-      const matchesText = !term || [asset.assetTag, asset.name, asset.category, asset.serialNumber, asset.location, asset.assignedTo, asset.fundingSource]
-        .some((value) => value?.toLowerCase().includes(term));
-      return matchesText && (statusFilter === 'All' || asset.status === statusFilter)
-        && (conditionFilter === 'All' || asset.condition === conditionFilter);
-    }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [assets, search, statusFilter, conditionFilter]);
+  const filtered = useMemo(() => filterAssetRegister(assets, {
+    search, status: statusFilter, condition: conditionFilter, category: categoryFilter, location: locationFilter,
+    followUp: followUpFilter, verification: verificationFilter, today: getLocalDateInputValue(),
+  }), [assets, search, statusFilter, conditionFilter, categoryFilter, locationFilter, followUpFilter, verificationFilter]);
 
   const serviceDue = assets.filter((asset) => {
     const days = daysFromToday(asset.nextServiceDate);
@@ -74,10 +76,23 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const warrantyDue = assets.filter((asset) => { const days = daysFromToday(asset.warrantyExpiryDate); return days !== null && days <= 30 && asset.status !== 'Disposed'; });
   const activeAssets = assets.filter((asset) => asset.status !== 'Disposed');
   const currentYear = getLocalDateInputValue().slice(0, 4);
-  const checkedThisYear = activeAssets.filter((asset) => asset.verificationDate?.startsWith(currentYear));
+  const checkedThisYear = activeAssets.filter((asset) => isAssetVerifiedInYear(asset, currentYear));
   const locatedThisYear = checkedThisYear.filter((asset) => asset.verificationOutcome === 'Verified' || asset.verificationOutcome === 'Discrepancy');
   const notCheckedThisYear = activeAssets.length - checkedThisYear.length;
   const activeValue = activeAssets.reduce((sum, asset) => sum + (Number.isFinite(asset.acquisitionCostMWK) ? asset.acquisitionCostMWK || 0 : 0), 0);
+
+  const handleExport = async (format: AssetExportFormat) => {
+    if (exporting || filtered.length === 0) return;
+    setExporting(true); setError(''); setNotice('');
+    try {
+      await exportAssetRegister(filtered, format);
+      setNotice(`Asset register exported as ${format.toUpperCase()} (${filtered.length} asset${filtered.length === 1 ? '' : 's'}).`);
+    } catch {
+      setError(`Could not create the ${format.toUpperCase()} asset export. Please try again.`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const openNew = () => { setEditing(null); setForm(blankForm()); setError(''); setNotice(''); setShowForm(true); };
   const openEdit = (asset: AssetRecord) => {
@@ -185,7 +200,31 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
       {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div>}
       <section className="fx-card space-y-4 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5" aria-label="Asset search and filters">
         <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" /><input aria-label="Search assets" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tag, name, serial number, location or assignee…" className="min-h-11 w-full rounded-xl border border-stone-300 pl-10 pr-3 text-sm" /></div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-stone-600">Status<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'All' | AssetStatus)} className={inputClass}><option>All</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label><label className="text-xs font-bold text-stone-600">Condition<select value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value as 'All' | AssetCondition)} className={inputClass}><option>All</option>{conditions.map((condition) => <option key={condition}>{condition}</option>)}</select></label></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="text-xs font-bold text-stone-600">Category<select aria-label="Filter assets by category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={inputClass}><option value="All">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+          <label className="text-xs font-bold text-stone-600">Location<select aria-label="Filter assets by location" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className={inputClass}><option value="All">All locations</option>{locations.map((location) => <option key={location}>{location}</option>)}</select></label>
+          <label className="text-xs font-bold text-stone-600">Status<select aria-label="Filter assets by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'All' | AssetStatus)} className={inputClass}><option>All</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+          <label className="text-xs font-bold text-stone-600">Condition<select aria-label="Filter assets by condition" value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value as 'All' | AssetCondition)} className={inputClass}><option>All</option>{conditions.map((condition) => <option key={condition}>{condition}</option>)}</select></label>
+          <label className="text-xs font-bold text-stone-600">Maintenance &amp; warranty<select aria-label="Filter assets by maintenance and warranty" value={followUpFilter} onChange={(e) => setFollowUpFilter(e.target.value as AssetFollowUpFilter)} className={inputClass}>
+            <option value="All">All follow-up</option><option value="Service overdue">Service overdue</option><option value="Service due soon">Service due within 30 days</option><option value="Warranty expired">Warranty expired</option><option value="Warranty expiring soon">Warranty expires within 30 days</option>
+          </select></label>
+          <label className="text-xs font-bold text-stone-600">Physical verification<select aria-label="Filter assets by physical verification" value={verificationFilter} onChange={(e) => setVerificationFilter(e.target.value as AssetVerificationFilter)} className={inputClass}>
+            <option value="All">All verification</option><option value="Not verified this year">Not verified this year</option><option value="Verified this year">Verified this year</option><option value="Latest outcome: discrepancy">Latest outcome: discrepancy</option><option value="Latest outcome: not located">Latest outcome: not located</option>
+          </select></label>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-stone-500" role="status">{filtered.length} of {assets.length} assets shown</p>
+          {(search || statusFilter !== 'All' || conditionFilter !== 'All' || categoryFilter !== 'All' || locationFilter !== 'All' || followUpFilter !== 'All' || verificationFilter !== 'All') && <button type="button" onClick={() => { setSearch(''); setStatusFilter('All'); setConditionFilter('All'); setCategoryFilter('All'); setLocationFilter('All'); setFollowUpFilter('All'); setVerificationFilter('All'); }} className="min-h-10 rounded-xl border border-stone-300 px-3 text-sm font-semibold text-stone-700 hover:bg-stone-50">Clear all filters</button>}
+        </div>
+      </section>
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white p-4" aria-label="Export asset register">
+        <div><h2 className="text-sm font-bold text-stone-900">Export asset register</h2><p className="mt-1 text-xs text-stone-600">Exports the current filtered list ({filtered.length} asset{filtered.length === 1 ? '' : 's'}). Word, Excel or PDF only.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={exporting || !filtered.length} onClick={() => void handleExport('docx')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-800 disabled:opacity-50"><FileText className="h-4 w-4" /> Word</button>
+          <button type="button" disabled={exporting || !filtered.length} onClick={() => void handleExport('xlsx')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-800 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" /> Excel</button>
+          <button type="button" disabled={exporting || !filtered.length} onClick={() => void handleExport('pdf')} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-300 px-3 text-xs font-bold text-stone-800 disabled:opacity-50"><FileType className="h-4 w-4" /> PDF</button>
+        </div>
       </section>
 
       {filtered.length === 0 ? <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><Archive className="mx-auto h-8 w-8 text-stone-400" /><h2 className="mt-3 font-bold text-stone-800">{assets.length ? 'No matching assets' : 'No assets registered yet'}</h2><p className="mt-1 text-sm text-stone-600">{assets.length ? 'Try a different search or filter.' : 'Register equipment or property to start the asset register.'}</p>{!isViewOnly && !assets.length && <button type="button" onClick={openNew} className="fx-press fx-btn-main mt-4 min-h-11 rounded-xl px-4 text-sm font-bold">Register first asset</button>}</div> : <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">

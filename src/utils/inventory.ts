@@ -1,3 +1,5 @@
+import type { InventoryItem } from '../types';
+
 /** Create collision-resistant client-side IDs for inventory records and movements. */
 export function createInventoryId(prefix: string, cryptoApi: Pick<Crypto, 'randomUUID' | 'getRandomValues'> | undefined = globalThis.crypto): string {
   if (cryptoApi?.randomUUID) return `${prefix}_${cryptoApi.randomUUID()}`;
@@ -25,20 +27,40 @@ export function getLocalDateInputValue(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Validate a date-only value as a real Gregorian calendar date (not just a parseable string). */
+export function isValidInventoryDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
 /** Classify a date-only expiry value without relying on local timezone parsing. */
 export function getInventoryExpiryStatus(expiryDate?: string, today = getLocalDateInputValue()): InventoryExpiryResult {
-  const validDate = (value: string) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-    const timestamp = Date.parse(`${value}T00:00:00Z`);
-    return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
-  };
-  if (!expiryDate || !validDate(expiryDate) || !validDate(today)) return { status: 'not-tracked', daysRemaining: null };
+  if (!expiryDate || !isValidInventoryDate(expiryDate) || !isValidInventoryDate(today)) return { status: 'not-tracked', daysRemaining: null };
   const expiry = Date.parse(`${expiryDate}T00:00:00Z`);
   const current = Date.parse(`${today}T00:00:00Z`);
   const daysRemaining = Math.round((expiry - current) / 86_400_000);
   if (daysRemaining < 0) return { status: 'expired', daysRemaining };
   if (daysRemaining <= 30) return { status: 'expiring-soon', daysRemaining };
   return { status: 'ok', daysRemaining };
+}
+
+
+export interface InventoryExpirySummary {
+  expired: number;
+  expiringSoon: number;
+  notTracked: number;
+}
+
+/** Count date-tracked inventory alerts using the same local calendar-day rules as the register filter. */
+export function summarizeInventoryExpiry(items: InventoryItem[], today = getLocalDateInputValue()): InventoryExpirySummary {
+  return items.reduce<InventoryExpirySummary>((summary, item) => {
+    const status = getInventoryExpiryStatus(item.expiryDate, today).status;
+    if (status === 'expired') summary.expired += 1;
+    else if (status === 'expiring-soon') summary.expiringSoon += 1;
+    else if (status === 'not-tracked') summary.notTracked += 1;
+    return summary;
+  }, { expired: 0, expiringSoon: 0, notTracked: 0 });
 }
 
 export interface InventoryStocktakeAdjustment {
@@ -196,4 +218,34 @@ export async function flushPendingInventoryMovements(
     }
     processed += 1;
   }
+}
+
+
+export type InventoryStockFilter = 'all' | 'low' | 'expiry';
+
+export interface InventoryRegisterFilters {
+  query?: string;
+  category?: string;
+  location?: string;
+  stock?: InventoryStockFilter;
+  today?: string;
+}
+
+/** Apply the inventory register's search and alert filters consistently. */
+export function filterInventoryItems(items: InventoryItem[], filters: InventoryRegisterFilters = {}): InventoryItem[] {
+  const term = (filters.query || '').trim().toLowerCase();
+  const category = filters.category || 'All categories';
+  const location = filters.location || 'All locations';
+  const stock = filters.stock || 'all';
+  return [...items].filter((item) => {
+    const matchesQuery = !term || [item.name, item.stockCode, item.category, item.location, item.supplier]
+      .some((value) => value?.toLowerCase().includes(term));
+    const matchesCategory = category === 'All categories' || item.category === category;
+    const matchesLocation = location === 'All locations' || item.location === location;
+    const expiryStatus = getInventoryExpiryStatus(item.expiryDate, filters.today).status;
+    const matchesStock = stock === 'all'
+      || (stock === 'low' && item.quantityOnHand <= item.minimumStockLevel)
+      || (stock === 'expiry' && ['expired', 'expiring-soon'].includes(expiryStatus));
+    return matchesQuery && matchesCategory && matchesLocation && matchesStock;
+  }).sort((a, b) => a.name.localeCompare(b.name));
 }

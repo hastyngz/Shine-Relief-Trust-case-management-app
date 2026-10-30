@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { checkProcurementApproval, normalizeImportedProcurementItems, selectProcurementQuote } from '../src/services/procurementWorkflow';
+import { buildSupplierActivityIndex } from '../src/utils/supplierActivity';
 import type { ProcurementList, ProcurementListItem, ProcurementQuote } from '../src/types';
 const baseItem: ProcurementListItem = { description: 'Synthetic stationery pack', quantity: 10, unit: 'pack', unitPriceMWK: 12000, totalMWK: 120000, priceStatus: 'quoted' };
 const baseList: ProcurementList = { id: 'PRC-TEST-001', title: 'Synthetic stationery purchase', purpose: 'Automated test fixture only', items: [baseItem], totalMWK: 120000, status: 'draft', quoteThresholdMWK: 500000, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'synthetic-test', updatedBy: 'synthetic-test' };
@@ -8,6 +9,18 @@ assert.equal(checkProcurementApproval({ ...baseList, items: [] }).allowed, false
 const expensiveItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 100000, totalMWK: 1000000 };
 const missingQuotes = checkProcurementApproval({ ...baseList, items: [expensiveItem] });
 assert.equal(missingQuotes.allowed, false); assert.ok(missingQuotes.blockers.some((message) => message.includes('three supplier quotes')));
+const thresholdBoundaryItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 50000, totalMWK: 500000, quotes: [
+  { supplier: 'Boundary Supplier A', amountMWK: 500000 },
+  { supplier: 'Boundary Supplier B', amountMWK: 490000 },
+] };
+const atThreshold = checkProcurementApproval({ ...baseList, items: [thresholdBoundaryItem] });
+assert.equal(atThreshold.allowed, false, 'the default three-quote rule applies at exactly MWK 500,000');
+assert.ok(atThreshold.blockers.some((message) => message.includes('three supplier quotes')));
+const belowThresholdItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 49999.9, totalMWK: 499999, quotes: [
+  { supplier: 'Below Threshold Supplier', amountMWK: 499999 },
+] };
+assert.equal(checkProcurementApproval({ ...baseList, items: [belowThresholdItem] }).allowed, true,
+  'the default three-quote rule does not apply below MWK 500,000 when price is already quoted');
 const quotes: ProcurementQuote[] = [{ supplier: 'Supplier A', amountMWK: 1000000 }, { supplier: 'Supplier B', amountMWK: 950000 }, { supplier: 'Supplier C', amountMWK: 900000 }];
 const selected = selectProcurementQuote({ ...expensiveItem, quotes }, quotes[2]);
 assert.equal(selected.selectedQuoteSupplier, 'Supplier C'); assert.equal(selected.selectedQuoteAmountMWK, 900000);
@@ -35,6 +48,13 @@ const duplicateSupplierQuotes = [
 const duplicateQuoteCheck = checkProcurementApproval({ ...baseList, items: [{ ...selected, quotes: duplicateSupplierQuotes }] });
 assert.equal(duplicateQuoteCheck.allowed, false, 'repeated supplier names must not satisfy the three-quote requirement');
 assert.ok(duplicateQuoteCheck.blockers.some((message) => message.includes('three supplier quotes')));
+const whitespaceDuplicateQuoteCheck = checkProcurementApproval({ ...baseList, items: [{ ...selected, quotes: [
+  { supplier: 'North  Star Supplies', amountMWK: 1000000 },
+  { supplier: 'North Star Supplies', amountMWK: 950000 },
+  { supplier: 'Third Supplier', amountMWK: 900000 },
+] }] });
+assert.equal(whitespaceDuplicateQuoteCheck.allowed, false, 'internal whitespace variants must not count as distinct suppliers');
+assert.ok(whitespaceDuplicateQuoteCheck.blockers.some((message) => message.includes('three supplier quotes')));
 
 const imported = normalizeImportedProcurementItems([
   { description: 'Synthetic A4 paper', quantity: '2', unit: 'ream', unitPriceMWK: '1200', priceStatus: 'quoted' },
@@ -51,7 +71,45 @@ assert.throws(() => normalizeImportedProcurementItems([{ description: 'Inconsist
 assert.throws(() => normalizeImportedProcurementItems([{ description: 'Duplicate quotes', quantity: 1, unit: 'box', quotes: [
   { supplier: 'A', amountMWK: 10 }, { supplier: ' a ', amountMWK: 11 },
 ] }]), /duplicate supplier quotes/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Whitespace duplicate quotes', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'North  Star Supplies', amountMWK: 10 }, { supplier: 'North Star Supplies', amountMWK: 11 },
+] }]), /duplicate supplier quotes/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Impossible quote date', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'Supplier A', amountMWK: 10, quotedAt: '2026-02-31' },
+] }]), /invalid quote date/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Non-leap quote date', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'Supplier A', amountMWK: 10, quotedAt: '2025-02-29' },
+] }]), /invalid quote date/);
+assert.doesNotThrow(() => normalizeImportedProcurementItems([{ description: 'Leap-day quote date', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'Supplier A', amountMWK: 10, quotedAt: '2024-02-29' },
+] }]));
 
 assert.throws(() => selectProcurementQuote(baseItem, { supplier: 'Supplier', amountMWK: 0 }), /positive MWK amount/);
 assert.throws(() => selectProcurementQuote({ ...baseItem, quantity: 0 }, quotes[0]), /valid item quantity/);
-console.log('Procurement workflow tests passed.');
+const supplierIndex = buildSupplierActivityIndex([
+  { ...baseList, id: 'PRC-TEST-001', updatedAt: '2026-10-20T10:00:00.000Z', items: [
+    { ...baseItem, quotes: [
+      { supplier: 'Acme Supplies', amountMWK: 12000, quotedAt: '2026-10-18' },
+      { supplier: 'Acme Supplies', amountMWK: 12500, quotedAt: '2026-02-31' },
+      { supplier: 'Beta Traders', amountMWK: 13000, quotedAt: '2026-10-19' },
+    ] },
+  ] },
+  { ...baseList, id: 'PRC-TEST-002', updatedAt: '2026-10-25T10:00:00.000Z', items: [
+    { ...baseItem, quotes: [{ supplier: ' ACME   SUPPLIES ', amountMWK: 11000, quotedAt: '2026-10-25' }] },
+  ] },
+], [
+  { id: 'EXP-1', supplier: 'Acme Supplies', date: '2026-10-27' },
+  { id: 'EXP-INVALID', supplier: 'Acme Supplies', date: '2026-13-01' },
+  { id: 'EXP-2', supplier: 'Gamma Services', date: '2026-10-26' },
+  { id: 'EXP-3', supplier: 'N/A', date: '2026-10-28' },
+] as unknown as import('../src/types').HouseholdExpense[], [
+  { id: 'INV-1', supplier: 'Gamma Services', updatedAt: '2026-10-28T12:00:00.000Z' },
+] as unknown as import('../src/types').InventoryItem[]);
+assert.deepEqual(supplierIndex, [
+  { name: 'Acme Supplies', quoteCount: 2, procurementListCount: 2, expenseRecordCount: 1, inventoryItemCount: 0, lastActivityDate: '2026-10-27' },
+  { name: 'Beta Traders', quoteCount: 1, procurementListCount: 1, expenseRecordCount: 0, inventoryItemCount: 0, lastActivityDate: '2026-10-19' },
+  { name: 'Gamma Services', quoteCount: 0, procurementListCount: 0, expenseRecordCount: 1, inventoryItemCount: 1, lastActivityDate: '2026-10-26' },
+], 'supplier names should be grouped case-insensitively and counts/date should reflect existing source records only');
+assert.deepEqual(buildSupplierActivityIndex([], []), []);
+assert.equal(supplierIndex.some((supplier) => 'amountMWK' in supplier), false, 'supplier index must not aggregate or expose financial amounts');
+console.log('Procurement workflow and supplier activity index tests passed.');

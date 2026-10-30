@@ -6,7 +6,7 @@ import type { SalaryHistoryRecord } from '../src/types';
 import { buildManagementAnalytics, canAccessManagementDashboard, projectManagementDatabase } from '../src/services/managementAnalytics';
 import { buildManagementReportRows, generateManagementReportWorkbook, MANAGEMENT_REPORTS } from '../src/services/managementReports';
 import { buildFactualReportNarrative, buildRecordedRecommendations, filterDataForReport, generateExcelWorkbook, generatePdfReport, generateWordReport, ReportConfig } from '../src/services/reportGenerators';
-import { downloadCSV } from '../src/utils/export';
+import { downloadExcel } from '../src/utils/export';
 
 const db = {
   girls: [
@@ -321,7 +321,7 @@ const completeCaseWorkbook = XLSX.read(await generateExcelWorkbook({
 for (const sheetName of ['Education History', 'Examinations', 'Attendance', 'Leave and Absence', 'Household Activities']) {
   assert.ok(completeCaseWorkbook.SheetNames.includes(sheetName), `${sheetName} worksheet should be exported`);
 }
-const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
+const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
   includeSections: { ...reportConfig.includeSections, photoGallery: true },
@@ -350,7 +350,7 @@ assert.ok(budgetSheet['!autofilter']);
 const reportImageFixture = new Uint8Array(readFileSync(new URL('../public/logo.png', import.meta.url)));
 const wordWithEmbeddedPhoto = await generateWordReport({
   ...reportDb,
-  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
@@ -360,7 +360,7 @@ const wordWithEmbeddedPhoto = await generateWordReport({
 assert.ok(wordWithEmbeddedPhoto.size > wordReport.size);
 const pdfWithEmbeddedPhoto = await generatePdfReport({
   ...reportDb,
-  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
@@ -389,19 +389,31 @@ const emptyTextPdf = await generatePdfReport(reportDb, {
 assert.ok((await longPdf.arrayBuffer()).byteLength > (await emptyTextPdf.arrayBuffer()).byteLength);
 
 const originalDocument = globalThis.document;
-let csvDownloaded = false;
-let csvHref = '';
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+let excelDownloaded = false;
+let excelHref = '';
+let excelFilename = '';
+let excelBlobType = '';
 const mockLink = {
-  setAttribute: (name: string, value: string) => { if (name === 'href') csvHref = value; },
-  click: () => { csvDownloaded = true; },
+  set href(value: string) { excelHref = value; },
+  set download(value: string) { excelFilename = value; },
+  click: () => { excelDownloaded = true; },
+  remove: () => undefined,
 };
-globalThis.document = { createElement: () => mockLink, body: { appendChild: () => undefined, removeChild: () => undefined } } as any;
+globalThis.document = { createElement: () => mockLink, body: { appendChild: () => undefined } } as unknown as Document;
+URL.createObjectURL = ((blob: Blob) => { excelBlobType = blob.type; return 'blob:shine-test'; }) as typeof URL.createObjectURL;
+URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
 try {
-  downloadCSV('phase3d-test', [['Budget', 'Actual'], [100, 120]]);
+  await downloadExcel('phase3d-test', [['Budget', 'Actual'], [100, 120]]);
 } finally {
   globalThis.document = originalDocument;
+  URL.createObjectURL = originalCreateObjectURL;
+  URL.revokeObjectURL = originalRevokeObjectURL;
 }
-assert.equal(csvDownloaded, true);
-assert.ok(csvHref.startsWith('data:text/csv'));
+assert.equal(excelDownloaded, true);
+assert.equal(excelHref, 'blob:shine-test');
+assert.match(excelFilename, /phase3d-test_\d{4}-\d{2}-\d{2}\.xlsx$/);
+assert.equal(excelBlobType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
 console.log('Phase 3D management overview tests passed.');

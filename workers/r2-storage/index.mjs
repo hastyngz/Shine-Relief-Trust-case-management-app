@@ -100,12 +100,18 @@ async function firestoreCommit(writes, idToken) {
   return response.json();
 }
 
+function isValidCalendarDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
 function validateInventoryMovementPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new ApiError('A stock movement is required.');
   const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
   if (!validId(payload.id) || !validId(payload.itemId)) throw new ApiError('A valid item and movement ID are required.');
   if (!['Received', 'Issued', 'Adjustment'].includes(payload.type)) throw new ApiError('This stock movement type is not supported.');
-  if (typeof payload.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date) || !Number.isFinite(Date.parse(`${payload.date}T00:00:00Z`))) {
+  if (!isValidCalendarDate(payload.date)) {
     throw new ApiError('Enter a valid movement date.');
   }
   if (typeof payload.reason !== 'string' || !payload.reason.trim() || payload.reason.trim().length > 1000) throw new ApiError('A reason of up to 1,000 characters is required.');
@@ -126,7 +132,15 @@ function validateInventoryMovementPayload(payload) {
     typeof payload.sourceId !== 'string' || !validId(payload.sourceId) ||
     !Number.isInteger(payload.sourceLineIndex) || payload.sourceLineIndex < 0 || payload.sourceLineIndex > 9999
   )) throw new ApiError('A valid procurement list and line reference are required.');
-  if (payload.sourceType === 'procurementReceipt' &&
+  if (payload.sourceDeliveryId !== undefined && (payload.sourceType !== 'procurementReceipt' || !validId(payload.sourceDeliveryId))) {
+    throw new ApiError('A valid procurement delivery ID is required.');
+  }
+  if (payload.sourceType === 'procurementReceipt' && payload.sourceDeliveryId !== undefined &&
+      (typeof payload.reference !== 'string' || !payload.reference.startsWith(`Delivery ${payload.sourceDeliveryId} ·`) ||
+       !payload.reference.includes(`procurement ${payload.sourceId} · line ${payload.sourceLineIndex + 1}`))) {
+    throw new ApiError('The delivery reference does not match the procurement list line.');
+  }
+  if (payload.sourceType === 'procurementReceipt' && payload.sourceDeliveryId === undefined &&
       (typeof payload.reference !== 'string' || !payload.reference.startsWith(`Procurement ${payload.sourceId} · line ${payload.sourceLineIndex + 1}`))) {
     throw new ApiError('The receipt reference does not match the procurement list line.');
   }
@@ -143,6 +157,7 @@ function validateInventoryMovementPayload(payload) {
     sourceType: payload.sourceType,
     sourceId: payload.sourceId,
     sourceLineIndex: payload.sourceLineIndex,
+    sourceDeliveryId: payload.sourceDeliveryId,
   };
 }
 
@@ -166,13 +181,31 @@ async function handleInventoryMovement(request, staff, idToken) {
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let procurementLine;
+    let procurementDocumentForReceipt;
+    let procurementForReceipt;
     if (payload.sourceType === 'procurementReceipt') {
-      const procurementDocument = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
-      if (!procurementDocument) throw new ApiError('The purchased procurement list was not found on the server.', 404);
-      const procurement = decodeFirestoreFields(procurementDocument.fields);
+      procurementDocumentForReceipt = await firestoreGet(`procurementLists/${encodeURIComponent(payload.sourceId)}`, idToken);
+      if (!procurementDocumentForReceipt) throw new ApiError('The purchased procurement list was not found on the server.', 404);
+      procurementForReceipt = decodeFirestoreFields(procurementDocumentForReceipt.fields);
+      const procurement = procurementForReceipt;
       procurementLine = Array.isArray(procurement.items) ? procurement.items[payload.sourceLineIndex] : undefined;
-      if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt || !procurementLine || procurementLine.quantity !== payload.quantity) {
-        throw new ApiError('This procurement line is not eligible for a full-quantity inventory receipt.', 409);
+      const receivedQuantitiesByLine = procurement.receivedQuantitiesByLine && typeof procurement.receivedQuantitiesByLine === 'object'
+        ? procurement.receivedQuantitiesByLine
+        : {};
+      const legacyReceived = Array.isArray(procurement.receivedQuantities)
+        ? Number(procurement.receivedQuantities[payload.sourceLineIndex] || 0)
+        : 0;
+      const ledgerReceived = Number(
+        receivedQuantitiesByLine[`line_${payload.sourceLineIndex}`] ??
+        receivedQuantitiesByLine[String(payload.sourceLineIndex)] ?? 0,
+      );
+      const alreadyReceived = Math.max(legacyReceived, ledgerReceived);
+      const outstanding = Number(procurementLine?.quantity) - alreadyReceived;
+      if (procurement.id !== payload.sourceId || procurement.status !== 'purchased' || procurement.receivedAt ||
+          !procurementLine || !Number.isFinite(alreadyReceived) || alreadyReceived < 0 ||
+          !Number.isFinite(outstanding) || outstanding <= 0 || payload.quantity > outstanding ||
+          (payload.sourceDeliveryId === undefined && payload.quantity !== outstanding)) {
+        throw new ApiError('This procurement line exceeds the remaining receivable quantity or is already complete.', 409);
       }
     }
     const itemDocument = await firestoreGet(itemPath, idToken);
@@ -209,6 +242,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       ...(payload.destination ? { destination: payload.destination } : {}),
       ...(payload.reference ? { reference: payload.reference } : {}),
       ...(payload.sourceType ? { sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex } : {}),
+      ...(payload.sourceDeliveryId ? { sourceDeliveryId: payload.sourceDeliveryId } : {}),
       reason: payload.reason,
       recordedBy: staff.fullName,
       recordedByUid: staff.uid,
@@ -227,6 +261,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       ...(movement.destination ? { destination: movement.destination } : {}),
       ...(movement.reference ? { reference: movement.reference } : {}),
       ...(movement.sourceType ? { sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineIndex: movement.sourceLineIndex } : {}),
+      ...(movement.sourceDeliveryId ? { sourceDeliveryId: movement.sourceDeliveryId } : {}),
       reason: movement.reason,
       recordedBy: movement.recordedBy,
       recordedByUid: movement.recordedByUid,
@@ -243,24 +278,51 @@ async function handleInventoryMovement(request, staff, idToken) {
       updatedByUid: encodeFirestoreValue(staff.uid),
     };
     const movementFields = Object.fromEntries(Object.entries(movement).map(([key, value]) => [key, encodeFirestoreValue(value)]));
+    const writes = [
+      {
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/${itemPath}`,
+          fields: itemFields,
+        },
+        updateMask: { fieldPaths: Object.keys(itemFields) },
+        currentDocument: { updateTime: itemDocument.updateTime },
+      },
+      {
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/${movementPath}`,
+          fields: movementFields,
+        },
+        currentDocument: { exists: false },
+      },
+    ];
+    if (payload.sourceType === 'procurementReceipt' && procurementDocumentForReceipt && procurementForReceipt) {
+      const receivedQuantitiesByLine = procurementForReceipt.receivedQuantitiesByLine && typeof procurementForReceipt.receivedQuantitiesByLine === 'object'
+        ? { ...procurementForReceipt.receivedQuantitiesByLine }
+        : {};
+      const ledgerKey = `line_${payload.sourceLineIndex}`;
+      const legacyReceived = Array.isArray(procurementForReceipt.receivedQuantities)
+        ? Number(procurementForReceipt.receivedQuantities[payload.sourceLineIndex] || 0)
+        : 0;
+      const priorLedger = Number(receivedQuantitiesByLine[ledgerKey] ?? receivedQuantitiesByLine[String(payload.sourceLineIndex)] ?? 0);
+      receivedQuantitiesByLine[ledgerKey] = Math.max(legacyReceived, priorLedger) + payload.quantity;
+      delete receivedQuantitiesByLine[String(payload.sourceLineIndex)];
+      const procurementFields = {
+        receivedQuantitiesByLine: encodeFirestoreValue(receivedQuantitiesByLine),
+        lastReceiptMovementId: encodeFirestoreValue(payload.id),
+        updatedAt: encodeFirestoreValue(now),
+        updatedBy: encodeFirestoreValue(staff.fullName),
+      };
+      writes.push({
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/procurementLists/${encodeURIComponent(payload.sourceId)}`,
+          fields: procurementFields,
+        },
+        updateMask: { fieldPaths: Object.keys(procurementFields) },
+        currentDocument: { updateTime: procurementDocumentForReceipt.updateTime },
+      });
+    }
     try {
-      await firestoreCommit([
-        {
-          update: {
-            name: `projects/shine-relief-trust-cms/databases/(default)/documents/${itemPath}`,
-            fields: itemFields,
-          },
-          updateMask: { fieldPaths: Object.keys(itemFields) },
-          currentDocument: { updateTime: itemDocument.updateTime },
-        },
-        {
-          update: {
-            name: `projects/shine-relief-trust-cms/databases/(default)/documents/${movementPath}`,
-            fields: movementFields,
-          },
-          currentDocument: { exists: false },
-        },
-      ], idToken);
+      await firestoreCommit(writes, idToken);
       return json({ ok: true, duplicate: false, quantityOnHand: nextQuantity, movement }, 200);
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 409) throw error;

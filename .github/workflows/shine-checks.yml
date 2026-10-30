@@ -45,6 +45,25 @@ jobs:
       - name: Test shared UI effects and save feedback
         run: npm run test:ui-effects
 
+      - name: Test administration hub module navigation
+        run: npm run test:administration-hub
+
+      - name: Test administration operational attention summaries
+        run: npm run test:administration-overview
+
+      - name: Test document filing filters
+        run: npm run test:document-filing
+
+      - name: Test safeguarding export boundary
+        run: npm run test:safeguarding-export-boundary
+
+      - name: Test Excel report file generation
+        run: npm run test:report-export
+
+      - name: Test management report generation and Excel download
+        run: npx tsx scripts/phase3d-management.test.ts
+
+
       - name: Test password-reset feedback sanitization
         run: npx tsx scripts/password-reset-feedback.test.ts
 
@@ -72,6 +91,12 @@ jobs:
       - name: Test procurement receipt to inventory linkage
         run: npx tsx scripts/procurement-inventory-receipt.test.ts
 
+      - name: Test partial procurement delivery retry and quantity safeguards
+        run: npx tsx scripts/procurement-delivery.test.ts
+
+      - name: Test procurement lifecycle validation
+        run: npx tsx scripts/procurement-lifecycle.test.ts
+
       - name: Test durable inventory retry persistence
         run: npm run test:inventory-pending-retry
 
@@ -89,6 +114,9 @@ jobs:
 
       - name: Test existing quality rules
         run: npm run test:quality
+
+      - name: Test compliance recurring occurrence generation
+        run: npx tsx scripts/compliance-recurrence.test.ts
 
       - name: Test report-writing guidance coverage
         run: npm run test:report-writing-help
@@ -113,6 +141,9 @@ jobs:
 
       - name: Test procurement quote and approval workflow
         run: npm run test:procurement
+
+      - name: Test procurement list filters
+        run: npm run test:procurement-filtering
 
       - name: Test internal procurement report aggregates
         run: npm run test:management-procurement-report
@@ -147,8 +178,13 @@ jobs:
       - name: Test inventory expiry and stocktake helpers
         run: npm run test:inventory
 
-      - name: Test asset CSV export
+      - name: Test inventory Word, Excel and PDF export mapping
+        run: npm run test:inventory-export
+      - name: Test asset Word, Excel and PDF export mapping
         run: npm run test:asset-export
+
+      - name: Test asset register filters
+        run: npm run test:asset-filtering
 
       - name: Test physical asset verification
         run: npm run test:asset-verification

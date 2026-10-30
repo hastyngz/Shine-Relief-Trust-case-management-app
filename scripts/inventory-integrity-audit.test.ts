@@ -36,6 +36,7 @@ assert.deepEqual(auditInventorySnapshot(cleanSnapshot), {
   extraDuplicateStockCodeItems: 0,
   malformedMovementLists: 0,
   malformedMovementEntries: 0,
+  movementsWithInvalidDates: 0,
   movementsMissingActorUid: 0,
   movementsMissingCreatedAt: 0,
   duplicateMovementIdGroups: 0,
@@ -75,7 +76,7 @@ const findings = auditInventorySnapshot({
       stockCode: 'ST-003',
       quantityOnHand: 0,
       minimumStockLevel: 0,
-      movements: [{ ...cleanMovement, id: 'mov_duplicate', type: 'Unknown movement' }],
+      movements: [{ ...cleanMovement, id: 'mov_duplicate', type: 'Unknown movement' }, { ...cleanMovement, id: 'mov_invalid_date', date: '2026-02-31' }],
     },
     null,
   ],
@@ -88,7 +89,8 @@ assert.equal(findings.invalidUnitCostItems, 2);
 assert.equal(findings.duplicateStockCodeGroups, 1);
 assert.equal(findings.extraDuplicateStockCodeItems, 1);
 assert.equal(findings.malformedMovementLists, 1);
-assert.equal(findings.malformedMovementEntries, 2);
+assert.equal(findings.malformedMovementEntries, 3);
+assert.equal(findings.movementsWithInvalidDates, 2, 'empty and impossible movement dates must be counted');
 assert.equal(findings.movementsMissingActorUid, 1);
 assert.equal(findings.movementsMissingCreatedAt, 1);
 assert.equal(findings.duplicateMovementIdGroups, 1);

@@ -1,3 +1,4 @@
+import { isValidInventoryDate } from './inventory';
 const MOVEMENT_TYPES = new Set([
   'Received',
   'Issued',
@@ -19,6 +20,7 @@ export interface InventoryIntegrityAuditSummary {
   extraDuplicateStockCodeItems: number;
   malformedMovementLists: number;
   malformedMovementEntries: number;
+  movementsWithInvalidDates: number;
   movementsMissingActorUid: number;
   movementsMissingCreatedAt: number;
   duplicateMovementIdGroups: number;
@@ -59,6 +61,7 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     extraDuplicateStockCodeItems: 0,
     malformedMovementLists: 0,
     malformedMovementEntries: 0,
+    movementsWithInvalidDates: 0,
     movementsMissingActorUid: 0,
     movementsMissingCreatedAt: 0,
     duplicateMovementIdGroups: 0,
@@ -112,8 +115,10 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
         && Number.isFinite(quantity)
         && (movementType === 'Adjustment' ? quantity >= 0 : quantity > 0);
       const movementId = hasText(movement.id) ? movement.id.trim() : '';
+      const validDate = typeof movement.date === 'string' && isValidInventoryDate(movement.date);
       const createdAtPresent = hasText(movement.createdAt);
-      if (!validType || !validQuantity || !movementId || !hasText(movement.date)
+      if (!validDate) summary.movementsWithInvalidDates += 1;
+      if (!validType || !validQuantity || !movementId || !validDate
         || !hasText(movement.location) || !hasText(movement.reason)
         || !hasText(movement.recordedBy) || !createdAtPresent) {
         summary.malformedMovementEntries += 1;
