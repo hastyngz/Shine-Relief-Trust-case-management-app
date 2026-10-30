@@ -29,19 +29,14 @@ export function getLocalDateInputValue(date = new Date()): string {
 
 /** Validate a date-only value as a real Gregorian calendar date (not just a parseable string). */
 export function isValidInventoryDate(value: string): boolean {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const timestamp = Date.parse(`${value}T00:00:00Z`);
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
 }
 
 /** Classify a date-only expiry value without relying on local timezone parsing. */
 export function getInventoryExpiryStatus(expiryDate?: string, today = getLocalDateInputValue()): InventoryExpiryResult {
-  const validDate = (value: string) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-    const timestamp = Date.parse(`${value}T00:00:00Z`);
-    return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
-  };
-  if (!expiryDate || !validDate(expiryDate) || !validDate(today)) return { status: 'not-tracked', daysRemaining: null };
+  if (!expiryDate || !isValidInventoryDate(expiryDate) || !isValidInventoryDate(today)) return { status: 'not-tracked', daysRemaining: null };
   const expiry = Date.parse(`${expiryDate}T00:00:00Z`);
   const current = Date.parse(`${today}T00:00:00Z`);
   const daysRemaining = Math.round((expiry - current) / 86_400_000);
