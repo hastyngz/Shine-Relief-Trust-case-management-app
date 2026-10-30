@@ -1630,7 +1630,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                         const itemTotal = item.totalMWK ?? (
                           item.unitPriceMWK === undefined ? undefined : item.unitPriceMWK * item.quantity
                         );
-                        const quoteRequired = (itemTotal !== undefined && itemTotal >= (list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK)) || item.quoteRequirementReason === 'price-unknown';
+                        const quoteThreshold = list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK;
+                        const quoteThresholdInvalid = !Number.isFinite(quoteThreshold) || quoteThreshold <= 0;
+                        const quoteRequired = quoteThresholdInvalid || (itemTotal !== undefined && itemTotal >= quoteThreshold) || item.quoteRequirementReason === 'price-unknown';
                         // Unknown/unclear prices need supplier quotes to establish a price even before the threshold can be evaluated.
                         const quoteCollectionAvailable = quoteRequired || item.priceStatus !== 'quoted';
                         const draftKey = `${list.id}:${index}`;
@@ -1686,6 +1688,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                               <p className={`font-bold ${item.priceStatus === 'quoted' ? 'text-stone-800' : 'text-amber-900'}`}>
                                 {item.priceStatus === 'quoted' ? formatMWK(itemTotal || 0) : item.priceStatus === 'unclear' ? 'Price unclear' : 'Missing price'}
                               </p>
+                              {quoteThresholdInvalid && <p className="mt-1 text-[11px] font-semibold text-red-800">Invalid quote threshold: approval is blocked until a positive MWK threshold is restored.</p>}
                               {quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Three quotes required: {item.quotes?.length || 0}/3</p>}
                               {item.priceStatus !== 'quoted' && !quoteRequired && <p className="mt-1 text-[11px] text-amber-900">Collect supplier quotes to establish the price: {item.quotes?.length || 0}/3</p>}
                               {item.priceStatus !== 'quoted' && (item.quotes?.length || 0) >= 3 && <p className="mt-1 text-[11px] text-stone-600">Three supplier prices captured; price selection and approval remain outstanding.</p>}
