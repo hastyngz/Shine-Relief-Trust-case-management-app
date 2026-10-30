@@ -28,6 +28,8 @@ export function checkProcurementApproval(list: ProcurementList): ProcurementAppr
   const blockers: string[] = [];
   if (!Array.isArray(list.items) || list.items.length === 0) return { allowed: false, blockers: ['Add at least one item before approval.'] };
   const threshold = list.quoteThresholdMWK ?? DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK;
+  const validThreshold = typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0;
+  if (!validThreshold) blockers.push('The procurement quote threshold is invalid. Restore a positive MWK threshold before approval.');
   list.items.forEach((item, index) => {
     const label = item.description?.trim() || `Item ${index + 1}`; const quantity = Number(item.quantity); const unitPrice = Number(item.unitPriceMWK);
     const total = item.totalMWK ?? unitPrice * quantity;
@@ -41,7 +43,7 @@ export function checkProcurementApproval(list: ProcurementList): ProcurementAppr
         uniqueQuotes.set(normalizeSupplierIdentity(supplier), quote);
       }
     }
-    const requiresThreeQuotes = item.priceStatus !== 'quoted' || total >= threshold || item.quoteRequirementReason === 'price-unknown';
+    const requiresThreeQuotes = !validThreshold || item.priceStatus !== 'quoted' || total >= threshold || item.quoteRequirementReason === 'price-unknown';
     if (requiresThreeQuotes && uniqueQuotes.size < 3) blockers.push(`${label}: three supplier quotes from distinct suppliers are required (${uniqueQuotes.size}/3).`);
     const selectedSupplier = typeof item.selectedQuoteSupplier === 'string' ? normalizeSupplierIdentity(item.selectedQuoteSupplier) : '';
     const selectedQuote = uniqueQuotes.get(selectedSupplier);
