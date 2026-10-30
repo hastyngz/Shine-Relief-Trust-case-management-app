@@ -27,6 +27,13 @@ export function getLocalDateInputValue(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Validate a date-only value as a real Gregorian calendar date (not just a parseable string). */
+export function isValidInventoryDate(value: string): boolean {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
 /** Classify a date-only expiry value without relying on local timezone parsing. */
 export function getInventoryExpiryStatus(expiryDate?: string, today = getLocalDateInputValue()): InventoryExpiryResult {
   const validDate = (value: string) => {
