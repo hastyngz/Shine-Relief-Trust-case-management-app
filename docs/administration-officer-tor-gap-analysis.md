@@ -242,3 +242,9 @@ The asset register now rejects invalid reference-date context before deriving th
 ### 2026-10-30 · Inventory movement date integrity
 - The stock movement and stocktake forms now reject malformed or impossible calendar dates before queueing/submission. The offline FIFO retry path revalidates persisted dates and routes corrupt entries to the existing needs-review state rather than sending them.
 - Regression coverage added for ISO format, leap-year handling and impossible dates. This is client-side validation; server-side validation remains authoritative and must continue to reject malformed requests.
+
+
+### 2026-10-30 · Inventory expiry completeness and supplier date integrity
+- Inventory cards and summary now surface missing or invalid expiry dates so staff can identify records needing date checks. The status is a prompt for data completion, not evidence that stock is safe.
+- Added server Worker tests proving impossible/non-ISO/empty movement dates are rejected before any item read or write. Supplier activity regression fixtures now include impossible quote and expense dates to protect the derived latest-activity indicator.
+- CI remains pending for the latest exact Replit head. No production data, stock balances, permissions or supplier master data changed.
