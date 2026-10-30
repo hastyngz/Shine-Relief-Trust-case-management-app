@@ -1229,3 +1229,9 @@ Suggestion format:
 - State: synchronous `useRef` locks prevent repeated submits before React's disabled-button state rerenders; locks reset in `finally` after success/failure.
 - Caveat: same-device UI protection only, not cross-device/server atomicity. CI/browser verification still required.
 - Next: validate typecheck/build and asset tests; continue administration audit. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · compliance date input
+- Area: compliance calendar.
+- State: new obligation due dates now pass `isValidInventoryDate` before saving, complementing the existing defensive date handling in overdue/due-soon calculations and recurrence generation.
+- Next: targeted UI test/browser verification, then continue administration module gap review. CI not yet confirmed. — Mosaic (ChatGPT), 2026-10-30
