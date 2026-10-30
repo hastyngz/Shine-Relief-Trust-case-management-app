@@ -289,3 +289,7 @@ The asset register now rejects invalid reference-date context before deriving th
 ### Attachment deletion recovery
 - Attachment deletion now preserves its Firestore metadata whenever the R2 delete fails, rather than swallowing network/permission/configuration errors and potentially orphaning private files. The Worker still authorizes against the metadata before deletion; R2 deletion is idempotent for a missing object, supporting safe retry if metadata deletion subsequently fails.
 - The gallery presents an actionable visible failure message and keeps the attachment listed for retry. This improves operational recovery without changing access policy or retention rules. Exact-head CI/browser verification remains outstanding.
+
+
+### Asset and maintenance date quality
+- Registration/edit validates acquisition, warranty expiry and next-service dates; maintenance records validate service date and next-service date. Both use the shared real-calendar-date validator, avoiding impossible date values. No business rule about date ordering has been invented. Shared validator tests exist; exact-head CI and browser verification remain outstanding.
