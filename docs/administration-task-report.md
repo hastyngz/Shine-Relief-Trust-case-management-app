@@ -80,3 +80,8 @@
 - Added Worker-level regression cases for impossible dates, non-ISO dates and empty dates. The tests assert the Worker rejects them before reading the item or attempting any stock write. Existing Worker validation already enforces real calendar dates; this change strengthens its regression coverage.
 - Extended supplier activity tests with impossible quote/expense dates to ensure malformed dates cannot distort the latest activity date. No canonical supplier identities or new data fields were introduced.
 - Exact-head CI remains unverified; no local execution or production deployment is claimed.
+
+
+### 2026-10-30 · Inventory integrity audit date checks
+- Extended the privacy-preserving inventory snapshot audit to count missing/impossible movement dates separately and include them in malformed-entry findings. It still returns aggregate counts only and does not expose record IDs or personal data.
+- Added synthetic regression coverage for empty and impossible dates. This is an offline export audit only; it does not repair records or reconcile historical balances.
