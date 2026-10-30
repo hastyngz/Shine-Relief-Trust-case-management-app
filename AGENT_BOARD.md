@@ -1158,3 +1158,10 @@ Suggestion format:
 ### 2026-10-30 · Supplier activity display normalization
 - Supplier activity grouping now collapses repeated internal whitespace and trims leading/trailing spaces before case-insensitive grouping. This reduces obvious duplicate display rows without asserting legal/business identity or merging unrelated entities by fuzzy matching.
 - Existing synthetic procurement test fixture now covers repeated whitespace; exact-head CI remains unverified.
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · procurement quote integrity
+- Area: procurement approvals and import validation.
+- State: normalized supplier labels consistently across quote selection and approval (trim/collapse whitespace + case-insensitive comparison), preventing spacing variants from counting as separate suppliers. Imported quote dates now reject impossible Gregorian dates. Added focused synthetic regression cases for duplicate spacing variants and leap-day validity.
+- Next: verify procurement workflow tests, TypeScript, build and browser procurement flow on the exact Replit head.
+- Watch out: this does not create a verified supplier master register, due-diligence workflow or legal identity matching. Existing MWK 500,000 default threshold and three-distinct-supplier rule are retained. CI is not yet confirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30
