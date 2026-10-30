@@ -284,3 +284,8 @@ The asset register now rejects invalid reference-date context before deriving th
 - Invalid custom thresholds now appear as an explicit item-level warning and keep the three-quote collection state conservative, consistent with the approval block. Staff must correct the configured threshold; the UI does not silently reset it. Browser verification and exact-head CI remain outstanding.
 
 - The threshold editor now communicates the positive whole-number requirement through its numeric input constraints and accessible label; approval validation still rejects invalid legacy values.
+
+
+### Attachment deletion recovery
+- Attachment deletion now preserves its Firestore metadata whenever the R2 delete fails, rather than swallowing network/permission/configuration errors and potentially orphaning private files. The Worker still authorizes against the metadata before deletion; R2 deletion is idempotent for a missing object, supporting safe retry if metadata deletion subsequently fails.
+- The gallery presents an actionable visible failure message and keeps the attachment listed for retry. This improves operational recovery without changing access policy or retention rules. Exact-head CI/browser verification remains outstanding.
