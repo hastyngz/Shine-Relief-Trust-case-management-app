@@ -274,3 +274,7 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Procurement quote-entry usability (2026-10-30)
 - Quote entry now uses the same normalized supplier identity rule as approval/import validation, so duplicate supplier names with case or spacing differences are rejected at entry rather than discovered only during approval. This is a data-entry safeguard, not independent supplier verification.
+
+
+### Procurement import consistency correction (2026-10-30)
+- Corrected selected-supplier import normalization to collapse repeated whitespace consistently with quote entry, selection and approval. Added a regression fixture for a selected quote with spacing differences. Exact-head CI remains unconfirmed.
