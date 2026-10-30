@@ -5,7 +5,7 @@ import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../utils/inventory';
 import { exportInventoryRegister } from '../utils/inventoryExport';
 
 interface InventoryViewProps {
@@ -50,7 +50,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     query, category: categoryFilter, location: locationFilter, stock: stockFilter,
   }), [items, query, categoryFilter, locationFilter, stockFilter]);
   const lowStock = items.filter((item) => item.quantityOnHand <= item.minimumStockLevel);
-  const expiryAlerts = items.filter((item) => ['expired', 'expiring-soon'].includes(getInventoryExpiryStatus(item.expiryDate).status));
+  const expirySummary = summarizeInventoryExpiry(items);
+  const expiryAlerts = expirySummary.expired + expirySummary.expiringSoon;
   const totalValue = items.reduce((sum, item) => sum + Math.max(0, item.quantityOnHand) * Math.max(0, item.unitCostMWK || 0), 0);
 
   const [exporting, setExporting] = useState(false);
@@ -609,7 +610,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <div className="rounded-2xl bg-stone-50 p-4"><Boxes className="h-5 w-5 text-teal-800" /><p className="mt-2 text-2xl font-bold">{items.length}</p><p className="text-xs text-stone-600">Registered items</p></div>
           <div className="rounded-2xl bg-amber-50 p-4"><AlertTriangle className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{lowStock.length}</p><p className="text-xs text-stone-600">At/below minimum</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><ClipboardList className="h-5 w-5 text-teal-800" /><p className="mt-2 text-2xl font-bold">{items.reduce((sum, item) => sum + (item.movements?.length || 0), 0)}</p><p className="text-xs text-stone-600">Recorded movements</p></div>
-          <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{expiryAlerts.length}</p><p className="text-xs text-stone-600">Expired / due within 30 days</p></div>
+          <div className="rounded-2xl bg-amber-50 p-4"><CalendarClock className="h-5 w-5 text-amber-800" /><p className="mt-2 text-2xl font-bold">{expiryAlerts}</p><p className="text-xs text-stone-600">Expired / due within 30 days</p><p className="mt-1 text-[11px] text-stone-500">{expirySummary.expired} expired · {expirySummary.expiringSoon} due soon</p></div>
           <div className="rounded-2xl bg-stone-50 p-4"><CheckCircle2 className="h-5 w-5 text-teal-800" /><p className="mt-2 text-lg font-bold">{money(totalValue)}</p><p className="text-xs text-stone-600">Estimated stock value</p></div>
         </div>
       </header>
