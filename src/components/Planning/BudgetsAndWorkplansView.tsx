@@ -905,6 +905,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
               <p className="text-xs font-medium text-stone-500">Total Budget Allocation</p>
               <p className="text-xl font-extrabold text-teal-900 mt-1">{formatMWK(totalBudgeted)}</p>
               <span className="text-[11px] text-stone-500 mt-1 block">{filteredBudgets.length} budget line items</span>
+              <span className="text-[10px] text-stone-400 mt-1 block">{budgetPeriodFilter === 'ALL' ? 'All years · active category filter' : `Period: ${budgetPeriodFilter} · active category filter`}</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs">
