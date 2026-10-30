@@ -111,3 +111,8 @@
 ### Procurement import normalization correction (2026-10-30)
 - A focused review found that imported *selected supplier* labels still used an over-escaped whitespace pattern, unlike the shared supplier identity helper. Corrected it so imported selected supplier labels collapse repeated whitespace as intended, and added a regression case proving a selected quote still matches when the imported label contains extra spaces.
 - This was a source-review correction; tests have been added but have not been executed locally. Exact-head CI remains unconfirmed.
+
+
+### Procurement threshold visibility (2026-10-30)
+- The procurement item panel now flags a missing/invalid custom quote threshold and states that approval is blocked until a positive MWK threshold is restored. It also treats every item conservatively as requiring three quotes while the threshold is invalid, matching the approval guard rather than showing a misleading lower-quote state.
+- No threshold value is silently rewritten. This is a user-facing warning only; exact-head CI and browser verification remain outstanding.
