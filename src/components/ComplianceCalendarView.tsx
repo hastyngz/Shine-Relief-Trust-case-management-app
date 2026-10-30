@@ -3,7 +3,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Clock3, Plu
 import type { ScheduleItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { addScheduleItemWithSaveResult, updateScheduleItemWithSaveResult } from '../utils/storage';
-import { getLocalDateInputValue } from '../utils/inventory';
+import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
 import { isComplianceDueSoon, isComplianceOverdue, matchesComplianceStatus, type ComplianceStatusFilter } from '../utils/compliance';
 import { buildNextComplianceOccurrence } from '../services/complianceRecurrence';
 
@@ -66,6 +66,10 @@ export const ComplianceCalendarView: React.FC<ComplianceCalendarViewProps> = ({ 
     setError(''); setNotice('');
     if (!form.title.trim() || !form.dueDate || !form.assignedStaffId) {
       setError('Enter an obligation title, due date and responsible person.');
+      return;
+    }
+    if (!isValidInventoryDate(form.dueDate)) {
+      setError('Enter a real calendar date for this compliance deadline.');
       return;
     }
     const owner = staff.find((person) => person.uid === form.assignedStaffId);
