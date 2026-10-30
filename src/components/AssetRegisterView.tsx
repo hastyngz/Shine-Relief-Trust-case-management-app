@@ -1,4 +1,4 @@
-import React, { FormEvent, useMemo, useState } from 'react';
+import React, { FormEvent, useMemo, useRef, useState } from 'react';
 import { Archive, AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
 import type { AssetCondition, AssetHistoryEntry, AssetRecord, AssetStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -58,6 +58,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
   const [exporting, setExporting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [maintenanceTarget, setMaintenanceTarget] = useState<AssetRecord | null>(null);
@@ -174,6 +175,8 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
       updatedAt: now, createdBy: editing?.createdBy || actor, updatedBy: actor,
       createdByUid: editing?.createdByUid || currentUser?.uid, updatedByUid: currentUser?.uid,
     };
+    if (saveLock.current) return;
+    saveLock.current = true;
     setSaving(true);
     try {
       saveAssetRecord(saved);
@@ -181,7 +184,7 @@ export const AssetRegisterView: React.FC<AssetRegisterViewProps> = ({ assets, on
       setShowForm(false); setEditing(null); setForm(blankForm()); onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save this asset.');
-    } finally { setSaving(false); }
+    } finally { saveLock.current = false; setSaving(false); }
   };
 
   const inputClass = 'mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm font-normal text-stone-900';
