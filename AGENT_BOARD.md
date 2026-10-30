@@ -1123,3 +1123,9 @@ Suggestion format:
 - State: expanded the derived index to include supplier references on inventory items; inventory contributes an item count only, not an activity date. The displayed latest date comes only from actual dated quotes or expense records.
 - Next: exact-head CI should run procurement workflow tests, TypeScript and the production build.
 - Watch out: supplier master records, contact management and server-side identity matching remain unbuilt. — Mosaic (ChatGPT), 2026-10-29
+
+### 2026-10-30 · Mosaic (ChatGPT) · budget scope and document filing order
+- Area: administration budget reporting and document index usability.
+- State: labelled the budget allocation KPI to distinguish all-years totals from a selected-period total. Added newest-first sorting to the existing permission-filtered document index, with invalid legacy upload timestamps retained at the end in stable order. Extracted the sorter to a shared utility and added focused assertions.
+- Next: verify focused document-filing and existing budget/procurement checks, TypeScript, production build and browser flow on the exact Replit head.
+- Watch out: this does not change budget calculations or implement document versioning, expiry, ownership or compliance reminders. No production data, permissions or storage paths were changed. — Mosaic (ChatGPT), 2026-10-30
