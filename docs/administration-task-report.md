@@ -116,3 +116,5 @@
 ### Procurement threshold visibility (2026-10-30)
 - The procurement item panel now flags a missing/invalid custom quote threshold and states that approval is blocked until a positive MWK threshold is restored. It also treats every item conservatively as requiring three quotes while the threshold is invalid, matching the approval guard rather than showing a misleading lower-quote state.
 - No threshold value is silently rewritten. This is a user-facing warning only; exact-head CI and browser verification remain outstanding.
+
+- The custom threshold input now advertises a positive whole-number MWK value (`min=1`, `step=1`) with an accessible label. The service-side fail-closed check remains authoritative for legacy/invalid stored values.
