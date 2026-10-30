@@ -293,3 +293,7 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Asset and maintenance date quality
 - Registration/edit validates acquisition, warranty expiry and next-service dates; maintenance records validate service date and next-service date. Both use the shared real-calendar-date validator, avoiding impossible date values. No business rule about date ordering has been invented. Shared validator tests exist; exact-head CI and browser verification remain outstanding.
+
+
+### Document filing permission transitions
+- The filing screen now clears old attachment results when account/health permission changes and ignores stale asynchronous responses from a prior scope or unmounted view. This reduces the risk of health-file metadata remaining visible after permission changes. Query policy and server-side authorization are unchanged. Component race coverage/browser verification remain outstanding.
