@@ -1222,3 +1222,10 @@ Suggestion format:
 - State: permission/account changes clear old metadata immediately; request generation guards prevent late results from a prior scope updating the current view; unmount invalidates pending results.
 - Caveat: no Firestore rules or Worker access-policy changes. Existing role-filtered queries and download authorization remain the enforcement boundary. Dedicated race test/browser verification still needed.
 - Next: add/execute targeted coverage if harness permits, verify CI and continue administration controls. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · asset form submission locks
+- Area: asset register, maintenance and physical verification.
+- State: synchronous `useRef` locks prevent repeated submits before React's disabled-button state rerenders; locks reset in `finally` after success/failure.
+- Caveat: same-device UI protection only, not cross-device/server atomicity. CI/browser verification still required.
+- Next: validate typecheck/build and asset tests; continue administration audit. — Mosaic (ChatGPT), 2026-10-30
