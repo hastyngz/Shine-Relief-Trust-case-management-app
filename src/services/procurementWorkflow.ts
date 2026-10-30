@@ -3,7 +3,7 @@ export const DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK = 500000;
 export interface ProcurementApprovalCheck { allowed: boolean; blockers: string[] }
 
 /** Normalize supplier labels consistently so spacing/case variants cannot count as separate quotes. */
-function normalizeSupplierIdentity(value: unknown): string {
+export function normalizeProcurementSupplierIdentity(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').toLocaleLowerCase() : '';
 }
 
@@ -19,7 +19,7 @@ export function selectProcurementQuote(item: ProcurementListItem, quote: Procure
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Set a valid item quantity before selecting a supplier quote.');
   const supplier = typeof quote.supplier === 'string' ? quote.supplier.trim() : '';
   const quoteIsOnItem = (item.quotes || []).some((candidate) =>
-    typeof candidate.supplier === 'string' && normalizeSupplierIdentity(candidate.supplier) === normalizeSupplierIdentity(supplier) &&
+    typeof candidate.supplier === 'string' && normalizeProcurementSupplierIdentity(candidate.supplier) === normalizeProcurementSupplierIdentity(supplier) &&
     candidate.amountMWK === quote.amountMWK);
   if (!supplier || !quoteIsOnItem) throw new Error('Select a supplier quote recorded for this item.');
   return { ...item, selectedQuoteSupplier: supplier, selectedQuoteAmountMWK: quote.amountMWK, quoteRequirementReason: item.priceStatus !== 'quoted' ? 'price-unknown' : item.quoteRequirementReason, unitPriceMWK: quote.amountMWK / quantity, totalMWK: quote.amountMWK, priceStatus: 'quoted' };
@@ -40,12 +40,12 @@ export function checkProcurementApproval(list: ProcurementList): ProcurementAppr
     for (const quote of Array.isArray(item.quotes) ? item.quotes : []) {
       const supplier = typeof quote?.supplier === 'string' ? quote.supplier.trim() : '';
       if (supplier && Number.isFinite(quote.amountMWK) && quote.amountMWK > 0) {
-        uniqueQuotes.set(normalizeSupplierIdentity(supplier), quote);
+        uniqueQuotes.set(normalizeProcurementSupplierIdentity(supplier), quote);
       }
     }
     const requiresThreeQuotes = !validThreshold || item.priceStatus !== 'quoted' || total >= threshold || item.quoteRequirementReason === 'price-unknown';
     if (requiresThreeQuotes && uniqueQuotes.size < 3) blockers.push(`${label}: three supplier quotes from distinct suppliers are required (${uniqueQuotes.size}/3).`);
-    const selectedSupplier = typeof item.selectedQuoteSupplier === 'string' ? normalizeSupplierIdentity(item.selectedQuoteSupplier) : '';
+    const selectedSupplier = typeof item.selectedQuoteSupplier === 'string' ? normalizeProcurementSupplierIdentity(item.selectedQuoteSupplier) : '';
     const selectedQuote = uniqueQuotes.get(selectedSupplier);
     const selectedQuoteIsValid = Boolean(selectedQuote && Number.isFinite(item.selectedQuoteAmountMWK) &&
       selectedQuote.amountMWK === item.selectedQuoteAmountMWK && item.totalMWK === item.selectedQuoteAmountMWK);
@@ -124,7 +124,7 @@ export function normalizeImportedProcurementItems(value: unknown): { items: Proc
       }
       return { supplier, amountMWK, ...(quotedAt !== undefined ? { quotedAt } : {}) };
     });
-    if (new Set(quotes.map((quote) => normalizeSupplierIdentity(quote.supplier))).size !== quotes.length) {
+    if (new Set(quotes.map((quote) => normalizeProcurementSupplierIdentity(quote.supplier))).size !== quotes.length) {
       throw new Error(`Procurement item ${index + 1} contains duplicate supplier quotes.`);
     }
 
@@ -135,7 +135,7 @@ export function normalizeImportedProcurementItems(value: unknown): { items: Proc
     const selectedQuoteSupplier = typeof row.selectedQuoteSupplier === 'string' ? row.selectedQuoteSupplier.trim().replace(/\\s+/g, ' ') : '';
     const selectedQuoteAmountMWK = optionalImportedAmount(row.selectedQuoteAmountMWK, `Procurement item ${index + 1} selected quote`);
     if (Boolean(selectedQuoteSupplier) !== Boolean(selectedQuoteAmountMWK) ||
-        (selectedQuoteSupplier && !quotes.some((quote) => normalizeSupplierIdentity(quote.supplier) === normalizeSupplierIdentity(selectedQuoteSupplier) && quote.amountMWK === selectedQuoteAmountMWK))) {
+        (selectedQuoteSupplier && !quotes.some((quote) => normalizeProcurementSupplierIdentity(quote.supplier) === normalizeProcurementSupplierIdentity(selectedQuoteSupplier) && quote.amountMWK === selectedQuoteAmountMWK))) {
       throw new Error(`Procurement item ${index + 1} selected quote must match a recorded supplier quote.`);
     }
     const quoteRequirementReason = row.quoteRequirementReason;
