@@ -4,12 +4,12 @@ export interface ProcurementApprovalCheck { allowed: boolean; blockers: string[]
 
 /** Normalize supplier labels consistently so spacing/case variants cannot count as separate quotes. */
 function normalizeSupplierIdentity(value: unknown): string {
-  return typeof value === 'string' ? value.trim().replace(/\\s+/g, ' ').toLocaleLowerCase() : '';
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').toLocaleLowerCase() : '';
 }
 
 /** Quote dates are date-only values and must be real Gregorian calendar dates. */
 function isValidQuoteDate(value: string): boolean {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
