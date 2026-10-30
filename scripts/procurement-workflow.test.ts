@@ -59,6 +59,7 @@ const supplierIndex = buildSupplierActivityIndex([
   { ...baseList, id: 'PRC-TEST-001', updatedAt: '2026-10-20T10:00:00.000Z', items: [
     { ...baseItem, quotes: [
       { supplier: 'Acme Supplies', amountMWK: 12000, quotedAt: '2026-10-18' },
+      { supplier: 'Acme Supplies', amountMWK: 12500, quotedAt: '2026-02-31' },
       { supplier: 'Beta Traders', amountMWK: 13000, quotedAt: '2026-10-19' },
     ] },
   ] },
@@ -67,6 +68,7 @@ const supplierIndex = buildSupplierActivityIndex([
   ] },
 ], [
   { id: 'EXP-1', supplier: 'Acme Supplies', date: '2026-10-27' },
+  { id: 'EXP-INVALID', supplier: 'Acme Supplies', date: '2026-13-01' },
   { id: 'EXP-2', supplier: 'Gamma Services', date: '2026-10-26' },
   { id: 'EXP-3', supplier: 'N/A', date: '2026-10-28' },
 ] as unknown as import('../src/types').HouseholdExpense[], [
