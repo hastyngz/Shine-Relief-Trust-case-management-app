@@ -62,6 +62,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
   const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
   const [activePhotoUrl, setActivePhotoUrl] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteConfirmAttachment, setDeleteConfirmAttachment] = useState<PhotoAttachment | null>(null);
 
   const canUpload = canUploadAttachment(role, isViewOnly);
@@ -89,6 +90,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
       }
     } catch (err) {
       console.error('Failed to delete photo attachment:', err);
+      setDeleteError(err instanceof Error ? err.message : 'The attachment could not be deleted. Its record has been kept so you can retry.');
     } finally {
       setDeletingId(null);
     }
@@ -254,6 +256,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setDeleteError(null);
                             setDeleteConfirmAttachment(att);
                           }}
                           className="p-1 text-stone-400 hover:text-red-600 rounded"
@@ -328,6 +331,8 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
             <p className="text-xs text-stone-600">
               Are you sure you want to permanently remove this photo ({deleteConfirmAttachment.category}) from Cloudflare R2?
             </p>
+
+            {deleteError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">{deleteError} The attachment remains listed; check your connection or permissions and try again.</p>}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
