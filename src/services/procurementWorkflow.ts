@@ -132,7 +132,7 @@ export function normalizeImportedProcurementItems(value: unknown): { items: Proc
         typeof row.selectedQuoteSupplier !== 'string') {
       throw new Error(`Procurement item ${index + 1} selected supplier is invalid.`);
     }
-    const selectedQuoteSupplier = typeof row.selectedQuoteSupplier === 'string' ? row.selectedQuoteSupplier.trim().replace(/\\s+/g, ' ') : '';
+    const selectedQuoteSupplier = typeof row.selectedQuoteSupplier === 'string' ? row.selectedQuoteSupplier.trim().replace(/\s+/g, ' ') : '';
     const selectedQuoteAmountMWK = optionalImportedAmount(row.selectedQuoteAmountMWK, `Procurement item ${index + 1} selected quote`);
     if (Boolean(selectedQuoteSupplier) !== Boolean(selectedQuoteAmountMWK) ||
         (selectedQuoteSupplier && !quotes.some((quote) => normalizeProcurementSupplierIdentity(quote.supplier) === normalizeProcurementSupplierIdentity(selectedQuoteSupplier) && quote.amountMWK === selectedQuoteAmountMWK))) {
