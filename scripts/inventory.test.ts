@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import type { InventoryItem } from '../src/types';
-import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../src/utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, isValidInventoryDate, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../src/utils/inventory';
 
 assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
+assert.equal(isValidInventoryDate('2026-10-15'), true);
+assert.equal(isValidInventoryDate('2024-02-29'), true, 'leap days should be accepted');
+assert.equal(isValidInventoryDate('2026-02-29'), false, 'non-leap February 29 should be rejected');
+assert.equal(isValidInventoryDate('2026-02-31'), false, 'impossible dates should be rejected');
+assert.equal(isValidInventoryDate('15/10/2026'), false, 'non-ISO dates should be rejected');
+assert.equal(isValidInventoryDate(''), false);
 
 const generatedInventoryIds = new Set(Array.from({ length: 1000 }, () => createInventoryId('inv')));
 assert.equal(generatedInventoryIds.size, 1000, 'inventory IDs should be unique across a batch');
