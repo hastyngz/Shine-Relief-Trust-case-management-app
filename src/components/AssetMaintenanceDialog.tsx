@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useRef, useState } from 'react';
 import { CalendarClock, X } from 'lucide-react';
 import type { AssetHistoryEntry, AssetRecord } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,6 +22,7 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
   const [nextServiceDate, setNextServiceDate] = useState(asset.nextServiceDate || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -45,6 +46,8 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
       recordedBy: actor,
       recordedAt: now,
     };
+    if (saveLock.current) return;
+    saveLock.current = true;
     setSaving(true);
     setError('');
     try {
@@ -60,6 +63,7 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the maintenance record.');
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   };
