@@ -1,5 +1,4 @@
 import type { AppDatabase, SalaryHistoryRecord, StaffUser } from '../types';
-import * as XLSX from 'xlsx';
 import { calculateBudgetVariance } from './financialCalculations';
 import { buildManagementAnalytics, ManagementFilters, matchesManagementProgramme } from './managementAnalytics';
 import { calculateGratuity } from './gratuityService';
@@ -255,14 +254,15 @@ export function buildManagementReportRows(
   }
 }
 
-export function generateManagementReportWorkbook(
+export async function generateManagementReportWorkbook(
   reportId: ManagementReportId,
   report: { headers: string[]; rows: ReportCell[][] },
   filters: ManagementFilters,
   generatedBy: string,
   generatedAt = new Date().toISOString(),
   qualityRows: Array<Array<string | number>> = []
-): Uint8Array {
+): Promise<Uint8Array> {
+  const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
   const reportLabel = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
   const summary = XLSX.utils.aoa_to_sheet([

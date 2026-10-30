@@ -1,0 +1,237 @@
+name: SHINE app checks
+
+on:
+  push:
+    branches:
+      - Replit
+  pull_request:
+    branches:
+      - Replit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shine-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (reconcile existing lockfile)
+        run: npm install --no-audit --no-fund
+
+      - name: Check TypeScript
+        run: npm run lint
+
+      - name: Test shared UI effects and save feedback
+        run: npm run test:ui-effects
+
+      - name: Test administration hub module navigation
+        run: npm run test:administration-hub
+
+      - name: Test administration operational attention summaries
+        run: npm run test:administration-overview
+
+      - name: Test document filing filters
+        run: npm run test:document-filing
+
+      - name: Test safeguarding export boundary
+        run: npm run test:safeguarding-export-boundary
+
+      - name: Test Excel report file generation
+        run: npm run test:report-export
+
+      - name: Test management report generation and Excel download
+        run: npx tsx scripts/phase3d-management.test.ts
+
+
+      - name: Test password-reset feedback sanitization
+        run: npx tsx scripts/password-reset-feedback.test.ts
+
+      - name: Test case-goal persistence recovery
+        run: npm run test:case-goals
+
+      - name: Test upload MIME and signature validation
+        run: npm run test:storage-upload-validation
+
+      - name: Test authenticated R2 Worker upload route
+        run: npm run test:r2-worker-upload-validation
+
+      - name: Test secure staff invitation lifecycle
+        run: npm run test:staff-invitations-worker
+
+      - name: Test staff invitation URL handling
+        run: npm run test:staff-invitation-url
+
+      - name: Test safe staff invitation feedback
+        run: npm run test:staff-invitation-feedback
+
+      - name: Test atomic inventory movement Worker transactions
+        run: npm run test:inventory-movement-worker
+
+      - name: Test procurement receipt to inventory linkage
+        run: npx tsx scripts/procurement-inventory-receipt.test.ts
+
+      - name: Test partial procurement delivery retry and quantity safeguards
+        run: npx tsx scripts/procurement-delivery.test.ts
+
+      - name: Test procurement lifecycle validation
+        run: npx tsx scripts/procurement-lifecycle.test.ts
+
+      - name: Test durable inventory retry persistence
+        run: npm run test:inventory-pending-retry
+
+      - name: Test inventory transaction Firestore rules
+        run: npm run test:inventory-rules
+
+      - name: Test health-record access and follow-up notifications
+        run: npm run test:health-access
+
+      - name: Test Firestore listener permissions
+        run: npm run test:firestore-listener-permissions
+
+      - name: Test Firestore security rules in emulator
+        run: npm run test:rules
+
+      - name: Test existing quality rules
+        run: npm run test:quality
+
+      - name: Test compliance recurring occurrence generation
+        run: npx tsx scripts/compliance-recurrence.test.ts
+
+      - name: Test report-writing guidance coverage
+        run: npm run test:report-writing-help
+
+      - name: Test local early-warning rules
+        run: npm run test:early-warning
+
+      - name: Test spreadsheet import and AI access boundaries
+        run: npm run test:phase2
+
+      - name: Test Phase 5 operational intelligence
+        run: npm run test:phase5
+
+      - name: Test Phase 5 case intelligence chain
+        run: npm run test:phase5-e2e
+
+      - name: Test Phase 5 Firestore permissions in emulator
+        run: npm run test:phase5-rules
+
+      - name: Test import-audit source migration safeguards
+        run: npm run test:import-audit-migration
+
+      - name: Test procurement quote and approval workflow
+        run: npm run test:procurement
+
+      - name: Test procurement list filters
+        run: npm run test:procurement-filtering
+
+      - name: Test internal procurement report aggregates
+        run: npm run test:management-procurement-report
+
+      - name: Test payroll and gratuity calculations
+        run: npm run test:payroll
+
+      - name: Test offline sync queue
+        run: npm run test:offline
+
+      - name: Test offline diff performance budget
+        run: npm run test:offline-perf
+
+      - name: Test offline queue keying
+        run: npm run test:offline-queue
+
+      - name: Test local storage failure handling
+        run: npm run test:storage
+
+      - name: Test error boundary
+        run: npm run test:error-boundary
+
+      - name: Test code splitting
+        run: npm run test:code-splitting
+
+      - name: Test offline app shell
+        run: npm run test:app-shell
+
+      - name: Test rate limiting
+        run: npm run test:rate-limit
+
+      - name: Test inventory expiry and stocktake helpers
+        run: npm run test:inventory
+
+      - name: Test inventory Word, Excel and PDF export mapping
+        run: npm run test:inventory-export
+      - name: Test asset Word, Excel and PDF export mapping
+        run: npm run test:asset-export
+
+      - name: Test asset register filters
+        run: npm run test:asset-filtering
+
+      - name: Test physical asset verification
+        run: npm run test:asset-verification
+
+      - name: Test hash routing
+        run: npm run test:routing
+
+      - name: Audit Firestore access patterns
+        run: npm run audit:firestore-access
+
+      - name: Build application
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java for the Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (reconcile existing lockfile)
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run offline end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

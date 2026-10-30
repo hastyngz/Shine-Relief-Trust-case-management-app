@@ -7,7 +7,7 @@ import { addEarlyYearsRecord, addFeedingProgramLog, addMarketPrice, addMeetingRe
 import { AudioDataInput } from './AudioDataInput';
 import { DocumentIntelligencePanel } from './DocumentIntelligencePanel';
 import { calculateBudgetForecast, calculateFeedingCostInsight, calculateMarketPriceInsight, calculateWhatIfScenario, searchOperationalRecords } from '../../services/intelligenceService';
-import { buildIntelligentCaseSummary, detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from '../../services/caseIntelligenceService';
+import { buildIntelligentCaseSummary, detectIntelligenceSuggestions, filterCaseIntelligenceData, findPotentialDuplicates, scanDataQuality } from '../../services/caseIntelligenceService';
 import { expandWorkplanOccurrences } from '../../services/workplanRecurrence';
 
 interface Phase5OperationsViewProps { db: AppDatabase; onRefresh: () => void; onNavigateToProgramme: (id: ProgrammeId) => void; }
@@ -28,7 +28,7 @@ type OperationsAgendaItem = {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, onRefresh, onNavigateToProgramme }) => {
-  const { canEdit, isAdmin, role, staffProfile, currentUser } = useAuth();
+  const { canEdit, isAdmin, role, staffProfile, currentUser, canViewHealthRecords, canViewCaseReviews } = useAuth();
   const [tab, setTab] = useState<Phase5Tab>('overview');
   const [calendarMode, setCalendarMode] = useState<'month' | 'week' | 'day' | 'agenda'>('agenda');
   const [calendarDate, setCalendarDate] = useState(today());
@@ -55,6 +55,11 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     setUpdatedAt(new Date());
   }, [db]);
 
+  const intelligenceDb = useMemo(
+    () => filterCaseIntelligenceData(db, { canViewHealthRecords, canViewCaseReviews }),
+    [db, canViewHealthRecords, canViewCaseReviews]
+  );
+
   const meetings = db.meetings || [];
   const feedingLogs = db.feedingProgramLogs || [];
   const marketPrices = db.marketPrices || [];
@@ -72,9 +77,9 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     return { category, approved, actual, ratio: approved ? Math.min(100, (actual / approved) * 100) : 0 };
   }), [db.budgets]);
   const searchResults = useMemo(() => searchOperationalRecords(db, search), [db, search]);
-  const suggestions = useMemo(() => detectIntelligenceSuggestions(db).map((suggestion) => db.intelligenceSuggestions?.find((saved) => saved.id === suggestion.id) || suggestion), [db]);
-  const qualityIssues = useMemo(() => scanDataQuality(db), [db]);
-  const duplicateCandidates = useMemo(() => findPotentialDuplicates(db), [db]);
+  const suggestions = useMemo(() => detectIntelligenceSuggestions(intelligenceDb).map((suggestion) => intelligenceDb.intelligenceSuggestions?.find((saved) => saved.id === suggestion.id) || suggestion), [intelligenceDb]);
+  const qualityIssues = useMemo(() => scanDataQuality(intelligenceDb), [intelligenceDb]);
+  const duplicateCandidates = useMemo(() => findPotentialDuplicates(intelligenceDb), [intelligenceDb]);
   const pendingReviewCount = useMemo(() => {
     const pendingSuggestions = suggestions.filter((suggestion) =>
       !reviewStatuses[suggestion.id] && suggestion.reviewStatus === 'suggested'
@@ -121,7 +126,7 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     }
     return '';
   }, [db, askQuestion]);
-  const caseSummary = useMemo(() => summaryGirlId ? buildIntelligentCaseSummary(db, summaryGirlId) : null, [db, summaryGirlId]);
+  const caseSummary = useMemo(() => summaryGirlId ? buildIntelligentCaseSummary(intelligenceDb, summaryGirlId) : null, [intelligenceDb, summaryGirlId]);
 
   const workplanAgenda = useMemo(() => {
     const selectedYear = Number(calendarDate.slice(0, 4));

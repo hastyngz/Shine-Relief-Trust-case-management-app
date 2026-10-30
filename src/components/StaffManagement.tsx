@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
-import { EmployeeContractPanel } from './EmployeeContractPanel';
+import { getPasswordResetErrorMessage } from '../utils/passwordResetFeedback';
 import {
   Users,
   UserPlus,
@@ -36,8 +36,6 @@ export const StaffManagement: React.FC = () => {
     deleteStaffAccount,
     sendResetPassword,
   } = useAuth();
-  const [selectedEmployee, setSelectedEmployee] = useState<StaffUser | null>(null);
-
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
@@ -50,7 +48,6 @@ export const StaffManagement: React.FC = () => {
   const [newRole, setNewRole] = useState<StaffRole>('Staff');
   const [newDepartment, setNewDepartment] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newPassword, setNewPassword] = useState('Shine@2026!');
 
   // Action states
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +55,7 @@ export const StaffManagement: React.FC = () => {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Guard: Admin only
-  if (!isAdmin && staffProfile?.role !== 'Manager') {
+  if (!isAdmin) {
     return (
       <div className="max-w-4xl mx-auto py-12 px-4 text-center">
         <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -140,10 +137,9 @@ export const StaffManagement: React.FC = () => {
         role: newRole,
         departmentOrTitle: newDepartment,
         phone: newPhone,
-        initialPassword: newPassword,
       });
 
-      setActionSuccess(`Staff account created for ${newFullName} (${newRole}). An invitation email was sent.`);
+      setActionSuccess(`Invitation email sent to ${newEmail.trim().toLowerCase()}. The staff profile will be created only after the recipient verifies their email and accepts the invitation.`);
       setIsAddModalOpen(false);
       // Reset form
       setNewFullName('');
@@ -151,7 +147,6 @@ export const StaffManagement: React.FC = () => {
       setNewRole('Staff');
       setNewDepartment('');
       setNewPhone('');
-      setNewPassword('Shine@2026!');
     } catch (err: any) {
       setActionError(err.message || 'Failed to create staff account.');
     } finally {
@@ -187,11 +182,13 @@ export const StaffManagement: React.FC = () => {
   };
 
   const handleSendResetLink = async (staff: StaffUser) => {
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await sendResetPassword(staff.email);
-      setActionSuccess(`Dispatched password reset instructions to ${staff.email}.`);
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to send password reset email.');
+      setActionSuccess(`Password reset request accepted. If an Auth account exists for ${staff.email}, instructions should arrive by email. This action did not change the password.`);
+    } catch (err: unknown) {
+      setActionError(getPasswordResetErrorMessage(err));
     }
   };
 
@@ -538,14 +535,6 @@ export const StaffManagement: React.FC = () => {
                       {/* Actions */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedEmployee(staff)}
-                            title="Open contract, salary history and gratuity"
-                            className="px-2 py-1 text-[10px] font-bold text-teal-900 bg-teal-50 hover:bg-teal-100 rounded-lg"
-                          >
-                            Contract & gratuity
-                          </button>
                           {/* Send Reset Email */}
                           {isAdmin && <button
                             type="button"
@@ -658,7 +647,6 @@ export const StaffManagement: React.FC = () => {
                   >
                     <option value="Staff">Staff (Standard)</option>
                     <option value="Manager">Manager (Operations)</option>
-                    <option value="Administrator">Administrator (Full Access)</option>
                     <option value="View Only">View Only (Auditor/Guest)</option>
                   </select>
                 </div>
@@ -691,28 +679,14 @@ export const StaffManagement: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                    Temporary Initial Password
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    minLength={6}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs font-mono text-stone-900 focus:bg-white focus:ring-2 focus:ring-teal-700"
-                  />
-                </div>
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] text-amber-900">
                 <div className="font-bold flex items-center gap-1 text-amber-950 mb-0.5">
                   <Lock className="w-3.5 h-3.5" />
-                  Firebase Authentication Account Provisioning
+                  Secure email invitation
                 </div>
-                The account will be provisioned in Firebase Auth, and a password reset link will be
-                automatically sent so the staff member can immediately set their own private password.
+                Firebase sends a sign-in link to the invited address. No shared or temporary password is created; the staff profile is saved only after the recipient verifies the email and accepts the single-use invitation.
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
@@ -728,25 +702,12 @@ export const StaffManagement: React.FC = () => {
                   disabled={submitting}
                   className="px-5 py-2 bg-teal-900 hover:bg-teal-950 text-white font-bold text-xs rounded-xl shadow-xs transition-all disabled:opacity-50"
                 >
-                  {submitting ? 'Creating Account...' : 'Create Staff Member'}
+                  {submitting ? 'Sending invitation…' : 'Send invitation'}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
-      {selectedEmployee && staffProfile && (
-        <EmployeeContractPanel
-          staff={selectedEmployee}
-          actorUid={staffProfile.uid}
-          actorName={staffProfile.fullName}
-          canEdit={isAdmin || staffProfile.role === 'Manager'}
-          onUpdate={async (staffId, updates) => {
-            await updateStaffAccount(staffId, updates);
-            setSelectedEmployee((current) => current ? { ...current, ...updates } : current);
-          }}
-          onClose={() => setSelectedEmployee(null)}
-        />
       )}
     </div>
   );

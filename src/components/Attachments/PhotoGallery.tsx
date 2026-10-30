@@ -31,6 +31,7 @@ import {
 import { PhotoUploadModal } from './PhotoUploadModal';
 import { formatDate } from '../../utils/export';
 import { formatBytes } from '../../utils/imageOptimizer';
+import { getStoredFileDownloadUrl } from '../../services/r2StorageClient';
 
 interface PhotoGalleryProps {
   attachments: PhotoAttachment[];
@@ -50,7 +51,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
   targetId,
   targetTitle,
   title = 'Photos & Attached Documentation',
-  subtitle = 'Secure photos, report cards, medical records and supporting documents stored in Firebase Storage',
+  subtitle = 'Secure photos, report cards, medical records and supporting documents stored in Cloudflare R2',
   defaultCategory,
   onAttachmentDeleted,
   onAttachmentAdded,
@@ -59,7 +60,9 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
+  const [activePhotoUrl, setActivePhotoUrl] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteConfirmAttachment, setDeleteConfirmAttachment] = useState<PhotoAttachment | null>(null);
 
   const canUpload = canUploadAttachment(role, isViewOnly);
@@ -87,6 +90,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
       }
     } catch (err) {
       console.error('Failed to delete photo attachment:', err);
+      setDeleteError(err instanceof Error ? err.message : 'The attachment could not be deleted. Its record has been kept so you can retry.');
     } finally {
       setDeletingId(null);
     }
@@ -96,6 +100,33 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
     activePhotoIndex !== null && filteredAttachments[activePhotoIndex]
       ? filteredAttachments[activePhotoIndex]
       : null;
+
+  const openPhoto = async (attachment: PhotoAttachment, index: number) => {
+    setActivePhotoIndex(index);
+    setActivePhotoUrl('');
+    try {
+      setActivePhotoUrl(await getStoredFileDownloadUrl(attachment.storagePath));
+    } catch (error) {
+      console.error('Could not create secure photo view URL:', error);
+    }
+  };
+
+  const downloadPhoto = async (event: React.MouseEvent<HTMLAnchorElement>, attachment: PhotoAttachment) => {
+    event.preventDefault();
+    const popup = window.open('', '_blank');
+    try {
+      const url = await getStoredFileDownloadUrl(attachment.storagePath, attachment.fileName);
+      if (popup) {
+        popup.opener = null;
+        popup.location.replace(url);
+      } else {
+        window.location.assign(url);
+      }
+    } catch (error) {
+      popup?.close();
+      console.error('Could not create secure photo download URL:', error);
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-5 space-y-4">
@@ -172,7 +203,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
               >
                 {/* Thumbnail */}
                 <div
-                  onClick={() => setActivePhotoIndex(idx)}
+                  onClick={() => void openPhoto(att, idx)}
                   className="relative aspect-4/3 bg-stone-200 cursor-pointer overflow-hidden"
                 >
                   <img
@@ -214,6 +245,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
                         href={att.downloadUrl}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={(event) => void downloadPhoto(event, att)}
                         className="p-1 text-stone-400 hover:text-teal-900 rounded"
                         title="Open in new tab / download"
                       >
@@ -224,6 +256,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setDeleteError(null);
                             setDeleteConfirmAttachment(att);
                           }}
                           className="p-1 text-stone-400 hover:text-red-600 rounded"
@@ -296,8 +329,10 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
             </div>
 
             <p className="text-xs text-stone-600">
-              Are you sure you want to permanently remove this photo ({deleteConfirmAttachment.category}) from Firebase Storage?
+              Are you sure you want to permanently remove this photo ({deleteConfirmAttachment.category}) from Cloudflare R2?
             </p>
+
+            {deleteError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">{deleteError} The attachment remains listed; check your connection or permissions and try again.</p>}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
@@ -345,6 +380,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
                 target="_blank"
                 rel="noreferrer"
                 download={activePhoto.fileName}
+                onClick={(event) => void downloadPhoto(event, activePhoto)}
                 className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-white transition-colors"
                 title="Download full photo"
               >
@@ -379,7 +415,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
             {activePhotoIndex! > 0 && (
               <button
                 type="button"
-                onClick={() => setActivePhotoIndex(activePhotoIndex! - 1)}
+                onClick={() => void openPhoto(filteredAttachments[activePhotoIndex! - 1], activePhotoIndex! - 1)}
                 className="absolute left-2 p-2 rounded-full bg-stone-900/80 hover:bg-stone-800 text-white transition-colors z-10"
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -387,7 +423,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
             )}
 
             <img
-              src={activePhoto.downloadUrl}
+              src={activePhotoUrl || activePhoto.downloadUrl}
               alt={activePhoto.caption || activePhoto.fileName}
               className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
             />
@@ -396,7 +432,7 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
             {activePhotoIndex! < filteredAttachments.length - 1 && (
               <button
                 type="button"
-                onClick={() => setActivePhotoIndex(activePhotoIndex! + 1)}
+                onClick={() => void openPhoto(filteredAttachments[activePhotoIndex! + 1], activePhotoIndex! + 1)}
                 className="absolute right-2 p-2 rounded-full bg-stone-900/80 hover:bg-stone-800 text-white transition-colors z-10"
               >
                 <ChevronRight className="w-6 h-6" />

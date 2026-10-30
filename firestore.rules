@@ -6,10 +6,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // The primary Administrator email must be verified even if a legacy profile
+    // already exists under that UID. Other pre-registered staff remain UID-bound.
+    function isPrimaryEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.get('email', null) == null ||
+        request.auth.token.get('email', '').lower() != 'hastingszidanamot@gmail.com' ||
+        request.auth.token.get('email_verified', false) == true
+      );
+    }
+
     function isHastings() {
       return isSignedIn() &&
-        request.auth.token.email != null &&
-        request.auth.token.email.lower() == 'hastingszidanamot@gmail.com';
+        request.auth.token.get('email', null) != null &&
+        request.auth.token.get('email', '').lower() == 'hastingszidanamot@gmail.com' &&
+        request.auth.token.get('email_verified', false) == true;
     }
 
     function getStaffDoc(uid) {
@@ -17,7 +28,7 @@ service cloud.firestore {
     }
 
     function isStaffActive() {
-      return isSignedIn() && (
+      return isSignedIn() && isPrimaryEmailVerified() && (
         isHastings() ||
         (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
          getStaffDoc(request.auth.uid).data.status == 'Active')
@@ -25,7 +36,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
+      return isSignedIn() && isPrimaryEmailVerified() && (
         isHastings() ||
         (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
          getStaffDoc(request.auth.uid).data.role == 'Administrator' &&
@@ -34,7 +45,7 @@ service cloud.firestore {
     }
 
     function isManagerOrStaff() {
-      return isSignedIn() && (
+      return isSignedIn() && isPrimaryEmailVerified() && (
         isAdmin() ||
         (exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
          (getStaffDoc(request.auth.uid).data.role == 'Manager' || getStaffDoc(request.auth.uid).data.role == 'Staff') &&
@@ -44,7 +55,7 @@ service cloud.firestore {
 
     function isManagerOrAdmin() {
       return isAdmin() || (
-        isSignedIn() &&
+        isSignedIn() && isPrimaryEmailVerified() &&
         exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) &&
         getStaffDoc(request.auth.uid).data.role == 'Manager' &&
         getStaffDoc(request.auth.uid).data.status == 'Active'
@@ -55,6 +66,13 @@ service cloud.firestore {
       return isManagerOrAdmin() || (
         isStaffActive() &&
         getStaffDoc(request.auth.uid).data.canViewHealthRecords == true
+      );
+    }
+
+    function canViewSafeguardingRecords() {
+      return isAdmin() || (
+        isStaffActive() &&
+        getStaffDoc(request.auth.uid).data.get('safeguardingPermissions', {}).get('canView', false) == true
       );
     }
 
@@ -79,6 +97,127 @@ service cloud.firestore {
       );
     }
 
+    function inventoryMovementMatchesItem(itemId, movementId) {
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let movement = getAfter(movementPath).data;
+      let embedded = request.resource.data.movements[request.resource.data.movements.size() - 1];
+      return existsAfter(movementPath) &&
+        movement.inventoryItemId == itemId &&
+        movement.id == movementId &&
+        movement.recordedByUid == request.auth.uid &&
+        movement.previousQuantity == resource.data.quantityOnHand &&
+        movement.newQuantity == request.resource.data.quantityOnHand &&
+        embedded.type == movement.type &&
+        embedded.quantity == movement.quantity &&
+        embedded.date == movement.date &&
+        embedded.reason == movement.reason &&
+        embedded.createdAt == movement.createdAt &&
+        movement.quantity is number &&
+        movement.quantity >= 0 &&
+        (
+          (movement.type == 'Received' &&
+            movement.quantity > 0 &&
+            movement.newQuantity == movement.previousQuantity + movement.quantity) ||
+          (movement.type == 'Issued' &&
+            movement.quantity > 0 &&
+            movement.quantity <= movement.previousQuantity &&
+            movement.newQuantity == movement.previousQuantity - movement.quantity) ||
+          (movement.type == 'Adjustment' &&
+            movement.newQuantity >= 0 &&
+            movement.quantity == (movement.newQuantity >= movement.previousQuantity
+              ? movement.newQuantity - movement.previousQuantity
+              : movement.previousQuantity - movement.newQuantity))
+        );
+    }
+
+    function isValidInventoryMovementUpdate(itemId) {
+      let movementId = request.resource.data.lastMovementId;
+      return movementId is string &&
+        request.resource.data.quantityOnHand is number &&
+        request.resource.data.quantityOnHand >= 0 &&
+        request.resource.data.movements is list &&
+        request.resource.data.movements.size() == resource.data.get('movements', []).size() + 1 &&
+        request.resource.data.movements.hasAll(resource.data.get('movements', [])) &&
+        request.resource.data.movements[request.resource.data.movements.size() - 1].id == movementId &&
+        inventoryMovementMatchesItem(itemId, movementId);
+    }
+
+    function isValidProcurementReceiptSource(itemId) {
+      let procurementPath = /databases/$(database)/documents/procurementLists/$(request.resource.data.sourceId);
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let lineIndex = request.resource.data.sourceLineIndex;
+      return request.resource.data.sourceType == 'procurementReceipt' &&
+        request.resource.data.type == 'Received' &&
+        request.resource.data.sourceId is string &&
+        request.resource.data.sourceId.matches('^[A-Za-z0-9_-]{1,100}$') &&
+        request.resource.data.sourceLineIndex is int &&
+        lineIndex >= 0 && lineIndex <= 9999 &&
+        request.resource.data.reference is string &&
+        request.resource.data.reference.size() > 0 &&
+        request.resource.data.reference.size() <= 250 &&
+        exists(procurementPath) &&
+        get(procurementPath).data.id == request.resource.data.sourceId &&
+        get(procurementPath).data.status == 'purchased' &&
+        !get(procurementPath).data.keys().hasAny(['receivedAt']) &&
+        get(procurementPath).data.items is list &&
+        get(procurementPath).data.items.size() > lineIndex &&
+        get(procurementPath).data.items[lineIndex].quantity == request.resource.data.quantity &&
+        get(procurementPath).data.items[lineIndex].unit is string &&
+        get(procurementPath).data.items[lineIndex].unit.size() > 0 &&
+        get(itemPath).data.unit is string &&
+        get(procurementPath).data.items[lineIndex].unit == get(itemPath).data.unit;
+    }
+
+    function isValidInventoryMovementCreate(movementId) {
+      let itemId = request.resource.data.inventoryItemId;
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let itemAfter = getAfter(itemPath).data;
+      return isManagerOrStaff() &&
+        request.resource.data.id == movementId &&
+        request.resource.data.recordedByUid == request.auth.uid &&
+        request.resource.data.previousQuantity is number &&
+        request.resource.data.newQuantity is number &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity >= 0 &&
+        (!request.resource.data.keys().hasAny(['sourceType']) || isValidProcurementReceiptSource(itemId)) &&
+        exists(itemPath) &&
+        existsAfter(itemPath) &&
+        itemAfter.lastMovementId == movementId &&
+        itemAfter.quantityOnHand == request.resource.data.newQuantity &&
+        get(itemPath).data.quantityOnHand == request.resource.data.previousQuantity &&
+        (
+          (request.resource.data.type == 'Received' &&
+            request.resource.data.quantity > 0 &&
+            request.resource.data.newQuantity == request.resource.data.previousQuantity + request.resource.data.quantity) ||
+          (request.resource.data.type == 'Issued' &&
+            request.resource.data.quantity > 0 &&
+            request.resource.data.quantity <= request.resource.data.previousQuantity &&
+            request.resource.data.newQuantity == request.resource.data.previousQuantity - request.resource.data.quantity) ||
+          (request.resource.data.type == 'Adjustment' &&
+            request.resource.data.newQuantity >= 0 &&
+            request.resource.data.quantity == (request.resource.data.newQuantity >= request.resource.data.previousQuantity
+              ? request.resource.data.newQuantity - request.resource.data.previousQuantity
+              : request.resource.data.previousQuantity - request.resource.data.newQuantity))
+        );
+    }
+
+    function importAuditMigrationComplete() {
+      return exists(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary) &&
+        get(/databases/$(database)/documents/importAuditMigrationStatus/sourceDataBoundary).data.status == 'complete';
+    }
+
+    function hasMatchingRestrictedImportSource(auditId, auditData) {
+      let sourcePath = /databases/$(database)/documents/restrictedImportSources/$(auditId);
+      return existsAfter(sourcePath) &&
+        getAfter(sourcePath).data.id == auditId &&
+        getAfter(sourcePath).data.auditId == auditId &&
+        getAfter(sourcePath).data.fileName == auditData.get('fileName', '') &&
+        getAfter(sourcePath).data.importedAt == auditData.get('importedAt', '') &&
+        getAfter(sourcePath).data.keys().hasAll(['sourceData']) &&
+        getAfter(sourcePath).data.sourceData is map &&
+        getAfter(sourcePath).data.sourceData.keys().size() > 0;
+    }
+
     function canReadSafeguarding(caseId) {
       let caseRecord = get(/databases/$(database)/documents/safeguardingCases/$(caseId));
       return isAdmin() || (
@@ -101,18 +240,19 @@ service cloud.firestore {
 
     // Staff Users Management collection
     match /staffUsers/{userId} {
-      // Active staff can view the roster; an unregistered user can only look up their own invitation.
+      // Active staff can view the roster; a verified, unregistered email can read only its matching pre-registered profile for UID linking.
       allow read: if isAdmin() || isStaffActive() || (
         isSignedIn() &&
-        request.auth.token.email != null &&
-        request.auth.token.email.lower() == resource.data.email.lower()
+        request.auth.token.get('email_verified', false) == true &&
+        request.auth.token.get('email', null) != null &&
+        request.auth.token.get('email', '').lower() == resource.data.email.lower()
       );
 
       // Bootstrap rule: Hastings can initialize his own Administrator doc.
       // All other staff creations MUST be performed by an existing Administrator.
       // Self-registration as Administrator by anyone else is strictly blocked.
       allow create: if isSignedIn() && (
-        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator') ||
+        (isHastings() && request.auth.uid == userId && request.resource.data.role == 'Administrator' && request.resource.data.email is string && request.resource.data.email.lower() == request.auth.token.get('email', '').lower()) ||
         isAdmin()
       );
 
@@ -222,29 +362,54 @@ service cloud.firestore {
     }
 
     match /caseActions/{actionId} {
-      allow read: if isManagerOrAdmin() ||
-        (isStaffActive() && resource.data.assignedStaffId == request.auth.uid);
-      allow create: if isManagerOrAdmin() || (
-        isStaffActive() &&
-        resource == null &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.assignedStaffId == request.auth.uid
-      );
-      allow update: if isManagerOrAdmin() || (
-        isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
-        request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
-        ])
-      );
-      allow delete: if isAdmin();
+      // Single-record reads retain the legacy missing-sourceType default.
+      allow get: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() ||
+          (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
+      // Use direct field access for list queries so Firestore can prove that a
+      // query excludes restricted action types. The app's not-in / != listeners
+      // already exclude legacy records that lack sourceType.
+      allow list: if (resource.data.sourceType != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.sourceType != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() ||
+          (isStaffActive() && resource.data.assignedStaffId == request.auth.uid));
+      allow create: if (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() || (
+          isManagerOrStaff() &&
+          resource == null &&
+          request.resource.data.createdByUid == request.auth.uid &&
+          request.resource.data.assignedStaffId == request.auth.uid
+        ));
+      allow update: if
+        (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (request.resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) &&
+        (isManagerOrAdmin() || (
+          isManagerOrStaff() && resource.data.assignedStaffId == request.auth.uid &&
+          request.resource.data.assignedStaffId == resource.data.assignedStaffId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'completedAt', 'completionNotes', 'updatedAt', 'updatedBy', 'updatedByUid'
+          ])
+        ));
+      allow delete: if (resource.data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (resource.data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords()) && isAdmin();
     }
 
     match /caseActionAuditLogs/{eventId} {
-      allow read: if isManagerOrAdmin() || (
+      allow get: if (
+        (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'healthFollowUp' || canViewHealthRecords()) &&
+        (get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.get('sourceType', '') != 'safeguarding' || canViewSafeguardingRecords())
+      ) && (isManagerOrAdmin() || (
         isStaffActive() &&
         get(/databases/$(database)/documents/caseActions/$(resource.data.recordId)).data.assignedStaffId == request.auth.uid
-      );
+      ));
+      // This collection mixes action types and the query cannot constrain the
+      // referenced action's sourceType. Restrict listing to roles allowed to
+      // inspect safeguarding records; direct get remains action-scoped above.
+      allow list: if isManagerOrAdmin() && canViewSafeguardingRecords();
       allow create: if isStaffActive() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
@@ -287,8 +452,39 @@ service cloud.firestore {
 
     match /caseReviews/{id} {
       allow read: if canViewCaseReviews();
-      allow create, update: if canEditCaseReviews();
+      allow create: if canEditCaseReviews() &&
+        (request.resource.data.get('health', '') == '' || canEditHealthRecords());
+      allow update: if canEditCaseReviews() &&
+        ((resource.data.get('health', '') == '' && request.resource.data.get('health', '') == '') || canEditHealthRecords());
       allow delete: if isAdmin();
+    }
+
+    match /caseGoals/{goalId} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.status in ['Not started', 'In progress', 'Achieved', 'Not achieved', 'On hold'] &&
+        request.resource.data.title is string && request.resource.data.title.size() > 0 &&
+        request.resource.data.targetOutcome is string &&
+        request.resource.data.measureOfSuccess is string &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true);
+      allow update: if isManagerOrStaff() &&
+        request.resource.data.girlId == resource.data.girlId &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.createdByUid == resource.data.createdByUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        (request.resource.data.status in ['Achieved', 'Not achieved']
+          ? request.resource.data.get('outcome', '') is string && request.resource.data.get('outcome', '').size() > 0
+          : true) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'baseline', 'targetOutcome', 'measureOfSuccess', 'targetDate', 'status',
+          'progressNotes', 'outcome', 'outcomeRecordedAt', 'updatedByUid', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isManagerOrAdmin();
     }
 
     // Salary and gratuity inputs are restricted to Administrators and Managers.
@@ -305,6 +501,42 @@ service cloud.firestore {
     match /employeeAuditLogs/{eventId} {
       allow read: if isManagerOrAdmin();
       allow create: if isManagerOrAdmin() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Procurement report audit metadata is separate from generic report history,
+    // which may archive full report files and has broader staff permissions.
+    match /managementProcurementReportHistory/{reportId} {
+      allow read: if isManagerOrAdmin() &&
+        resource.data.expiresAt is timestamp && resource.data.expiresAt > request.time;
+      allow create: if isManagerOrAdmin() &&
+        request.resource.data.keys().hasOnly([
+          'id', 'reportType', 'generatedByUid', 'generatedAt', 'expiresAt', 'dateBasis',
+          'startDate', 'endDate', 'programmeId', 'format', 'selectedListCount', 'aggregateRowCount'
+        ]) &&
+        request.resource.data.id == reportId &&
+        request.resource.data.reportType == 'management-procurement' &&
+        request.resource.data.generatedByUid == request.auth.uid &&
+        request.resource.data.generatedAt is timestamp &&
+        request.resource.data.generatedAt >= request.time - duration.value(5, 'm') &&
+        request.resource.data.generatedAt <= request.time + duration.value(5, 'm') &&
+        request.resource.data.expiresAt is timestamp &&
+        request.resource.data.expiresAt > request.time &&
+        request.resource.data.expiresAt >= request.resource.data.generatedAt + duration.value(89, 'd') &&
+        request.resource.data.expiresAt <= request.resource.data.generatedAt + duration.value(91, 'd') &&
+        request.resource.data.dateBasis in ['createdAt', 'approvedAt', 'orderedAt', 'receivedAt', 'financeHandedOverAt'] &&
+        request.resource.data.format in ['docx', 'xlsx', 'csv'] &&
+        request.resource.data.selectedListCount is int && request.resource.data.selectedListCount >= 0 &&
+        request.resource.data.aggregateRowCount is int && request.resource.data.aggregateRowCount >= 0 &&
+        (!request.resource.data.keys().hasAny(['startDate']) ||
+          (request.resource.data.startDate is string && request.resource.data.startDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))) &&
+        (!request.resource.data.keys().hasAny(['endDate']) ||
+          (request.resource.data.endDate is string && request.resource.data.endDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))) &&
+        (!request.resource.data.keys().hasAny(['programmeId']) ||
+          request.resource.data.programmeId in [
+            'early-years', 'shine-village', 'bursary', 'child-house', 'relief-family',
+            'fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'
+          ]);
       allow update, delete: if false;
     }
 
@@ -344,22 +576,6 @@ service cloud.firestore {
           'generatedAt', 'draft', 'finalLocked'
         ]);
       allow update, delete: if false;
-    }
-
-    // Contact details are private staff data. Edits remain attributable and contacts are archived, never deleted.
-    match /contacts/{contactId} {
-      allow read: if isStaffActive();
-      allow create: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == contactId &&
-        request.resource.data.type in ['person', 'organisation'] &&
-        request.resource.data.name is string &&
-        request.resource.data.createdByUid == request.auth.uid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow update: if (isManagerOrAdmin() || isManagerOrStaff()) &&
-        request.resource.data.id == resource.data.id &&
-        request.resource.data.createdByUid == resource.data.createdByUid &&
-        request.resource.data.updatedByUid == request.auth.uid;
-      allow delete: if false;
     }
 
     // Sensitive records and their access audit are server-only; Admin SDK endpoints enforce grants and log reads.
@@ -420,6 +636,62 @@ service cloud.firestore {
     }
 
     match /procurementLists/{id} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.status == 'draft' &&
+        !request.resource.data.keys().hasAny([
+          'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
+          'receivedAt', 'receivedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]);
+      allow update: if isManagerOrStaff() &&
+        (resource.data.status == 'draft' || isManagerOrAdmin() ||
+          (request.resource.data.status == resource.data.status &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy', 'updatedAt', 'updatedBy']))) &&
+        (request.resource.data.status == resource.data.status ||
+          (isManagerOrAdmin() && (
+            (resource.data.status == 'draft' && request.resource.data.status == 'approved' &&
+             request.resource.data.items.size() > 0 && request.resource.data.approvedAt is string && request.resource.data.approvedBy is string) ||
+            (resource.data.status == 'approved' && request.resource.data.status == 'purchased' &&
+             request.resource.data.purchaseOrderReference is string && request.resource.data.purchaseOrderReference.size() > 0 &&
+             request.resource.data.orderedAt is string && request.resource.data.orderedBy is string)
+          ))) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
+          'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]) || isManagerOrAdmin()) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['receivedAt', 'receivedBy']) ||
+          resource.data.status == 'purchased') &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
+        ]) || (resource.data.status == 'purchased' && resource.data.receivedAt is string &&
+          request.resource.data.financeHandedOverAt is string &&
+          request.resource.data.financeReference is string && request.resource.data.financeReference.size() > 0));
+      allow delete: if isAdmin();
+    }
+
+    match /inventoryItems/{id} {
+      allow read: if isStaffActive();
+      allow create: if isManagerOrStaff() &&
+        request.resource.data.quantityOnHand == 0 &&
+        request.resource.data.movements is list &&
+        request.resource.data.movements.size() == 0;
+      allow update: if isManagerOrStaff() &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'quantityOnHand', 'movements', 'lastMovementId'
+          ]) ||
+          isValidInventoryMovementUpdate(id)
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isStaffActive();
+      allow create: if isValidInventoryMovementCreate(movementId);
+      allow update, delete: if false;
+    }
+
+    match /assets/{id} {
       allow read: if isStaffActive();
       allow create, update: if isManagerOrStaff();
       allow delete: if isAdmin();
@@ -488,11 +760,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Import Audits - Document parsing audit trails
+    // Import audit metadata is staff-readable; original source rows belong only in
+    // restrictedImportSources. Legacy audit docs containing sourceData stay hidden from
+    // ordinary staff until the repair migration removes that field. Ordinary collection
+    // queries remain disabled until the Admin-SDK migration verifies the full collection.
     match /importAudits/{id} {
-      allow read: if isStaffActive();
-      allow create: if isManagerOrStaff();
-      allow update, delete: if isAdmin();
+      allow get: if isStaffActive() &&
+        (!exists(/databases/$(database)/documents/importAudits/$(id)) ||
+          !resource.data.keys().hasAny(['sourceData']) || isManagerOrAdmin());
+      allow list: if isManagerOrAdmin() || (isStaffActive() && importAuditMigrationComplete());
+      allow create: if isManagerOrStaff() &&
+        !request.resource.data.keys().hasAny(['sourceData']) &&
+        (!request.resource.data.keys().hasAny(['sourceDataStoredInRestrictedCollection']) ||
+          request.resource.data.sourceDataStoredInRestrictedCollection == false ||
+          (request.resource.data.sourceDataStoredInRestrictedCollection == true &&
+            hasMatchingRestrictedImportSource(id, request.resource.data)));
+      allow update: if isAdmin() &&
+        !request.resource.data.keys().hasAny(['sourceData']);
+      allow delete: if isAdmin();
+    }
+
+    match /importAuditMigrationStatus/{id} {
+      allow read, write: if false;
     }
 
     match /restrictedImportSources/{id} {
@@ -520,9 +809,21 @@ service cloud.firestore {
     match /contacts/{contactId} {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() &&
+        request.resource.data.id == contactId &&
+        request.resource.data.type in ['person', 'organisation'] &&
+        request.resource.data.name is string &&
+        request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.createdByUid == request.auth.uid &&
         request.resource.data.updatedByUid == request.auth.uid &&
-        request.resource.data.archived == false;
+        request.resource.data.updatedByName is string &&
+        request.resource.data.archived == false &&
+        request.resource.data.keys().hasOnly([
+          'id', 'type', 'name', 'aliases', 'organisationId', 'affiliation',
+          'roleTitle', 'category', 'phone', 'email', 'address', 'district',
+          'notes', 'programmes', 'firstSeen', 'lastSeen', 'createdBy',
+          'createdByUid', 'createdAt', 'updatedAt', 'updatedByUid',
+          'updatedByName', 'source', 'archived', 'interactions', 'mergedInto'
+        ]);
       allow update: if isManagerOrStaff() &&
         request.resource.data.createdByUid == resource.data.createdByUid &&
         request.resource.data.updatedByUid == request.auth.uid &&

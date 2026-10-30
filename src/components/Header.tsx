@@ -23,11 +23,13 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { SyncStatus } from '../services/firestoreSync';
+import { getPendingOfflineSnapshotCount, refreshPendingOfflineSnapshotCount, getSyncConflictCount } from '../services/offlineSync';
 import { useAuth } from '../contexts/AuthContext';
-import { themes, useVisualSettings } from '../contexts/VisualSettingsContext';
+import { appViews, themes, useVisualSettings } from '../contexts/VisualSettingsContext';
 import { StaffRole } from '../types';
 import { NotificationBellDropdown } from './Notifications/NotificationBellDropdown';
 import { ShineLogo } from './ShineLogo';
+import { SyncConflictsPanel } from './Sync/SyncConflictsPanel';
 
 interface HeaderProps {
   onNavigateDashboard: () => void;
@@ -39,6 +41,7 @@ interface HeaderProps {
   onOpenRecord?: (type: string, id: string) => void;
   onOpenNotificationSettings?: () => void;
   syncStatus?: SyncStatus;
+  storageWarning?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,6 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRecord,
   onOpenNotificationSettings,
   syncStatus = 'synced',
+  storageWarning = false,
 }) => {
   const { staffProfile, currentUser, role, isAdmin, isViewOnly, logout, sendResetPassword } = useAuth();
   const {
@@ -69,6 +73,9 @@ export const Header: React.FC<HeaderProps> = ({
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingOfflineSnapshotCount);
+  const [conflictCount, setConflictCount] = useState(0);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const mobileActionsRef = useRef<HTMLDivElement>(null);
   const visualSettingsRef = useRef<HTMLDivElement>(null);
@@ -91,12 +98,22 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   useEffect(() => {
-    const updateOnlineStatus = () => setIsOffline(!navigator.onLine);
+    const updateOnlineStatus = () => {
+      setIsOffline(!navigator.onLine);
+      void refreshPendingOfflineSnapshotCount().then(setPendingSyncCount);
+      void getSyncConflictCount().then(setConflictCount);
+    };
+    void refreshPendingOfflineSnapshotCount().then(setPendingSyncCount);
+    void getSyncConflictCount().then(setConflictCount);
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    window.addEventListener('shine_offline_queue_updated', updateOnlineStatus);
+    window.addEventListener('shine_sync_conflicts_updated', updateOnlineStatus);
     return () => {
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
+      window.removeEventListener('shine_offline_queue_updated', updateOnlineStatus);
+      window.removeEventListener('shine_sync_conflicts_updated', updateOnlineStatus);
     };
   }, []);
 
@@ -152,10 +169,33 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Quick Action Controls, Cloud Status & User Session */}
           <div className="flex items-center gap-2 sm:gap-3">
             {isOffline && (
-              <div className="offline-indicator inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold" role="status" aria-live="polite" title="This device is offline; local changes will sync when a connection returns.">
+              <button
+                type="button"
+                onClick={() => setSyncPanelOpen(true)}
+                className="offline-indicator inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold"
+                role="status"
+                aria-live="polite"
+                title="This device is offline; local changes will sync when a connection returns. Tap to view sync conflicts."
+              >
                 <CloudOff className="h-3.5 w-3.5" />
-                <span>Offline</span>
-              </div>
+                <span>Offline{pendingSyncCount ? ` · ${pendingSyncCount} queued` : ' · drafts stay here'}</span>
+              </button>
+            )}
+            {(conflictCount > 0 || (!isOffline && pendingSyncCount > 0)) && (
+              <button
+                type="button"
+                onClick={() => setSyncPanelOpen(true)}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-amber-500/60 bg-amber-950/70 px-2.5 py-1 text-[11px] font-bold text-amber-200"
+                title="View sync conflicts and queued changes"
+                aria-label={`Sync status: ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}, ${pendingSyncCount} queued change${pendingSyncCount === 1 ? '' : 's'}`}
+              >
+                <CloudOff className="h-3.5 w-3.5" />
+                <span>
+                  {conflictCount > 0
+                    ? `${conflictCount} conflict${conflictCount === 1 ? '' : 's'}`
+                    : `${pendingSyncCount} queued`}
+                </span>
+              </button>
             )}
             {/* Firestore Cloud Status Indicator */}
             <div
@@ -214,15 +254,17 @@ export const Header: React.FC<HeaderProps> = ({
               />
             )}
 
-            <button
-              id="data-backup-btn"
-              onClick={onOpenDataModal}
-              className="hidden sm:flex p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium items-center gap-1.5 border border-teal-800 transition-colors"
-              title="Backup, export, or restore database"
-            >
-              <Database className="w-4 h-4 text-amber-400" />
-              <span className="hidden md:inline">Cloud & Data</span>
-            </button>
+            {isAdmin && (
+              <button
+                id="data-backup-btn"
+                onClick={onOpenDataModal}
+                className="hidden sm:flex p-2 sm:px-3 sm:py-1.5 rounded-lg bg-teal-900/80 hover:bg-teal-800 text-teal-100 hover:text-white text-xs font-medium items-center gap-1.5 border border-teal-800 transition-colors"
+                title="Backup, export, or restore database"
+              >
+                <Database className="w-4 h-4 text-amber-400" />
+                <span className="hidden md:inline">Cloud & Data</span>
+              </button>
+            )}
 
             {!isViewOnly && (
               <button
@@ -304,42 +346,25 @@ export const Header: React.FC<HeaderProps> = ({
                   aria-label="App view and appearance settings"
                   className="absolute right-0 top-full mt-2 w-[min(19rem,calc(100vw-1rem))] max-h-[min(75vh,36rem)] overflow-y-auto rounded-xl border border-stone-200 bg-white p-3 text-stone-900 shadow-xl z-50"
                 >
-                  <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-3">
-                    <div className="flex items-center gap-2">
+                  <div className="border-b border-stone-100 pb-3">
+                    <div className="mb-2 flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-stone-500" />
                       <span className="text-sm font-semibold">App view</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="App view style">
-                      <button
-                        type="button"
-                        aria-pressed={mobileViewMode === 'classic'}
-                        onClick={() => setMobileViewMode('classic')}
-                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          mobileViewMode === 'classic' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        Classic
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={mobileViewMode === 'ios'}
-                        onClick={() => setMobileViewMode('ios')}
-                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          mobileViewMode === 'ios' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        iOS
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={mobileViewMode === 'foundation'}
-                        onClick={() => setMobileViewMode('foundation')}
-                        className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                          mobileViewMode === 'foundation' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-                        }`}
-                      >
-                        Foundation
-                      </button>
+                    <div className="grid grid-cols-2 gap-1 rounded-lg bg-stone-100 p-1" role="group" aria-label="App view style">
+                      {appViews.map((view) => (
+                        <button
+                          key={view.id}
+                          type="button"
+                          aria-pressed={mobileViewMode === view.id}
+                          onClick={() => setMobileViewMode(view.id)}
+                          className={`rounded-md px-2 py-2 text-[11px] font-semibold transition-colors ${
+                            mobileViewMode === view.id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                          }`}
+                        >
+                          {view.name}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   {mobileViewMode === 'foundation' && (
@@ -530,6 +555,11 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+      <SyncConflictsPanel
+        isOpen={syncPanelOpen}
+        onClose={() => setSyncPanelOpen(false)}
+        storageWarning={storageWarning}
+      />
     </header>
   );
 };

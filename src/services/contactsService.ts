@@ -1,13 +1,12 @@
 import {
-  arrayUnion,
   collection,
   doc,
   getDocs,
   runTransaction,
-  setDoc,
-  updateDoc,
 } from 'firebase/firestore';
 import { firestore } from '../firebase';
+import { getDatabase, saveDatabase } from '../utils/storage';
+import { isBrowserOnline, loadQueue } from './offlineSync';
 import {
   ContactCategory,
   ContactEntityType,
@@ -278,10 +277,51 @@ export function detectRosterContacts(
 
 export async function listContacts(includeArchived = false): Promise<ContactRecord[]> {
   const snapshot = await getDocs(collection(firestore, 'contacts'));
-  return snapshot.docs
-    .map((contactDoc) => ({ id: contactDoc.id, ...contactDoc.data() } as ContactRecord))
+  const contactsById = new Map<string, ContactRecord>(
+    snapshot.docs.map((contactDoc) => [contactDoc.id, { id: contactDoc.id, ...contactDoc.data() } as ContactRecord]),
+  );
+
+  // A cloud snapshot can arrive before the durable local queue has flushed.
+  // Overlay only contacts with a persisted pending operation; never prefer an
+  // arbitrary stale local copy over the current server record.
+  const queue = await loadQueue();
+  const localContacts = new Map((getDatabase().contacts || []).map((contact) => [contact.id, contact]));
+  for (const entry of queue) {
+    if (entry.collection !== 'contacts') continue;
+    if (entry.operation === 'delete') {
+      contactsById.delete(entry.recordId);
+      continue;
+    }
+    const local = localContacts.get(entry.recordId);
+    const queued = entry.data as ContactRecord | null;
+    // Local storage is the latest user-visible draft; the queued payload may
+    // lag during the app's debounce window, so use it only as a fallback.
+    if (local) contactsById.set(entry.recordId, local);
+    else if (queued) contactsById.set(entry.recordId, queued);
+  }
+
+  return [...contactsById.values()]
     .filter((contact) => includeArchived || (!contact.archived && !contact.mergedInto))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function saveContactLocally(record: ContactRecord, creating = false): ContactRecord {
+  const db = getDatabase();
+  const previousContacts = db.contacts || [];
+  if (!creating && !previousContacts.some((contact) => contact.id === record.id)) {
+    throw new Error('Contact is not available in the local directory. Refresh the directory and try again.');
+  }
+  db.contacts = creating
+    ? [...previousContacts.filter((contact) => contact.id !== record.id), record]
+    : previousContacts.map((contact) => contact.id === record.id ? record : contact);
+  const saved = saveDatabase(db);
+  if (!saved.ok) {
+    db.contacts = previousContacts;
+    throw new Error(saved.quotaExceeded
+      ? 'Contact was not saved because this device is out of storage. Free space and try again.'
+      : 'Contact was not saved because local storage is unavailable. Try again.');
+  }
+  return record;
 }
 
 export type ContactDraft = Pick<ContactRecord, 'type' | 'name' | 'category'> & Partial<Omit<ContactRecord, 'id' | 'type' | 'name' | 'category'>>;
@@ -321,21 +361,33 @@ export async function createContact(
     archived: false,
     interactions: interaction ? [interaction] : draft.interactions || [],
   };
-  await setDoc(contactRef, record);
-  return record;
+  return saveContactLocally(record, true);
 }
 
 export async function updateContact(
   id: string,
   changes: Partial<ContactRecord>,
   actor: { uid: string; name: string }
-): Promise<void> {
-  await updateDoc(doc(firestore, 'contacts', id), {
-    ...changes,
+): Promise<ContactRecord> {
+  const db = getDatabase();
+  const current = (db.contacts || []).find((contact) => contact.id === id);
+  if (!current) throw new Error('Contact is not available in the local directory. Refresh the directory and try again.');
+  // Audit ownership fields must not be supplied by a form or caller.
+  const { id: _ignoredId, createdBy: _ignoredCreator, createdByUid: _ignoredCreatorUid,
+    createdAt: _ignoredCreatedAt, ...safeChanges } = changes;
+  void _ignoredId; void _ignoredCreator; void _ignoredCreatorUid; void _ignoredCreatedAt;
+  const updated: ContactRecord = {
+    ...current,
+    ...safeChanges,
+    id: current.id,
+    createdBy: current.createdBy,
+    createdByUid: current.createdByUid,
+    createdAt: current.createdAt,
     updatedAt: new Date().toISOString(),
     updatedByUid: actor.uid,
     updatedByName: actor.name,
-  });
+  };
+  return saveContactLocally(updated);
 }
 
 export async function addContactInteraction(
@@ -343,25 +395,23 @@ export async function addContactInteraction(
   interaction: ContactInteraction,
   actor: { uid: string; name: string }
 ): Promise<void> {
-  const contactRef = doc(firestore, 'contacts', id);
-  await runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(contactRef);
-    if (!snapshot.exists()) throw new Error('Contact no longer exists.');
-    const contact = snapshot.data() as ContactRecord;
-    const changes: Record<string, unknown> = {
-      interactions: arrayUnion(interaction),
-      lastSeen: contact.lastSeen > interaction.date ? contact.lastSeen : interaction.date,
-      updatedAt: new Date().toISOString(),
-      updatedByUid: actor.uid,
-      updatedByName: actor.name,
-    };
-    if (interaction.programme) changes.programmes = arrayUnion(interaction.programme);
-    transaction.update(contactRef, changes);
-  });
+  const db = getDatabase();
+  const contact = (db.contacts || []).find((candidate) => candidate.id === id);
+  if (!contact) throw new Error('Contact no longer exists in the local directory.');
+  const updated: ContactRecord = {
+    ...contact,
+    interactions: [...(contact.interactions || []), interaction],
+    lastSeen: contact.lastSeen > interaction.date ? contact.lastSeen : interaction.date,
+    programmes: Array.from(new Set([...(contact.programmes || []), ...(interaction.programme ? [interaction.programme] : [])])),
+    updatedAt: new Date().toISOString(),
+    updatedByUid: actor.uid,
+    updatedByName: actor.name,
+  };
+  saveContactLocally(updated);
 }
 
-export async function archiveContact(id: string, actor: { uid: string; name: string }): Promise<void> {
-  await updateContact(id, { archived: true }, actor);
+export async function archiveContact(id: string, actor: { uid: string; name: string }): Promise<ContactRecord> {
+  return updateContact(id, { archived: true }, actor);
 }
 
 export async function mergeContacts(
@@ -369,6 +419,9 @@ export async function mergeContacts(
   duplicateId: string,
   actor: { uid: string; name: string }
 ): Promise<void> {
+  if (!isBrowserOnline()) throw new Error('Contact merging needs an internet connection because both records must be updated together. Reconnect and retry; neither contact was changed.');
+  const pendingContactChanges = (await loadQueue()).filter((entry) => entry.collection === 'contacts' && (entry.recordId === primaryId || entry.recordId === duplicateId));
+  if (pendingContactChanges.length) throw new Error('These contacts have unsynced local changes. Let them sync or resolve their conflicts before merging; no merge was performed.');
   const primaryRef = doc(firestore, 'contacts', primaryId);
   const duplicateRef = doc(firestore, 'contacts', duplicateId);
   await runTransaction(firestore, async (transaction) => {
@@ -379,6 +432,16 @@ export async function mergeContacts(
     if (!primarySnapshot.exists() || !duplicateSnapshot.exists()) throw new Error('Both contacts must exist to merge.');
     const primary = primarySnapshot.data() as ContactRecord;
     const duplicate = duplicateSnapshot.data() as ContactRecord;
+    // The UI can start a merge before the app's debounced queue has persisted
+    // a just-saved local edit. Compare cached versions too, so a transaction
+    // cannot silently merge older server data over a pending device edit.
+    const localContacts = new Map((getDatabase().contacts || []).map((contact) => [contact.id, contact]));
+    const localPrimary = localContacts.get(primaryId);
+    const localDuplicate = localContacts.get(duplicateId);
+    if ((localPrimary && localPrimary.updatedAt !== primary.updatedAt) ||
+        (localDuplicate && localDuplicate.updatedAt !== duplicate.updatedAt)) {
+      throw new Error('A contact changed locally or on the server since it was last synced. Refresh and sync both contacts before merging; no merge was performed.');
+    }
     const now = new Date().toISOString();
     transaction.update(primaryRef, {
       aliases: Array.from(new Set([...primary.aliases, duplicate.name, ...duplicate.aliases])),

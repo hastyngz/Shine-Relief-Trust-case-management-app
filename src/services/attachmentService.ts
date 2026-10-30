@@ -1,11 +1,4 @@
 import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  getBlob,
-  deleteObject,
-} from 'firebase/storage';
-import {
   collection,
   doc,
   setDoc,
@@ -16,7 +9,7 @@ import {
   onSnapshot,
   updateDoc,
 } from 'firebase/firestore';
-import { storage, firestore } from '../firebase';
+import { firestore } from '../firebase';
 import {
   PhotoAttachment,
   AttachmentTargetType,
@@ -25,8 +18,20 @@ import {
 } from '../types';
 import { compressImage } from '../utils/imageOptimizer';
 import { sanitizeForFirestore, COLLECTIONS } from './firestoreSync';
+import { deleteStoredFile, getStoredFile, getStoredFileDownloadUrl, uploadStoredFile } from './r2StorageClient';
+import { getActiveWorkspaceUid } from './accountWorkspace';
+import { getAttachmentFileValidationError } from './storageUploadValidation';
 
 export const ATTACHMENTS_COLLECTION = 'attachments';
+
+async function withDownloadUrl(attachment: PhotoAttachment): Promise<PhotoAttachment> {
+  try {
+    return { ...attachment, downloadUrl: await getStoredFileDownloadUrl(attachment.storagePath) };
+  } catch (error) {
+    console.warn('Could not create secure attachment URL:', error);
+    return { ...attachment, downloadUrl: '' };
+  }
+}
 
 export async function archiveGeneratedReport(
   blob: Blob,
@@ -37,48 +42,105 @@ export async function archiveGeneratedReport(
 ): Promise<string> {
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `reports/${ownerUid}/${reportId}/${safeFileName}`;
-  await uploadBytes(ref(storage, storagePath), blob, {
-    contentType: fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
+  await uploadStoredFile(storagePath, blob, fileType === 'pdf' ? 'application/pdf' : fileType === 'docx'
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : fileType === 'xlsx'
         ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv',
-    customMetadata: { ownerUid, reportId, fileType },
+        : 'text/csv', {
+    'Owner-Uid': ownerUid,
+    'Report-Id': reportId,
+    'File-Type': fileType,
   });
   return storagePath;
 }
 
 export async function getArchivedReport(storagePath: string): Promise<Blob> {
-  return getBlob(ref(storage, storagePath), 50 * 1024 * 1024);
+  return getStoredFile(storagePath);
 }
 
-export async function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+// Share only concurrent requests within the same authenticated workspace and
+// permission scope. Never hand account A's in-flight result to account B.
+const reportAttachmentRequests = new Map<string, Promise<PhotoAttachment[]>>();
+
+export function getReportAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  const uid = getActiveWorkspaceUid();
+  if (!uid) return Promise.reject(new Error('An authenticated SHINE workspace is required to load attachments.'));
+  const cacheKey = uid + ':' + (canViewHealthRecords ? 'health' : 'general');
+  const existing = reportAttachmentRequests.get(cacheKey);
+  if (existing) return existing;
+
+  const request = fetchReportAttachmentMetadata(canViewHealthRecords, true, uid);
+  reportAttachmentRequests.set(cacheKey, request);
+  void request.finally(() => {
+    if (reportAttachmentRequests.get(cacheKey) === request) {
+      reportAttachmentRequests.delete(cacheKey);
+    }
+  }).catch(() => {
+    // The caller handles the original failure; don't create an unhandled cleanup rejection.
+  });
+  return request;
+}
+
+async function fetchReportAttachmentMetadata(
+  canViewHealthRecords: boolean,
+  includeDownloadUrls = true,
+  expectedUid: string | null = getActiveWorkspaceUid()
+): Promise<PhotoAttachment[]> {
+  if (!expectedUid || getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('The active SHINE workspace changed before attachments could be loaded.');
+  }
   const targetTypes: AttachmentTargetType[] = [
     'girl', 'household', 'educationalFollowUp', 'familyFollowUp',
     'householdActivity', 'programme', 'programmeLog', 'importBatch', 'rentPayment', 'expense',
   ];
   if (canViewHealthRecords) targetTypes.push('healthFollowUp');
-  const snapshots = await Promise.all(targetTypes.map((targetType) => {
-    const constraints = [
-      where('targetType', '==', targetType),
-      ...(!canViewHealthRecords ? [where('category', 'not-in', ['Medical Document', 'Prescription'])] : []),
-    ];
-    return getDocs(query(collection(firestore, ATTACHMENTS_COLLECTION), ...constraints));
-  }));
+  // When the user can view health records, a single bounded `in` query can
+  // retrieve all report-eligible target types. Without health permission, keep
+  // the per-type queries because Firestore cannot combine `in` and `not-in`
+  // in the same query; those queries exclude medical attachments at the server.
+  const snapshots = canViewHealthRecords
+    ? [await getDocs(query(
+        collection(firestore, ATTACHMENTS_COLLECTION),
+        where('targetType', 'in', targetTypes),
+      ))]
+    : await Promise.all(targetTypes.map((targetType) => getDocs(query(
+        collection(firestore, ATTACHMENTS_COLLECTION),
+        where('targetType', '==', targetType),
+        where('category', 'not-in', ['Medical Document', 'Prescription']),
+      ))));
 
-  return snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
+  if (getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('The active SHINE workspace changed while attachments were loading.');
+  }
+  const attachments = snapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data() as PhotoAttachment))
     .filter((attachment) => canViewHealthRecords || (
       attachment.targetType !== 'healthFollowUp' &&
       attachment.category !== 'Medical Document' &&
       attachment.category !== 'Prescription'
     ))
     .sort((a, b) => b.date.localeCompare(a.date));
+  // Filing search only needs metadata. Create a short-lived signed URL only
+  // after the user chooses a file, rather than signing every result up front.
+  if (!includeDownloadUrls) return attachments;
+  const withUrls = await Promise.all(attachments.map(withDownloadUrl));
+  if (getActiveWorkspaceUid() !== expectedUid) {
+    throw new Error('The active SHINE workspace changed while attachment URLs were being prepared.');
+  }
+  return withUrls;
+}
+
+export function getFilingAttachmentMetadata(canViewHealthRecords: boolean): Promise<PhotoAttachment[]> {
+  // Reuse the report's bounded, role-aware query scope. Safeguarding attachments
+  // are intentionally excluded; health documents remain permission-filtered.
+  return fetchReportAttachmentMetadata(canViewHealthRecords, false);
 }
 
 export async function getAuthorizedReportImage(
   attachment: PhotoAttachment,
   canViewHealthRecords: boolean
 ): Promise<Uint8Array> {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) throw new Error('An authenticated SHINE workspace is required to read attachments.');
   if (!attachment.contentType.match(/^image\/(jpeg|png)$/i)) {
     throw new Error('Only JPEG and PNG attachments can be embedded in Word reports.');
   }
@@ -90,13 +152,19 @@ export async function getAuthorizedReportImage(
     throw new Error('Your account cannot include this health attachment in a report.');
   }
 
-  const image = await getBlob(ref(storage, attachment.storagePath), 15 * 1024 * 1024);
+  const image = await getStoredFile(attachment.storagePath);
+  if (getActiveWorkspaceUid() !== ownerUid) throw new Error('The active SHINE workspace changed while the attachment was loading.');
   return new Uint8Array(await image.arrayBuffer());
 }
 
 export async function getAllAttachmentMetadata(): Promise<PhotoAttachment[]> {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) throw new Error('An authenticated SHINE workspace is required to load attachments.');
   const snapshot = await getDocs(collection(firestore, ATTACHMENTS_COLLECTION));
-  return snapshot.docs.map((document) => document.data() as PhotoAttachment);
+  if (getActiveWorkspaceUid() !== ownerUid) throw new Error('The active SHINE workspace changed while attachments were loading.');
+  const attachments = await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
+  if (getActiveWorkspaceUid() !== ownerUid) throw new Error('The active SHINE workspace changed while attachment URLs were being prepared.');
+  return attachments;
 }
 
 export interface UploadAttachmentParams {
@@ -118,13 +186,15 @@ export interface UploadAttachmentParams {
 }
 
 /**
- * Uploads an image or document to Firebase Storage, compresses it on mobile,
+ * Uploads an image or document to private Cloudflare R2 storage, compresses it on mobile,
  * and saves metadata securely in Firestore.
  */
 export async function uploadPhotoAttachment(
   params: UploadAttachmentParams
 ): Promise<PhotoAttachment> {
   const { file, targetType, targetId, caption, category, date, consent, user } = params;
+  const fileValidationError = getAttachmentFileValidationError(file);
+  if (fileValidationError) throw new Error(fileValidationError);
   if (file.type.startsWith('image/') && consent !== true && !params.allowUnconfirmedConsent) {
     throw new Error('Photo consent must be confirmed before uploading an image.');
   }
@@ -135,29 +205,20 @@ export async function uploadPhotoAttachment(
     maxHeight: 1600,
     quality: 0.82,
   });
+  const optimizedValidationError = getAttachmentFileValidationError(optimizedFile);
+  if (optimizedValidationError) throw new Error(optimizedValidationError);
 
   // 2. Generate unique attachment ID
   const attachmentId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `attachments/${targetType}/${targetId}/${attachmentId}_${cleanName}`;
 
-  // 3. Upload to Firebase Storage
-  const storageRef = ref(storage, storagePath);
-  const metadata = {
-    contentType: optimizedFile.type || 'image/jpeg',
-    customMetadata: {
-      targetType,
-      targetId,
-      uploadedByUid: user.uid,
-      uploadedByEmail: user.email,
-      category,
-    },
-  };
-
-  await uploadBytes(storageRef, optimizedFile, metadata);
-
-  // 4. Retrieve secure download URL
-  const downloadUrl = await getDownloadURL(storageRef);
+  // 3. Upload to private R2 storage. The server validates the target and user role.
+  await uploadStoredFile(storagePath, optimizedFile, optimizedFile.type || 'image/jpeg', {
+    'Target-Type': targetType,
+    'Target-Id': targetId,
+    Category: category,
+  });
 
   // 5. Construct PhotoAttachment record
   const attachment: PhotoAttachment = {
@@ -168,7 +229,7 @@ export async function uploadPhotoAttachment(
     fileSize: optimizedFile.size,
     contentType: optimizedFile.type || 'image/jpeg',
     storagePath,
-    downloadUrl,
+    downloadUrl: '',
     caption: caption?.trim() || undefined,
     ...(file.type.startsWith('image/') ? {
       consent: consent === true,
@@ -187,10 +248,12 @@ export async function uploadPhotoAttachment(
     },
     createdAt: new Date().toISOString(),
   };
+  const downloadUrl = attachment.downloadUrl;
 
   // 6. Save metadata record to Firestore
   const firestoreDocRef = doc(firestore, ATTACHMENTS_COLLECTION, attachmentId);
   await setDoc(firestoreDocRef, sanitizeForFirestore(attachment));
+  attachment.downloadUrl = await getStoredFileDownloadUrl(storagePath);
 
   // 7. If this is a primary profile photo, update the parent entity's photoUrl
   if (category === 'Profile Photo') {
@@ -217,19 +280,17 @@ export async function uploadPhotoAttachment(
 }
 
 /**
- * Deletes an attachment from both Firebase Storage and Firestore.
+ * Deletes an attachment from both R2 and Firestore.
  */
 export async function deletePhotoAttachment(
   attachment: PhotoAttachment
 ): Promise<void> {
-  // 1. Delete file from Firebase Storage
-  try {
-    const storageRef = ref(storage, attachment.storagePath);
-    await deleteObject(storageRef);
-  } catch (err: any) {
-    // If already missing from storage, proceed to delete Firestore metadata
-    console.warn('Storage delete notice (file may not exist):', err.message || err);
-  }
+  // 1. Delete file from R2 first. The Worker authorizes deletion against the
+  // still-present Firestore metadata and R2 DeleteObject is idempotent for a
+  // missing object. If storage deletion fails for any other reason (network,
+  // authorization, configuration), preserve the metadata so staff can retry
+  // instead of silently orphaning a private file.
+  await deleteStoredFile(attachment.storagePath);
 
   // 2. Delete metadata doc from Firestore
   try {
@@ -249,6 +310,8 @@ export function subscribeAttachmentsForTarget(
   targetId: string,
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) { onUpdate([]); return () => {}; }
   try {
     const q = query(
       collection(firestore, ATTACHMENTS_COLLECTION),
@@ -258,13 +321,15 @@ export function subscribeAttachmentsForTarget(
 
     return onSnapshot(
       q,
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => d.data() as PhotoAttachment);
+      async (snapshot) => {
+        const list = await Promise.all(snapshot.docs.map((d) => withDownloadUrl(d.data() as PhotoAttachment)));
+        if (getActiveWorkspaceUid() !== ownerUid) return;
         // Sort descending by date / createdAt
         list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         onUpdate(list);
       },
       (err) => {
+        if (getActiveWorkspaceUid() !== ownerUid) return;
         console.warn('Attachments snapshot notice:', err.message);
         onUpdate([]);
       }
@@ -278,15 +343,23 @@ export function subscribeAttachmentsForTarget(
 /**
  * Subscribes in real-time to all attachments linked to a specific girl (profile, edu, health, family).
  */
+// Firestore supports up to 30 values in an `in` query. Grouping target IDs
+// reduces the number of simultaneous listeners on profiles with many linked
+// follow-up records. This does not promise fewer billed document reads: every
+// matching attachment is still returned, and each batch remains real-time.
+
 export function subscribeAllGirlAttachments(
   girlId: string,
   followUpIds: string[],
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) { onUpdate([]); return () => {}; }
   try {
     const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
     const current = new Map<string, PhotoAttachment[]>();
     const emit = () => {
+      if (getActiveWorkspaceUid() !== ownerUid) return;
       const related = Array.from(current.values()).flat();
       related.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       onUpdate(related);
@@ -294,11 +367,14 @@ export function subscribeAllGirlAttachments(
     const unsubscribers = Array.from(new Set([girlId, ...followUpIds])).map((targetId) =>
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
-        (snapshot) => {
-          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+        async (snapshot) => {
+          const attachments = await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment)));
+          if (getActiveWorkspaceUid() !== ownerUid) return;
+          current.set(targetId, attachments);
           emit();
         },
         (err) => {
+          if (getActiveWorkspaceUid() !== ownerUid) return;
           console.warn('Girl attachment subscription notice:', err.message);
           current.set(targetId, []);
           emit();
@@ -320,6 +396,8 @@ export function subscribeAllHouseholdAttachments(
   linkedRecordIds: string[],
   onUpdate: (attachments: PhotoAttachment[]) => void
 ): () => void {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) { onUpdate([]); return () => {}; }
   try {
     const colRef = collection(firestore, ATTACHMENTS_COLLECTION);
     const current = new Map<string, PhotoAttachment[]>();
@@ -331,11 +409,12 @@ export function subscribeAllHouseholdAttachments(
     const unsubscribers = Array.from(new Set([householdId, ...linkedRecordIds])).map((targetId) =>
       onSnapshot(
         query(colRef, where('targetId', '==', targetId)),
-        (snapshot) => {
-          current.set(targetId, snapshot.docs.map((document) => document.data() as PhotoAttachment));
+        async (snapshot) => {
+          current.set(targetId, await Promise.all(snapshot.docs.map((document) => withDownloadUrl(document.data() as PhotoAttachment))));
           emit();
         },
         (err) => {
+          if (getActiveWorkspaceUid() !== ownerUid) return;
           console.warn('Household attachment subscription notice:', err.message);
           current.set(targetId, []);
           emit();
@@ -348,6 +427,7 @@ export function subscribeAllHouseholdAttachments(
     return () => {};
   }
 }
+
 
 /**
  * Role-based permission checks for attachments

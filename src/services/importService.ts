@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   Girl,
@@ -27,21 +26,7 @@ import {
 import { generateFollowUpId, generatePersonId, saveDatabase } from '../utils/storage';
 import { auth } from '../firebase';
 import {
-  persistGirlToFirestore,
-  persistHouseholdToFirestore,
-  persistEduFollowUpToFirestore,
-  persistHealthFollowUpToFirestore,
-  persistFamilyFollowUpToFirestore,
-  persistHistoricalCaseRecordToFirestore,
-  persistHouseholdActivityToFirestore,
-  persistWorkplanItemToFirestore,
-  persistBudgetItemToFirestore,
-  persistPayrollRecordToFirestore,
-  persistPhase2Record,
-  persistEarlyYearsRecordToFirestore,
-  persistPersonToFirestore,
   persistImportAuditToFirestore,
-  persistEmployeeRecordToFirestore,
   persistEmployeeSalaryHistoryToFirestore,
   appendEmployeeAuditLog,
 } from './firestoreSync';
@@ -58,6 +43,19 @@ import { analyzeSpreadsheetWorkbook, SpreadsheetAnalysis } from './spreadsheetIm
 import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spreadsheetImport/importers';
 import { uploadPhotoAttachment } from './attachmentService';
 import { PROGRAMMES } from '../data/programmes';
+import { normalizeImportedProcurementItems } from './procurementWorkflow';
+
+/**
+ * Import confirmation currently has a few separate cloud writes (notably salary history
+ * and employee audit logs) that are not represented in AppDatabase. If the final local
+ * save fails, do not falsely report success: earlier cloud writes may already have landed.
+ */
+export function assertImportLocalSaveSucceeded(result: ReturnType<typeof saveDatabase>): void {
+  if (result.ok) return;
+  throw new Error(
+    'The import could not be saved on this device after cloud writes began. Some records may already exist in Firestore. Do not repeat the import blindly; refresh and verify the imported records with an administrator before retrying.'
+  );
+}
 
 function employeeImportWriteError(collectionName: string, recordId: string, error: unknown): Error {
   const details = error instanceof Error ? error.message : String(error);
@@ -94,15 +92,16 @@ export async function parseExcelFile(
   employees: EmployeeRecord[] = [],
 ): Promise<FileAnalysisResult> {
   const buffer = await file.arrayBuffer();
+  const XLSX = await import('xlsx');
   const workbook = XLSX.read(buffer, {
     type: 'array',
     cellFormula: true,
     cellNF: true,
     cellText: true,
   });
-  const spreadsheetAnalysis = analyzeSpreadsheetWorkbook(workbook);
-  const spreadsheetImportPreview = createSpreadsheetImportPreview(
-    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, staff, employees, file.name,
+  const spreadsheetAnalysis = await analyzeSpreadsheetWorkbook(workbook);
+  const spreadsheetImportPreview = await createSpreadsheetImportPreview(
+    workbook, spreadsheetAnalysis, spreadsheetAnalysis.detectedKind, employees, file.name,
   );
   const sheetNames = workbook.SheetNames;
   const primarySheet = workbook.Sheets[sheetNames[0]];
@@ -596,7 +595,9 @@ export function analyzeImportRows(
 }
 
 /**
- * Commits approved import preview items to Firestore and updates local database
+ * Applies approved import preview items to the local database. AppDatabase records flow through
+ * the shared per-record offline queue; separate restricted-source, salary-history, employee-audit,
+ * photo-storage and import-audit side effects still use their dedicated secured services.
  */
 export async function commitImportBatch(
   approvedItems: ImportPreviewItem[],
@@ -604,8 +605,29 @@ export async function commitImportBatch(
   db: AppDatabase,
   onProgress?: (processed: number, total: number) => void,
   approvedContacts: ConfirmedContactCandidate[] = [],
-  confirmedDueDatePeriods: Record<string, string> = {}
+  confirmedDueDatePeriods: Record<string, string> = {},
+  canReadImportSourceData = false,
+  canWriteImportAuditMetadata = false,
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
+  const normalizedProcurementItems = new Map<ImportPreviewItem, ReturnType<typeof normalizeImportedProcurementItems>>();
+  for (const item of approvedItems) {
+    if (item.selected && item.targetEntity === 'procurementList') {
+      const data = item.extractedData;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('The imported procurement list is malformed. Reopen Import and try again.');
+      for (const [field, maximum] of [['title', 200], ['purpose', 1000]] as const) {
+        const value = data[field];
+        if (value !== undefined && value !== null && (typeof value !== 'string' || value.length > maximum)) {
+          throw new Error(`The imported procurement ${field} must be text of at most ${maximum} characters.`);
+        }
+      }
+      const programmeId = data.programmeId;
+      if (programmeId !== undefined && programmeId !== null && programmeId !== '' &&
+          (typeof programmeId !== 'string' || !PROGRAMMES.some((programme) => programme.id === programmeId))) {
+        throw new Error('The imported procurement list references an unknown programme. Choose a valid programme and retry.');
+      }
+      normalizedProcurementItems.set(item, normalizeImportedProcurementItems(item.extractedData.items));
+    }
+  }
   const authenticatedUid = auth.currentUser?.uid;
   const importingEmployee = approvedItems.some((item) => item.selected && item.targetEntity === 'employee');
   if (importingEmployee && !authenticatedUid) {
@@ -650,6 +672,8 @@ export async function commitImportBatch(
     budgets: [...(db.budgets || [])],
     procurementLists: [...(db.procurementLists || [])],
     projectProjections: [...(db.projectProjections || [])],
+    inventoryItems: [...(db.inventoryItems || [])],
+    assets: [...(db.assets || [])],
     payrollRecords: [...(db.payrollRecords || [])],
     employees: [...(db.employees || [])],
     earlyYearsRecords: [...(db.earlyYearsRecords || [])],
@@ -704,7 +728,6 @@ export async function commitImportBatch(
         createdAt: new Date().toISOString(),
       };
       updatedDb.historicalRecords?.unshift(newHist);
-      await persistHistoricalCaseRecordToFirestore(newHist);
     }
     // 2. Group / Programme Activity or Agriculture Activity
     else if (
@@ -734,7 +757,6 @@ export async function commitImportBatch(
       };
       linkedRecordId = newActivity.id;
       updatedDb.householdActivities.unshift(newActivity);
-      await persistHouseholdActivityToFirestore(newActivity);
     }
     // 3. Early Years Programme Record
     else if (item.classification === 'EARLY_YEARS_RECORD' || item.targetEntity === 'earlyYears') {
@@ -763,7 +785,6 @@ export async function commitImportBatch(
       linkedRecordId = newEarlyYears.id;
       if (!updatedDb.earlyYearsRecords) updatedDb.earlyYearsRecords = [];
       updatedDb.earlyYearsRecords.unshift(newEarlyYears);
-      await persistEarlyYearsRecordToFirestore(newEarlyYears);
     }
     else if (item.targetEntity === 'employee') {
       const data = item.extractedData;
@@ -780,16 +801,21 @@ export async function commitImportBatch(
       const importedOtherAmounts = Array.isArray(data.otherPayrollAmounts)
         ? data.otherPayrollAmounts as Array<{ type: string; amount: number; payPeriod?: string; sourceReference?: string }>
         : [];
+      const contractFields = data.contractFields && typeof data.contractFields === 'object'
+        ? data.contractFields
+        : {};
       const employee: EmployeeRecord = {
         ...existingEmployee,
+        ...contractFields,
         id: employeeId,
         fullName: String(data.employeeName || item.title || '').trim(),
         department: data.department || existingEmployee?.department,
-        positionTitle: data.positionTitle || existingEmployee?.positionTitle,
+        positionTitle: contractFields.position || data.positionTitle || existingEmployee?.positionTitle,
+        position: contractFields.position || existingEmployee?.position,
         sourceYear: Number(data.sourceYear) || existingEmployee?.sourceYear,
-        employmentStatus: useImportedEmploymentStatus
+        employmentStatus: contractFields.employmentStatus || (useImportedEmploymentStatus
           ? data.employmentStatus
-          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active',
+          : existingEmployee?.employmentStatus || data.employmentStatus || 'Active'),
         needsEmploymentReview: false,
         salaryMWK: useImportedSalary ? Number(data.currentSalary) : existingEmployee?.salaryMWK || 0,
         latestSalaryPeriod: useImportedSalary ? importedSalaryPeriod : existingEmployee?.latestSalaryPeriod,
@@ -884,11 +910,6 @@ export async function commitImportBatch(
             updatedAt: now,
           };
           updatedDb.payrollRecords!.unshift(payment);
-          try {
-            await persistPayrollRecordToFirestore(payment);
-          } catch (error) {
-            throw employeeImportWriteError('payrollRecords', payment.id, error);
-          }
           importedPayrollRecords += 1;
         }
       }
@@ -929,19 +950,9 @@ export async function commitImportBatch(
           updatedAt: nowForSpecial,
         };
         updatedDb.payrollRecords!.unshift(specialRecord);
-        try {
-          await persistPayrollRecordToFirestore(specialRecord);
-        } catch (error) {
-          throw employeeImportWriteError('payrollRecords', specialRecord.id, error);
-        }
         importedPayrollRecords += 1;
       }
       employee.salaryHistoryRecordIds = Array.from(importedSalaryIds);
-      try {
-        await persistEmployeeRecordToFirestore(employee);
-      } catch (error) {
-        throw employeeImportWriteError('employees', employee.id, error);
-      }
       const employeeImportEventId = `employee_import_${auditId}_${employeeId}`.replace(/[^A-Za-z0-9_-]/g, '_');
       try {
         await appendEmployeeAuditLog({
@@ -997,23 +1008,22 @@ export async function commitImportBatch(
       };
       if (!updatedDb.payrollRecords) updatedDb.payrollRecords = [];
       updatedDb.payrollRecords.unshift(payroll);
-      await persistPayrollRecordToFirestore(payroll);
       linkedRecordId = payroll.id;
     }
     else if (item.targetEntity === 'procurementList') {
       const data = item.extractedData;
       const now = new Date().toISOString();
-      const sourceItems = Array.isArray(data.items) ? data.items : [];
+      const normalized = normalizedProcurementItems.get(item);
+      if (!normalized) throw new Error('The imported procurement list was not validated. Reopen Import and try again.');
       const procurement: ProcurementList = {
         id: generateFollowUpId('PRC'),
-        title: data.title || item.title || 'Imported procurement list',
-        purpose: data.purpose || 'Imported item list',
-        programmeId: data.programmeId,
-        items: sourceItems.map((source: ProcurementList['items'][number]) => ({ ...source })),
-        totalMWK: sourceItems.reduce(
-          (sum: number, source: ProcurementList['items'][number]) => sum + (source.totalMWK || 0),
-          0,
-        ),
+        title: (typeof data.title === 'string' && data.title.trim()) || (typeof item.title === 'string' && item.title.trim()) || 'Imported procurement list',
+        purpose: (typeof data.purpose === 'string' && data.purpose.trim()) || 'Imported item list',
+        programmeId: typeof data.programmeId === 'string' && data.programmeId.trim()
+          ? data.programmeId.trim() as ProcurementList['programmeId']
+          : undefined,
+        items: normalized.items,
+        totalMWK: normalized.totalMWK,
         status: 'draft',
         createdAt: now,
         updatedAt: now,
@@ -1022,7 +1032,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.procurementLists) updatedDb.procurementLists = [];
       updatedDb.procurementLists.unshift(procurement);
-      await persistPhase2Record('procurementLists', { ...procurement });
       linkedRecordId = procurement.id;
     }
     else if (item.targetEntity === 'projectProjection') {
@@ -1043,7 +1052,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.projectProjections) updatedDb.projectProjections = [];
       updatedDb.projectProjections.unshift(projection);
-      await persistPhase2Record('projectProjections', { ...projection });
       linkedRecordId = projection.id;
     }
     else if (item.targetEntity === 'budget') {
@@ -1071,7 +1079,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.budgets) updatedDb.budgets = [];
       updatedDb.budgets.unshift(budget);
-      await persistBudgetItemToFirestore(budget);
       linkedRecordId = budget.id;
     }
     else if (item.classification === 'WORKPLAN_PRIORITY' || item.targetEntity === 'workplan') {
@@ -1131,7 +1138,6 @@ export async function commitImportBatch(
       } else {
         updatedDb.workplans.unshift(newWorkplan);
       }
-      await persistWorkplanItemToFirestore(newWorkplan);
       linkedRecordId = newWorkplan.id;
     }
     // 5. Photographic Highlights / Embedded Photos
@@ -1192,8 +1198,7 @@ export async function commitImportBatch(
         };
         if (!updatedDb.historicalRecords) updatedDb.historicalRecords = [];
         updatedDb.historicalRecords.unshift(newHist);
-        await persistHistoricalCaseRecordToFirestore(newHist);
-        linkedRecordId = newHist.id;
+          linkedRecordId = newHist.id;
       } else if (item.matchedPersonAction === 'REGISTER_AS_NEW_GIRL') {
         const nextGirlNum = updatedDb.girls.length + 1;
         const newGirlId = `SG-${String(nextGirlNum).padStart(3, '0')}`;
@@ -1221,8 +1226,7 @@ export async function commitImportBatch(
           updatedAt: new Date().toISOString(),
         };
         updatedDb.girls.unshift(newGirl);
-        await persistGirlToFirestore(newGirl);
-
+  
         // Also add historical record for this newly registered girl
         const newHist: HistoricalCaseRecord = {
           id: generateFollowUpId('HCR'),
@@ -1245,8 +1249,7 @@ export async function commitImportBatch(
         };
         if (!updatedDb.historicalRecords) updatedDb.historicalRecords = [];
         updatedDb.historicalRecords.unshift(newHist);
-        await persistHistoricalCaseRecordToFirestore(newHist);
-      } else if (item.matchedPersonAction === 'DO_NOT_REGISTER' || item.matchedPersonAction === 'IGNORE') {
+        } else if (item.matchedPersonAction === 'DO_NOT_REGISTER' || item.matchedPersonAction === 'IGNORE') {
         // Skip
       } else if (
         (item.matchedPersonAction === 'ADD_TO_EXISTING_PERSON' || item.resultType === 'EXISTING_PERSON_MATCHED') &&
@@ -1297,8 +1300,7 @@ export async function commitImportBatch(
           };
 
           updatedDb.people[existingIdx] = updatedPerson;
-          await persistPersonToFirestore(updatedPerson);
-        }
+            }
       } else {
         // Register brand new Person
         const personId = generatePersonId(updatedDb.people);
@@ -1338,8 +1340,7 @@ export async function commitImportBatch(
         };
 
         updatedDb.people.unshift(newPerson);
-        await persistPersonToFirestore(newPerson);
-      }
+        }
     }
     // 7. New Girl Profile (if explicitly confirmed)
     else if (item.resultType === 'NEW_RECORD' && item.targetEntity === 'girl') {
@@ -1349,7 +1350,6 @@ export async function commitImportBatch(
         updatedAt: new Date().toISOString(),
       } as Girl;
       updatedDb.girls.unshift(newGirl);
-      await persistGirlToFirestore(newGirl);
     }
     // 8. Profile Update (if recent differences)
     else if (item.resultType === 'PROFILE_UPDATE' && item.targetEntity === 'girl' && item.matchedId) {
@@ -1360,8 +1360,7 @@ export async function commitImportBatch(
           ...item.extractedData,
           updatedAt: new Date().toISOString(),
         };
-        await persistGirlToFirestore(updatedDb.girls[idx]);
-      }
+        }
     }
     // 9. Educational Follow-Up
     else if (item.targetEntity === 'educationalFollowUp') {
@@ -1372,7 +1371,6 @@ export async function commitImportBatch(
         updatedAt: new Date().toISOString(),
       };
       updatedDb.educationalFollowUps.unshift(newEdu as any);
-      await persistEduFollowUpToFirestore(newEdu as any);
     }
     // 10. Health Follow-up (only after staff review and confirmation)
     else if (item.targetEntity === 'healthFollowUp' && item.matchedId) {
@@ -1386,7 +1384,6 @@ export async function commitImportBatch(
         updatedBy: auditRecord.importedByName,
       } as HealthFollowUp;
       updatedDb.healthFollowUps.unshift(newHealth);
-      await persistHealthFollowUpToFirestore(newHealth);
     }
 
     if (createsWorkplan && item.targetEntity !== 'workplan' && item.classification !== 'WORKPLAN_PRIORITY') {
@@ -1416,7 +1413,6 @@ export async function commitImportBatch(
       };
       if (!updatedDb.workplans) updatedDb.workplans = [];
       updatedDb.workplans.unshift(linkedWorkplan);
-      await persistWorkplanItemToFirestore(linkedWorkplan);
     }
 
     processed++;
@@ -1518,9 +1514,10 @@ export async function commitImportBatch(
     payrollRecordsImportedCount: importedPayrollRecords,
   };
   updatedDb.importAudits?.unshift(finalAudit);
-  await persistImportAuditToFirestore(finalAudit);
+  await persistImportAuditToFirestore(finalAudit, canReadImportSourceData, canWriteImportAuditMetadata);
 
-  saveDatabase(updatedDb);
+  const localSaveResult = saveDatabase(updatedDb);
+  assertImportLocalSaveSucceeded(localSaveResult);
 
   return { success: true, createdAudit: finalAudit };
 }

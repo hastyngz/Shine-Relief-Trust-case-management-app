@@ -84,14 +84,20 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     return () => media.removeEventListener('change', update);
   }, []);
 
+  // Salary history only depends on which staff IDs are included. A fresh roster
+  // array can be produced by unrelated staff updates; depending on the array
+  // itself would repeat the same sensitive Firestore read unnecessarily.
+  const salaryHistoryStaffKey = JSON.stringify(staff.map((person) => person.uid || person.id).filter(Boolean).sort());
+
   useEffect(() => {
     if (!canAccessManagementDashboard(isAdmin, role)) return;
     let mounted = true;
-    getEmployeeSalaryHistoryForStaff(staff.map((person) => person.uid || person.id))
+    const staffIds = JSON.parse(salaryHistoryStaffKey) as string[];
+    getEmployeeSalaryHistoryForStaff(staffIds)
       .then((records) => { if (mounted) setSalaryHistory(records); })
       .catch(() => { if (mounted) setSalaryHistoryError(true); });
     return () => { mounted = false; };
-  }, [isAdmin, role, staff]);
+  }, [isAdmin, role, salaryHistoryStaffKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setOverviewLoading(false), 0);
@@ -194,8 +200,8 @@ export const ManagementDashboard: React.FC<ManagementDashboardProps> = ({ db, st
     [programmeFilteredDb.budgets, permittedDb.forecastSettings]
   );
   const attentionItems = useMemo(
-    () => buildNeedsAttention(permittedDb, today, canViewCaseReviews),
-    [permittedDb, today, canViewCaseReviews]
+    () => buildNeedsAttention(permittedDb, today, canViewCaseReviews, canViewHealthRecords),
+    [permittedDb, today, canViewCaseReviews, canViewHealthRecords]
   );
   const programmePerformance = useMemo(() => [...PROGRAMMES, ...LEGACY_PROGRAMMES]
     .filter((item) => programmeId === 'ALL' || item.id === programmeId)

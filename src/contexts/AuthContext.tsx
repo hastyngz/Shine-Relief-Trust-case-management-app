@@ -1,18 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth as getSecondaryAuth } from 'firebase/auth';
-import { auth, firestore } from '../firebase';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { auth } from '../firebase';
+import { setActiveWorkspaceUid } from '../services/accountWorkspace';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
 import {
   getStaffUserDoc,
@@ -20,7 +19,9 @@ import {
   persistStaffUserToFirestore,
   deleteStaffUserFromFirestore,
   subscribeStaffUsers,
+  subscribeStaffUserDoc,
 } from '../services/firestoreSync';
+import { createStaffInvitation } from '../services/r2StorageClient';
 
 export const PRIMARY_ADMIN_EMAIL = 'hastingszidanamot@gmail.com';
 
@@ -46,7 +47,7 @@ interface AuthContextType {
   auditActor: string;
   login: (email: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
-  setupInitialAdmin: (password: string, fullName?: string) => Promise<void>;
+  setupInitialAdmin: (password: string, fullName?: string) => Promise<'verification-sent' | 'initialized'>;
   sendResetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   createStaffAccount: (data: {
@@ -55,8 +56,7 @@ interface AuthContextType {
     role: StaffRole;
     departmentOrTitle?: string;
     phone?: string;
-    initialPassword?: string;
-  }) => Promise<StaffUser>;
+  }) => Promise<void>;
   updateStaffAccount: (staffId: string, updates: Partial<StaffUser>) => Promise<void>;
   deleteStaffAccount: (staffId: string, email: string) => Promise<void>;
   refreshStaffProfile: () => Promise<void>;
@@ -69,28 +69,49 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [staffProfile, setStaffProfile] = useState<StaffUser | null>(null);
   const [allStaff, setAllStaff] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  // A later refresh for the same UID supersedes any older in-flight profile read.
+  const profileLoadSequence = useRef(0);
 
   // Load and refresh current user profile from Firestore
   const loadStaffProfile = async (user: User | null) => {
+    const requestSequence = ++profileLoadSequence.current;
     if (!user) {
       setStaffProfile(null);
       return;
     }
 
+    // Profile reads can overlap both across account switches and when an email-link
+    // sign-in triggers an initial read while invitation claiming triggers a refresh.
+    // Only the newest read for the current UID may publish a role/profile.
+    const isCurrentProfileLoad = () =>
+      profileLoadSequence.current === requestSequence && auth.currentUser?.uid === user.uid;
+    if (!isCurrentProfileLoad()) return;
+
     const email = user.email?.toLowerCase().trim() || '';
-    const isHastings = email === PRIMARY_ADMIN_EMAIL;
+    const isHastings = email === PRIMARY_ADMIN_EMAIL && user.emailVerified === true;
+
+    // A legacy primary-admin profile must not bypass email verification just
+    // because this Firebase UID already has an Administrator document.
+    if (email === PRIMARY_ADMIN_EMAIL && user.emailVerified !== true) {
+      setStaffProfile(null);
+      return;
+    }
 
     try {
       let profile = await getStaffUserDoc(user.uid);
+      if (!isCurrentProfileLoad()) return;
 
       // If not found by UID, check if invited/pre-registered by email
-      if (!profile && email) {
+      if (!profile && email && user.emailVerified === true) {
         profile = await getStaffUserByEmail(email);
+        if (!isCurrentProfileLoad()) return;
         if (profile) {
-          // Link UID and update in Firestore
+          // Link UID and update in Firestore only while this auth identity is current.
+          if (!isCurrentProfileLoad()) return;
           profile.uid = user.uid;
           profile.id = user.uid;
           await persistStaffUserToFirestore(profile);
+          if (!isCurrentProfileLoad()) return;
         }
       }
 
@@ -110,17 +131,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           createdBy: 'System Initializer',
           lastLoginAt: now,
         };
+        if (!isCurrentProfileLoad()) return;
         await persistStaffUserToFirestore(initialHastingsDoc);
+        if (!isCurrentProfileLoad()) return;
         profile = initialHastingsDoc;
       }
 
+      if (!isCurrentProfileLoad()) return;
       if (profile) {
-        // Update last login
+        // Update lastLoginAt at most once per calendar day. Every write to
+        // staffUsers can fan out to the roster onSnapshot listener for every
+        // active session, so writing on every login creates avoidable reads.
         if (profile.status === 'Active') {
-          profile.lastLoginAt = new Date().toISOString();
-          persistStaffUserToFirestore(profile).catch((e) =>
-            console.warn('Non-fatal: could not update lastLoginAt', e)
-          );
+          const now = new Date().toISOString();
+          if (profile.lastLoginAt?.slice(0, 10) !== now.slice(0, 10) && isCurrentProfileLoad()) {
+            profile.lastLoginAt = now;
+            persistStaffUserToFirestore(profile).catch((e) =>
+              console.warn('Non-fatal: could not update lastLoginAt', e)
+            );
+          }
         }
         setStaffProfile(profile);
       } else {
@@ -145,6 +174,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      setActiveWorkspaceUid(user?.uid ?? null);
       setCurrentUser(user);
       await loadStaffProfile(user);
       setLoading(false);
@@ -155,28 +185,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  // Subscribe to staff roster ONLY when an authenticated user is signed in
+  // Load the full staff roster only after the signed-in user is confirmed active.
+  // Suspended registered users keep a listener on their own profile so an
+  // administrator can reactivate them without requiring a fresh login. Unknown
+  // accounts do not start a collection-wide listener that rules will reject.
   useEffect(() => {
     if (!currentUser) {
       setAllStaff([]);
       return;
     }
 
-    const unsubStaff = subscribeStaffUsers((list) => {
-      setAllStaff(list);
-      // Also update current user's profile in real time if admin changes their role
-      if (auth.currentUser) {
-        const matching = list.find((s) => s.uid === auth.currentUser?.uid || s.id === auth.currentUser?.uid);
+    const isPrimaryAdmin = currentUser.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL;
+    const profileBelongsToUser = staffProfile?.uid === currentUser.uid || staffProfile?.id === currentUser.uid;
+    const profileResolved = profileBelongsToUser && staffProfile !== null;
+    const isRegisteredProfile = profileResolved && staffProfile.createdBy !== 'Unregistered User';
+    const canReadRoster = isPrimaryAdmin || (isRegisteredProfile && staffProfile.status === 'Active');
+
+    if (canReadRoster) {
+      const unsubStaff = subscribeStaffUsers((list) => {
+        setAllStaff(list);
+        // Keep role/status changes live while the user has roster access.
+        const matching = list.find((staff) =>
+          staff.uid === currentUser.uid || staff.id === currentUser.uid
+        );
         if (matching) {
           setStaffProfile(matching);
+        } else if (!isPrimaryAdmin) {
+          setStaffProfile((previous) => previous && (
+            previous.uid === currentUser.uid || previous.id === currentUser.uid
+          ) ? { ...previous, status: 'Suspended', createdBy: 'Unregistered User' } : previous);
         }
-      }
-    });
+      });
+      return () => {
+        unsubStaff();
+      };
+    }
 
-    return () => {
-      unsubStaff();
-    };
-  }, [currentUser]);
+    setAllStaff([]);
+    // Only listen to a single profile document when a known staff member is
+    // suspended. This keeps status/reactivation changes live without exposing
+    // or repeatedly attempting to read the full roster.
+    if (profileResolved && isRegisteredProfile) {
+      const unsubOwnProfile = subscribeStaffUserDoc(currentUser.uid, (profile) => {
+        if (profile) {
+          setStaffProfile(profile);
+        } else {
+          setStaffProfile((previous) => previous && (
+            previous.uid === currentUser.uid || previous.id === currentUser.uid
+          ) ? { ...previous, status: 'Suspended', createdBy: 'Unregistered User' } : previous);
+        }
+      });
+      return () => {
+        unsubOwnProfile();
+      };
+    }
+  }, [currentUser, staffProfile?.uid, staffProfile?.id, staffProfile?.status, staffProfile?.createdBy]);
 
   const refreshStaffProfile = async () => {
     if (auth.currentUser) {
@@ -184,7 +247,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const isHastingsUser = currentUser?.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL;
+  const isHastingsUser = currentUser?.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL && currentUser.emailVerified === true;
   const isRegisteredStaff = isHastingsUser || (staffProfile !== null && staffProfile.createdBy !== 'Unregistered User');
   const role: StaffRole | null = staffProfile?.role || (isHastingsUser ? 'Administrator' : null);
   const isAdmin = role === 'Administrator' || isHastingsUser;
@@ -223,7 +286,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Dedicated first-time admin setup for Hastings
-  const setupInitialAdmin = async (password: string, fullName: string = 'Hastings Zidana') => {
+  const setupInitialAdmin = async (
+    password: string,
+    fullName: string = 'Hastings Zidana',
+  ): Promise<'verification-sent' | 'initialized'> => {
     const email = PRIMARY_ADMIN_EMAIL;
     if (password.length < 6) {
       throw new Error('Password must be at least 6 characters long.');
@@ -234,11 +300,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       userCredential = await createUserWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
-        // Account exists, try logging in
         userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
         throw err;
       }
+    }
+
+    // Never create the first Administrator profile for an unverified email/password
+    // identity. Verification proves control of the primary mailbox before bootstrap.
+    if (userCredential.user.emailVerified !== true) {
+      try {
+        await sendEmailVerification(userCredential.user);
+      } catch {
+        await signOut(auth).catch(() => undefined);
+        throw new Error('Could not send the verification email. Please retry later or use Google sign-in.');
+      }
+      await signOut(auth);
+      return 'verification-sent';
     }
 
     const uid = userCredential.user.uid;
@@ -260,6 +338,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await persistStaffUserToFirestore(adminDoc);
     setStaffProfile(adminDoc);
     setCurrentUser(userCredential.user);
+    return 'initialized';
   };
 
   // Password reset email
@@ -274,77 +353,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(null);
   };
 
-  // Admin invites / provisions a new staff account
+  // Invite a staff member through the trusted Worker. Firebase Auth creates the
+  // identity only after the recipient follows the email link and claims the invitation.
   const createStaffAccount = async (data: {
     email: string;
     fullName: string;
     role: StaffRole;
     departmentOrTitle?: string;
     phone?: string;
-    initialPassword?: string;
-  }): Promise<StaffUser> => {
+  }): Promise<void> => {
     if (!isAdmin) {
-      throw new Error('Unauthorized: Only Administrators can create staff accounts.');
+      throw new Error('Unauthorized: Only Administrators can invite staff accounts.');
     }
-
-    const cleanEmail = data.email.trim().toLowerCase();
-    if (cleanEmail === PRIMARY_ADMIN_EMAIL && data.role !== 'Administrator') {
-      throw new Error('Cannot change primary administrator account.');
+    if (data.role === 'Administrator') {
+      throw new Error('Administrator accounts cannot be created through staff invitations.');
     }
-
-    // Default password if not provided
-    const password = data.initialPassword || `Shine${Math.floor(100000 + Math.random() * 900000)}!`;
-
-    // Use an isolated secondary Firebase app instance to avoid signing out the current admin
-    const tempAppName = `StaffProvision_${Date.now()}`;
-    const secondaryApp = initializeApp(firebaseConfig, tempAppName);
-    let newUid: string;
-
-    try {
-      const secondaryAuth = getSecondaryAuth(secondaryApp);
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, password);
-      newUid = userCredential.user.uid;
-    } catch (authErr: any) {
-      if (authErr.code === 'auth/email-already-in-use') {
-        // If email already exists in Auth, generate a deterministic or look up UID from staff list
-        const existingStaff = allStaff.find((s) => s.email.toLowerCase() === cleanEmail);
-        newUid = existingStaff ? existingStaff.uid : `ext_${Date.now()}`;
-      } else if (authErr.code === 'auth/operation-not-allowed') {
-        // Firebase project only has Google auth enabled; create provisioned profile for Google sign-in
-        newUid = `staff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      } else {
-        throw authErr;
-      }
-    } finally {
-      await deleteApp(secondaryApp);
-    }
-
-    const now = new Date().toISOString();
-    const newStaffUser: StaffUser = {
-      id: newUid,
-      uid: newUid,
-      email: cleanEmail,
+    await createStaffInvitation({
+      email: data.email.trim().toLowerCase(),
       fullName: data.fullName.trim(),
       role: data.role,
-      status: 'Active',
       departmentOrTitle: data.departmentOrTitle || '',
       phone: data.phone || '',
-      createdAt: now,
-      updatedAt: now,
-      createdBy: auditActor,
-      lastLoginAt: '',
-    };
-
-    await persistStaffUserToFirestore(newStaffUser);
-
-    // Optionally trigger a password reset link to staff so they can set their personal password
-    try {
-      await sendPasswordResetEmail(auth, cleanEmail);
-    } catch (emailErr) {
-      console.warn('Password reset invitation email dispatch note:', emailErr);
-    }
-
-    return newStaffUser;
+    });
   };
 
   // Update staff member

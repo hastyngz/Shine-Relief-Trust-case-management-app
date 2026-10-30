@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { AppDatabase } from '../types';
 import {
-  exportGirlsToCSV,
-  exportHouseholdsToCSV,
-  exportEducationalFollowUpsToCSV,
-  exportHealthFollowUpsToCSV,
-  exportFamilyFollowUpsToCSV,
-  exportHouseholdActivitiesToCSV,
-  exportRentPaymentsToCSV,
-  exportExpensesToCSV,
+  exportGirlsToExcel,
+  exportHouseholdsToExcel,
+  exportEducationalFollowUpsToExcel,
+  exportHealthFollowUpsToExcel,
+  exportFamilyFollowUpsToExcel,
+  exportHouseholdActivitiesToExcel,
+  exportRentPaymentsToExcel,
+  exportExpensesToExcel,
   formatMWK,
   formatDate,
-  downloadCSV,
+  downloadExcel,
 } from '../utils/export';
 import {
   FileSpreadsheet,
@@ -31,6 +31,7 @@ import { ComprehensiveReportModal } from './Reports/ComprehensiveReportModal';
 import { ManagementReportsPanel } from './Reports/ManagementReportsPanel';
 import { useAuth } from '../contexts/AuthContext';
 import type { QualityIssue } from '../services/qualityRules';
+import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 
 interface ReportsProps {
   db: AppDatabase;
@@ -51,10 +52,25 @@ type ReportTab =
   | 'exports';
 
 export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHouse, onOpenQualityRecord }) => {
-  const { canViewHealthRecords, canViewCaseReviews, isAdmin, role, allStaff } = useAuth();
+  const { currentUser, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, isAdmin, role, allStaff } = useAuth();
   const canViewManagementReports = isAdmin || role === 'Manager';
+  const visibleCaseActions = excludeSafeguardingCaseActions(filterCaseActionsForStaff(db.caseActions || [], {
+    uid: currentUser?.uid,
+    canViewTeamTasks: isAdmin || role === 'Manager',
+    canViewHealthRecords,
+    canViewSafeguarding,
+  }));
+  const reportDb = { ...db, caseActions: visibleCaseActions };
   const [activeTab, setActiveTab] = useState<ReportTab>('schools');
   const [isComprehensiveModalOpen, setIsComprehensiveModalOpen] = useState<boolean>(false);
+  const [exportMessage, setExportMessage] = useState('');
+  const [exportMessageType, setExportMessageType] = useState<'success' | 'error' | ''>('');
+  const runExcelExport = async (operation: () => Promise<void>) => {
+    setExportMessage(''); setExportMessageType('');
+    try { await operation(); setExportMessage('Excel file created successfully.'); setExportMessageType('success'); }
+    catch { setExportMessage('Excel export failed. Check your storage and try again.'); setExportMessageType('error'); }
+  };
+
   const [sourceImportAuditId, setSourceImportAuditId] = useState(() => {
     if (typeof window === 'undefined') return '';
     return new URLSearchParams(window.location.hash.split('?')[1] || '').get('importAudit') || '';
@@ -131,6 +147,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
 
   return (
     <div id="reports-view" className="space-y-6 pb-12">
+      {exportMessage && <p role={exportMessageType === 'error' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${exportMessageType === 'error' ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>{exportMessage}</p>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -156,7 +173,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
             className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
           >
             <Download className="w-4 h-4 text-amber-300" />
-            <span>Export CSVs</span>
+            <span>Export Excel</span>
           </button>
         </div>
       </div>
@@ -268,7 +285,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
             }`}
           >
             <Download className="w-4 h-4" />
-            <span>CSV Export Centre</span>
+            <span>Excel Export Centre</span>
           </button>
         </div>
 
@@ -282,11 +299,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   <p className="text-xs text-stone-500">Distribution across secondary schools in Malawi</p>
                 </div>
                 <button
-                  onClick={() => exportGirlsToCSV(db.girls, db.households)}
+                  onClick={() => void runExcelExport(() => exportGirlsToExcel(db.girls, db.households))}
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Girls CSV</span>
+                  <span>Export Girls Excel</span>
                 </button>
               </div>
 
@@ -495,11 +512,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   <p className="text-xs text-stone-500">Comparison of expected rent vs actual payments</p>
                 </div>
                 <button
-                  onClick={() => exportRentPaymentsToCSV(db.rentPayments, db.households)}
+                  onClick={() => void runExcelExport(() => exportRentPaymentsToExcel(db.rentPayments, db.households))}
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Rent CSV</span>
+                  <span>Export Rent Excel</span>
                 </button>
               </div>
 
@@ -577,11 +594,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                   </p>
                 </div>
                 <button
-                  onClick={() => exportExpensesToCSV(db.expenses, db.households)}
+                  onClick={() => void runExcelExport(() => exportExpensesToExcel(db.expenses, db.households))}
                   className="text-xs font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Expenses CSV</span>
+                  <span>Export Expenses Excel</span>
                 </button>
               </div>
 
@@ -616,8 +633,8 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                 <p className="text-xs text-stone-500">Counts and exports are derived only from records available to your account.</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
-                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
+                <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Open actions</span><div className="text-lg font-black">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length}</div></div>
+                <div className="p-3 border rounded-md bg-rose-50"><span className="text-[10px] uppercase font-bold text-rose-800">Overdue actions</span><div className="text-lg font-black">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status) && item.dueDate < new Date().toISOString().slice(0, 10)).length}</div></div>
                 <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Education history</span><div className="text-lg font-black">{(db.educationHistory || []).length}</div></div>
                 <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Academic support</span><div className="text-lg font-black">{(db.academicSupports || []).length}</div></div>
                 {canViewHealthRecords && <div className="p-3 border rounded-md bg-white"><span className="text-[10px] uppercase font-bold text-stone-500">Health follow-ups</span><div className="text-lg font-black">{db.healthFollowUps.length}</div></div>}
@@ -629,35 +646,35 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-stone-700">Export records</h4>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => downloadCSV('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...(db.caseActions || []).map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions CSV</button>
-                  <button onClick={() => downloadCSV('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education history CSV</button>
-                  <button onClick={() => downloadCSV('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Education support CSV</button>
-                  {canViewHealthRecords && <button onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups CSV</button>}
-                  <button onClick={() => downloadCSV('SHINE_Attendance', [['Girl ID', 'Activity', 'Type', 'Location', 'Date', 'Status', 'Notes'], ...(db.attendanceRecords || []).map((item) => [item.girlId, item.activityName, item.activityType, item.location || '', item.date, item.status, item.notes || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Attendance CSV</button>
-                  <button onClick={() => downloadCSV('SHINE_Leave_History', [['Girl ID', 'Type', 'Start', 'Expected Return', 'Actual Return', 'Reason', 'Approved By', 'Status'], ...(db.girlLeaves || []).map((item) => [item.girlId, item.leaveType, item.startDate, item.expectedReturnDate, item.actualReturnDate || '', item.reason, item.approvedBy, item.status])])} className="px-3 py-2 border rounded-md text-xs font-bold">Leave history CSV</button>
-                  {canViewCaseReviews && <button onClick={() => downloadCSV('SHINE_Case_Reviews', [['Girl ID', 'Review Date', 'Progress', 'Challenges', 'Support Required', 'Action Plan', 'Next Review'], ...(db.caseReviews || []).map((item) => [item.girlId, item.reviewDate, item.progress || '', item.challenges || '', item.supportRequired || '', item.actionPlan || '', item.nextReviewDate || ''])])} className="px-3 py-2 border rounded-md text-xs font-bold">Case reviews CSV</button>}
+                  <button onClick={() => void runExcelExport(() => downloadExcel('SHINE_Case_Actions', [['ID', 'Title', 'Description', 'Girl ID', 'Household ID', 'Assigned Staff', 'Priority', 'Due Date', 'Status', 'Completed At'], ...visibleCaseActions.map((item) => [item.id, item.title, item.description, item.girlId || '', item.householdId || '', item.assignedStaffName, item.priority, item.dueDate, item.status, item.completedAt || ''])]))} className="px-3 py-2 border rounded-md text-xs font-bold">Outstanding actions Excel</button>
+                  <button onClick={() => void runExcelExport(() => downloadExcel('SHINE_Education_History', [['Girl ID', 'Academic Year', 'School', 'Class', 'Start', 'End', 'Status', 'Reason', 'Source'], ...(db.educationHistory || []).map((item) => [item.girlId, item.academicYear, item.school, item.classLevel, item.startDate || '', item.endDate || '', item.status, item.reasonForChange || '', item.source || ''])]))} className="px-3 py-2 border rounded-md text-xs font-bold">Education history Excel</button>
+                  <button onClick={() => void runExcelExport(() => downloadExcel('SHINE_Academic_Support', [['Girl ID', 'Subject', 'Concern', 'Problem', 'Support', 'Date', 'Outcome', 'Follow-up Date'], ...(db.academicSupports || []).map((item) => [item.girlId, item.subject, item.areaOfConcern, item.problemIdentified, item.supportProvided, item.date, item.outcome || '', item.nextFollowUpDate || ''])]))} className="px-3 py-2 border rounded-md text-xs font-bold">Education support Excel</button>
+                  {canViewHealthRecords && <button onClick={() => void runExcelExport(() => exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls))} className="px-3 py-2 border rounded-md text-xs font-bold">Health follow-ups Excel</button>}
+                  <button onClick={() => void runExcelExport(() => downloadExcel('SHINE_Attendance', [['Girl ID', 'Activity', 'Type', 'Location', 'Date', 'Status', 'Notes'], ...(db.attendanceRecords || []).map((item) => [item.girlId, item.activityName, item.activityType, item.location || '', item.date, item.status, item.notes || ''])]))} className="px-3 py-2 border rounded-md text-xs font-bold">Attendance Excel</button>
+                  <button onClick={() => void runExcelExport(() => downloadExcel('SHINE_Leave_History', [['Girl ID', 'Type', 'Start', 'Expected Return', 'Actual Return', 'Reason', 'Approved By', 'Status'], ...(db.girlLeaves || []).map((item) => [item.girlId, item.leaveType, item.startDate, item.expectedReturnDate, item.actualReturnDate || '', item.reason, item.approvedBy, item.status])]))} className="px-3 py-2 border rounded-md text-xs font-bold">Leave history Excel</button>
+                  {canViewCaseReviews && <button onClick={() => void runExcelExport(() => downloadExcel('SHINE_Case_Reviews', [['Girl ID', 'Review Date', 'Progress', 'Challenges', 'Support Required', 'Action Plan', 'Next Review'], ...(db.caseReviews || []).map((item) => [item.girlId, item.reviewDate, item.progress || '', item.challenges || '', item.supportRequired || '', item.actionPlan || '', item.nextReviewDate || ''])]))} className="px-3 py-2 border rounded-md text-xs font-bold">Case reviews Excel</button>}
                 </div>
               </div>
 
               <div className="overflow-x-auto border-y border-stone-200">
                 <table className="w-full text-left text-xs">
                   <thead><tr className="text-stone-600"><th className="py-2 pr-3">Action</th><th className="py-2 pr-3">Assigned staff</th><th className="py-2 pr-3">Priority</th><th className="py-2 pr-3">Due</th><th className="py-2">Status</th></tr></thead>
-                  <tbody className="divide-y divide-stone-100">{(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
+                  <tbody className="divide-y divide-stone-100">{visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).map((item) => <tr key={item.id}><td className="py-2 pr-3">{item.title}</td><td className="py-2 pr-3">{item.assignedStaffName}</td><td className="py-2 pr-3">{item.priority}</td><td className="py-2 pr-3">{formatDate(item.dueDate)}</td><td className="py-2">{item.dueDate < new Date().toISOString().slice(0, 10) ? 'Overdue' : item.status}</td></tr>)}</tbody>
                 </table>
-                {(db.caseActions || []).filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
+                {visibleCaseActions.filter((item) => !['Completed', 'Cancelled'].includes(item.status)).length === 0 && <p className="py-4 text-center text-xs text-stone-500">No outstanding actions available.</p>}
               </div>
             </div>
           )}
 
           {activeTab === 'management' && canViewManagementReports && (
-            <ManagementReportsPanel db={db} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
+            <ManagementReportsPanel db={reportDb} staff={allStaff} onOpenQualityRecord={onOpenQualityRecord} />
           )}
 
-          {/* TAB 7: CSV EXPORTS CENTRE */}
+          {/* TAB 7: EXCEL EXPORT CENTRE */}
           {activeTab === 'exports' && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-base font-bold text-stone-900">Official CSV Data Export Centre</h3>
+                <h3 className="text-base font-bold text-stone-900">Official Excel Export Centre</h3>
                 <p className="text-xs text-stone-500">
                   Export complete historical records for donor reporting, auditing, or offline analysis in Excel/Sheets.
                 </p>
@@ -674,11 +691,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportGirlsToCSV(db.girls, db.households)}
+                    onClick={() => void runExcelExport(() => exportGirlsToExcel(db.girls, db.households))}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Girls CSV</span>
+                    <span>Download Girls Excel</span>
                   </button>
                 </div>
 
@@ -692,11 +709,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportHouseholdsToCSV(db.households, db.girls)}
+                    onClick={() => void runExcelExport(() => exportHouseholdsToExcel(db.households, db.girls))}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Houses CSV</span>
+                    <span>Download Houses Excel</span>
                   </button>
                 </div>
 
@@ -710,16 +727,15 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportEducationalFollowUpsToCSV(db.educationalFollowUps, db.girls)}
+                    onClick={() => void runExcelExport(() => exportEducationalFollowUpsToExcel(db.educationalFollowUps, db.girls))}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Education CSV</span>
+                    <span>Download Education Excel</span>
                   </button>
                 </div>
 
-                {/* 4. Health Follow-ups */}
-                <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
+                {canViewHealthRecords && <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
                   <div className="flex items-center gap-2">
                     <HeartPulse className="w-5 h-5 text-rose-800" />
                     <div>
@@ -728,13 +744,13 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportHealthFollowUpsToCSV(db.healthFollowUps, db.girls)}
+                    onClick={() => void runExcelExport(() => exportHealthFollowUpsToExcel(db.healthFollowUps, db.girls))}
                     className="w-full py-2 bg-rose-800 hover:bg-rose-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Medical CSV</span>
+                    <span>Download Medical Excel</span>
                   </button>
-                </div>
+                </div>}
 
                 {/* 5. Family Follow-ups */}
                 <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-xs space-y-3">
@@ -746,11 +762,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportFamilyFollowUpsToCSV(db.familyFollowUps, db.girls)}
+                    onClick={() => void runExcelExport(() => exportFamilyFollowUpsToExcel(db.familyFollowUps, db.girls))}
                     className="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Family CSV</span>
+                    <span>Download Family Excel</span>
                   </button>
                 </div>
 
@@ -764,11 +780,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportHouseholdActivitiesToCSV(db.householdActivities, db.households)}
+                    onClick={() => void runExcelExport(() => exportHouseholdActivitiesToExcel(db.householdActivities, db.households))}
                     className="w-full py-2 bg-purple-800 hover:bg-purple-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Activities CSV</span>
+                    <span>Download Activities Excel</span>
                   </button>
                 </div>
 
@@ -782,11 +798,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportRentPaymentsToCSV(db.rentPayments, db.households)}
+                    onClick={() => void runExcelExport(() => exportRentPaymentsToExcel(db.rentPayments, db.households))}
                     className="w-full py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Rent CSV</span>
+                    <span>Download Rent Excel</span>
                   </button>
                 </div>
 
@@ -800,11 +816,11 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
                     </div>
                   </div>
                   <button
-                    onClick={() => exportExpensesToCSV(db.expenses, db.households)}
+                    onClick={() => void runExcelExport(() => exportExpensesToExcel(db.expenses, db.households))}
                     className="w-full py-2 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Expenses CSV</span>
+                    <span>Download Expenses Excel</span>
                   </button>
                 </div>
               </div>
@@ -816,7 +832,7 @@ export const Reports: React.FC<ReportsProps> = ({ db, onSelectGirl, onSelectHous
       {/* Comprehensive Report Modal */}
       {isComprehensiveModalOpen && (
         <ComprehensiveReportModal
-          db={db}
+          db={reportDb}
           onClose={() => setIsComprehensiveModalOpen(false)}
           onOpenQualityRecord={onOpenQualityRecord}
         />

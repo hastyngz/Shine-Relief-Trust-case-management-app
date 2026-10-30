@@ -128,7 +128,7 @@ const privacyDocXml = await privacyDocArchive.file('word/document.xml')?.async('
 assert.ok(!privacyDocXml?.includes('Sensitive Example Name'));
 assert.ok(!privacyDocXml?.includes('Example School'));
 assert.ok(privacyDocXml?.includes('[hidden]'));
-const privacyWorkbook = XLSX.read(generateExcelWorkbook(sourceDb, privacyConfig), { type: 'array' });
+const privacyWorkbook = XLSX.read(await generateExcelWorkbook(sourceDb, privacyConfig), { type: 'array' });
 assert.ok(!JSON.stringify(privacyWorkbook.Sheets).includes('Sensitive Example Name'));
 assert.ok(!JSON.stringify(privacyWorkbook.Sheets).includes('Example School'));
 const privacyPdf = await generatePdfReport(sourceDb, privacyConfig);

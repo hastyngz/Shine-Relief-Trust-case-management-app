@@ -1,4 +1,5 @@
 import type { ProgrammeId } from './data/programmes';
+import type { Timestamp } from 'firebase/firestore';
 
 export type GirlStatus = 'Active' | 'On Holiday' | 'Completed' | 'Left SHINE';
 
@@ -59,6 +60,20 @@ export interface EmploymentPeriod {
   status: ContractStatus;
 }
 
+export interface EmployeeContractFields {
+  employeeCategory?: EmployeeCategory;
+  position?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
+  contractType?: string;
+  contractDuration?: string;
+  contractStatus?: ContractStatus;
+  renewalInformation?: string;
+  employmentStatus?: EmploymentStatus;
+  originalContractStartDate?: string;
+  employmentPeriods?: EmploymentPeriod[];
+}
+
 export interface SalaryHistoryRecord {
   id: string;
   employeeId: string;
@@ -86,7 +101,7 @@ export interface SafeguardingPermissions {
   canClose: boolean;
 }
 
-export interface StaffUser {
+export interface StaffUser extends EmployeeContractFields {
   id: string; // document id / uid
   uid: string;
   email: string;
@@ -104,20 +119,9 @@ export interface StaffUser {
   canEditHealthRecords?: boolean;
   canViewCaseReviews?: boolean;
   canEditCaseReviews?: boolean;
-  employeeCategory?: EmployeeCategory;
-  position?: string;
-  contractStartDate?: string;
-  contractEndDate?: string;
-  contractType?: string;
-  contractDuration?: string;
-  contractStatus?: ContractStatus;
-  renewalInformation?: string;
-  employmentStatus?: EmploymentStatus;
-  originalContractStartDate?: string;
-  employmentPeriods?: EmploymentPeriod[];
 }
 
-export interface EmployeeRecord {
+export interface EmployeeRecord extends EmployeeContractFields {
   id: string;
   fullName: string;
   department?: string;
@@ -404,6 +408,7 @@ export interface GirlLeaveRecord {
 
 export type ProgrammeLogType = 'Production' | 'Sale' | 'Expense' | 'Input' | 'Distribution' | 'Family support' | 'Activity' | 'Note';
 export type ProgrammePaymentStatus = 'paid' | 'partial' | 'credit';
+export type FishProductionStage = 'fingerlings' | 'table-size';
 
 export interface ProgrammeLogRecord {
   id: string;
@@ -419,6 +424,14 @@ export interface ProgrammeLogRecord {
   counterpartyContactId?: string;
   counterpartyName?: string;
   beneficiaries?: number;
+  /** Fish farm record sheet fields (Fish Farming production entries only). */
+  fishStage?: FishProductionStage;
+  pondNo?: string;
+  numberStocked?: number;
+  feedGivenKg?: number;
+  waterChange?: string;
+  averageWeightG?: number;
+  dayExpenseMWK?: number;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -442,6 +455,28 @@ export interface CaseReview {
   nextReviewDate?: string;
   createdBy: string;
   createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export type CaseGoalStatus = 'Not started' | 'In progress' | 'Achieved' | 'Not achieved' | 'On hold';
+
+export interface CaseGoal {
+  id: string;
+  girlId: string;
+  title: string;
+  baseline: string;
+  targetOutcome: string;
+  measureOfSuccess: string;
+  targetDate?: string;
+  status: CaseGoalStatus;
+  progressNotes: Array<{ id: string; date: string; note: string; recordedBy: string }>;
+  outcome?: string;
+  outcomeRecordedAt?: string;
+  createdByUid: string;
+  createdBy: string;
+  createdAt: string;
+  updatedByUid: string;
   updatedBy: string;
   updatedAt: string;
 }
@@ -589,8 +624,8 @@ export interface PhotoAttachment {
   fileName: string;
   fileSize: number; // in bytes
   contentType: string; // e.g. 'image/jpeg'
-  storagePath: string; // path in Firebase Storage
-  downloadUrl: string; // secure download URL
+  storagePath: string; // object key in Cloudflare R2
+  downloadUrl: string; // short-lived signed download URL
   caption?: string;
   consent?: boolean;
   consentCheckedAt?: string;
@@ -803,6 +838,36 @@ export interface ProcurementListItem {
   itemNumber?: string;
   budgetLineId?: string;
   quotes?: ProcurementQuote[];
+  selectedQuoteSupplier?: string;
+  selectedQuoteAmountMWK?: number;
+  quoteRequirementReason?: 'threshold' | 'price-unknown';
+}
+
+export interface ProcurementDeliveryLine {
+  itemIndex: number;
+  quantity: number;
+  inventoryItemId: string | null;
+  movementId?: string;
+}
+
+export interface ProcurementDelivery {
+  id: string;
+  date: string;
+  reference: string;
+  recordedAt: string;
+  recordedBy: string;
+  lines: ProcurementDeliveryLine[];
+}
+
+export interface ProcurementPayment {
+  id: string;
+  date: string;
+  amountMWK: number;
+  reference: string;
+  method?: 'Cash' | 'Bank transfer' | 'Mobile money' | 'Cheque' | 'Other';
+  recordedAt: string;
+  recordedBy: string;
+  notes?: string;
 }
 
 export interface ProcurementList {
@@ -814,6 +879,23 @@ export interface ProcurementList {
   totalMWK: number;
   status: 'draft' | 'approved' | 'purchased';
   quoteThresholdMWK?: number;
+  approvedAt?: string;
+  approvedBy?: string;
+  purchaseOrderReference?: string;
+  orderedAt?: string;
+  orderedBy?: string;
+  /** Legacy full-receipt summary; delivery history is authoritative when present. */
+  receivedAt?: string;
+  receivedBy?: string;
+  deliveries?: ProcurementDelivery[];
+  /** Server-transactional cumulative receipt quantities, indexed by procurement line. */
+  receivedQuantities?: number[];
+  receivedQuantitiesByLine?: Record<string, number>;
+  lastReceiptMovementId?: string;
+  financeHandedOverAt?: string;
+  financeHandedOverBy?: string;
+  financeReference?: string;
+  payments?: ProcurementPayment[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -875,6 +957,17 @@ export interface ScheduleItem {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+  /** Optional metadata for records explicitly managed in the compliance register. */
+  complianceCategory?: string;
+  compliancePriority?: 'Low' | 'Medium' | 'High' | 'Urgent';
+  complianceRecurrence?: 'One-off' | 'Monthly' | 'Quarterly' | 'Every 6 months' | 'Annually';
+  /** Stable identifier shared by recurring compliance occurrences. */
+  complianceSeriesId?: string;
+  /** Original due date used to preserve month-end and leap-day recurrence anchors. */
+  complianceAnchorDate?: string;
+  evidenceReference?: string;
+  completionNote?: string;
+  complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened'; actor: string; at: string; note?: string }>;
 }
 
 export type MeetingStatus = 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
@@ -1229,6 +1322,7 @@ export interface ImportAuditRecord {
   qualityScores?: { quantification: number; impact: number; dataQuality: number };
   blockerOverrideReason?: string;
   qualityResolutions?: Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; field?: string; before?: unknown; after?: unknown }>;
+  sourceDataStoredInRestrictedCollection?: boolean;
   sourceData?: Record<string, unknown>;
 }
 
@@ -1364,6 +1458,75 @@ export interface ImportPreviewItem {
     | 'MARK_FOR_REVIEW';
 }
 
+export type InventoryMovementType = 'Received' | 'Issued' | 'Returned' | 'Damaged' | 'Adjustment' | 'Transfer In' | 'Transfer Out';
+
+export interface InventoryMovement {
+  id: string; type: InventoryMovementType; quantity: number; date: string; location: string;
+  destination?: string; reference?: string; reason: string; recordedBy: string; recordedByUid?: string; createdAt: string;
+  inventoryItemId?: string;
+  sourceType?: 'procurementReceipt';
+  sourceId?: string;
+  sourceLineIndex?: number;
+  /** Server-validated stock balance before and after this immutable movement. */
+  previousQuantity?: number; newQuantity?: number;
+}
+
+export interface InventoryItem {
+  id: string; stockCode: string; name: string; category: string; description?: string; unit: string;
+  quantityOnHand: number; minimumStockLevel: number; location: string; supplier?: string; unitCostMWK?: number;
+  expiryDate?: string; condition?: 'Good' | 'Fair' | 'Damaged' | 'Expired'; notes?: string; movements: InventoryMovement[];
+  createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; createdByUid?: string; updatedByUid?: string;
+  /** ID of the last movement atomically committed with this balance. */
+  lastMovementId?: string;
+}
+
+export type AssetCondition = 'Good' | 'Fair' | 'Damaged' | 'Needs Repair' | 'Written Off';
+export type AssetStatus = 'In Use' | 'In Storage' | 'Under Repair' | 'Missing' | 'Disposed';
+
+export interface AssetHistoryEntry {
+  id: string;
+  date: string;
+  action: 'Registered' | 'Details Updated' | 'Condition Changed' | 'Status Changed' | 'Location Changed' | 'Assignment Changed' | 'Maintenance' | 'Physical Verification';
+  note: string;
+  previousValue?: string;
+  newValue?: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+export interface AssetRecord {
+  id: string;
+  assetTag: string;
+  name: string;
+  category: string;
+  description?: string;
+  serialNumber?: string;
+  acquisitionDate?: string;
+  acquisitionCostMWK?: number;
+  fundingSource?: string;
+  location: string;
+  assignedTo?: string;
+  condition: AssetCondition;
+  status: AssetStatus;
+  warrantyExpiryDate?: string;
+  nextServiceDate?: string;
+  notes?: string;
+  /** Last physical verification against the asset register; never implies the whole organisation's asset list is complete. */
+  verificationDate?: string;
+  verifiedBy?: string;
+  verificationOutcome?: 'Verified' | 'Discrepancy' | 'Not Located';
+  verificationNote?: string;
+  observedLocation?: string;
+  observedCondition?: AssetCondition;
+  history: AssetHistoryEntry[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  createdByUid?: string;
+  updatedByUid?: string;
+}
+
 export interface AppDatabase {
   girls: Girl[];
   households: Household[];
@@ -1402,8 +1565,69 @@ export interface AppDatabase {
   girlLeaves?: GirlLeaveRecord[];
   programmeLogs?: ProgrammeLogRecord[];
   caseReviews?: CaseReview[];
+  caseGoals?: CaseGoal[];
   procurementLists?: ProcurementList[];
   projectProjections?: ProjectProjection[];
+  inventoryItems?: InventoryItem[];
+  assets?: AssetRecord[];
+}
+
+export type OfflineChangeOperation = 'set' | 'delete';
+
+/**
+ * A single queued local change produced by diffing the current database
+ * against the last copy confirmed by Firestore. baseUpdatedAt is the value of
+ * the record's updatedAt when this device last saw it, which lets the sync
+ * flush detect that another device edited the same record while we were offline.
+ */
+export interface OfflineChangeEntry {
+  /** UID of the authenticated workspace that owns this queued edit. */
+  ownerUid?: string;
+  collection: string;
+  recordId: string;
+  operation: OfflineChangeOperation;
+  data: Record<string, any> | null;
+  baseUpdatedAt: string | null;
+  /** Content fingerprint for records that lack dependable updatedAt metadata. */
+  baseHash?: string | null;
+  queuedAt: string;
+  /**
+   * Storage-only composite key `collection/recordId`. The queue is keyed by
+   * this so several changed records in the same collection never collide.
+   * Always set on read (see offlineSync.loadQueue) before an entry is used.
+   */
+  queueKey?: string;
+}
+
+export type SyncConflictResolution = 'keep-mine' | 'keep-theirs';
+
+export interface SyncConflict {
+  /** UID of the workspace that owns this conflict; missing owner is not resolvable. */
+  ownerUid?: string;
+  id: string;
+  collection: string;
+  recordId: string;
+  localData: Record<string, any> | null;
+  localOperation: OfflineChangeOperation;
+  baseUpdatedAt: string | null;
+  serverData: Record<string, any> | null;
+  serverUpdatedAt: string | null;
+  serverUpdatedBy: string | null;
+  detectedAt: string;
+  detectedBy: string | null;
+}
+
+export interface SyncConflictAuditEvent {
+  action: 'conflict_detected' | 'conflict_resolved';
+  resolution?: SyncConflictResolution;
+  collection: string;
+  recordId: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  localUpdatedAt?: string | null;
+  serverUpdatedAt?: string | null;
+  serverUpdatedBy?: string | null;
 }
 
 export interface ReportHistoryRecord {
@@ -1457,6 +1681,21 @@ export interface ReportExportRecord {
   generatedAt: string;
   draft: boolean;
   finalLocked: boolean;
+}
+
+export interface ManagementProcurementReportHistoryRecord {
+  id: string;
+  reportType: 'management-procurement';
+  generatedByUid: string;
+  generatedAt: Timestamp | Date;
+  expiresAt: Timestamp | Date;
+  dateBasis: 'createdAt' | 'approvedAt' | 'orderedAt' | 'receivedAt' | 'financeHandedOverAt';
+  startDate?: string;
+  endDate?: string;
+  programmeId?: string;
+  format: 'docx' | 'xlsx' | 'csv';
+  selectedListCount: number;
+  aggregateRowCount: number;
 }
 
 export type ConversationType = 'direct' | 'group' | 'announcement';

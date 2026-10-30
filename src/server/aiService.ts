@@ -16,7 +16,7 @@ function getGenAI(): GoogleGenAI {
   return genAIClient;
 }
 
-export type AIProvider = 'gemini' | 'openrouter';
+export type AIProvider = 'openrouter';
 
 export interface AIChatMessage {
   role: 'user' | 'assistant';
@@ -30,7 +30,7 @@ export interface AIChatRequest {
     girlId?: string;
     householdId?: string;
   };
-  db: AppDatabase;
+  loadDatabase: (toolName: string, args: Record<string, any>) => Promise<AppDatabase>;
   staffUser: {
     uid: string;
     email: string;
@@ -40,13 +40,23 @@ export interface AIChatRequest {
   };
 }
 
+export interface AIChatSourceRef {
+  id: string;
+  collection: string;
+  date?: string;
+  girlId?: string;
+  householdId?: string;
+}
+
 export interface AIChatResponse {
   success: boolean;
   reply: string;
+  modelsUsed?: string[];
   isUnavailable?: boolean;
   provider?: AIProvider;
   toolsUsed?: string[];
   accessedRecordIds?: string[];
+  sourceRefs?: AIChatSourceRef[];
   auditEntry?: {
     userId: string;
     userEmail: string;
@@ -104,16 +114,17 @@ You assist authorized SHINE staff members (Administrators, Managers, and Social 
 
 CRITICAL OPERATIONAL RULES:
 1. STRICT READ-ONLY FACTUALITY: Only report information retrieved via your tools. Never invent missing details, dates, statistics, girls, households, or expenditures.
-2. MISSING INFORMATION: If information is unavailable or not found, explicitly state:
+2. NO-RECORD QUESTIONS: Answer greetings, small talk, and general capability questions directly without calling record tools. Call tools only when the user asks for information that must come from SHINE records.
+3. MISSING INFORMATION: If information is unavailable or not found, explicitly state:
    "I could not find that information in the SHINE records."
    If a tool reports that more than one girl or household matches a name, do not pick one. List the candidates (name and ID) and ask the staff member which one they mean.
-3. CONFLICT IDENTIFICATION: If records appear contradictory or incomplete, explicitly highlight the discrepancy for the staff member to review in the original documentation.
-4. CLEAR CATEGORICAL SEPARATION: In every response, organize your findings and clearly distinguish between:
+4. CONFLICT IDENTIFICATION: If records appear contradictory or incomplete, explicitly highlight the discrepancy for the staff member to review in the original documentation.
+5. CLEAR CATEGORICAL SEPARATION: In every response, organize your findings and clearly distinguish between:
    - 📋 **Information from SHINE Records**: Verifiable data extracted directly from stored files, citing girl name, Case ID (e.g. SG-001), household name, or recorded visit dates.
    - 🔢 **Calculations**: Explicit math performed on records (e.g., total expenses, percentage rent collected, days overdue).
    - 📝 **Case Summary**: High-level synthesis of verified records.
    - 💡 **Recommendations & Next Steps**: Clearly labeled suggestions for staff follow-up (never confuse recommendations with recorded facts).
-5. INDIVIDUAL GIRL SUMMARIES:
+6. INDIVIDUAL GIRL SUMMARIES:
    When asked to summarize a girl's case history:
    - Provide basic case info: Name, Case ID, Age / DOB, School, Class level, Admission date, Living arrangement.
    - Educational follow-ups: Academic progress, attendance notes, school challenges.
@@ -122,7 +133,7 @@ CRITICAL OPERATIONAL RULES:
    - Family / Guardian follow-ups: Guardian relationship, home environment notes, family concerns.
    - Unresolved issues and upcoming scheduled follow-ups.
    - Recommended next actions for staff attention.
-6. FOLLOW-UP AND OVERDUE LISTS:
+7. FOLLOW-UP AND OVERDUE LISTS:
    Present clear tabular or bulleted lists specifying:
    - Girl Name
    - Case ID
@@ -131,12 +142,12 @@ CRITICAL OPERATIONAL RULES:
    - Identified Issue / Agreed Action
    - Next Follow-up Date
    - Current Status (e.g. Overdue, Open, In Progress)
-7. HOUSEHOLD, RENT, AND EXPENSE ANALYSIS:
+8. HOUSEHOLD, RENT, AND EXPENSE ANALYSIS:
    - Use actual numbers stored in records. Provide currency in MWK (Malawian Kwacha).
    - Clearly report verified totals and category breakdowns.
-8. REPORT NARRATIVES:
+9. REPORT NARRATIVES:
    When drafting monthly or periodic summaries, ground every statement in verified numbers. Show the underlying figures so staff can verify them before including in official trustee reports.
-9. PRIVACY AND RESPECT:
+10. PRIVACY AND RESPECT:
    This system manages vulnerable girls and families in Malawi. Maintain a professional, supportive, objective, and strictly confidential tone at all times.`;
 
 const CANDIDATE_MODELS = process.env.GEMINI_MODEL
@@ -146,172 +157,44 @@ const CANDIDATE_MODELS = process.env.GEMINI_MODEL
 // Max tool-call rounds per question (same limit for both providers).
 const MAX_TOOL_TURNS = 4;
 
-async function generateContentWithFallback(
-  ai: ReturnType<typeof getGenAI>,
-  contents: any[],
-  preferredModel?: string
-) {
-  const modelsToTry = preferredModel
-    ? [preferredModel, ...CANDIDATE_MODELS.filter((m) => m !== preferredModel)]
-    : CANDIDATE_MODELS;
-
-  let lastError: any = null;
-
-  for (const model of modelsToTry) {
-    // Try up to 2 times for transient 503/high demand spikes
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents,
-          config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            tools: [{ functionDeclarations: AI_TOOL_DECLARATIONS }],
-            temperature: 0.2,
-          },
-        });
-        return { response, workingModel: model };
-      } catch (err: any) {
-        lastError = err;
-        const msg = String(err?.message || err);
-        const isTransient =
-          msg.includes('503') ||
-          msg.includes('high demand') ||
-          msg.includes('UNAVAILABLE') ||
-          msg.includes('overloaded') ||
-          msg.includes('429') ||
-          msg.includes('RESOURCE_EXHAUSTED');
-
-        if (isTransient && attempt === 1) {
-          // Wait briefly before second attempt on same model
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-
-        // If not transient or second attempt failed, switch to next candidate model
-        break;
-      }
-    }
-  }
-
-  throw lastError;
-}
-
-// ---------------------------------------------------------------------------
-// Error classification
-// ---------------------------------------------------------------------------
-
-/** Quota, rate-limit, overload, out-of-credit or missing-key errors: the user should simply retry later. */
-function isQuotaOrUnavailableMessage(message: string): boolean {
-  return /quota|resource_exhausted|overloaded|\b429\b|\b402\b|\b503\b|unavailable|high demand|rate[\s_-]?limit|too many requests|insufficient (credits|funds)|GEMINI_API_KEY|OPENROUTER_API_KEY/i.test(message);
-}
-
-/** Gemini failures that justify trying the backup provider. */
-function shouldFallBackToOpenRouter(message: string): boolean {
-  return isQuotaOrUnavailableMessage(message) ||
-    /not[\s_-]?found|\b404\b|permission[\s_-]?denied|\b403\b|api key not valid|invalid api key|\b500\b|\b502\b|\b504\b|deadline|timeout|fetch failed|ECONN|ENOTFOUND/i.test(message);
-}
-
-// ---------------------------------------------------------------------------
-// Gemini (primary provider)
-// ---------------------------------------------------------------------------
-
 interface ProviderOutcome {
   text: string;
   hitToolLimit: boolean;
-}
-
-function buildUserPrompt(request: AIChatRequest): string {
-  // Context hint if user is currently viewing a specific girl or household
-  let userPromptWithContext = request.message;
-  if (request.context?.girlId) {
-    userPromptWithContext += `\n[Staff note: The staff member is currently viewing girl with ID: "${request.context.girlId}"]`;
-  }
-  if (request.context?.householdId) {
-    userPromptWithContext += `\n[Staff note: The staff member is currently viewing household with ID: "${request.context.householdId}"]`;
-  }
-  return userPromptWithContext;
-}
-
-async function runGeminiChat(
-  request: AIChatRequest,
-  userPrompt: string,
-  toolsUsed: Set<string>,
-  accessedRecordIds: Set<string>
-): Promise<ProviderOutcome> {
-  const ai = getGenAI();
-  const db = request.db;
-
-  // Format chat contents
-  const contents: Array<any> = [];
-
-  // Add prior message history if present (limit to last 6 for prompt efficiency & privacy)
-  if (request.history && request.history.length > 0) {
-    const recentHistory = request.history.slice(-6);
-    for (const msg of recentHistory) {
-      contents.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }],
-      });
-    }
-  }
-
-  contents.push({
-    role: 'user',
-    parts: [{ text: userPrompt }],
-  });
-
-  let { response: currentResponse, workingModel } = await generateContentWithFallback(ai, contents);
-
-  // Handle tool execution loop (max turns for fast response and cost efficiency)
-  let turns = 0;
-  while (turns < MAX_TOOL_TURNS && currentResponse.functionCalls && currentResponse.functionCalls.length > 0) {
-    turns++;
-    const functionCalls = currentResponse.functionCalls;
-
-    // Append model response containing the tool calls
-    const candidateContent = currentResponse.candidates?.[0]?.content;
-    if (candidateContent) {
-      contents.push(candidateContent);
-    }
-
-    // Execute each requested tool
-    const functionResponseParts: any[] = [];
-    for (const call of functionCalls) {
-      if (!call.name) continue;
-      toolsUsed.add(call.name);
-      const result = await executeAITool(call.name, call.args || {}, db, accessedRecordIds);
-      functionResponseParts.push({
-        functionResponse: {
-          name: call.name,
-          response: { output: result },
-        },
-      });
-    }
-
-    // Append tool responses
-    contents.push({
-      role: 'user',
-      parts: functionResponseParts,
-    });
-
-    // Request next completion from model using current working model (or fallback)
-    const nextGen = await generateContentWithFallback(ai, contents, workingModel);
-    currentResponse = nextGen.response;
-    workingModel = nextGen.workingModel;
-  }
-
-  return {
-    text: (currentResponse.text || '').trim(),
-    hitToolLimit: !!(currentResponse.functionCalls && currentResponse.functionCalls.length > 0),
-  };
+  modelsUsed: string[];
+  sourceRefs: AIChatSourceRef[];
 }
 
 // ---------------------------------------------------------------------------
-// OpenRouter (backup provider, OpenAI-compatible API)
+// OpenRouter (primary chat provider, OpenAI-compatible API)
 // ---------------------------------------------------------------------------
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const DEFAULT_OPENROUTER_MODELS = [
+  'nvidia/nemotron-3.5-lightning:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'dots-studio/dots-3-note-preview:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'google/gemma-4-31b-it:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'poolside/laguna-s-2.1:free',
+  'poolside/laguna-xs-2.1:free',
+];
+
+function buildUserPrompt(request: AIChatRequest): string {
+  let prompt = request.message;
+  if (request.context?.girlId) {
+    prompt += `\n[Staff note: The staff member is currently viewing girl with ID: "${request.context.girlId}"]`;
+  }
+  if (request.context?.householdId) {
+    prompt += `\n[Staff note: The staff member is currently viewing household with ID: "${request.context.householdId}"]`;
+  }
+  return prompt;
+}
+
+function isQuotaOrUnavailableMessage(message: string): boolean {
+  return /quota|resource_exhausted|overloaded|\b429\b|\b402\b|\b503\b|unavailable|high demand|rate[\s_-]?limit|too many requests|insufficient (credits|funds)|OPENROUTER_API_KEY/i.test(message);
+}
 
 function isOpenRouterConfigured(): boolean {
   return !!process.env.OPENROUTER_API_KEY;
@@ -323,7 +206,7 @@ function getOpenRouterModels(): string[] {
     .split(',')
     .map((model) => model.trim())
     .filter(Boolean);
-  return configured.length > 0 ? configured : ['openrouter/auto'];
+  return configured.length > 0 ? configured : DEFAULT_OPENROUTER_MODELS;
 }
 
 /** Gemini declares schema types in upper case (OBJECT, STRING); JSON Schema / OpenAI want lower case. */
@@ -352,34 +235,56 @@ function getOpenRouterTools(): any[] {
 }
 
 async function openRouterCompletion(messages: any[], tools: any[]): Promise<any> {
-  const response = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'X-Title': 'SHINE Case Management',
-    },
-    body: JSON.stringify({
-      models: getOpenRouterModels(),
-      messages,
-      tools,
-      tool_choice: 'auto',
-      temperature: 0.2,
-      // Only use providers that actually support tool calling and every parameter we send.
-      provider: { require_parameters: true },
-    }),
-    signal: AbortSignal.timeout(60_000),
-  });
+  const models = getOpenRouterModels();
+  const retryableStatuses = new Set([402, 404, 408, 429, 500, 502, 503, 504]);
+  const modelErrors: string[] = [];
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`OpenRouter ${response.status}: ${detail.slice(0, 300)}`);
+  for (let index = 0; index < models.length; index += 3) {
+    const modelGroup = models.slice(index, index + 3);
+    let response: Response;
+    try {
+      response = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'SHINE Case Management',
+        },
+        body: JSON.stringify({
+          models: modelGroup,
+          messages,
+          tools,
+          tool_choice: 'auto',
+          temperature: 0.2,
+          provider: { require_parameters: true },
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (error: any) {
+      modelErrors.push(String(error?.message || error).slice(0, 200));
+      continue;
+    }
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      const message = `OpenRouter ${response.status}: ${detail.slice(0, 200)}`;
+      if (retryableStatuses.has(response.status)) {
+        modelErrors.push(message);
+        continue;
+      }
+      throw new Error(message);
+    }
+
+    const data: any = await response.json();
+    if (data?.error) {
+      const message = `OpenRouter error: ${JSON.stringify(data.error).slice(0, 200)}`;
+      modelErrors.push(message);
+      continue;
+    }
+    return data;
   }
-  const data: any = await response.json();
-  if (data?.error) {
-    throw new Error(`OpenRouter error: ${JSON.stringify(data.error).slice(0, 300)}`);
-  }
-  return data;
+
+  throw new Error(`All OpenRouter model groups failed: ${modelErrors.slice(-3).join(' | ')}`);
 }
 
 async function runOpenRouterChat(
@@ -388,8 +293,8 @@ async function runOpenRouterChat(
   toolsUsed: Set<string>,
   accessedRecordIds: Set<string>
 ): Promise<ProviderOutcome> {
-  const db = request.db;
   const tools = getOpenRouterTools();
+  const sourceRefs = new Map<string, AIChatSourceRef>();
 
   const messages: any[] = [{ role: 'system', content: SYSTEM_INSTRUCTION }];
   if (request.history && request.history.length > 0) {
@@ -400,6 +305,8 @@ async function runOpenRouterChat(
   messages.push({ role: 'user', content: userPrompt });
 
   let data = await openRouterCompletion(messages, tools);
+  const modelsUsed = new Set<string>();
+  if (typeof data?.model === 'string' && data.model) modelsUsed.add(data.model);
   let message = data?.choices?.[0]?.message;
 
   let turns = 0;
@@ -417,7 +324,22 @@ async function runOpenRouterChat(
         args = {};
       }
       toolsUsed.add(toolName);
+      const db = await request.loadDatabase(toolName, args);
       const result = await executeAITool(toolName, args, db, accessedRecordIds);
+      for (const [collection, records] of Object.entries(db)) {
+        if (!Array.isArray(records)) continue;
+        for (const record of records) {
+          if (typeof record?.id !== 'string' || !accessedRecordIds.has(record.id)) continue;
+          const date = record.date || record.reviewDate || record.dateReported || record.startDate || record.dateRecorded || record.createdAt;
+          sourceRefs.set(`${collection}:${record.id}`, {
+            id: record.id,
+            collection,
+            date: typeof date === 'string' ? date.slice(0, 10) : undefined,
+            girlId: typeof record.girlId === 'string' ? record.girlId : collection === 'girls' ? record.id : undefined,
+            householdId: typeof record.householdId === 'string' ? record.householdId : collection === 'households' ? record.id : undefined,
+          });
+        }
+      }
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
@@ -426,12 +348,15 @@ async function runOpenRouterChat(
     }
 
     data = await openRouterCompletion(messages, tools);
+    if (typeof data?.model === 'string' && data.model) modelsUsed.add(data.model);
     message = data?.choices?.[0]?.message;
   }
 
   return {
     text: String(message?.content || '').trim(),
     hitToolLimit: Array.isArray(message?.tool_calls) && message.tool_calls.length > 0,
+    modelsUsed: Array.from(modelsUsed),
+    sourceRefs: Array.from(sourceRefs.values()).slice(0, 30),
   };
 }
 
@@ -464,27 +389,11 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
 
   try {
     const userPrompt = buildUserPrompt(request);
-    let provider: AIProvider = 'gemini';
-    let outcome: ProviderOutcome;
-
-    try {
-      outcome = await runGeminiChat(request, userPrompt, toolsUsed, accessedRecordIds);
-    } catch (geminiError: any) {
-      const geminiMessage = String(geminiError?.message || geminiError);
-      if (!isOpenRouterConfigured() || !shouldFallBackToOpenRouter(geminiMessage)) {
-        throw geminiError;
-      }
-
-      console.warn('SHINE AI Assistant: Gemini failed, rerouting to OpenRouter:', geminiMessage.slice(0, 200));
-      provider = 'openrouter';
-      try {
-        outcome = await runOpenRouterChat(request, userPrompt, toolsUsed, accessedRecordIds);
-      } catch (openRouterError: any) {
-        throw new Error(
-          `Gemini failed: ${geminiMessage.slice(0, 200)} | OpenRouter failed: ${String(openRouterError?.message || openRouterError).slice(0, 200)}`
-        );
-      }
+    if (!isOpenRouterConfigured()) {
+      throw new Error('OPENROUTER_API_KEY environment variable is not configured.');
     }
+    const provider: AIProvider = 'openrouter';
+    const outcome = await runOpenRouterChat(request, userPrompt, toolsUsed, accessedRecordIds);
 
     // If the model still wanted more look-ups after the turn limit, say so instead of
     // presenting a partial or empty answer as complete.
@@ -501,6 +410,8 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
     return {
       success: true,
       reply: replyText,
+      modelsUsed: outcome.modelsUsed,
+      sourceRefs: outcome.sourceRefs,
       provider,
       toolsUsed: Array.from(toolsUsed),
       accessedRecordIds: Array.from(accessedRecordIds),
@@ -509,8 +420,7 @@ export async function processAIChat(request: AIChatRequest): Promise<AIChatRespo
         userEmail: staff.email,
         userRole: staff.role,
         timestamp,
-        // The backup provider is recorded in the audit log because it received the record data.
-        aiFunction: provider === 'gemini' ? functionLabel : `${functionLabel} [via openrouter]`,
+        aiFunction: `${functionLabel} [OpenRouter]`,
         status: 'success',
         recordIdsAccessed: Array.from(accessedRecordIds),
       },

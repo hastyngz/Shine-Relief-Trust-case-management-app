@@ -103,10 +103,14 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
     supplierEmail: string;
     supplierAddress: string;
     invoiceReference: string;
+    updatedAt?: string;
   } | null>(null);
   const [expenseEditError, setExpenseEditError] = useState('');
   const [householdAttachments, setHouseholdAttachments] = useState<PhotoAttachment[]>([]);
   const [isHousePhotoModalOpen, setIsHousePhotoModalOpen] = useState(false);
+  const housePhotoUrl = householdAttachments.find((attachment) =>
+    attachment.targetType === 'household' && attachment.targetId === household.id && attachment.category === 'Profile Photo'
+  )?.downloadUrl || household.photoUrl;
 
   // Subscribe to all attachments linked to this household or its activities/expenses/rent
   useEffect(() => {
@@ -140,7 +144,11 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const outstandingActivities = activities.filter((a) => a.furtherActionRequired);
 
   const saveExpenseEdit = (expense: HouseholdExpense) => {
-    if (!editingExpense || !onUpdateExpense) return;
+    if (isViewOnly || !editingExpense || !onUpdateExpense) return;
+    if (editingExpense.updatedAt && editingExpense.updatedAt !== expense.updatedAt) {
+      setExpenseEditError('This expense changed elsewhere. Close and reopen it before saving.');
+      return;
+    }
     const totalCost = Number(editingExpense.totalCost);
     const unitCost = Number(editingExpense.unitCost);
     const amountDue = Number(editingExpense.amountDue);
@@ -255,9 +263,9 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-4">
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-teal-950 flex items-center justify-center font-black text-xl sm:text-2xl shadow-md shrink-0 overflow-hidden group border-2 border-white/20">
-                {household.photoUrl ? (
+                {housePhotoUrl ? (
                   <img
-                    src={household.photoUrl}
+                    src={housePhotoUrl}
                     alt={household.name}
                     className="w-full h-full object-cover"
                   />
@@ -542,13 +550,15 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => onAddRentPayment(household)}
-                className="self-start sm:self-center px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Record Rent Payment</span>
-              </button>
+              {!isViewOnly && (
+                <button
+                  onClick={() => onAddRentPayment(household)}
+                  className="self-start sm:self-center px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Record Rent Payment</span>
+                </button>
+              )}
             </div>
 
             {rentPayments.length === 0 ? (
@@ -618,7 +628,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                             )}
                             {r.notes || '—'}
                           </td>
-                          {onDeleteRentPayment && (
+                          {!isViewOnly && onDeleteRentPayment && (
                             <td className="px-2 py-2.5 text-right">
                               <button
                                 onClick={() => onDeleteRentPayment(r.id)}
@@ -679,13 +689,15 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                   <option value="Payment Outstanding">Payment Outstanding</option>
                 </select>
 
-                <button
-                  onClick={() => onAddExpense(household)}
-                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Record Expense</span>
-                </button>
+                {!isViewOnly && (
+                  <button
+                    onClick={() => onAddExpense(household)}
+                    className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Record Expense</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -799,6 +811,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                                   supplierEmail: exp.supplierEmail || '',
                                   supplierAddress: exp.supplierAddress || '',
                                   invoiceReference: exp.invoiceReference || '',
+                                  updatedAt: exp.updatedAt,
                                 });
                               }}>Edit</button>
                             )}
@@ -814,7 +827,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           </div>
                         </td>
                       </tr>
-                      {editingExpense?.id === exp.id && (
+                      {!isViewOnly && editingExpense?.id === exp.id && (
                         <tr>
                           <td colSpan={9} className="bg-stone-50 p-3">
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -881,13 +894,15 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => onAddActivity(household)}
-                className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-center"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Record Group Activity</span>
-              </button>
+              {!isViewOnly && (
+                <button
+                  onClick={() => onAddActivity(household)}
+                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-center"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Record Group Activity</span>
+                </button>
+              )}
             </div>
 
             {activities.length === 0 ? (
@@ -987,7 +1002,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           {act.recordedBy && <span>Staff: {act.recordedBy}</span>}
                         </div>
 
-                        {onDeleteActivity && (
+                        {!isViewOnly && onDeleteActivity && (
                           <button
                             onClick={() => onDeleteActivity(act.id)}
                             className="text-stone-400 hover:text-red-700 p-1 rounded hover:bg-red-50"
@@ -1022,7 +1037,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
               targetId={household.id}
               targetTitle={household.name}
               title={`Photos & Documentation for ${household.name}`}
-              subtitle="Household physical condition, maintenance repairs, communal activities, grocery receipts, and utility bills stored in Firebase Storage"
+              subtitle="Household physical condition, maintenance repairs, communal activities, grocery receipts, and utility bills stored in Cloudflare R2"
               defaultCategory="Household Condition"
             />
           </div>

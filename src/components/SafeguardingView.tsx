@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, LockKeyhole, RefreshCw, ShieldAlert } from 'lucide-react';
 import { Girl, SafeguardingCase, SafeguardingCaseStatus, SafeguardingCategory, SafeguardingRiskLevel } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { downloadCSV } from '../utils/export';
 
 interface SafeguardingViewProps {
   girls: Girl[];
@@ -185,10 +184,6 @@ export const SafeguardingView: React.FC<SafeguardingViewProps> = ({ girls }) => 
         </div>
         <div className="flex gap-2">
           <button onClick={() => void loadRecords()} className="p-2 border border-stone-300 rounded-md text-stone-700" title="Refresh safeguarding list"><RefreshCw className="w-4 h-4" /></button>
-          {records.length > 0 && <button onClick={() => downloadCSV('SHINE_Restricted_Safeguarding_Report', [
-            ['Case ID', 'Girl ID', 'Reported', 'Incident Date', 'Category', 'Risk', 'Description', 'Immediate Concern', 'Action Taken', 'Referral Made', 'Referred To', 'Responsible Staff', 'Follow-up Date', 'Outcome', 'Status'],
-            ...records.map((record) => [record.id, record.girlId, record.dateReported, record.incidentDate || '', record.category, record.riskLevel, record.description, record.immediateConcern, record.actionTaken, record.referralMade ? 'Yes' : 'No', record.referredTo || '', record.responsibleStaffName, record.followUpDate || '', record.outcome || '', record.status]),
-          ])} className="px-3 py-2 border border-rose-300 text-rose-900 rounded-md text-xs font-bold">Export restricted report</button>}
           {canCreateSafeguarding && !isViewOnly && <button onClick={() => setShowForm((value) => !value)} className="px-3 py-2 bg-rose-900 text-white rounded-md text-xs font-bold">New safeguarding record</button>}
         </div>
       </div>
