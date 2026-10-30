@@ -301,3 +301,7 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Asset record duplicate-submit prevention
 - Asset registration/edit, maintenance and physical verification forms now use synchronous in-flight guards in addition to disabled saving controls. This prevents rapid repeated submissions from duplicating local asset/history writes on the same device. It is not a cross-device atomic guarantee; CI/browser verification remains outstanding.
+
+
+### Compliance deadline input quality
+- Compliance obligation creation now rejects impossible or malformed calendar dates using the shared Gregorian date validator before saving. Existing deadline calculations already reject invalid stored dates; UI/browser verification remains outstanding.
