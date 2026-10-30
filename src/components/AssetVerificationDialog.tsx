@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { AssetCondition, AssetRecord } from '../types';
 import { getLocalDateInputValue } from '../utils/inventory';
@@ -21,11 +21,13 @@ export const AssetVerificationDialog: React.FC<AssetVerificationDialogProps> = (
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
 
   const inputClass = 'mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm font-normal text-stone-900';
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (saveLock.current) return;
+    saveLock.current = true;
     setError('');
     setSaving(true);
     try {
@@ -41,6 +43,7 @@ export const AssetVerificationDialog: React.FC<AssetVerificationDialogProps> = (
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not record this physical verification.');
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   };
