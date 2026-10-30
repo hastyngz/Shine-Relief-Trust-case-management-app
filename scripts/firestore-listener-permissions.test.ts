@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { shouldSubscribeToCollection } from '../src/services/firestoreListenerPermissions';
+import { aggregateFirestoreSnapshotMetadata } from '../src/services/firestoreSnapshotState';
 
 // Management-only listeners must remain off unless App.tsx explicitly grants access.
 assert.equal(shouldSubscribeToCollection('whatIfScenarios'), false);
@@ -34,5 +35,27 @@ assert.equal(shouldSubscribeToCollection('caseReviews', { canReadCaseReviews: tr
 // Ordinary listeners retain the existing default behavior.
 assert.equal(shouldSubscribeToCollection('girls'), true);
 assert.equal(shouldSubscribeToCollection('contacts', {}), true);
+
+const serverSnapshot = { fromCache: false, hasPendingWrites: false };
+assert.deepEqual(
+	aggregateFirestoreSnapshotMetadata([serverSnapshot], false),
+	{ fromCache: true, hasPendingWrites: false },
+	'an incomplete listener set cannot be server-confirmed',
+);
+assert.deepEqual(
+	aggregateFirestoreSnapshotMetadata([serverSnapshot, { fromCache: true, hasPendingWrites: false }], true),
+	{ fromCache: true, hasPendingWrites: false },
+	'one cache-backed collection keeps the aggregate unconfirmed',
+);
+assert.deepEqual(
+	aggregateFirestoreSnapshotMetadata([serverSnapshot, { fromCache: false, hasPendingWrites: true }], true),
+	{ fromCache: false, hasPendingWrites: true },
+	'pending writes in any collection keep the aggregate unconfirmed',
+);
+assert.deepEqual(
+	aggregateFirestoreSnapshotMetadata([serverSnapshot, serverSnapshot], true),
+	serverSnapshot,
+	'all loaded server-backed collections can confirm the aggregate',
+);
 
 console.log('Firestore listener permission tests passed.');

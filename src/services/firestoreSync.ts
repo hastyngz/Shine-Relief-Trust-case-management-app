@@ -18,6 +18,7 @@ import {
 import { firestore } from '../firebase';
 import { deleteStoredFile } from './r2StorageClient';
 import { shouldSubscribeToCollection } from './firestoreListenerPermissions';
+import { aggregateFirestoreSnapshotMetadata } from './firestoreSnapshotState';
 import { planImportAuditWrites, type ImportAuditSourceShape } from './importAuditPersistence';
 import { BACKUP_RESTORE_COLLECTIONS, OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
 import {
@@ -1630,6 +1631,7 @@ export function initFirestoreListeners(
     canReadCaseReviews?: boolean;
     canReadImportSourceData?: boolean;
     canReadManagementPlanning?: boolean;
+    onListenerError?: (collectionName: string, errorCode: string) => void;
   } = {}
 ): () => void {
   // Teardown previous listeners if any
@@ -1685,14 +1687,7 @@ export function initFirestoreListeners(
   const initialLoadedCollections = new Set<string>();
   const TOTAL_COLLECTIONS = 40;
 
-  // Firestore emits a snapshot with `fromCache === true` for optimistic local
-  // writes that the server has not confirmed yet (and when the client is
-  // offline). The caller must not treat such a snapshot as a confirmed server
-  // copy — doing so advances the sync baseline past an unsynced edit and loses
-  // it. A snapshot is only reported as server-confirmed when every collection
-  // that contributed to it came from the server and carried no pending writes.
-  let allContributingFromServer = true;
-  let anyPendingWrites = false;
+  const collectionSnapshotMetadata = new Map<string, { fromCache: boolean; hasPendingWrites: boolean }>();
 
   // Coalesce bursts of independent collection snapshots into one app-state
   // update. This does not change Firestore reads or realtime subscription
@@ -1703,10 +1698,9 @@ export function initFirestoreListeners(
     if (notifyTimer !== null) clearTimeout(notifyTimer);
     notifyTimer = setTimeout(() => {
       notifyTimer = null;
-      const fromCache = !allContributingFromServer;
-      const hasPendingWrites = anyPendingWrites;
-      allContributingFromServer = true;
-      anyPendingWrites = false;
+      const allCollectionsLoaded = initialLoadedCollections.size === TOTAL_COLLECTIONS;
+      if (!allCollectionsLoaded) return;
+      const metadata = aggregateFirestoreSnapshotMetadata(collectionSnapshotMetadata.values(), allCollectionsLoaded);
       onDatabaseSynced({
       girls: [...liveState.girls],
       households: [...liveState.households],
@@ -1751,7 +1745,7 @@ export function initFirestoreListeners(
       projectProjections: [...(liveState.projectProjections || [])],
       inventoryItems: [...(liveState.inventoryItems || [])],
       assets: [...(liveState.assets || [])],
-      }, { fromCache, hasPendingWrites });
+      }, metadata);
     }, 50);
   };
 
@@ -1792,23 +1786,20 @@ export function initFirestoreListeners(
         const records = snapshot.docs.map((d) => d.data() as T);
         (liveState[stateField] as unknown as T[]) = records;
 
-        // Remember whether this snapshot is server-confirmed before the
-        // coalesced callback reads the flags.
-        if (snapshot.metadata.fromCache) allContributingFromServer = false;
-        if (snapshot.metadata.hasPendingWrites) anyPendingWrites = true;
+        collectionSnapshotMetadata.set(colName, {
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        });
 
-        const firstSnapshot = !initialLoadedCollections.has(colName);
         initialLoadedCollections.add(colName);
         if (initialLoadedCollections.size === TOTAL_COLLECTIONS) {
-          updateSyncStatus('synced');
-          notifyChange();
-        } else if (!firstSnapshot) {
           updateSyncStatus('synced');
           notifyChange();
         }
       },
       (error) => {
         console.error(`Firestore snapshot error for ${colName}:`, error);
+        options.onListenerError?.(colName, error.code || 'unknown');
         updateSyncStatus('error');
       }
     );

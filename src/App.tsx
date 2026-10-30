@@ -70,7 +70,7 @@ import { flushPendingOfflineSnapshots, recordOfflineChanges, isBrowserOnline, is
 import { getActiveWorkspaceUid } from './services/accountWorkspace';
 
 import { ErrorBoundary } from './components/Error/ErrorBoundary';
-import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { uploadPhotoAttachment } from './services/attachmentService';
 import { PendingPhoto } from './components/Attachments/FormPhotoSection';
 import { AttachmentTargetType } from './types';
@@ -149,6 +149,8 @@ function MainAppContent() {
   const [db, setDb] = useState<AppDatabase>(() => getDatabase());
   const [dbOwnerUid, setDbOwnerUid] = useState<string | null>(() => getActiveWorkspaceUid());
   const [hasSyncBaseline, setHasSyncBaseline] = useState<boolean>(() => !!getLastSyncedSnapshot() && !isDatabaseReadRecoveryRequired());
+  const [initialSyncFailure, setInitialSyncFailure] = useState<{ collectionName: string; errorCode: string } | null>(null);
+  const [syncRetryKey, setSyncRetryKey] = useState(0);
 
   // AuthContext may publish a login result just before Firebase's auth-state
   // observer updates the workspace UID. Listen for that authoritative workspace
@@ -331,6 +333,7 @@ function MainAppContent() {
     if (!currentUser || isSuspended) {
       return;
     }
+    setInitialSyncFailure(null);
     const unsub = initFirestoreListeners((cloudDb, meta) => {
       if (getActiveWorkspaceUid() !== currentUser.uid) return;
       // Do not replace the live UI state or advance the baseline unless the
@@ -351,9 +354,13 @@ function MainAppContent() {
       canReadCaseReviews: canViewCaseReviews,
       canReadImportSourceData: isAdmin || role === 'Manager',
       canReadManagementPlanning: isAdmin || role === 'Manager',
+      onListenerError: (collectionName, errorCode) => {
+        if (getActiveWorkspaceUid() !== currentUser.uid) return;
+        setInitialSyncFailure({ collectionName, errorCode });
+      },
     });
     return () => unsub();
-  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding]);
+  }, [currentUser?.uid, isSuspended, isAdmin, role, canViewHealthRecords, canViewCaseReviews, canViewSafeguarding, syncRetryKey]);
 
   // On load, drain any queue left by a previous offline session. Without this a
   // phone that was closed while offline and reopened already-online would keep
@@ -1233,7 +1240,13 @@ function MainAppContent() {
       <div className="max-w-md rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
         <h1 className="text-base font-bold text-stone-900">Preparing your secure workspace</h1>
         <p className="mt-2 text-sm leading-relaxed text-stone-600">SHINE is waiting for a confirmed server copy before enabling edits. This protects offline changes from being mistaken for synced data.</p>
-        <p className="mt-2 text-sm leading-relaxed text-stone-600">{isBrowserOnline() ? 'Keep this page open while the first secure sync completes.' : 'Connect to the internet once to load your authorized records. Editing stays paused until a confirmed sync baseline is available.'}</p>
+        {initialSyncFailure ? <>
+          <p className="mt-2 text-sm leading-relaxed text-rose-700">A secure data request failed for {initialSyncFailure.collectionName} ({initialSyncFailure.errorCode}). Editing remains paused until all authorized records load.</p>
+          <p className="mt-2 text-sm leading-relaxed text-stone-600">Check your connection and account access, then retry. If the problem continues, contact your SHINE administrator with the collection name and error code.</p>
+          <button type="button" onClick={() => { setInitialSyncFailure(null); setSyncRetryKey((key) => key + 1); }} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900">
+            <RefreshCw size={16} aria-hidden="true" /> Retry secure sync
+          </button>
+        </> : <p className="mt-2 text-sm leading-relaxed text-stone-600">{isBrowserOnline() ? 'Keep this page open while the first secure sync completes.' : 'Connect to the internet once to load your authorized records. Editing stays paused until a confirmed sync baseline is available.'}</p>}
         {storageWarning && <p className="mt-3 text-sm font-semibold text-rose-700">Device storage could not safely save the sync baseline. Free space and reconnect, then retry.</p>}
       </div>
     </div>;
