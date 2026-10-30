@@ -101,3 +101,8 @@
 ### Procurement threshold fail-closed validation (2026-10-30)
 - Approval now blocks if a stored/custom quote threshold is missing in an invalid form, non-finite, zero, negative or non-numeric. An invalid threshold cannot silently disable the three-quote check; the approval result reports the threshold problem and keeps the quote requirement conservative.
 - Added synthetic tests for zero, negative, `NaN`, infinity and string thresholds. The configured/default threshold logic for valid positive numbers is unchanged. Exact-head CI remains unconfirmed.
+
+
+### Procurement quote-entry consistency (2026-10-30)
+- The supplier identity normalizer is now shared by the quote-entry screen, quote selection, import validation and approval checks. The UI warns immediately when a new quote repeats a supplier under a case/spacing variant, instead of allowing a duplicate that only fails later at approval.
+- This complements the threshold fail-closed validation above; no supplier records are merged and no quote history is rewritten. Exact-head CI remains unconfirmed.
