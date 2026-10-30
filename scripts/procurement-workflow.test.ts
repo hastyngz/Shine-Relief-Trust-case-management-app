@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { checkProcurementApproval, normalizeImportedProcurementItems, selectProcurementQuote } from '../src/services/procurementWorkflow';
+import { checkProcurementApproval, normalizeImportedProcurementItems, normalizeProcurementSupplierIdentity, selectProcurementQuote } from '../src/services/procurementWorkflow';
 import { buildSupplierActivityIndex } from '../src/utils/supplierActivity';
 import type { ProcurementList, ProcurementListItem, ProcurementQuote } from '../src/types';
+assert.equal(normalizeProcurementSupplierIdentity(' North  Star Supplies '), normalizeProcurementSupplierIdentity('north star supplies'));
+assert.equal(normalizeProcurementSupplierIdentity('N/A'), 'n/a', 'placeholder handling remains the responsibility of the supplier index, not identity normalization');
 const baseItem: ProcurementListItem = { description: 'Synthetic stationery pack', quantity: 10, unit: 'pack', unitPriceMWK: 12000, totalMWK: 120000, priceStatus: 'quoted' };
 const baseList: ProcurementList = { id: 'PRC-TEST-001', title: 'Synthetic stationery purchase', purpose: 'Automated test fixture only', items: [baseItem], totalMWK: 120000, status: 'draft', quoteThresholdMWK: 500000, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', createdBy: 'synthetic-test', updatedBy: 'synthetic-test' };
 assert.equal(checkProcurementApproval(baseList).allowed, true);
