@@ -96,3 +96,8 @@
 - Supplier identity comparison for quote selection and approval now trims and collapses whitespace and compares case-insensitively. Repeated spaces can no longer make the same supplier appear as multiple independent quotes; this preserves the existing three-distinct-supplier requirement and MWK 500,000 default threshold.
 - Imported quote dates are now checked as real Gregorian `YYYY-MM-DD` dates, including leap-day rules, rather than accepting impossible calendar dates. Added synthetic tests for whitespace-variant suppliers, impossible/non-leap dates and a valid leap day.
 - Added explicit boundary tests: a quoted item at exactly MWK 500,000 requires three distinct suppliers, while a quoted item just below the threshold does not trigger that default requirement. These checks validate imported procurement records and approval calculations; they do not establish legal supplier identity or replace a verified supplier master register. Exact-head CI has not yet been confirmed.
+
+
+### Procurement threshold fail-closed validation (2026-10-30)
+- Approval now blocks if a stored/custom quote threshold is missing in an invalid form, non-finite, zero, negative or non-numeric. An invalid threshold cannot silently disable the three-quote check; the approval result reports the threshold problem and keeps the quote requirement conservative.
+- Added synthetic tests for zero, negative, `NaN`, infinity and string thresholds. The configured/default threshold logic for valid positive numbers is unchanged. Exact-head CI remains unconfirmed.
