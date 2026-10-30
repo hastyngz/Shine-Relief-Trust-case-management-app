@@ -85,3 +85,8 @@
 ### 2026-10-30 · Inventory integrity audit date checks
 - Extended the privacy-preserving inventory snapshot audit to count missing/impossible movement dates separately and include them in malformed-entry findings. It still returns aggregate counts only and does not expose record IDs or personal data.
 - Added synthetic regression coverage for empty and impossible dates. This is an offline export audit only; it does not repair records or reconcile historical balances.
+
+
+### 2026-10-30 · Supplier activity display normalization
+- Supplier activity grouping now collapses repeated internal whitespace and trims leading/trailing spaces before case-insensitive grouping. This reduces obvious duplicate display rows without asserting legal/business identity or merging unrelated entities by fuzzy matching.
+- Existing synthetic procurement test fixture now covers repeated whitespace; exact-head CI remains unverified.
