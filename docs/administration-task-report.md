@@ -118,3 +118,9 @@
 - No threshold value is silently rewritten. This is a user-facing warning only; exact-head CI and browser verification remain outstanding.
 
 - The custom threshold input now advertises a positive whole-number MWK value (`min=1`, `step=1`) with an accessible label. The service-side fail-closed check remains authoritative for legacy/invalid stored values.
+
+
+### Attachment deletion recovery safeguard (2026-10-30)
+- Corrected the R2/Firestore deletion sequence: the private R2 object must delete successfully before its Firestore metadata is removed. The prior implementation swallowed every R2 error and proceeded, which could leave an orphaned private object after a transient network, permission or configuration failure.
+- The Worker authorizes deletion using the still-present attachment metadata; R2 `DeleteObject` is idempotent for an already-missing object. Other storage errors now propagate and preserve the metadata for retry. If the subsequent Firestore metadata deletion fails, the object may already be gone, but the retained metadata allows a retry because the R2 delete is idempotent.
+- The photo gallery now shows a visible retry-oriented error instead of only logging deletion failures. This change does not alter who may delete files, Worker authorization, storage paths, retention policy or Firestore rules. Automated execution and browser verification remain outstanding.
