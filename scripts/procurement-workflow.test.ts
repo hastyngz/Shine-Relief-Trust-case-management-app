@@ -64,7 +64,7 @@ const supplierIndex = buildSupplierActivityIndex([
     ] },
   ] },
   { ...baseList, id: 'PRC-TEST-002', updatedAt: '2026-10-25T10:00:00.000Z', items: [
-    { ...baseItem, quotes: [{ supplier: ' ACME SUPPLIES ', amountMWK: 11000, quotedAt: '2026-10-25' }] },
+    { ...baseItem, quotes: [{ supplier: ' ACME   SUPPLIES ', amountMWK: 11000, quotedAt: '2026-10-25' }] },
   ] },
 ], [
   { id: 'EXP-1', supplier: 'Acme Supplies', date: '2026-10-27' },
