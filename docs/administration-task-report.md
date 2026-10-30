@@ -67,3 +67,9 @@
 - The Inventory & Stores summary now separates expired stock from items expiring within 30 days while retaining the combined alert total and existing filter behaviour.
 - Added a shared expiry-summary helper and focused regression assertions for expired, due-soon, safe, missing and invalid legacy expiry dates. Missing/invalid dates are counted as not tracked, not silently treated as safe.
 - This is visibility only: it does not quarantine stock, change quantities or introduce expiry enforcement. Exact-head CI and local lint/build/test have not been run here; verification remains pending.
+
+
+### 2026-10-30 · Inventory transaction date validation
+- Added a shared strict ISO calendar-date validator for inventory movements and physical stocktakes; impossible dates (for example, 31 February) are rejected while valid leap days are accepted.
+- Both online submissions and queued offline retries validate the saved date before calling the stock-movement service. A malformed legacy/corrupted queued date is marked for staff review and blocks later FIFO entries rather than being sent automatically.
+- Added focused helper tests for valid dates, leap days, impossible dates and non-ISO formats. Exact-head CI is still required; no production data, stock balances, sync protocol or server rules were changed.
