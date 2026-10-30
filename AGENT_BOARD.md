@@ -1199,3 +1199,5 @@ Suggestion format:
 - State: item panel now surfaces invalid/non-positive custom threshold values, explains approval is blocked, and keeps three-quote collection conservative until a positive threshold is restored.
 - Next: run procurement workflow tests, TypeScript, production build and browser flow on exact Replit head.
 - Watch out: no automatic threshold reset or policy mutation. Exact-head CI remains unconfirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30
+
+- Follow-up: threshold editor now requests a positive whole-number MWK amount with native numeric constraints and an accessible label; service-side validation remains authoritative.
