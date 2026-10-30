@@ -22,4 +22,17 @@ assert.deepEqual(filterFilingAttachments(attachments, { ...base, recordTypeFilte
 assert.deepEqual(filterFilingAttachments(attachments, { ...base, search: 'TEST STAFF' }).map((a) => a.id), ['att-1', 'att-2', 'att-3']);
 assert.deepEqual(filterFilingAttachments(attachments, { ...base, search: 'no-match' }), []);
 assert.deepEqual(filterFilingAttachments([], base), []);
-console.log('Document filing filter tests passed: search, file type, category, linked record, and empty states.');
+const older = makeAttachment({ id: 'att-older', createdAt: '2026-10-18T00:00:00Z' });
+const newer = makeAttachment({ id: 'att-newer', createdAt: '2026-10-22T00:00:00Z' });
+const invalidDate = makeAttachment({ id: 'att-invalid', createdAt: 'not-a-date' });
+const sorted = [older, newer, invalidDate, receipt].map((attachment, index) => ({
+  attachment, index, uploadedAt: Date.parse(attachment.createdAt),
+})).sort((a, b) => {
+  const aValid = Number.isFinite(a.uploadedAt);
+  const bValid = Number.isFinite(b.uploadedAt);
+  if (aValid && bValid && a.uploadedAt !== b.uploadedAt) return b.uploadedAt - a.uploadedAt;
+  if (aValid !== bValid) return aValid ? -1 : 1;
+  return a.index - b.index;
+}).map(({ attachment }) => attachment);
+assert.deepEqual(sorted.map((a) => a.id), ['att-newer', 'att-1', 'att-older', 'att-invalid']);
+console.log('Document filing tests passed: filters, empty states, newest-first ordering and invalid legacy dates.');
