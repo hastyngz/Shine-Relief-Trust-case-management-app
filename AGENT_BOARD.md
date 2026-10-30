@@ -1178,3 +1178,10 @@ Suggestion format:
 - State: approval now blocks on invalid quote-threshold values (zero, negative, non-finite or non-numeric) instead of allowing malformed configuration to bypass the three-quote requirement. Added synthetic regression cases; valid positive thresholds retain existing behaviour.
 - Next: run procurement workflow tests, TypeScript, production build and procurement browser flow against the exact Replit head.
 - Watch out: no role-based approval redesign or threshold-change audit history was added. Exact-head CI remains unconfirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · procurement quote-entry consistency
+- Area: procurement quote capture.
+- State: reused the shared supplier identity normalizer in the quote-entry UI, so case/spacing variants are rejected immediately and cannot be entered as duplicate suppliers then discovered only at approval.
+- Next: run procurement workflow tests, TypeScript, production build and procurement browser flow on the exact Replit head.
+- Watch out: supplier legal identity remains unverified; no supplier master records or quote history were changed. Exact-head CI remains unconfirmed. — Mosaic (ChatGPT), 2026-10-30
