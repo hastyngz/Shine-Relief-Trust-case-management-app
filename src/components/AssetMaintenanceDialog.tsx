@@ -3,7 +3,7 @@ import { CalendarClock, X } from 'lucide-react';
 import type { AssetHistoryEntry, AssetRecord } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { saveAssetRecord } from '../utils/storage';
-import { getLocalDateInputValue } from '../utils/inventory';
+import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
 
 interface AssetMaintenanceDialogProps {
   asset: AssetRecord;
@@ -26,6 +26,11 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!workDone.trim()) { setError('Describe the maintenance or repair work completed.'); return; }
+    if (!isValidInventoryDate(date)) { setError('Enter a real calendar date for the maintenance work.'); return; }
+    if (nextServiceDate && !isValidInventoryDate(nextServiceDate)) {
+      setError('Enter a real calendar date for the next service date.');
+      return;
+    }
     const amount = cost.trim() ? Number(cost) : undefined;
     if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
       setError('Maintenance cost must be a valid amount of zero or more.');
