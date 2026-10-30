@@ -1215,3 +1215,10 @@ Suggestion format:
 - State: registration/edit now validates optional acquisition, warranty and next-service dates; maintenance logging validates its service date and optional next-service date using `isValidInventoryDate` shared with inventory. Existing inventory tests cover Gregorian dates/leap years/impossible dates.
 - Next: add targeted component-level tests if current harness permits, run CI, then continue asset lifecycle review.
 - Watch out: no invented chronology constraints; no schema/rules/offline changes. CI not yet confirmed. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · filing permission race
+- Area: document filing privacy.
+- State: permission/account changes clear old metadata immediately; request generation guards prevent late results from a prior scope updating the current view; unmount invalidates pending results.
+- Caveat: no Firestore rules or Worker access-policy changes. Existing role-filtered queries and download authorization remain the enforcement boundary. Dedicated race test/browser verification still needed.
+- Next: add/execute targeted coverage if harness permits, verify CI and continue administration controls. — Mosaic (ChatGPT), 2026-10-30
