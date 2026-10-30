@@ -36,6 +36,13 @@ const duplicateSupplierQuotes = [
 const duplicateQuoteCheck = checkProcurementApproval({ ...baseList, items: [{ ...selected, quotes: duplicateSupplierQuotes }] });
 assert.equal(duplicateQuoteCheck.allowed, false, 'repeated supplier names must not satisfy the three-quote requirement');
 assert.ok(duplicateQuoteCheck.blockers.some((message) => message.includes('three supplier quotes')));
+const whitespaceDuplicateQuoteCheck = checkProcurementApproval({ ...baseList, items: [{ ...selected, quotes: [
+  { supplier: 'North  Star Supplies', amountMWK: 1000000 },
+  { supplier: 'North Star Supplies', amountMWK: 950000 },
+  { supplier: 'Third Supplier', amountMWK: 900000 },
+] }] });
+assert.equal(whitespaceDuplicateQuoteCheck.allowed, false, 'internal whitespace variants must not count as distinct suppliers');
+assert.ok(whitespaceDuplicateQuoteCheck.blockers.some((message) => message.includes('three supplier quotes')));
 
 const imported = normalizeImportedProcurementItems([
   { description: 'Synthetic A4 paper', quantity: '2', unit: 'ream', unitPriceMWK: '1200', priceStatus: 'quoted' },
@@ -52,6 +59,18 @@ assert.throws(() => normalizeImportedProcurementItems([{ description: 'Inconsist
 assert.throws(() => normalizeImportedProcurementItems([{ description: 'Duplicate quotes', quantity: 1, unit: 'box', quotes: [
   { supplier: 'A', amountMWK: 10 }, { supplier: ' a ', amountMWK: 11 },
 ] }]), /duplicate supplier quotes/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Whitespace duplicate quotes', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'North  Star Supplies', amountMWK: 10 }, { supplier: 'North Star Supplies', amountMWK: 11 },
+] }]), /duplicate supplier quotes/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Impossible quote date', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'Supplier A', amountMWK: 10, quotedAt: '2026-02-31' },
+] }]), /invalid quote date/);
+assert.throws(() => normalizeImportedProcurementItems([{ description: 'Non-leap quote date', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'Supplier A', amountMWK: 10, quotedAt: '2025-02-29' },
+] }]), /invalid quote date/);
+assert.doesNotThrow(() => normalizeImportedProcurementItems([{ description: 'Leap-day quote date', quantity: 1, unit: 'box', quotes: [
+  { supplier: 'Supplier A', amountMWK: 10, quotedAt: '2024-02-29' },
+] }]));
 
 assert.throws(() => selectProcurementQuote(baseItem, { supplier: 'Supplier', amountMWK: 0 }), /positive MWK amount/);
 assert.throws(() => selectProcurementQuote({ ...baseItem, quantity: 0 }, quotes[0]), /valid item quantity/);
