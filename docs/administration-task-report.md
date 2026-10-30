@@ -134,3 +134,8 @@
 ### Document filing permission-transition race (2026-10-30)
 - The filing view now clears the previous result set immediately when the signed-in user or health-record permission changes. Each metadata load has a request generation guard; a slower response from an earlier account/permission scope cannot overwrite the newer view, and in-flight updates are invalidated on unmount. This addresses a sensitive-data presentation race without changing Firestore rules, query scope or Worker authorization.
 - Existing filing metadata queries remain role-filtered, exclude safeguarding attachments from general filing, and download bytes only after the user selects a file. A dedicated component-level race test and browser verification are still outstanding.
+
+
+### Asset form duplicate-submit guard (2026-10-30)
+- Added synchronous in-flight save locks to asset registration/edit, maintenance logging and physical verification forms. The locks close the small window before React state updates disable the submit button, preventing a rapid repeated submit from appending duplicate local asset-history entries. Locks release in `finally` on success or failure; existing saving-state feedback remains.
+- This is client-side same-device protection only; it does not claim cross-device or server-atomic deduplication. Automated execution and browser verification remain outstanding.
