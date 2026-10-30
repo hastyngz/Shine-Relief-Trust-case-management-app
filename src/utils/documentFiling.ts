@@ -28,3 +28,18 @@ export function filterFilingAttachments(
     ].some((value) => String(value || '').toLowerCase().includes(term));
   });
 }
+
+
+/** Sorts the filtered, permission-approved set by upload time; invalid legacy dates stay last. */
+export function sortFilingAttachmentsNewestFirst(attachments: PhotoAttachment[]): PhotoAttachment[] {
+  return attachments
+    .map((attachment, index) => ({ attachment, index, timestamp: Date.parse(attachment.createdAt) }))
+    .sort((a, b) => {
+      const aValid = Number.isFinite(a.timestamp);
+      const bValid = Number.isFinite(b.timestamp);
+      if (aValid && bValid && a.timestamp !== b.timestamp) return b.timestamp - a.timestamp;
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      return a.index - b.index;
+    })
+    .map(({ attachment }) => attachment);
+}
