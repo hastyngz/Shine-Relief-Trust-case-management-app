@@ -232,3 +232,8 @@ The asset register now rejects invalid reference-date context before deriving th
 - A shared scope label above the budget KPI cards now states whether the totals cover all years or the selected period and identifies the active category filter. The monthly monitoring panel has its own summary-year selector, so users can distinguish the reporting scopes without changing calculation behaviour.
 - The existing access-aware document index now orders permitted attachments newest-first using upload timestamps. Records with invalid legacy timestamps remain listed after dated records; no attachments are deleted or rewritten.
 - This does not add document expiry/version control, document owner assignment, or compliance reminders. Those remain separate requirements requiring an agreed metadata model and workflow.
+
+
+### Inventory expiry visibility update (2026-10-30)
+- The register summary now breaks the existing expiry-alert total into expired and due-within-30-days counts. Missing or invalid legacy dates are separately counted as not tracked by the helper and are not presented as safe stock.
+- Focused tests cover expired, due-soon, safe, missing and invalid date cases. This is an informational summary only; quarantine, disposal, batch/lot tracking and formal approval remain outside the current workflow. Verification is pending on the exact Replit head.
