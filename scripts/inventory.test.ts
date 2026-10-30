@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { InventoryItem } from '../src/types';
-import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave } from '../src/utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../src/utils/inventory';
 
 assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
 
@@ -46,3 +46,12 @@ assert.deepEqual(filterInventoryItems(filterItems, { stock: 'expiry', today: '20
 assert.deepEqual(filterInventoryItems(filterItems, { query: 'clean-01', today: '2026-10-15' }).map((item) => item.id), ['soap']);
 assert.deepEqual(filterInventoryItems(filterItems, { category: 'Stationery', today: '2026-10-15' }), []);
 console.log('Inventory register filter tests passed.');
+
+const expirySummary = summarizeInventoryExpiry([
+  inventoryFixture({ id: 'expired', expiryDate: '2026-10-14' }),
+  inventoryFixture({ id: 'soon', expiryDate: '2026-11-14' }),
+  inventoryFixture({ id: 'safe', expiryDate: '2026-11-15' }),
+  inventoryFixture({ id: 'missing', expiryDate: undefined }),
+  inventoryFixture({ id: 'invalid', expiryDate: '2026-02-31' }),
+], '2026-10-15');
+assert.deepEqual(expirySummary, { expired: 1, expiringSoon: 1, notTracked: 2 });
