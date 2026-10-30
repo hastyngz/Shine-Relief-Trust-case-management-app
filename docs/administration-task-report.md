@@ -90,3 +90,9 @@
 ### 2026-10-30 · Supplier activity display normalization
 - Supplier activity grouping now collapses repeated internal whitespace and trims leading/trailing spaces before case-insensitive grouping. This reduces obvious duplicate display rows without asserting legal/business identity or merging unrelated entities by fuzzy matching.
 - Existing synthetic procurement test fixture now covers repeated whitespace; exact-head CI remains unverified.
+
+
+### 2026-10-30 · Procurement quote integrity
+- Supplier identity comparison for quote selection and approval now trims and collapses whitespace and compares case-insensitively. Repeated spaces can no longer make the same supplier appear as multiple independent quotes; this preserves the existing three-distinct-supplier requirement and MWK 500,000 default threshold.
+- Imported quote dates are now checked as real Gregorian `YYYY-MM-DD` dates, including leap-day rules, rather than accepting impossible calendar dates. Added synthetic tests for whitespace-variant suppliers, impossible/non-leap dates and a valid leap day.
+- These checks validate imported procurement records and approval calculations; they do not establish legal supplier identity or replace a verified supplier master register. Exact-head CI has not yet been confirmed.
