@@ -297,3 +297,7 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Document filing permission transitions
 - The filing screen now clears old attachment results when account/health permission changes and ignores stale asynchronous responses from a prior scope or unmounted view. This reduces the risk of health-file metadata remaining visible after permission changes. Query policy and server-side authorization are unchanged. Component race coverage/browser verification remain outstanding.
+
+
+### Asset record duplicate-submit prevention
+- Asset registration/edit, maintenance and physical verification forms now use synchronous in-flight guards in addition to disabled saving controls. This prevents rapid repeated submissions from duplicating local asset/history writes on the same device. It is not a cross-device atomic guarantee; CI/browser verification remains outstanding.
