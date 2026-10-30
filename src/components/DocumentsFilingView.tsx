@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, ShieldCheck } from 'lucide-react';
 import type { AppDatabase, PhotoAttachment } from '../types';
-import { filterFilingAttachments, type FilingRecordType } from '../utils/documentFiling';
+import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, type FilingRecordType } from '../utils/documentFiling';
 import { useAuth } from '../contexts/AuthContext';
 import { getFilingAttachmentMetadata } from '../services/attachmentService';
 import { getStoredFile } from '../services/r2StorageClient';
@@ -72,20 +72,9 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   }, [currentUser?.uid, canViewHealthRecords]);
 
   const categories = useMemo(() => [...new Set(attachments.map((item) => item.category).filter(Boolean))].sort(), [attachments]);
-  const recordTypes = useMemo(() => [...new Set(attachments.map((item) => item.targetType).filter(Boolean))].sort() as FilingRecordType[], [attachments]);
-  const filtered = useMemo(() => filterFilingAttachments(attachments, {
+  const recordTypes = useMemo(() => [...new Set(attachments.map((item) => item.targetType).filter(Boolean))].sort() as Fi  const filtered = useMemo(() => sortFilingAttachmentsNewestFirst(filterFilingAttachments(attachments, {
     search, fileFilter, categoryFilter, recordTypeFilter,
-  }).map((attachment, index) => ({
-    attachment,
-    index,
-    uploadedAt: Date.parse(attachment.createdAt),
-  })).sort((a, b) => {
-    const aValid = Number.isFinite(a.uploadedAt);
-    const bValid = Number.isFinite(b.uploadedAt);
-    if (aValid && bValid && a.uploadedAt !== b.uploadedAt) return b.uploadedAt - a.uploadedAt;
-    if (aValid !== bValid) return aValid ? -1 : 1;
-    return a.index - b.index;
-  }).map(({ attachment }) => attachment), [attachments, search, fileFilter, categoryFilter, recordTypeFilter]);
+  })), [attachments, search, fileFilter, categoryFilter, recordTypeFilter]);
 
   const openFile = async (attachment: PhotoAttachment) => {
     setDownloadingId(attachment.id);
