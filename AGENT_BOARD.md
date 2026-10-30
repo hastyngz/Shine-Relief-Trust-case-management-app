@@ -1162,6 +1162,6 @@ Suggestion format:
 
 ### 2026-10-30 · Mosaic (ChatGPT) · procurement quote integrity
 - Area: procurement approvals and import validation.
-- State: normalized supplier labels consistently across quote selection and approval (trim/collapse whitespace + case-insensitive comparison), preventing spacing variants from counting as separate suppliers. Imported quote dates now reject impossible Gregorian dates. Added focused synthetic regression cases for duplicate spacing variants and leap-day validity.
+- State: normalized supplier labels consistently across quote selection and approval (trim/collapse whitespace + case-insensitive comparison), preventing spacing variants from counting as separate suppliers. Imported quote dates now reject impossible Gregorian dates. Added focused synthetic regression cases for duplicate spacing variants, leap-day validity and the exact MWK 500,000 threshold boundary.
 - Next: verify procurement workflow tests, TypeScript, build and browser procurement flow on the exact Replit head.
 - Watch out: this does not create a verified supplier master register, due-diligence workflow or legal identity matching. Existing MWK 500,000 default threshold and three-distinct-supplier rule are retained. CI is not yet confirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30
