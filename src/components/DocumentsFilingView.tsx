@@ -164,7 +164,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
           {(['All files', 'Images', 'Documents'] as FileFilter[]).map((filter) => (
             <button key={filter} type="button" onClick={() => setFileFilter(filter)} aria-pressed={fileFilter === filter} className={`fx-press min-h-10 rounded-full border px-4 py-2 text-sm font-semibold ${fileFilter === filter ? 'border-teal-800 bg-teal-800 text-white' : 'border-stone-200 text-stone-700 hover:bg-stone-50'}`}>{filter}</button>
           ))}
-          <span className="ml-auto self-center text-xs text-stone-500">{filtered.length} shown</span>
+          <span className="ml-auto self-center text-xs text-stone-500">{filtered.length} shown · newest first</span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-semibold text-stone-700">Document category
