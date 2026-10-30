@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, ShieldCheck } from 'lucide-react';
 import type { AppDatabase, PhotoAttachment } from '../types';
 import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, type FilingRecordType } from '../utils/documentFiling';
@@ -49,24 +49,34 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   const [error, setError] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const loadRequestId = useRef(0);
 
   const load = async (refresh = false) => {
+    const requestId = ++loadRequestId.current;
     if (refresh) setRefreshing(true);
     else setLoading(true);
     setError('');
     try {
       const result = await getFilingAttachmentMetadata(canViewHealthRecords);
-      setAttachments(result);
+      if (requestId === loadRequestId.current) setAttachments(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Documents could not be loaded. Check your connection and access.');
+      if (requestId === loadRequestId.current) {
+        setError(err instanceof Error ? err.message : 'Documents could not be loaded. Check your connection and access.');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === loadRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   useEffect(() => {
+    // Clear the previous permission scope immediately. A slower request from an
+    // earlier account/permission must never repopulate this filing view.
+    setAttachments([]);
     void load();
+    return () => { loadRequestId.current += 1; };
     // Re-fetch when the signed-in user or health-record permission changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid, canViewHealthRecords]);
