@@ -73,3 +73,10 @@
 - Added a shared strict ISO calendar-date validator for inventory movements and physical stocktakes; impossible dates (for example, 31 February) are rejected while valid leap days are accepted.
 - Both online submissions and queued offline retries validate the saved date before calling the stock-movement service. A malformed legacy/corrupted queued date is marked for staff review and blocks later FIFO entries rather than being sent automatically.
 - Added focused helper tests for valid dates, leap days, impossible dates and non-ISO formats. Exact-head CI is still required; no production data, stock balances, sync protocol or server rules were changed.
+
+
+### 2026-10-30 · Inventory expiry data completeness and server validation coverage
+- The Inventory & Stores dashboard now displays the number of records without a valid expiry date, and every item card explicitly shows either its expiry date/status or that the date needs adding/checking. Missing legacy dates are no longer invisible in the item list.
+- Added Worker-level regression cases for impossible dates, non-ISO dates and empty dates. The tests assert the Worker rejects them before reading the item or attempting any stock write. Existing Worker validation already enforces real calendar dates; this change strengthens its regression coverage.
+- Extended supplier activity tests with impossible quote/expense dates to ensure malformed dates cannot distort the latest activity date. No canonical supplier identities or new data fields were introduced.
+- Exact-head CI remains unverified; no local execution or production deployment is claimed.
