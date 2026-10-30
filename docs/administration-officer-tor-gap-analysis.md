@@ -258,3 +258,9 @@ The asset register now rejects invalid reference-date context before deriving th
 ### 2026-10-30 · Supplier activity display normalization
 - Supplier activity grouping now collapses repeated internal whitespace and trims leading/trailing spaces before case-insensitive grouping. This reduces obvious duplicate display rows without asserting legal/business identity or merging unrelated entities by fuzzy matching.
 - Existing synthetic procurement test fixture now covers repeated whitespace; exact-head CI remains unverified.
+
+
+### Procurement quote data quality (2026-10-30)
+- Quote selection and approval now use the same normalized supplier label (trimmed, repeated whitespace collapsed, case-insensitive) so superficial spacing differences cannot satisfy the distinct-supplier quote threshold.
+- Imported quote dates must be valid Gregorian date-only values. Added regression cases for impossible dates and leap years.
+- Remaining gap: this is not a supplier due-diligence process or canonical supplier register. Verification, tax/registration documents, conflict-of-interest declarations, quote attachments and approval audit controls still need a separately agreed workflow. Exact-head CI remains unconfirmed.
