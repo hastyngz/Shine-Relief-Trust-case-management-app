@@ -270,3 +270,7 @@ The asset register now rejects invalid reference-date context before deriving th
 ### Procurement threshold integrity (2026-10-30)
 - Added fail-closed approval validation for invalid custom quote thresholds. Zero, negative, non-finite and non-numeric threshold values now block approval rather than weakening the three-quote safeguard.
 - Regression coverage includes zero, negative, `NaN`, infinity and a numeric-looking string. This protects the approval calculation but does not replace role-based approval controls or an auditable policy-change history. Exact-head CI remains unconfirmed.
+
+
+### Procurement quote-entry usability (2026-10-30)
+- Quote entry now uses the same normalized supplier identity rule as approval/import validation, so duplicate supplier names with case or spacing differences are rejected at entry rather than discovered only during approval. This is a data-entry safeguard, not independent supplier verification.
