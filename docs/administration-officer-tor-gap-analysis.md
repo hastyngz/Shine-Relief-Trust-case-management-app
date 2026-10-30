@@ -248,3 +248,8 @@ The asset register now rejects invalid reference-date context before deriving th
 - Inventory cards and summary now surface missing or invalid expiry dates so staff can identify records needing date checks. The status is a prompt for data completion, not evidence that stock is safe.
 - Added server Worker tests proving impossible/non-ISO/empty movement dates are rejected before any item read or write. Supplier activity regression fixtures now include impossible quote and expense dates to protect the derived latest-activity indicator.
 - CI remains pending for the latest exact Replit head. No production data, stock balances, permissions or supplier master data changed.
+
+
+### 2026-10-30 · Inventory integrity audit date checks
+- Extended the privacy-preserving inventory snapshot audit to count missing/impossible movement dates separately and include them in malformed-entry findings. It still returns aggregate counts only and does not expose record IDs or personal data.
+- Added synthetic regression coverage for empty and impossible dates. This is an offline export audit only; it does not repair records or reconcile historical balances.
