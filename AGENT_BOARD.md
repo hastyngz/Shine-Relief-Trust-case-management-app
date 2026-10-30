@@ -1126,6 +1126,6 @@ Suggestion format:
 
 ### 2026-10-30 · Mosaic (ChatGPT) · budget scope and document filing order
 - Area: administration budget reporting and document index usability.
-- State: labelled the budget allocation KPI to distinguish all-years totals from a selected-period total. Added newest-first sorting to the existing permission-filtered document index, with invalid legacy upload timestamps retained at the end in stable order. Extracted the sorter to a shared utility and added focused assertions.
+- State: added a shared scope label above the budget KPI cards to distinguish all-years totals from selected-period totals and show the active category filter. Added newest-first sorting to the existing permission-filtered document index, with invalid legacy upload timestamps retained at the end in stable order. Extracted the sorter to a shared utility and added focused assertions.
 - Next: verify focused document-filing and existing budget/procurement checks, TypeScript, production build and browser flow on the exact Replit head.
 - Watch out: this does not change budget calculations or implement document versioning, expiry, ownership or compliance reminders. No production data, permissions or storage paths were changed. — Mosaic (ChatGPT), 2026-10-30
