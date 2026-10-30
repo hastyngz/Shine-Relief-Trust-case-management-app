@@ -265,3 +265,8 @@ The asset register now rejects invalid reference-date context before deriving th
 - Imported quote dates must be valid Gregorian date-only values. Added regression cases for impossible dates and leap years.
 - Regression coverage also pins the default MWK 500,000 boundary: exactly MWK 500,000 triggers three quotes, while a quoted amount just below does not.
 - Remaining gap: this is not a supplier due-diligence process or canonical supplier register. Verification, tax/registration documents, conflict-of-interest declarations, quote attachments and approval audit controls still need a separately agreed workflow. Exact-head CI remains unconfirmed.
+
+
+### Procurement threshold integrity (2026-10-30)
+- Added fail-closed approval validation for invalid custom quote thresholds. Zero, negative, non-finite and non-numeric threshold values now block approval rather than weakening the three-quote safeguard.
+- Regression coverage includes zero, negative, `NaN`, infinity and a numeric-looking string. This protects the approval calculation but does not replace role-based approval controls or an auditable policy-change history. Exact-head CI remains unconfirmed.
