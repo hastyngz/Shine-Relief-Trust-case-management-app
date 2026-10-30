@@ -1192,3 +1192,10 @@ Suggestion format:
 - State: source review caught an over-escaped whitespace regex in imported selected supplier labels. Corrected the pattern and added a regression case showing spacing variants resolve to the same recorded quote.
 - Next: verify procurement workflow test, TypeScript, build and browser flow on exact Replit head.
 - Watch out: code review and test additions only; no local execution or CI pass claimed. No deployment or production-data changes. — Mosaic (ChatGPT), 2026-10-30
+
+
+### 2026-10-30 · Mosaic (ChatGPT) · procurement threshold visibility
+- Area: procurement operator feedback.
+- State: item panel now surfaces invalid/non-positive custom threshold values, explains approval is blocked, and keeps three-quote collection conservative until a positive threshold is restored.
+- Next: run procurement workflow tests, TypeScript, production build and browser flow on exact Replit head.
+- Watch out: no automatic threshold reset or policy mutation. Exact-head CI remains unconfirmed; no deployment or production-data change. — Mosaic (ChatGPT), 2026-10-30
