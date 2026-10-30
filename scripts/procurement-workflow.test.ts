@@ -9,6 +9,18 @@ assert.equal(checkProcurementApproval({ ...baseList, items: [] }).allowed, false
 const expensiveItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 100000, totalMWK: 1000000 };
 const missingQuotes = checkProcurementApproval({ ...baseList, items: [expensiveItem] });
 assert.equal(missingQuotes.allowed, false); assert.ok(missingQuotes.blockers.some((message) => message.includes('three supplier quotes')));
+const thresholdBoundaryItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 50000, totalMWK: 500000, quotes: [
+  { supplier: 'Boundary Supplier A', amountMWK: 500000 },
+  { supplier: 'Boundary Supplier B', amountMWK: 490000 },
+] };
+const atThreshold = checkProcurementApproval({ ...baseList, items: [thresholdBoundaryItem] });
+assert.equal(atThreshold.allowed, false, 'the default three-quote rule applies at exactly MWK 500,000');
+assert.ok(atThreshold.blockers.some((message) => message.includes('three supplier quotes')));
+const belowThresholdItem: ProcurementListItem = { ...baseItem, unitPriceMWK: 49999.9, totalMWK: 499999, quotes: [
+  { supplier: 'Below Threshold Supplier', amountMWK: 499999 },
+] };
+assert.equal(checkProcurementApproval({ ...baseList, items: [belowThresholdItem] }).allowed, true,
+  'the default three-quote rule does not apply below MWK 500,000 when price is already quoted');
 const quotes: ProcurementQuote[] = [{ supplier: 'Supplier A', amountMWK: 1000000 }, { supplier: 'Supplier B', amountMWK: 950000 }, { supplier: 'Supplier C', amountMWK: 900000 }];
 const selected = selectProcurementQuote({ ...expensiveItem, quotes }, quotes[2]);
 assert.equal(selected.selectedQuoteSupplier, 'Supplier C'); assert.equal(selected.selectedQuoteAmountMWK, 900000);
