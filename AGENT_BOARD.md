@@ -1148,3 +1148,8 @@ Suggestion format:
 - Inventory dashboard now counts untracked/invalid expiry dates and labels each item card so missing dates are visible. Worker tests assert malformed dates are rejected before stock reads/writes; supplier activity tests cover impossible quote/expense dates.
 - Exact-head CI has not yet been confirmed. No deployment or live data changes.
 - Next: continue broad administration reliability review; keep supplier index read-only until canonical identity/contact permissions are designed.
+
+
+### 2026-10-30 · Inventory integrity audit date checks
+- Extended the privacy-preserving inventory snapshot audit to count missing/impossible movement dates separately and include them in malformed-entry findings. It still returns aggregate counts only and does not expose record IDs or personal data.
+- Added synthetic regression coverage for empty and impossible dates. This is an offline export audit only; it does not repair records or reconcile historical balances.
