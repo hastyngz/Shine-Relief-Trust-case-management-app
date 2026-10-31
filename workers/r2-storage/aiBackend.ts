@@ -1,4 +1,5 @@
 import { analyzeDocument, processAIChat, transcribeAudio } from '../../src/server/aiService';
+import { mapSpreadsheetWithAI, SpreadsheetMappingInputError } from '../../src/server/importMapping';
 import type { AppDatabase } from '../../src/types';
 
 const firestoreRoot = (projectId: string) =>
@@ -302,6 +303,23 @@ export async function handleAIRequest(request: Request, env: Record<string, stri
         recordIdsAccessed: [], reviewStatus: 'review_required',
       });
       return json(result);
+    }
+
+    if (url.pathname === '/api/ai/map-spreadsheet') {
+      if (settings.documentAnalysis === false) return json({ error: 'Document analysis is disabled by an Administrator.' }, 403);
+      if (staff.role === 'View Only') return json({ error: 'Your role cannot import spreadsheets.' }, 403);
+      try {
+        const result = await mapSpreadsheetWithAI(body?.sample);
+        await auditSafely(env, {
+          userId: staff.uid, userEmail: staff.email, userRole: staff.role,
+          timestamp: new Date().toISOString(), aiFunction: 'spreadsheet_mapping',
+          status: result.success ? 'success' : 'failure', recordIdsAccessed: [], reviewStatus: 'review_required',
+        });
+        return json(result);
+      } catch (error: any) {
+        if (error instanceof SpreadsheetMappingInputError) return json({ error: error.message }, 400);
+        throw error;
+      }
     }
 
     return json({ error: 'AI endpoint not found.' }, 404);
