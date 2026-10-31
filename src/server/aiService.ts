@@ -234,7 +234,7 @@ function getOpenRouterTools(): any[] {
   }));
 }
 
-async function openRouterCompletion(messages: any[], tools: any[]): Promise<any> {
+async function openRouterCompletion(messages: any[], tools: any[], temperature = 0.2): Promise<any> {
   const models = getOpenRouterModels();
   const retryableStatuses = new Set([402, 404, 408, 429, 500, 502, 503, 504]);
   const modelErrors: string[] = [];
@@ -253,9 +253,8 @@ async function openRouterCompletion(messages: any[], tools: any[]): Promise<any>
         body: JSON.stringify({
           models: modelGroup,
           messages,
-          tools,
-          tool_choice: 'auto',
-          temperature: 0.2,
+          ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
+          temperature,
           provider: { require_parameters: true },
         }),
         signal: AbortSignal.timeout(60_000),
@@ -285,6 +284,24 @@ async function openRouterCompletion(messages: any[], tools: any[]): Promise<any>
   }
 
   throw new Error(`All OpenRouter model groups failed: ${modelErrors.slice(-3).join(' | ')}`);
+}
+
+/**
+ * Single-shot, tool-free OpenRouter call that reuses the same key, model list and fallback
+ * behaviour as the chat assistant. The caller must validate whatever text comes back.
+ */
+export async function openRouterTextCompletion(system: string, user: string): Promise<{ text: string; model?: string }> {
+  if (!isOpenRouterConfigured()) {
+    throw new Error('OPENROUTER_API_KEY environment variable is not configured.');
+  }
+  const data = await openRouterCompletion([
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ], [], 0);
+  return {
+    text: String(data?.choices?.[0]?.message?.content || '').trim(),
+    model: typeof data?.model === 'string' ? data.model : undefined,
+  };
 }
 
 async function runOpenRouterChat(
