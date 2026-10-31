@@ -20,6 +20,10 @@ export interface ImportedBudgetLine {
   periodType: BudgetPeriodType;
   month?: number;
   notes: string;
+  /** Set by the AI-assisted layout mapping: how often the item is bought in the period. */
+  frequency?: number;
+  /** 'stated-total' means budgetAmount is the sheet's own total, which may not equal quantity × unit cost. */
+  amountBasis?: 'stated-total' | 'calculated';
 }
 
 export interface ImportedWorkplanLine {
@@ -136,6 +140,17 @@ export interface SpreadsheetImportPreview {
   sheetStats: Array<{ sheet: string; rowsRead: number; imported: number; skipped: number }>;
   formulaDisagreements: Array<{ sheet: string; address: string; formula: string; cachedValue: unknown }>;
   sourceData: Record<string, unknown>;
+  /** Present only when the AI layout mapping produced this preview. */
+  aiMapping?: {
+    explanation: string;
+    confidence: 'high' | 'medium' | 'low';
+    model?: string;
+    programmeId?: string;
+    period?: string;
+    parsedTotal: number;
+    statedTotal?: number;
+    warnings: string[];
+  };
 }
 
 const MONTHS: Array<{ label: RegExp; month: number }> = [
@@ -1009,7 +1024,7 @@ function evaluateFormula(formula: string, cells: Map<string, unknown>): number |
   return left / right;
 }
 
-function formulaDisagreements(analysis: SpreadsheetAnalysis): SpreadsheetImportPreview['formulaDisagreements'] {
+export function formulaDisagreements(analysis: SpreadsheetAnalysis): SpreadsheetImportPreview['formulaDisagreements'] {
   return analysis.sheets.flatMap((sheet) => sheet.cells.flatMap((cell) => {
     if (!cell.formula) return [];
     const formulaValue = number(cell.cachedValue);
@@ -1065,8 +1080,15 @@ export async function createSpreadsheetImportPreview(
 
   if (kind === 'item-list' || kind === 'back-to-school') {
     const merged = new Map<string, ImportedProcurementLine['items'][number]>();
-    procurementGroups.forEach((group) => group.items.forEach((item, index) => {
-      const key = item.itemNumber ? `number:${normalized(item.itemNumber)}` : `description:${normalized(item.description)}:${index}`;
+    procurementGroups.forEach((group) => {
+      // Merging by item number is meant for the same item quoted on different sheets. A number
+      // repeated inside one sheet is a numbering slip, so those rows are kept separate instead of
+      // one silently overwriting the other.
+      const seenInSheet = new Set<string>();
+      group.items.forEach((item, index) => {
+      const baseKey = item.itemNumber ? `number:${normalized(item.itemNumber)}` : `description:${normalized(item.description)}:${index}`;
+      const key = seenInSheet.has(baseKey) ? `${baseKey}:repeat:${index}` : baseKey;
+      seenInSheet.add(baseKey);
       const current = merged.get(key);
       if (!current) merged.set(key, { ...item });
       else {
@@ -1080,7 +1102,8 @@ export async function createSpreadsheetImportPreview(
             : preferred.priceStatus,
         });
       }
-    }));
+      });
+    });
     const items = Array.from(merged.values());
     lines.splice(0, lines.length, ...(items.length ? [{
       kind: 'procurement' as const,
