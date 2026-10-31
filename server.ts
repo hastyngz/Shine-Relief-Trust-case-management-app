@@ -4,6 +4,7 @@ import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
+import { mapSpreadsheetWithAI, SpreadsheetMappingInputError } from './src/server/importMapping';
 import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, resolveAuthenticatedUid, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
 import { createRateLimiter, getRateLimitConfig } from './src/server/rateLimit';
@@ -283,6 +284,22 @@ async function startServer() {
     } catch (err: any) {
       const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
       res.status(status).json({ error: err.message || 'Could not analyze document.' });
+    }
+  });
+
+  app.post('/api/ai/map-spreadsheet', aiLimiter, async (req, res) => {
+    try {
+      const staff = await authenticateAIRequest(req.headers.authorization);
+      if (staff.status !== 'Active' || staff.role === 'View Only') return res.status(403).json({ error: 'Your role cannot import spreadsheets.' });
+      const aiSettings = await getAISettings();
+      if (aiSettings.enabled === false || aiSettings.documentAnalysis === false) return res.status(403).json({ error: 'Document analysis is disabled by an Administrator.' });
+      const result = await mapSpreadsheetWithAI(req.body?.sample);
+      await writeAIAudit({ userId: staff.uid, userEmail: staff.email, userRole: staff.role, timestamp: new Date().toISOString(), aiFunction: 'spreadsheet_mapping', status: result.success ? 'success' : 'failure', recordIdsAccessed: [], reviewStatus: 'review_required' });
+      res.json(result);
+    } catch (err: any) {
+      if (err instanceof SpreadsheetMappingInputError) return res.status(400).json({ error: err.message });
+      const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
+      res.status(status).json({ error: err.message || 'Could not map the spreadsheet.' });
     }
   });
 
