@@ -309,3 +309,8 @@ The asset register now rejects invalid reference-date context before deriving th
 ### 2026-11-01 · Existing programme attendance and girl-leave safeguards
 - The existing beneficiary programme attendance/leave workflow now has strict date validation, duplicate-submit protection, active-leave duplicate prevention, visible local-save/return failure feedback and retry-safe participant-row updates after a partial attendance save.
 - This does not close the Administration Officer's employee attendance, timesheet or staff leave-management requirement. Employee HR records remain confidential and require a separately reviewed, permission-protected workflow. Component/browser verification and exact-head CI remain outstanding.
+
+
+### Payroll entry reliability follow-up (2026-11-01)
+- Payroll form validation now checks strict calendar dates, month boundaries, numeric MWK values and payment amounts against the visible outstanding balance. The form is protected against rapid duplicate submissions and reports a missing update target rather than showing success. Synthetic service tests cover the new validation cases.
+- This remains a local client-side validation layer; it does not provide a server-atomic payroll payment ledger, independent finance authorization or bank/mobile-money confirmation. Exact-head CI and browser verification remain outstanding.
