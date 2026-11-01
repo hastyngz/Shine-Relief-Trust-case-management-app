@@ -5,6 +5,7 @@ import {
   employeeRecordFromPayrollRecord,
   filterPayrollDataForViewer,
   formatPayrollPeriod,
+  getPayrollSubmissionValidationError,
   monthlyPayrollTaskId,
   payrollTaskDescription,
   payrollTaskStatus,
@@ -81,5 +82,34 @@ assert.equal(shouldCreateMonthlyPayrollTask(new Date('2026-10-26T12:00:00')), fa
 assert.equal(shouldCreateMonthlyPayrollTask(new Date('2026-10-27T12:00:00')), true);
 assert.equal(shouldCreateMonthlyPayrollTask(new Date('2026-10-28T12:00:00')), true);
 assert.match(payrollTaskDescription('2026-09', '2026-09-27', paidSummary), /Status: Completed/);
+
+const validPayrollSubmission = {
+  employeeName: 'Synthetic Employee',
+  employeeId: 'synthetic-employee',
+  payPeriod: '2026-09',
+  payPeriodStartDate: '2026-09-01',
+  payPeriodEndDate: '2026-09-30',
+  applicableSalary: 80000,
+  allowancesMWK: 5000,
+  deductionsMWK: 0,
+  expectedAmount: 85000,
+  paymentAmount: 25000,
+  datePaid: '2026-09-15',
+  isPayment: true,
+  outstandingAmount: 85000,
+};
+assert.equal(getPayrollSubmissionValidationError(validPayrollSubmission), null);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriod: '2026-13' }) || '', /valid YYYY-MM/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriodEndDate: '2026-09-31' }) || '', /valid YYYY-MM/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriodStartDate: '2026-10-01' }) || '', /in order/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, datePaid: '2026-02-31' }) || '', /real payment date/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, paymentAmount: 90000 }) || '', /outstanding balance/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, expectedAmount: Number.NaN }) || '', /non-negative MWK/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, paymentAmount: 0 }) || '', /positive payment amount/);
+assert.equal(
+  getPayrollSubmissionValidationError({ ...validPayrollSubmission, isPayment: false, paymentAmount: 0 }),
+  null,
+  'an unpaid payroll entry can be created without a payment date or payment amount',
+);
 
 console.log('Payroll monthly summary, salary history, task status and due-date tests passed.');
