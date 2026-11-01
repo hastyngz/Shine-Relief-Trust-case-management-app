@@ -324,3 +324,7 @@ The asset register now rejects invalid reference-date context before deriving th
 ### 2026-11-01 · Procurement payment save-failure feedback
 - The procurement payment form now treats a failed local procurement-list save as an explicit error instead of silently retaining the draft with no operator feedback. The existing catch path reports that the payment was not recorded and asks the operator to refresh/retry; the draft is only reset after the list update succeeds.
 - The existing payment lock, latest-local-list re-read and validated payment append remain unchanged. This does not change payment approval authority or imply settlement by a bank/mobile-money provider. Browser failure-path verification and exact-head CI remain outstanding.
+
+
+### Contract audit partial-failure messaging (2026-11-01)
+- Contract save feedback now distinguishes the employee-profile update from the separate Firestore audit append. If the profile update succeeds but the audit append fails, the panel says the contract was saved but is not fully audited and directs the operator to an administrator; it no longer incorrectly implies that the contract itself failed. This does not resolve the underlying two-operation audit durability gap.
