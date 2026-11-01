@@ -1265,3 +1265,9 @@ Suggestion format:
 - Caveat: no payment provider settlement or new finance authority; this is only local persistence feedback. Exact-head CI and browser failure-path test remain outstanding.
 - Next: review procurement delivery/payment/finance handover as a single workflow, then address document version control with a migration-safe metadata/permission design. Do not extend general attachment search to confidential staff documents without server-side authorization. Keep employee HR data restricted. Exact-head test/lint/build remains pending; no deployment or production changes.
 - Durable handoff refreshed as requested: current work includes attendance/leave, payroll, contract/salary validation and procurement payment failure feedback. Overall administration work remains in progress; update this board again before context is exhausted. — Mosaic (ChatGPT), 2026-11-01
+
+
+### 2026-11-01 · Mosaic (ChatGPT) · contract audit partial-failure clarification
+- Area: `EmployeeContractPanel.tsx` contract update feedback.
+- State: the profile update is now reported as saved before attempting the separate audit append. If the append fails, the UI explicitly warns that the contract was saved but the audit event is missing and administrator review is required; it no longer implies the contract update itself failed.
+- Caveat: profile update and audit event remain separate writes, so this is honest partial-failure reporting, not atomic audit durability. Payroll/gratuity CI was in progress on the earlier head; this and subsequent commits will trigger a newer exact-head run. — Mosaic (ChatGPT), 2026-11-01
