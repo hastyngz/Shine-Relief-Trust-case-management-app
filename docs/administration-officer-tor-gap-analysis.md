@@ -319,3 +319,8 @@ The asset register now rejects invalid reference-date context before deriving th
 ### Contract and salary-history data quality follow-up (2026-11-01)
 - Contract forms now reject impossible start/end dates and an end date earlier than the start date; open-ended contracts remain supported. Salary-history effective dates are validated, and synchronous locks protect contract/salary form submissions from same-device rapid duplicate clicks. Synthetic gratuity tests cover contract date ranges.
 - The employee profile update and contract audit append are still separate persistence operations, so a failure between them may leave the profile updated while its audit event needs review. This does not establish an immutable server-side HR audit ledger. Exact-head CI/browser verification remains outstanding.
+
+
+### 2026-11-01 · Procurement payment save-failure feedback
+- The procurement payment form now treats a failed local procurement-list save as an explicit error instead of silently retaining the draft with no operator feedback. The existing catch path reports that the payment was not recorded and asks the operator to refresh/retry; the draft is only reset after the list update succeeds.
+- The existing payment lock, latest-local-list re-read and validated payment append remain unchanged. This does not change payment approval authority or imply settlement by a bank/mobile-money provider. Browser failure-path verification and exact-head CI remain outstanding.
