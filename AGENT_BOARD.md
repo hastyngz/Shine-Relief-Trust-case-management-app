@@ -1235,3 +1235,9 @@ Suggestion format:
 - Area: compliance calendar.
 - State: new obligation due dates now pass `isValidInventoryDate` before saving, complementing the existing defensive date handling in overdue/due-soon calculations and recurrence generation.
 - Next: targeted UI test/browser verification, then continue administration module gap review. CI not yet confirmed. — Mosaic (ChatGPT), 2026-10-30
+
+### 2026-11-01 · Mosaic (ChatGPT) · programme attendance and leave recovery
+- Area: existing beneficiary programme attendance and girl-leave forms in `src/components/ProgrammeRecordsView.tsx`.
+- State: added strict calendar-date checks, same-device duplicate-submit locks, active-leave duplicate prevention and visible save/return failure feedback. Partial attendance batches retain the form and retry by updating rows already saved under the same activity ID.
+- Caveat: this is not employee attendance or HR leave management. No HR schema, permissions, rules or offline queue changes. Component/browser tests and exact-head CI are still outstanding.
+- Next: verify this slice on the exact Replit head, then scope staff attendance/leave only after reviewing confidential HR data access and persistence boundaries. No deployment or production-data change. — Mosaic (ChatGPT), 2026-11-01
