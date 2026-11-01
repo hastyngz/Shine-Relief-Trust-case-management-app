@@ -121,9 +121,13 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
       };
       const updates: Partial<EmployeeContractFields> = { ...contract, originalContractStartDate: originalStart, employmentPeriods: [period, ...existingPeriods.filter((item) => item.id !== period.id)] };
       await onUpdate(employee.id, updates);
-      await appendEmployeeAuditLog({ employeeId: employee.id, action: 'contract_change', actorUid, actorName, changedAt: new Date().toISOString(), changes: updates });
       setCalculationEndDate(contract.contractEndDate || calculationEndDate);
       setSaveNotice('Contract details saved.');
+      try {
+        await appendEmployeeAuditLog({ employeeId: employee.id, action: 'contract_change', actorUid, actorName, changedAt: new Date().toISOString(), changes: updates });
+      } catch {
+        setSaveNotice('Contract details were saved, but the separate audit event could not be recorded. Contact an administrator before treating this change as fully audited.');
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Contract could not be saved.');
     } finally {
