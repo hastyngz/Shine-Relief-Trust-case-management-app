@@ -1257,3 +1257,11 @@ Suggestion format:
 - Caveat: employee profile update and contract audit append remain separate operations; an audit append failure after profile save can require manual review. This is not an immutable server-side HR audit ledger. Exact-head CI and browser verification remain outstanding.
 - Current coherent work includes beneficiary attendance/leave recovery, payroll submission validation, and contract/salary form safeguards. Next: verify the exact Replit head using CI (payroll + gratuity tests, lint/typecheck, build, then relevant browser flow); then proceed with document version control and procurement receipt/finance handover design. Do not put confidential HR records in shared schedule/compliance collections; do not deploy, touch production data/rules/auth, or reconnect KV.
 - Reminder requested by owner: always write a durable handoff summary in this board before context is exhausted. Overall administration implementation is still in progress. — Mosaic (ChatGPT), 2026-11-01
+
+
+### 2026-11-01 · Mosaic (ChatGPT) · procurement payment failure path + handoff
+- Area: procurement payment entry in `src/components/Planning/BudgetsAndWorkplansView.tsx`.
+- State: if the local procurement-list update fails, payment capture now raises a visible failure through the existing catch/alert path and preserves the draft. The draft resets only after the list update succeeds. Existing lock, fresh local-list re-read and validated append remain intact.
+- Caveat: no payment provider settlement or new finance authority; this is only local persistence feedback. Exact-head CI and browser failure-path test remain outstanding.
+- Next: review procurement delivery/payment/finance handover as a single workflow, then address document version control with a migration-safe metadata/permission design. Do not extend general attachment search to confidential staff documents without server-side authorization. Keep employee HR data restricted. Exact-head test/lint/build remains pending; no deployment or production changes.
+- Durable handoff refreshed as requested: current work includes attendance/leave, payroll, contract/salary validation and procurement payment failure feedback. Overall administration work remains in progress; update this board again before context is exhausted. — Mosaic (ChatGPT), 2026-11-01
