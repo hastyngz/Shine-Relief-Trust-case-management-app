@@ -3,8 +3,8 @@ import { CalendarDays, DollarSign, Save, X } from 'lucide-react';
 import { EmployeeRecord, EmployeeContractFields, ContractStatus, EmployeeCategory, EmploymentStatus, SalaryFrequency, SalaryHistoryRecord, EmploymentPeriod } from '../types';
 import { appendEmployeeAuditLog, COLLECTIONS, getEmployeeSalaryHistory } from '../services/firestoreSync';
 import { flushPendingOfflineSnapshots, loadQueue, queueOfflineRecordsForSync } from '../services/offlineSync';
-import { calculateGratuity } from '../services/gratuityService';
-import { isValidInventoryDate } from '../utils/inventory';
+import { calculateGratuity, getContractDateValidationError } from '../services/gratuityService';
+
 
 interface EmployeeContractPanelProps {
   employee: EmployeeRecord;
@@ -96,16 +96,9 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
 
   const saveContract = async () => {
     if (!canEdit || saveLock.current) return;
-    if (!isValidInventoryDate(contract.contractStartDate)) {
-      setError('Enter a real calendar date for the contract start.');
-      return;
-    }
-    if (contract.contractEndDate && !isValidInventoryDate(contract.contractEndDate)) {
-      setError('Enter a real calendar date for the contract end.');
-      return;
-    }
-    if (contract.contractEndDate && contract.contractEndDate < contract.contractStartDate) {
-      setError('Contract end date cannot be earlier than its start date.');
+    const dateValidationError = getContractDateValidationError(contract.contractStartDate, contract.contractEndDate);
+    if (dateValidationError) {
+      setError(dateValidationError);
       return;
     }
     saveLock.current = true;
