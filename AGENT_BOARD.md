@@ -1281,3 +1281,9 @@ Suggestion format:
 - Area: administrator-only `src/components/StaffManagement.tsx` invitation form.
 - State: normalized full name/email before the call, added a synchronous in-flight lock, and disabled submit/cancel while the invitation request is pending. This reduces accidental repeated invitation requests/emails from one device. Existing server-side admin authorization and invitation-token workflow were not changed.
 - Caveat: same-device UI guard only, not cross-device server idempotency. Invitation worker tests already exist but this component change still needs exact-head CI and browser verification. — Mosaic (ChatGPT), 2026-11-01
+
+
+### Handoff refresh · 2026-11-01
+- Most recent source slice: administrator invitation form double-submit lock and submit/cancel disabled state (`StaffManagement.tsx`, commits `8e2cdddb869fabfcb9296bfb559b824e4b9e216d`, `ee27cbdfa1113283fc66ab27fb17b1c4e69d1ed0`). Docs updated in `docs/administration-task-report.md` and `docs/administration-officer-tor-gap-analysis.md`; board notes are current.
+- Verification: GitHub Actions on earlier Replit head was pending/in progress; newer pushes cancel superseded runs. Check only the latest exact-head run after the current coherent batch settles. No local lint/test/build run. Do not claim verified.
+- Next: finish verification of payroll/gratuity and procurement paths, then inspect document version control requirements and employee attendance/leave security boundary. Continue only on `Replit`; no deploy, no production data/rules/auth changes, no KV changes. Owner explicitly requests a durable handoff summary before context window is exhausted. — Mosaic (ChatGPT), 2026-11-01
