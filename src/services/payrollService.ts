@@ -208,13 +208,17 @@ export function getPayrollSubmissionValidationError(input: PayrollSubmissionVali
     return 'Enter an employee and a valid YYYY-MM payroll period with real start and end dates.';
   }
   if (input.payPeriodStartDate > input.payPeriodEndDate
-    || input.payPeriodStartDate.slice(0, 7) !== input.payPeriod) {
+    || input.payPeriodStartDate.slice(0, 7) !== input.payPeriod
+    || input.payPeriodEndDate.slice(0, 7) !== input.payPeriod) {
     return 'Payroll start and end dates must be in order and belong to the selected payroll month.';
   }
   const amounts = [input.applicableSalary, input.allowancesMWK, input.deductionsMWK, input.expectedAmount, input.paymentAmount];
   if (!amounts.every(Number.isFinite) || input.applicableSalary < 0 || input.allowancesMWK < 0
     || input.deductionsMWK < 0 || input.expectedAmount <= 0 || input.paymentAmount < 0) {
     return 'Payroll amounts must be valid non-negative MWK values, with an expected amount greater than zero.';
+  }
+  if (!input.isPayment && input.paymentAmount > input.expectedAmount) {
+    return 'Recorded payroll paid amount cannot exceed the expected amount.';
   }
   if (input.isPayment && (input.paymentAmount <= 0 || !isValidInventoryDate(input.datePaid || ''))) {
     return 'Enter a positive payment amount and a real payment date.';
