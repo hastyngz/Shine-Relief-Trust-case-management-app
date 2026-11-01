@@ -102,6 +102,7 @@ assert.equal(getPayrollSubmissionValidationError(validPayrollSubmission), null);
 assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriod: '2026-13' }) || '', /valid YYYY-MM/);
 assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriodEndDate: '2026-09-31' }) || '', /valid YYYY-MM/);
 assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriodStartDate: '2026-10-01' }) || '', /in order/);
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, payPeriodEndDate: '2026-10-01' }) || '', /in order/);
 assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, datePaid: '2026-02-31' }) || '', /real payment date/);
 assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, paymentAmount: 90000 }) || '', /outstanding balance/);
 assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, expectedAmount: Number.NaN }) || '', /non-negative MWK/);
@@ -111,5 +112,6 @@ assert.equal(
   null,
   'an unpaid payroll entry can be created without a payment date or payment amount',
 );
+assert.match(getPayrollSubmissionValidationError({ ...validPayrollSubmission, isPayment: false, paymentAmount: 90000 }) || '', /cannot exceed the expected amount/);
 
 console.log('Payroll monthly summary, salary history, task status and due-date tests passed.');
