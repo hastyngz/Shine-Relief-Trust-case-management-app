@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { StaffUser, StaffRole, StaffStatus } from '../types';
 import { getPasswordResetErrorMessage } from '../utils/passwordResetFeedback';
@@ -51,6 +51,7 @@ export const StaffManagement: React.FC = () => {
 
   // Action states
   const [submitting, setSubmitting] = useState(false);
+  const invitationLock = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -121,35 +122,38 @@ export const StaffManagement: React.FC = () => {
 
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (invitationLock.current) return;
     setActionError(null);
     setActionSuccess(null);
-
-    if (!newFullName || !newEmail) {
+    const fullName = newFullName.trim();
+    const email = newEmail.trim().toLowerCase();
+    if (!fullName || !email) {
       setActionError('Please fill in both full name and email address.');
       return;
     }
 
+    invitationLock.current = true;
     setSubmitting(true);
     try {
       await createStaffAccount({
-        fullName: newFullName,
-        email: newEmail,
+        fullName,
+        email,
         role: newRole,
-        departmentOrTitle: newDepartment,
-        phone: newPhone,
+        departmentOrTitle: newDepartment.trim(),
+        phone: newPhone.trim(),
       });
 
-      setActionSuccess(`Invitation email sent to ${newEmail.trim().toLowerCase()}. The staff profile will be created only after the recipient verifies their email and accepts the invitation.`);
+      setActionSuccess(`Invitation email sent to ${email}. The staff profile will be created only after the recipient verifies their email and accepts the invitation.`);
       setIsAddModalOpen(false);
-      // Reset form
       setNewFullName('');
       setNewEmail('');
       setNewRole('Staff');
       setNewDepartment('');
       setNewPhone('');
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to create staff account.');
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'Failed to create staff account.');
     } finally {
+      invitationLock.current = false;
       setSubmitting(false);
     }
   };
@@ -599,7 +603,7 @@ export const StaffManagement: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => setIsAddModalOpen(false)} disabled={submitting}
                 className="text-stone-400 hover:text-stone-600 text-sm font-bold"
               >
                 ✕
