@@ -332,9 +332,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
       };
       const updated = appendValidatedProcurementPayment(currentList, payment);
       const saved = saveProcurementList(currentList, { payments: updated.payments });
-      if (saved) {
-        setPaymentDrafts((current) => ({ ...current, [list.id]: { id: `payment_${createProcurementDeliveryId().slice(9)}`, date: new Date().toISOString().slice(0, 10), amount: '', reference: '', method: 'Cash', notes: '' } }));
-      }
+      if (!saved) throw new Error('The payment could not be saved on this device. Your draft has been kept; refresh and retry.');
+      setPaymentDrafts((current) => ({ ...current, [list.id]: { id: `payment_${createProcurementDeliveryId().slice(9)}`, date: new Date().toISOString().slice(0, 10), amount: '', reference: '', method: 'Cash', notes: '' } }));
     } catch (error) {
       window.alert(`Payment was not recorded: ${error instanceof Error ? error.message : 'Please refresh and retry.'}`);
     } finally {
