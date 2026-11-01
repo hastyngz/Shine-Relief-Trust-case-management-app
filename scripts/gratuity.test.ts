@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateGratuity } from '../src/services/gratuityService';
+import { calculateGratuity, getContractDateValidationError } from '../src/services/gratuityService';
 
 const employee = (category: 'Ground Worker/Gardener' | 'Other Staff') => ({
   id: 'staff-1',
@@ -84,4 +84,11 @@ const rehireSalary = [
 assert.equal(calculateGratuity({ ...employee('Other Staff'), employmentPeriodId: 'period-1' }, '2026-07-01', rehireSalary).totalGratuity, 60000);
 assert.equal(calculateGratuity({ ...employee('Other Staff'), contractStartDate: '2027-01-01', employmentPeriodId: 'period-2' }, '2027-07-01', rehireSalary).totalGratuity, 120000);
 
-console.log('Gratuity calculation tests passed.');
+
+assert.equal(getContractDateValidationError('2026-01-01', '2026-12-31'), null);
+assert.equal(getContractDateValidationError('2026-01-01'), null, 'an open-ended contract may omit its end date');
+assert.match(getContractDateValidationError('2026-02-31') || '', /valid YYYY-MM-DD/);
+assert.match(getContractDateValidationError('2026-01-01', '2026-02-31') || '', /valid YYYY-MM-DD/);
+assert.match(getContractDateValidationError('2026-03-01', '2026-02-28') || '', /cannot be earlier/);
+
+console.log('Gratuity calculation and contract date validation tests passed.');
