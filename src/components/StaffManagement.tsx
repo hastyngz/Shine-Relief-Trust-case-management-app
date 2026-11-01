@@ -697,7 +697,8 @@ export const StaffManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-900"
+                  disabled={submitting}
+                  className="px-4 py-2 text-xs font-bold text-stone-600 hover:text-stone-900 disabled:opacity-50"
                 >
                   Cancel
                 </button>
