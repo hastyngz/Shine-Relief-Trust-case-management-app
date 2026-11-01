@@ -332,3 +332,7 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Payroll period and overpayment boundary correction (2026-11-01)
 - Tightened the shared payroll validator so both start and end dates must fall within the selected YYYY-MM payroll month. Manual payroll edits also reject a recorded paid total greater than the expected amount. Added synthetic regression cases for a cross-month end date and overpaid total.
+
+
+### Staff invitation duplicate-submit safeguard (2026-11-01)
+- The administrator invitation form now normalizes name/email before submission, uses a synchronous lock against rapid repeated requests, and disables both submit and cancel controls while the invitation request is in flight. This reduces duplicate invitation emails/requests from a single device. Server-side invitation authorization and token lifecycle remain authoritative and unchanged; this is not cross-device idempotency. Exact-head CI and browser verification remain outstanding.
