@@ -38,6 +38,19 @@ function parseDate(value: string, fieldName: string): Date {
   return date;
 }
 
+
+export function getContractDateValidationError(startDate: string, endDate?: string): string | null {
+  try {
+    const start = parseDate(startDate, 'Contract start date');
+    if (!endDate) return null;
+    const end = parseDate(endDate, 'Contract end date');
+    if (end < start) return 'Contract end date cannot be earlier than its start date';
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Contract dates must be valid calendar dates';
+  }
+}
+
 function fullMonthsBetween(start: Date, end: Date): number {
   if (end <= start) return 0;
   const calendarMonths = (end.getUTCFullYear() - start.getUTCFullYear()) * 12
