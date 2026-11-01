@@ -314,3 +314,8 @@ The asset register now rejects invalid reference-date context before deriving th
 ### Payroll entry reliability follow-up (2026-11-01)
 - Payroll form validation now checks strict calendar dates, month boundaries, numeric MWK values and payment amounts against the visible outstanding balance. The form is protected against rapid duplicate submissions and reports a missing update target rather than showing success. Synthetic service tests cover the new validation cases.
 - This remains a local client-side validation layer; it does not provide a server-atomic payroll payment ledger, independent finance authorization or bank/mobile-money confirmation. Exact-head CI and browser verification remain outstanding.
+
+
+### Contract and salary-history data quality follow-up (2026-11-01)
+- Contract forms now reject impossible start/end dates and an end date earlier than the start date; open-ended contracts remain supported. Salary-history effective dates are validated, and synchronous locks protect contract/salary form submissions from same-device rapid duplicate clicks. Synthetic gratuity tests cover contract date ranges.
+- The employee profile update and contract audit append are still separate persistence operations, so a failure between them may leave the profile updated while its audit event needs review. This does not establish an immutable server-side HR audit ledger. Exact-head CI/browser verification remains outstanding.
