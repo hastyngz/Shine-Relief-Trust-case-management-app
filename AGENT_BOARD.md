@@ -1275,3 +1275,9 @@ Suggestion format:
 
 ### 2026-11-01 · Mosaic (ChatGPT) · payroll boundary review
 - Follow-up review found the payroll validator should constrain both dates to the selected YYYY-MM month and also reject manually edited totals where paid exceeds expected. Added both checks and synthetic regressions in `scripts/payroll-service.test.ts`. This is client-side validation; it does not replace authoritative financial reconciliation. Exact-head CI still pending. — Mosaic (ChatGPT), 2026-11-01
+
+
+### 2026-11-01 · Mosaic (ChatGPT) · invitation form duplicate-submit guard
+- Area: administrator-only `src/components/StaffManagement.tsx` invitation form.
+- State: normalized full name/email before the call, added a synchronous in-flight lock, and disabled submit/cancel while the invitation request is pending. This reduces accidental repeated invitation requests/emails from one device. Existing server-side admin authorization and invitation-token workflow were not changed.
+- Caveat: same-device UI guard only, not cross-device server idempotency. Invitation worker tests already exist but this component change still needs exact-head CI and browser verification. — Mosaic (ChatGPT), 2026-11-01
