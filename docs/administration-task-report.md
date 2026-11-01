@@ -143,3 +143,8 @@
 
 ### Compliance deadline validation (2026-10-30)
 - New compliance obligations now validate the due date with the shared real-calendar-date helper before local persistence. This prevents impossible dates from entering the obligation register and recurring schedule calculation, even if a browser date control is bypassed. Existing compliance date tests cover impossible date rejection in status calculations; direct UI/browser validation remains unexecuted.
+
+### 2026-11-01 · Programme attendance and leave save recovery
+- Programme attendance now rejects impossible dates, blocks rapid repeat submissions, and re-reads the local database after each participant save. If a multi-participant save partially succeeds, the form remains available and retry updates already-saved participant rows instead of creating duplicates under the same activity ID. The UI reports how many rows were saved before a failure.
+- Girl leave now validates real calendar dates and date order, prevents a second active leave record for the same girl, and catches local save/return failures with retry-oriented feedback. Return actions and form submissions share a synchronous in-flight lock.
+- This is the existing programme/beneficiary attendance and leave workflow, not employee time-and-attendance or HR leave management. No staff HR data, roles, Firestore rules, offline queue semantics or schema were changed. Component-level and browser tests have not yet been run; exact-head CI is still required.
