@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CalendarDays, DollarSign, Save, X } from 'lucide-react';
 import { EmployeeRecord, EmployeeContractFields, ContractStatus, EmployeeCategory, EmploymentStatus, SalaryFrequency, SalaryHistoryRecord, EmploymentPeriod } from '../types';
 import { appendEmployeeAuditLog, COLLECTIONS, getEmployeeSalaryHistory } from '../services/firestoreSync';
 import { flushPendingOfflineSnapshots, loadQueue, queueOfflineRecordsForSync } from '../services/offlineSync';
 import { calculateGratuity } from '../services/gratuityService';
+import { isValidInventoryDate } from '../utils/inventory';
 
 interface EmployeeContractPanelProps {
   employee: EmployeeRecord;
@@ -22,6 +23,7 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const saveLock = useRef(false);
   const [contract, setContract] = useState({
     employeeCategory: employee.employeeCategory || 'Other Staff' as EmployeeCategory,
     position: employee.position || employee.positionTitle || employee.department || '',
@@ -93,9 +95,23 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
   const currentSalary = salaryHistory.filter((record) => record.effectiveDate <= calculationEndDate).at(-1)?.salaryAmount;
 
   const saveContract = async () => {
-    if (!canEdit) return;
-    if (!contract.contractStartDate) { setError('Contract start date is required.'); return; }
-    setSaving(true); setError(null);
+    if (!canEdit || saveLock.current) return;
+    if (!isValidInventoryDate(contract.contractStartDate)) {
+      setError('Enter a real calendar date for the contract start.');
+      return;
+    }
+    if (contract.contractEndDate && !isValidInventoryDate(contract.contractEndDate)) {
+      setError('Enter a real calendar date for the contract end.');
+      return;
+    }
+    if (contract.contractEndDate && contract.contractEndDate < contract.contractStartDate) {
+      setError('Contract end date cannot be earlier than its start date.');
+      return;
+    }
+    saveLock.current = true;
+    setSaving(true);
+    setError(null);
+    setSaveNotice(null);
     try {
       const originalStart = employee.originalContractStartDate || employee.contractStartDate || contract.contractStartDate;
       const existingPeriods = employee.employmentPeriods || [];
@@ -114,15 +130,21 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
       await onUpdate(employee.id, updates);
       await appendEmployeeAuditLog({ employeeId: employee.id, action: 'contract_change', actorUid, actorName, changedAt: new Date().toISOString(), changes: updates });
       setCalculationEndDate(contract.contractEndDate || calculationEndDate);
-    } catch (err: any) { setError(err.message || 'Contract could not be saved.'); }
-    finally { setSaving(false); }
+      setSaveNotice('Contract details saved.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Contract could not be saved.');
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
   };
 
   const addSalary = async () => {
-    if (!canEdit) return;
+    if (!canEdit || saveLock.current) return;
     setSaveNotice(null);
     const amount = Number(salary.amount);
-    if (!salary.effectiveDate || !Number.isFinite(amount) || amount <= 0) { setError('Enter a positive salary and effective date.'); return; }
+    if (!isValidInventoryDate(salary.effectiveDate) || !Number.isFinite(amount) || amount <= 0) { setError('Enter a positive salary and a real effective date.'); return; }
+    saveLock.current = true;
     setSaving(true); setError(null);
     try {
       const previousSalary = salaryHistory.filter((record) => record.effectiveDate < salary.effectiveDate).at(-1)?.salaryAmount;
@@ -183,7 +205,7 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
         setSaveNotice('Salary record saved on this device; sync is pending and will retry.');
       }
     } catch (err: any) { setError(err.message || 'Salary record could not be saved.'); }
-    finally { setSaving(false); }
+    finally { saveLock.current = false; setSaving(false); }
   };
 
   return <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
