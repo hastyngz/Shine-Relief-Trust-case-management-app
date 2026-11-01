@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, BadgeDollarSign, BriefcaseBusiness, CalendarRange, FileText, Filter, Pencil, Plus, Trash2, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { isValidInventoryDate } from '../utils/inventory';
+
 import { AppDatabase, CaseAction, EmployeeRecord, PayrollRecord, PayrollPaymentStatus, SalaryHistoryRecord } from '../types';
 import { addCaseAction, addPayrollRecord, deletePayrollRecord, updateCaseAction, updateEmployeeRecord, updatePayrollRecord } from '../utils/storage';
 import { getEmployeeSalaryHistoryForStaff } from '../services/firestoreSync';
 import { notifyPayrollProcessors } from '../services/messagingService';
-import { buildMonthlyPayrollSummary, employeeRecordFromPayrollRecord, filterPayrollDataForViewer, formatPayrollPeriod, monthlyPayrollTaskId, payrollTaskDescription, payrollTaskStatus, shouldCreateMonthlyPayrollTask } from '../services/payrollService';
+import { buildMonthlyPayrollSummary, employeeRecordFromPayrollRecord, filterPayrollDataForViewer, formatPayrollPeriod, getPayrollSubmissionValidationError, monthlyPayrollTaskId, payrollTaskDescription, payrollTaskStatus, shouldCreateMonthlyPayrollTask } from '../services/payrollService';
 import { EmployeeContractPanel } from './EmployeeContractPanel';
 
 interface PayrollDashboardProps {
@@ -209,25 +209,23 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
     const datePaid = String(fd.get('datePaid') || '').trim();
     const notes = String(fd.get('notes') || '').trim();
 
-    if (!employeeName || !employeeId || !periodMatch || !isValidInventoryDate(payPeriodStartDate) || !isValidInventoryDate(payPeriodEndDate)) {
-      setPaymentError('Enter an employee and a valid YYYY-MM payroll period with real start and end dates.');
-      return;
-    }
-    if (payPeriodStartDate > payPeriodEndDate || payPeriodStartDate.slice(0, 7) !== payPeriod) {
-      setPaymentError('Payroll start and end dates must be in order and belong to the selected payroll month.');
-      return;
-    }
-    if (![applicableSalary, allowancesMWK, deductionsMWK, expectedAmount, paymentAmount, amountPaid].every(Number.isFinite)
-      || applicableSalary < 0 || allowancesMWK < 0 || deductionsMWK < 0 || expectedAmount <= 0 || paymentAmount < 0 || amountPaid < 0) {
-      setPaymentError('Payroll amounts must be valid non-negative MWK values, with an expected amount greater than zero.');
-      return;
-    }
-    if (paymentEmployee && (paymentAmount <= 0 || !isValidInventoryDate(datePaid))) {
-      setPaymentError('Enter a positive payment amount and a real payment date.');
-      return;
-    }
-    if (paymentEmployee && paymentAmount > paymentEmployee.outstandingAmount) {
-      setPaymentError('Payment exceeds the outstanding balance of MWK ' + paymentEmployee.outstandingAmount.toLocaleString() + '.');
+    const validationError = getPayrollSubmissionValidationError({
+      employeeName,
+      employeeId,
+      payPeriod,
+      payPeriodStartDate,
+      payPeriodEndDate,
+      applicableSalary,
+      allowancesMWK,
+      deductionsMWK,
+      expectedAmount,
+      paymentAmount,
+      datePaid,
+      isPayment: Boolean(paymentEmployee),
+      outstandingAmount: paymentEmployee?.outstandingAmount,
+    });
+    if (validationError) {
+      setPaymentError(validationError);
       return;
     }
 
