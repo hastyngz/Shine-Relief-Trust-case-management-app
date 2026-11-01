@@ -1,8 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { AppDatabase, AttendanceStatus, GirlLeaveStatus, LeaveType } from '../types';
-import { addAttendanceRecord, addGirlLeaveRecord, updateAttendanceRecord, updateGirlLeaveRecord } from '../utils/storage';
+import { addAttendanceRecord, addGirlLeaveRecord, getDatabase, updateAttendanceRecord, updateGirlLeaveRecord } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
-import { getDatabase } from '../utils/storage';
 import { isValidInventoryDate } from '../utils/inventory';
 import { CalendarCheck2, Plane, Plus, RotateCcw } from 'lucide-react';
 
@@ -35,6 +34,7 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
+  const pendingActivityId = useRef<string | null>(null);
 
   const activities = db.householdActivities || [];
   const attendanceRecords = db.attendanceRecords || [];
@@ -74,7 +74,8 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
     }
     saveLock.current = true;
     setSaving(true);
-    const activityId = selectedActivityId || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const activityId = selectedActivityId || pendingActivityId.current || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    if (!selectedActivityId) pendingActivityId.current = activityId;
     let savedCount = 0;
     try {
       for (const girlId of selectedGirlIds) {
@@ -92,6 +93,7 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
         savedCount += 1;
       }
       setSelectedActivityId('');
+      pendingActivityId.current = null;
       setActivityName('');
       setActivityType('Training');
       setLocation('');
