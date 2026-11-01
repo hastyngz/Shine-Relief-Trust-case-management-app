@@ -160,3 +160,8 @@
 - Employee contract start/end dates now use a shared strict date-range validator: malformed dates and end dates before start are rejected, while a blank end date remains valid for open-ended contracts. The validator is covered by the gratuity service regression suite.
 - Contract updates and salary-history additions share a synchronous in-flight lock, preventing rapid repeated clicks from duplicating local updates or appending duplicate salary/audit queue entries on the same device. Salary effective dates must be real calendar dates.
 - Existing confidential payroll/HR access boundaries and salary-history queueing are unchanged. The contract employee update and its separate Firestore audit append are still separate operations; a failure between them can require manual review. Exact-head CI and browser verification remain outstanding.
+
+
+### 2026-11-01 · Procurement payment save-failure feedback
+- The procurement payment form now treats a failed local procurement-list save as an explicit error instead of silently retaining the draft with no operator feedback. The existing catch path reports that the payment was not recorded and asks the operator to refresh/retry; the draft is only reset after the list update succeeds.
+- The existing payment lock, latest-local-list re-read and validated payment append remain unchanged. This does not change payment approval authority or imply settlement by a bank/mobile-money provider. Browser failure-path verification and exact-head CI remain outstanding.
