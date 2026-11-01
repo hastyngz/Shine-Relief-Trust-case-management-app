@@ -154,3 +154,9 @@
 - Payroll submission now uses a shared validation helper for real Gregorian pay-period/payment dates, valid YYYY-MM periods, ordered period boundaries, non-negative finite MWK amounts and a positive expected payroll amount. Payment capture also rejects amounts above the currently calculated outstanding balance.
 - The payroll form now uses a synchronous same-device submission lock and disabled saving feedback. Missing records on update are treated as errors. A stale duplicate monthly-payment create that resolves to an existing row with a different balance no longer closes the form as if the payment was recorded.
 - Added synthetic payroll-service regression cases for valid entries, invalid periods, impossible dates, out-of-order period dates, invalid amounts, zero payments and overpayment. No payroll data, staff permissions, Firestore rules or payment provider integrations were changed. Local tests/typecheck/build were not available in this editing session; exact-head CI is required.
+
+
+### 2026-11-01 · Contract and salary-history entry safeguards
+- Employee contract start/end dates now use a shared strict date-range validator: malformed dates and end dates before start are rejected, while a blank end date remains valid for open-ended contracts. The validator is covered by the gratuity service regression suite.
+- Contract updates and salary-history additions share a synchronous in-flight lock, preventing rapid repeated clicks from duplicating local updates or appending duplicate salary/audit queue entries on the same device. Salary effective dates must be real calendar dates.
+- Existing confidential payroll/HR access boundaries and salary-history queueing are unchanged. The contract employee update and its separate Firestore audit append are still separate operations; a failure between them can require manual review. Exact-head CI and browser verification remain outstanding.
