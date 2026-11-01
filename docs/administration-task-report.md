@@ -169,3 +169,7 @@
 
 ### Contract audit partial-failure messaging (2026-11-01)
 - Contract save feedback now distinguishes the employee-profile update from the separate Firestore audit append. If the profile update succeeds but the audit append fails, the panel says the contract was saved but is not fully audited and directs the operator to an administrator; it no longer incorrectly implies that the contract itself failed. This does not resolve the underlying two-operation audit durability gap.
+
+
+### Payroll period and overpayment boundary correction (2026-11-01)
+- Tightened the shared payroll validator so both start and end dates must fall within the selected YYYY-MM payroll month. Manual payroll edits also reject a recorded paid total greater than the expected amount. Added synthetic regression cases for a cross-month end date and overpaid total.
