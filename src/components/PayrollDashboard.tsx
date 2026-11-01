@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, BadgeDollarSign, BriefcaseBusiness, CalendarRange, FileText, Filter, Pencil, Plus, Trash2, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isValidInventoryDate } from '../utils/inventory';
 import { AppDatabase, CaseAction, EmployeeRecord, PayrollRecord, PayrollPaymentStatus, SalaryHistoryRecord } from '../types';
 import { addCaseAction, addPayrollRecord, deletePayrollRecord, updateCaseAction, updateEmployeeRecord, updatePayrollRecord } from '../utils/storage';
 import { getEmployeeSalaryHistoryForStaff } from '../services/firestoreSync';
@@ -31,6 +32,8 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
   const [salaryHistoryError, setSalaryHistoryError] = useState('');
   const [payrollTaskError, setPayrollTaskError] = useState('');
   const [paymentError, setPaymentError] = useState('');
+  const [savingPayroll, setSavingPayroll] = useState(false);
+  const payrollSaveLock = useRef(false);
   const [financialYear, setFinancialYear] = useState<string>('ALL');
   const [monthFilter, setMonthFilter] = useState<string>('ALL');
   const [employeeFilter, setEmployeeFilter] = useState<string>('ALL');
@@ -175,15 +178,15 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
 
   const handleSavePayroll = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canProcessPayroll) return;
+    if (!canProcessPayroll || payrollSaveLock.current) return;
     setPaymentError('');
     const fd = new FormData(event.currentTarget);
     const employeeName = paymentEmployee?.employeeName || String(fd.get('employeeName') || '').trim();
     const employeeId = paymentEmployee?.employeeId || String(fd.get('employeeId') || '').trim() || employeeName || 'staff-unknown';
     const departmentOrProgramme = paymentEmployee?.department || String(fd.get('departmentOrProgramme') || '').trim();
     const payPeriod = paymentEmployee ? selectedPeriod : String(fd.get('payPeriod') || '').trim();
-    const periodMatch = payPeriod.match(/^(\d{4})-(\d{2})$/);
-    const payPeriodStartDate = paymentEmployee && periodMatch ? `${payPeriod}-01` : String(fd.get('payPeriodStartDate') || '').trim();
+    const periodMatch = payPeriod.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+    const payPeriodStartDate = paymentEmployee && periodMatch ? payPeriod + '-01' : String(fd.get('payPeriodStartDate') || '').trim();
     const payPeriodEndDate = paymentEmployee && periodMatch
       ? new Date(Date.UTC(Number(periodMatch[1]), Number(periodMatch[2]), 0)).toISOString().slice(0, 10)
       : String(fd.get('payPeriodEndDate') || '').trim();
@@ -206,12 +209,25 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
     const datePaid = String(fd.get('datePaid') || '').trim();
     const notes = String(fd.get('notes') || '').trim();
 
-    if (!employeeName || !payPeriod || !payPeriodStartDate || !payPeriodEndDate) {
-      setPaymentError('Employee and payroll period are required.');
+    if (!employeeName || !employeeId || !periodMatch || !isValidInventoryDate(payPeriodStartDate) || !isValidInventoryDate(payPeriodEndDate)) {
+      setPaymentError('Enter an employee and a valid YYYY-MM payroll period with real start and end dates.');
       return;
     }
-    if (paymentEmployee && (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || !datePaid)) {
-      setPaymentError('Enter a positive payment amount and confirm the payment date.');
+    if (payPeriodStartDate > payPeriodEndDate || payPeriodStartDate.slice(0, 7) !== payPeriod) {
+      setPaymentError('Payroll start and end dates must be in order and belong to the selected payroll month.');
+      return;
+    }
+    if (![applicableSalary, allowancesMWK, deductionsMWK, expectedAmount, paymentAmount, amountPaid].every(Number.isFinite)
+      || applicableSalary < 0 || allowancesMWK < 0 || deductionsMWK < 0 || expectedAmount <= 0 || paymentAmount < 0 || amountPaid < 0) {
+      setPaymentError('Payroll amounts must be valid non-negative MWK values, with an expected amount greater than zero.');
+      return;
+    }
+    if (paymentEmployee && (paymentAmount <= 0 || !isValidInventoryDate(datePaid))) {
+      setPaymentError('Enter a positive payment amount and a real payment date.');
+      return;
+    }
+    if (paymentEmployee && paymentAmount > paymentEmployee.outstandingAmount) {
+      setPaymentError('Payment exceeds the outstanding balance of MWK ' + paymentEmployee.outstandingAmount.toLocaleString() + '.');
       return;
     }
 
@@ -243,27 +259,32 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
       updatedByUid: currentUser?.uid || 'system',
     };
 
+    payrollSaveLock.current = true;
+    setSavingPayroll(true);
     try {
-      if (editingPayroll && paymentEmployee) {
-        updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
-      } else if (editingPayroll) {
-        updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+      if (editingPayroll) {
+        const updated = updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+        if (!updated) throw new Error('The payroll record could not be found. Refresh payroll and try again.');
       } else {
-        addPayrollRecord({
+        const created = addPayrollRecord({
           ...payload,
-          id: paymentEmployee ? `PAY-${encodeURIComponent(employeeId)}-${payPeriod}` : undefined,
+          id: paymentEmployee ? 'PAY-' + encodeURIComponent(employeeId) + '-' + payPeriod : undefined,
         }, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+        if (paymentEmployee && created.amountPaid !== amountPaid) {
+          throw new Error('A payroll record for this employee and period already exists with a different balance. Refresh before recording another payment.');
+        }
       }
+      setShowPayrollModal(false);
+      setEditingPayroll(null);
+      setPaymentEmployee(null);
+      setPaymentError('');
+      onRefresh();
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Payroll could not be saved. Check device storage and try again.');
-      return;
+    } finally {
+      payrollSaveLock.current = false;
+      setSavingPayroll(false);
     }
-
-    setShowPayrollModal(false);
-    setEditingPayroll(null);
-    setPaymentEmployee(null);
-    setPaymentError('');
-    onRefresh();
   };
 
   if (!canViewPayroll) {
@@ -581,7 +602,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">{paymentEmployee ? 'Amount paid now' : 'Amount paid'}</label>
-                  <input name="amountPaid" type="number" step="any" min="0" defaultValue={paymentEmployee ? Math.max((paymentEmployee.payment?.expectedAmount || paymentEmployee.applicableSalary) - paymentEmployee.paidAmount, 0) : editingPayroll?.amountPaid || 0} className="w-full text-xs border border-stone-300 rounded-lg p-2" />
+                  <input name="amountPaid" type="number" step="any" min="0" max={paymentEmployee?.outstandingAmount} defaultValue={paymentEmployee ? Math.max((paymentEmployee.payment?.expectedAmount || paymentEmployee.applicableSalary) - paymentEmployee.paidAmount, 0) : editingPayroll?.amountPaid || 0} className="w-full text-xs border border-stone-300 rounded-lg p-2" />
                 </div>
               </div>
 
@@ -636,7 +657,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
               {paymentError && <p role="alert" className="text-xs font-semibold text-rose-800">{paymentError}</p>}
               <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
                 <button type="button" onClick={() => { setShowPayrollModal(false); setEditingPayroll(null); setPaymentEmployee(null); setPaymentError(''); }} className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900">{editingPayroll ? 'Save changes' : 'Add record'}</button>
+                <button type="submit" disabled={savingPayroll} className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900 disabled:opacity-50">{savingPayroll ? 'Saving…' : editingPayroll ? 'Save changes' : 'Add record'}</button>
               </div>
             </form>
           </div>
