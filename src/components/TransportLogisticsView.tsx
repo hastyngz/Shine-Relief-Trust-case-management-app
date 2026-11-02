@@ -53,7 +53,7 @@ export const TransportLogisticsView: React.FC<Props> = ({ db, onRefresh }) => {
     <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Trip authorisation is not yet enforced in this module. Obtain management approval through SHINE's existing process before travel; entering a reference here does not approve a trip.</p>
     {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}{notice&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
     <section className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4">
-      <div><h2 className="text-lg font-bold">Vehicle service &amp; maintenance</h2><p className="text-sm text-stone-600">Service schedules and completed maintenance are read from the Asset Register. Maintenance costs are already posted to Finance and are not added again here.</p></div>
+      <div><h2 className="text-lg font-bold">Vehicle service &amp; maintenance</h2><p className="text-sm text-stone-600">Service schedules and completed maintenance are read from the Asset Register. New maintenance costs are posted to Finance when entered; this view never creates a second expense.</p></div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-800">Overdue service</p><p className="text-xl font-bold text-red-900">{serviceOverview.overdueCount}</p></div>
         <div className="rounded-xl bg-amber-50 p-3"><p className="text-xs text-amber-900">Due within 30 days</p><p className="text-xl font-bold text-amber-950">{serviceOverview.dueWithin30DaysCount}</p></div>
