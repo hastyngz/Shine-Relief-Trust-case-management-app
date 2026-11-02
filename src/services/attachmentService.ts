@@ -9,6 +9,7 @@ import {
   onSnapshot,
   updateDoc,
   getDoc,
+  getDocFromServer,
   writeBatch,
 } from 'firebase/firestore';
 import { firestore } from '../firebase';
@@ -319,7 +320,7 @@ export async function uploadAttachmentVersion(params: UploadAttachmentVersionPar
   const ownerUid = getActiveWorkspaceUid();
   if (!ownerUid || ownerUid !== user.uid) throw new Error('An authenticated SHINE workspace is required to upload a version.');
   const previousRef = doc(firestore, ATTACHMENTS_COLLECTION, previousVersion.id);
-  const previousSnapshot = await getDoc(previousRef);
+  const previousSnapshot = await getDocFromServer(previousRef);
   if (!previousSnapshot.exists()) throw new Error('The original document could not be found. Refresh and try again.');
   const current = previousSnapshot.data() as PhotoAttachment;
   if (current.storagePath !== previousVersion.storagePath || current.supersededBy ||
@@ -378,6 +379,7 @@ export async function uploadAttachmentVersion(params: UploadAttachmentVersionPar
     versionNote: note || undefined,
   };
 
+  const nextVersionRef = doc(firestore, ATTACHMENTS_COLLECTION, versionId);
   try {
     const batch = writeBatch(firestore);
     batch.update(previousRef, {
@@ -385,15 +387,37 @@ export async function uploadAttachmentVersion(params: UploadAttachmentVersionPar
       supersededBy: versionId,
       updatedAt: now,
     });
-    batch.set(doc(firestore, ATTACHMENTS_COLLECTION, versionId), sanitizeForFirestore(nextVersion));
+    batch.set(nextVersionRef, sanitizeForFirestore(nextVersion));
     await batch.commit();
   } catch (error) {
+    // A network failure can make the batch result ambiguous. Read back from
+    // the server before deciding whether cleanup is safe or a retry is needed.
+    let confirmedSaved = false;
+    let confirmedNotSaved = false;
     try {
-      await deleteStoredFile(storagePath);
+      const [sourceCheck, versionCheck] = await Promise.all([
+        getDocFromServer(previousRef),
+        getDocFromServer(nextVersionRef),
+      ]);
+      confirmedSaved = sourceCheck.exists() && versionCheck.exists() &&
+        sourceCheck.data().supersededBy === versionId &&
+        versionCheck.data().storagePath === storagePath;
+      confirmedNotSaved = sourceCheck.exists() && !versionCheck.exists() &&
+        !sourceCheck.data().supersededBy;
     } catch {
-      throw new Error('The version record was not saved and its uploaded file could not be removed. Contact an administrator with the document reference so the orphan can be cleaned up.');
+      // Do not delete an object when the server outcome cannot be established.
     }
-    throw error;
+    if (!confirmedSaved) {
+      if (!confirmedNotSaved) {
+        throw new Error('The save outcome could not be confirmed. Refresh the document list before retrying; do not upload another version yet.');
+      }
+      try {
+        await deleteStoredFile(storagePath);
+      } catch {
+        throw new Error('The version record was not saved and its uploaded file could not be removed. Contact an administrator with the document reference so the orphan can be cleaned up.');
+      }
+      throw error;
+    }
   }
 
   if (getActiveWorkspaceUid() !== ownerUid) {
