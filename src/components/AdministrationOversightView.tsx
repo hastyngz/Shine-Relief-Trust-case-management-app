@@ -24,7 +24,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
   const [paymentReference, setPaymentReference] = useState('');
   const [settlementError, setSettlementError] = useState('');
   const [settlementNotice, setSettlementNotice] = useState('');
-  const [pettyCashType, setPettyCashType] = useState<'opening_balance' | 'cash_received' | 'expense' | 'cash_returned'>('opening_balance');
+  const [pettyCashType, setPettyCashType] = useState<'opening_balance' | 'cash_received' | 'expense' | 'cash_returned'>(db.pettyCashTransactions?.some((entry) => entry.type === 'opening_balance') ? 'cash_received' : 'opening_balance');
   const [pettyCashDate, setPettyCashDate] = useState(today);
   const [pettyCashAmount, setPettyCashAmount] = useState('');
   const [pettyCashDescription, setPettyCashDescription] = useState('');
@@ -215,8 +215,8 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
       {pettyCashNotice && <p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">{pettyCashNotice}</p>}
       <form className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-stone-200 p-3 sm:grid-cols-2" onSubmit={recordPettyCashTransaction}>
         <label className="text-xs font-semibold text-stone-600">Transaction type
-          <select value={pettyCashType} onChange={(event) => setPettyCashType(event.target.value as typeof pettyCashType)} disabled={pettyCashTransactions.length > 0 && pettyCashType === 'opening_balance'} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm">
-            {pettyCashTransactions.length === 0 && <option value="opening_balance">Opening cash float</option>}
+          <select value={pettyCashType} onChange={(event) => setPettyCashType(event.target.value as typeof pettyCashType)} disabled={pettyCashTransactions.some((entry) => entry.type === 'opening_balance') && pettyCashType === 'opening_balance'} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm">
+            {!pettyCashTransactions.some((entry) => entry.type === 'opening_balance') && <option value="opening_balance">Opening cash float</option>}
             <option value="cash_received">Cash received / replenishment</option><option value="expense">Cash expense</option><option value="cash_returned">Cash returned to float</option>
           </select>
         </label>
@@ -281,6 +281,6 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
       }
       <p className="mt-3 text-xs text-stone-500">Only record a payment after checking the receipt, bank transaction or cash voucher. Payment-status changes are recorded in the expense history and follow the offline sync queue.</p>
     </section>
-    <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Budget actuals and expense entries are separate source figures and must not be added together. Compare them with supporting invoices, receipts and bank/cash records. Procurement receipts are not proof of payment. This view is an operational reconciliation aid, not a signed financial statement, petty-cash book or bank reconciliation.</p>
+    <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Budget actuals and expense entries are separate source figures and must not be added together. Compare them with supporting invoices, receipts and bank/cash records. Procurement receipts are not proof of payment. Petty-cash entries are an internal cashbook and do not independently verify a bank transaction. This view is not a signed financial statement or bank reconciliation.</p>
   </main>;
 };
