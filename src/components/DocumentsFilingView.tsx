@@ -39,7 +39,7 @@ const targetLabel = (type: string) => targetLabels[type] || type;
 const isImage = (attachment: PhotoAttachment) => attachment.contentType?.startsWith('image/');
 
 export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, onOpenTarget }) => {
-  const { canViewHealthRecords, currentUser, isAdmin, staffProfile } = useAuth();
+  const { canViewHealthRecords, canEditHealthRecords, currentUser, isAdmin, staffProfile } = useAuth();
   const canManageFiling = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [attachments, setAttachments] = useState<PhotoAttachment[]>([]);
   const [search, setSearch] = useState('');
@@ -270,7 +270,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                 <button type="button" onClick={() => openLinkedRecord(attachment)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">
                   <ExternalLink className="h-4 w-4" /> Open linked record
                 </button>
-                {canManageFiling && <button type="button" onClick={() => startFilingEdit(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">Edit filing details</button>}
+                {canManageFiling && ((attachment.targetType !== 'healthFollowUp' && attachment.category !== 'Medical Document' && attachment.category !== 'Prescription') || canEditHealthRecords) && <button type="button" onClick={() => startFilingEdit(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">Edit filing details</button>}
               </div>
             </article>
           ))}
