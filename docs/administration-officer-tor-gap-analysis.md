@@ -336,3 +336,29 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Staff invitation duplicate-submit safeguard (2026-11-01)
 - The administrator invitation form now normalizes name/email before submission, uses a synchronous lock against rapid repeated requests, and disables both submit and cancel controls while the invitation request is in flight. This reduces duplicate invitation emails/requests from a single device. Server-side invitation authorization and token lifecycle remain authoritative and unchanged; this is not cross-device idempotency. Exact-head CI and browser verification remain outstanding.
+
+
+## 2026-11-02 implementation update — administration modules
+
+### Transport & Logistics
+- Dedicated Administration route and journey register added.
+- Journeys link to existing active vehicle assets and use the existing offline-first schedule ledger; fields include driver, route, purpose, trip reference, start/end odometer, fuel quantity and fuel cost.
+- Prevents a second active journey for the same vehicle and rejects a starting odometer lower than the last completed reading or a journey date earlier than the previous completed journey.
+- Still outstanding: dedicated vehicle service/fuel-card registers, trip authorisation/approval workflow, transport document attachment workflow, and formal fuel-efficiency/maintenance reporting.
+
+### Administrative Performance
+- Dedicated record-based overview added for active employees, schedule completion, open/overdue work, meetings, workplans, household activities and overdue compliance.
+- Counts are explicitly limited to loaded/entered records; no formal staff rating is inferred.
+- Still outstanding: management-approved KPI catalogue, targets/denominators/weights, period-specific verified reporting, manager review and staff appraisal workflow.
+
+### Finance Administration
+- Dedicated read-only current-month reconciliation overview added for budget, budget actuals, expense entries, outstanding invoices and purchased procurement lists awaiting finance handover.
+- Budget actuals and expense totals are kept separate to avoid accidental double-counting. No payment approval or bank reconciliation authority is added.
+- Still outstanding: formal invoice register, payment reconciliation against bank/cash evidence, petty cash reconciliation, commitment register, delegated approval matrix and signed finance reports.
+
+### Documents & Filing
+- Existing permission-aware attachment index extended with document title, reference number, owner, classification label, expiry/review date and an audit trail for metadata changes.
+- Expiry dates are validated as real calendar dates and labelled expired, due within 30 days, current, absent or invalid.
+- General attachment metadata edits are restricted to administrators/managers in Firestore rules; health and safeguarding paths retain their distinct permission checks.
+- Classification labels do not themselves enforce access restrictions. File version history, supersession/retention rules, controlled document approvals and automated reminders remain outstanding.
+- Exact-head CI and manual mobile verification are required before treating these changes as verified. No live Firebase rules deployment has occurred.
