@@ -1298,3 +1298,14 @@ Suggestion format:
 - Regression coverage extended for hub route wiring, document expiry-date classification and manager-only metadata update rules.
 - Verification: all changes are on Replit; latest exact-head CI run must finish before declaring verified. No production deploy, live data migration, or Firebase rules deployment performed. Manual Android/weak-signal checks remain outstanding.
 - Next: inspect exact-head CI results, correct any failures, then expand finance reconciliation and formal KPI definitions with management-approved targets. Continue documenting any unfinished sub-work rather than marking the entire Administration Officer ToR complete. — Mosaic (ChatGPT), 2026-11-02
+
+### 2026-11-02 · Mosaic (ChatGPT) · automatic asset maintenance finance posting
+- User approved automatic posting of maintenance costs to Finance Administration.
+- The Asset Register maintenance form now captures supplier and invoice/receipt reference in addition to service date, work completed, cost and next service date.
+- A positive cost automatically creates one Repairs expense in the Administration & Operations cost centre. It is linked to the maintenance history event using a stable operation/source ID; duplicate retries cannot create a second expense for that event.
+- Asset history and expense are saved together in one local database write, then flow through the existing shared offline queue. No separate direct Firestore write was introduced.
+- Maintenance expenses default to Payment Outstanding because a recorded service cost is not proof that the supplier was paid. Manager/admin Finance users can record payment date, method and reference after checking evidence; the existing expense update audit trail records the settlement.
+- Finance overview displays the maintenance amount as a subset of total monthly expense actuals (not an additional amount), preventing double-counting. Organisation-wide costs use a reserved non-household cost-centre ID and do not inflate household spending.
+- Added scripts/asset-maintenance.test.ts covering expense mapping, validation and duplicate-source protection, wired into the main CI workflow. The test-first run on the test-only commit failed as expected because the helper did not yet exist (TS2307); implementation followed.
+- Verification: latest exact-head CI run must complete before this work is called verified. Manual Android/offline sync and Finance settlement checks remain outstanding. No live Firebase rules deployment or production data change.
+- Next: check exact-head CI, resolve any lint/test/build/E2E failures, then continue remaining transport approvals/maintenance reporting, approved KPI catalogue, finance petty-cash/bank reconciliation, and document version control. — Mosaic (ChatGPT), 2026-11-02
