@@ -67,6 +67,7 @@ import {
   ContactRecord,
   EmployeeRecord,
   AssetRecord,
+  PettyCashTransaction,
   OfflineChangeEntry,
   SyncConflict,
   SyncConflictResolution,
@@ -171,6 +172,7 @@ export const COLLECTIONS = {
   PROJECT_PROJECTIONS: 'projectProjections',
   INVENTORY_ITEMS: 'inventoryItems',
   ASSETS: 'assets',
+  PETTY_CASH_TRANSACTIONS: 'pettyCashTransactions',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -1239,6 +1241,7 @@ export async function syncEntireDatabaseToFirestore(
       ['projectProjections', COLLECTIONS.PROJECT_PROJECTIONS],
       ['inventoryItems', COLLECTIONS.INVENTORY_ITEMS],
       ['assets', COLLECTIONS.ASSETS],
+      ['pettyCashTransactions', COLLECTIONS.PETTY_CASH_TRANSACTIONS],
     ];
     for (const [field, collectionName] of phase2Collections) {
       const records = db[field] as Array<{ id: string }> | undefined;
@@ -1683,10 +1686,11 @@ export function initFirestoreListeners(
     projectProjections: [],
     inventoryItems: [],
     assets: [],
+    pettyCashTransactions: [],
   };
 
   const initialLoadedCollections = new Set<string>();
-  const TOTAL_COLLECTIONS = 40;
+  const TOTAL_COLLECTIONS = 41;
 
   const collectionSnapshotMetadata = new Map<string, { fromCache: boolean; hasPendingWrites: boolean }>();
 
@@ -1746,6 +1750,7 @@ export function initFirestoreListeners(
       projectProjections: [...(liveState.projectProjections || [])],
       inventoryItems: [...(liveState.inventoryItems || [])],
       assets: [...(liveState.assets || [])],
+      pettyCashTransactions: [...(liveState.pettyCashTransactions || [])],
       }, metadata);
     }, 50);
   };
@@ -1847,6 +1852,7 @@ export function initFirestoreListeners(
   handleCollection<ProjectProjection>(COLLECTIONS.PROJECT_PROJECTIONS, 'projectProjections');
   handleCollection<import('../types').InventoryItem>(COLLECTIONS.INVENTORY_ITEMS, 'inventoryItems');
   handleCollection<AssetRecord>(COLLECTIONS.ASSETS, 'assets');
+  handleCollection<PettyCashTransaction>(COLLECTIONS.PETTY_CASH_TRANSACTIONS, 'pettyCashTransactions');
 
   return () => {
     activeUnsubscribers.forEach((unsub) => unsub());
