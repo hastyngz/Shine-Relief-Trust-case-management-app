@@ -814,6 +814,7 @@ service cloud.firestore {
     function isValidTripRequestCreate() {
       return request.resource.data.type != 'transport_trip' || (
         request.resource.data.tripApprovalStatus == 'Pending' &&
+        request.resource.data.status == 'Scheduled' &&
         request.resource.data.tripRequestedByUid == request.auth.uid &&
         request.resource.data.assignedStaffId == request.auth.uid &&
         !request.resource.data.keys().hasAny(['tripApprovedByUid', 'tripApprovedAt'])

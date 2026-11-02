@@ -680,6 +680,7 @@ async function run() {
 
     const trip = { id: 'trip-1', type: 'transport_trip', title: 'Test trip', scheduledDate: '2026-11-10', assignedStaffId: 'worker', assignedStaffName: 'worker', status: 'Scheduled', tripApprovalStatus: 'Pending', tripRequestedByUid: 'worker', tripRequestedByName: 'worker', transportDetails: { vehicleAssetId: 'vehicle-1', vehicleLabel: 'VEH-001', driverName: 'worker', origin: 'Office', destination: 'Zomba', purpose: 'Field visit', startOdometerKm: 100 } };
     await assertSucceeds(setDoc(doc(worker, 'schedules/trip-1'), trip));
+    await assertFails(setDoc(doc(worker, 'schedules/trip-start-on-create'), { ...trip, id: 'trip-start-on-create', status: 'In Progress' }));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'In Progress' }));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed' }));
     await assertFails(updateDoc(doc(manager, 'schedules/trip-1'), { status: 'In Progress' }));
