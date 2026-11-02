@@ -3,7 +3,8 @@ import { Activity, Wallet } from 'lucide-react';
 import type { AppDatabase } from '../types';
 import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { updateExpense } from '../utils/storage';
+import { addPettyCashTransaction, updateExpense } from '../utils/storage';
+import { getPettyCashLedgerSummary, PETTY_CASH_OPENING_BALANCE_ID } from '../services/pettyCashLedger';
 import { getFinancePeriodSummary } from '../utils/financeOverview';
 import { getProcurementPaymentSummary } from '../services/procurementLifecycle';
 
@@ -23,6 +24,14 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
   const [paymentReference, setPaymentReference] = useState('');
   const [settlementError, setSettlementError] = useState('');
   const [settlementNotice, setSettlementNotice] = useState('');
+  const [pettyCashType, setPettyCashType] = useState<'opening_balance' | 'cash_received' | 'expense' | 'cash_returned'>('opening_balance');
+  const [pettyCashDate, setPettyCashDate] = useState(today);
+  const [pettyCashAmount, setPettyCashAmount] = useState('');
+  const [pettyCashDescription, setPettyCashDescription] = useState('');
+  const [pettyCashReference, setPettyCashReference] = useState('');
+  const [pettyCashCategory, setPettyCashCategory] = useState('');
+  const [pettyCashError, setPettyCashError] = useState('');
+  const [pettyCashNotice, setPettyCashNotice] = useState('');
 
   const schedules = db.schedules || [];
   const completed = schedules.filter((item) => item.status === 'Completed').length;
@@ -37,6 +46,31 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
     procurementPaidTotal, procurementOutstandingTotal, procurementPaymentsThisMonth,
     transportTrips, transportFuel,
   } = financeSummary;
+
+
+  const pettyCashTransactions = db.pettyCashTransactions || [];
+  const pettyCashSummary = getPettyCashLedgerSummary(pettyCashTransactions);
+  const recordPettyCashTransaction = (event: React.FormEvent) => {
+    event.preventDefault();
+    const uid = currentUser?.uid;
+    const actorName = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || '';
+    if (!uid || !actorName) { setPettyCashError('A signed-in Manager or Administrator is required.'); return; }
+    const amountMWK = Number(pettyCashAmount);
+    const id = pettyCashType === 'opening_balance'
+      ? PETTY_CASH_OPENING_BALANCE_ID
+      : `PCASH_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      addPettyCashTransaction({
+        id, date: pettyCashDate, type: pettyCashType, amountMWK,
+        description: pettyCashDescription, reference: pettyCashReference,
+        category: pettyCashCategory || undefined,
+      }, { uid, name: actorName }, today);
+      setPettyCashError('');
+      setPettyCashNotice('Entry saved on this device. Check the Sync indicator for server confirmation.');
+      setPettyCashAmount(''); setPettyCashDescription(''); setPettyCashReference(''); setPettyCashCategory('');
+      if (pettyCashType === 'opening_balance') setPettyCashType('cash_received');
+    } catch (error) { setPettyCashError(error instanceof Error ? error.message : 'Could not save the petty-cash entry.'); }
+  };
 
   const settleExpense = (expenseId: string) => {
     if (!isValidInventoryDate(paymentDate) || paymentDate > today) {
@@ -163,6 +197,45 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
           </article>;
         })}
       </div>}
+    </section>
+
+    <section className={card}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h2 className="font-bold">Petty-cash ledger</h2><p className="mt-1 text-xs text-stone-500">Append-only cash movements. Record receipts, replenishments or expenses with their supporting references. Only Managers and Administrators can view or record this ledger.</p></div>
+        <div className="rounded-xl bg-stone-50 px-4 py-3 text-right"><p className="text-xs text-stone-500">Available cash balance</p><p className="text-xl font-bold">{mwk(pettyCashSummary.currentBalanceMWK)}</p></div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          ['Opening float', pettyCashSummary.openingBalanceMWK],
+          ['Cash received', pettyCashSummary.cashReceivedMWK],
+          ['Cash returned', pettyCashSummary.cashReturnedMWK],
+          ['Cash expenses', pettyCashSummary.expensesMWK],
+        ].map(([label, amount]) => <div key={String(label)} className="rounded-xl bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold">{mwk(Number(amount))}</p></div>)}
+      </div>
+      {pettyCashNotice && <p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">{pettyCashNotice}</p>}
+      <form className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-stone-200 p-3 sm:grid-cols-2" onSubmit={recordPettyCashTransaction}>
+        <label className="text-xs font-semibold text-stone-600">Transaction type
+          <select value={pettyCashType} onChange={(event) => setPettyCashType(event.target.value as typeof pettyCashType)} disabled={pettyCashTransactions.length > 0 && pettyCashType === 'opening_balance'} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm">
+            {pettyCashTransactions.length === 0 && <option value="opening_balance">Opening cash float</option>}
+            <option value="cash_received">Cash received / replenishment</option><option value="expense">Cash expense</option><option value="cash_returned">Cash returned to float</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-stone-600">Transaction date<input type="date" value={pettyCashDate} max={today} onChange={(event) => setPettyCashDate(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
+        <label className="text-xs font-semibold text-stone-600">Amount (MWK)<input type="number" min="1" step="1" inputMode="numeric" value={pettyCashAmount} onChange={(event) => setPettyCashAmount(event.target.value)} placeholder="e.g. 25000" className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
+        <label className="text-xs font-semibold text-stone-600">Category (optional)<input value={pettyCashCategory} onChange={(event) => setPettyCashCategory(event.target.value)} placeholder="Transport, stationery, etc." className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
+        <label className="text-xs font-semibold text-stone-600 sm:col-span-2">Description<input value={pettyCashDescription} onChange={(event) => setPettyCashDescription(event.target.value)} maxLength={250} placeholder="What was the cash used for / received from?" className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
+        <label className="text-xs font-semibold text-stone-600 sm:col-span-2">Receipt / voucher / transfer reference<input value={pettyCashReference} onChange={(event) => setPettyCashReference(event.target.value)} maxLength={120} placeholder="Required audit reference" className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
+        {pettyCashError && <p role="alert" className="text-xs text-red-700 sm:col-span-2">{pettyCashError}</p>}
+        <div className="flex items-center justify-between gap-2 sm:col-span-2"><p className="text-[11px] text-stone-500">Entries cannot be edited or deleted. Correct errors with a separately referenced reversing entry.</p><button type="submit" className="min-h-10 shrink-0 rounded-lg bg-teal-800 px-4 text-xs font-bold text-white">Record entry</button></div>
+      </form>
+      <div className="mt-4"><h3 className="text-sm font-bold">Ledger history</h3>
+        {pettyCashSummary.entries.length === 0 ? <p className="mt-2 rounded-xl bg-stone-50 p-4 text-sm text-stone-600">No petty-cash opening float or transactions have been recorded.</p> : <div className="mt-2 divide-y divide-stone-100">
+          {[...pettyCashSummary.entries].reverse().map((entry) => <article key={entry.id} className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0"><p className="font-semibold">{entry.description}</p><p className="text-xs text-stone-500">{entry.date} · {entry.type.replaceAll('_', ' ')} · {entry.reference}{entry.category ? ' · ' + entry.category : ''}</p><p className="text-[11px] text-stone-500">Recorded by {entry.recordedBy}</p></div>
+            <div className="text-left sm:text-right"><p className={entry.type === 'expense' ? 'font-bold text-rose-700' : 'font-bold text-emerald-800'}>{entry.type === 'expense' ? '− ' : '+ '}{mwk(entry.amountMWK)}</p><p className="text-xs text-stone-500">Balance after: {mwk(entry.balanceAfterMWK)}</p></div>
+          </article>)}
+        </div>}
+      </div>
     </section>
     <section className={card}>
       <h2 className="font-bold">Expense and invoice register</h2>
