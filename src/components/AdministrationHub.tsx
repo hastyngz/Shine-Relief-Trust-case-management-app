@@ -37,9 +37,9 @@ const modules: ModuleCard[] = [
   { title: 'Procurement Lists & Quotations', description: 'Create procurement lists, collect and compare supplier quotes, review the derived supplier activity index, route for manager approval, record purchase orders and receipts, and hand supporting references to finance. A verified supplier master register, partial-delivery reconciliation and payment reconciliation remain planned.', icon: ShoppingCart, status: 'Available now', view: 'planning', group: 'Resources' },
   
   { title: 'Compliance Calendar', description: 'Register obligations, assign an owner, track deadlines and completion evidence. Independent management verification is not yet available.', icon: ShieldCheck, status: 'Available now', view: 'compliance', group: 'Compliance' },
-  { title: 'Transport & Logistics', description: 'Coordinate journeys, vehicle records, fuel, servicing and activity logistics.', icon: Truck, status: 'Build next', group: 'Operations' },
-  { title: 'Administrative Performance', description: 'Measure agreed service targets using verified records and clear calculation rules.', icon: ClipboardCheck, status: 'Build next', group: 'Oversight' },
-  { title: 'Finance Documentation', description: 'Track supporting documents and connect procurement records with existing finance workflows.', icon: BriefcaseBusiness, status: 'Build next', group: 'Finance' },
+  { title: 'Transport & Logistics', description: 'Record journeys against registered vehicles, capture drivers, routes, odometer readings and fuel costs.', icon: Truck, status: 'Available now', view: 'transport', group: 'Operations' },
+  { title: 'Administrative Performance', description: 'Review operational indicators calculated from loaded schedules, meetings, workplans and programme activity.', icon: ClipboardCheck, status: 'Available now', view: 'admin-performance', group: 'Oversight' },
+  { title: 'Finance Administration', description: 'Review monthly budget actuals, expense entries, outstanding invoices and procurement finance handovers.', icon: BriefcaseBusiness, status: 'Available now', view: 'finance-admin', group: 'Finance' },
 ];
 
 export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavigate }) => {
