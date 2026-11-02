@@ -180,7 +180,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
           uid: currentUser.uid,
           fullName: staffProfile?.fullName || currentUser.displayName || userEmail,
           email: userEmail,
-          role: staffProfile?.role,
+          role: isAdmin ? 'Administrator' : staffProfile?.role,
         },
       });
       setAttachments((items) => items.map((item) => item.id === versionTarget.id
