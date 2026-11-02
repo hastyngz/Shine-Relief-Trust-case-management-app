@@ -1582,6 +1582,22 @@ export interface AssetRecord {
   updatedByUid?: string;
 }
 
+export type PettyCashTransactionType = 'opening_balance' | 'cash_received' | 'expense' | 'cash_returned';
+
+export interface PettyCashTransaction {
+  id: string;
+  date: string;
+  type: PettyCashTransactionType;
+  amountMWK: number;
+  description: string;
+  reference: string;
+  category?: string;
+  recordedAt: string;
+  recordedBy: string;
+  recordedByUid: string;
+  createdAt: string;
+}
+
 export interface AppDatabase {
   girls: Girl[];
   households: Household[];
@@ -1625,6 +1641,7 @@ export interface AppDatabase {
   projectProjections?: ProjectProjection[];
   inventoryItems?: InventoryItem[];
   assets?: AssetRecord[];
+  pettyCashTransactions?: PettyCashTransaction[];
 }
 
 export type OfflineChangeOperation = 'set' | 'delete';
