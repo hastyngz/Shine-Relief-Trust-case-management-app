@@ -682,6 +682,8 @@ async function run() {
     await assertSucceeds(setDoc(doc(worker, 'schedules/trip-1'), trip));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'worker', tripApprovedAt: '2026-11-02T00:00:00.000Z' }));
     await assertSucceeds(updateDoc(doc(manager, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'manager', tripApprovedByName: 'manager', tripApprovedAt: '2026-11-02T00:00:00.000Z', tripApprovalNote: '', status: 'Scheduled', updatedAt: '2026-11-02T00:00:00.000Z', updatedBy: 'manager' }));
+    await assertSucceeds(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed', completedAt: '2026-11-10T12:00:00.000Z', transportDetails: { vehicleAssetId: 'vehicle-1', vehicleLabel: 'VEH-001', driverName: 'worker', origin: 'Office', destination: 'Zomba', purpose: 'Field visit', startOdometerKm: 100, endOdometerKm: 125 }, updatedAt: '2026-11-10T12:00:00.000Z', updatedBy: 'worker' }));
+
     console.log('Firestore rules tests passed.');
   } finally {
     await testEnvironment.cleanup();
