@@ -296,8 +296,12 @@ export async function updateAttachmentFilingMetadata(
   if (!title || !reference || !documentOwner) {
     throw new Error('Document title, reference number and document owner are required.');
   }
-  if (metadata.expiryDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(metadata.expiryDate)) {
-    throw new Error('Enter a valid document expiry date.');
+  if (metadata.expiryDate) {
+    const expiry = new Date(`${metadata.expiryDate}T00:00:00.000Z`);
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(metadata.expiryDate) ||
+        !Number.isFinite(expiry.getTime()) || expiry.toISOString().slice(0, 10) !== metadata.expiryDate) {
+      throw new Error('Enter a valid document expiry date.');
+    }
   }
   const changedFields = ['documentTitle', 'referenceNumber', 'documentOwner', 'classification', 'expiryDate']
     .filter((key) => (attachment.filingMetadata as Record<string, unknown> | undefined)?.[key] !== (metadata as Record<string, unknown>)[key]);
