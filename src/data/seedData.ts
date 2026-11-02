@@ -28,4 +28,5 @@ export const INITIAL_DATABASE: AppDatabase = {
   customPersonTypes: [],
   inventoryItems: [],
   assets: [],
+  pettyCashTransactions: [],
 };
