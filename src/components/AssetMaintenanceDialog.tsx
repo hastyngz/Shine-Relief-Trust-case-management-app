@@ -2,7 +2,7 @@ import React, { FormEvent, useRef, useState } from 'react';
 import { CalendarClock, X } from 'lucide-react';
 import type { AssetHistoryEntry, AssetRecord } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { saveAssetRecord } from '../utils/storage';
+import { recordAssetMaintenance } from '../utils/storage';
 import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
 
 interface AssetMaintenanceDialogProps {
@@ -19,6 +19,9 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
   const [date, setDate] = useState(getLocalDateInputValue());
   const [workDone, setWorkDone] = useState('');
   const [cost, setCost] = useState('');
+  const [supplier, setSupplier] = useState('');
+  const [invoiceReference, setInvoiceReference] = useState('');
+  const operationId = useRef(makeId());
   const [nextServiceDate, setNextServiceDate] = useState(asset.nextServiceDate || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -33,31 +36,26 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
       return;
     }
     const amount = cost.trim() ? Number(cost) : undefined;
-    if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
-      setError('Maintenance cost must be a valid amount of zero or more.');
+    if (amount !== undefined && (!Number.isFinite(amount) || amount <= 0)) {
+      setError('Enter a positive maintenance cost, or leave the cost blank if no amount is being recorded.');
       return;
     }
-    const now = new Date().toISOString();
-    const historyEntry: AssetHistoryEntry = {
-      id: makeId(),
-      date,
-      action: 'Maintenance',
-      note: `${workDone.trim()}${amount === undefined ? '' : ` · Cost recorded: MWK ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount)}`}${nextServiceDate ? ` · Next service: ${nextServiceDate}` : ''}`,
-      recordedBy: actor,
-      recordedAt: now,
-    };
     if (saveLock.current) return;
     saveLock.current = true;
     setSaving(true);
     setError('');
     try {
-      saveAssetRecord({
-        ...asset,
-        nextServiceDate: nextServiceDate || undefined,
-        history: [...(asset.history || []), historyEntry],
-        updatedAt: now,
-        updatedBy: actor,
-        updatedByUid: currentUser?.uid,
+      recordAssetMaintenance({
+        assetId: asset.id,
+        operationId: operationId.current,
+        date,
+        workDone,
+        costMWK: amount,
+        supplier,
+        invoiceReference,
+        nextServiceDate,
+        actor,
+        actorUid: currentUser?.uid,
       });
       onSaved();
     } catch (err) {
@@ -81,8 +79,10 @@ export const AssetMaintenanceDialog: React.FC<AssetMaintenanceDialogProps> = ({ 
           <label className="block text-sm font-semibold text-stone-700">Service / repair date *<input required type="date" value={date} onChange={(event) => setDate(event.target.value)} className={inputClass} /></label>
           <label className="block text-sm font-semibold text-stone-700">Work completed *<textarea required rows={3} value={workDone} onChange={(event) => setWorkDone(event.target.value)} placeholder="Describe the repair, inspection or service" className="mt-1 w-full rounded-xl border border-stone-300 p-3 font-normal" /></label>
           <label className="block text-sm font-semibold text-stone-700">Maintenance cost (MWK, optional)<input type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} className={inputClass} /></label>
+          <label className="block text-sm font-semibold text-stone-700">Supplier / garage (optional)<input value={supplier} onChange={(event) => setSupplier(event.target.value)} placeholder="Garage or service provider" className={inputClass} /></label>
+          <label className="block text-sm font-semibold text-stone-700">Invoice / receipt reference (optional)<input value={invoiceReference} onChange={(event) => setInvoiceReference(event.target.value)} placeholder="Invoice or receipt number" className={inputClass} /></label>
           <label className="block text-sm font-semibold text-stone-700">Next service date (optional)<input type="date" value={nextServiceDate} onChange={(event) => setNextServiceDate(event.target.value)} className={inputClass} /></label>
-          <p className="text-xs leading-5 text-stone-500">This records the work in asset history. The optional cost is retained in the note; it does not create a finance expense or payment.</p>
+          <p className="text-xs leading-5 text-stone-600">When you enter a cost, SHINE automatically creates one Repairs expense under Administration &amp; Operations, linked to this maintenance record. It is marked Payment Outstanding until Finance records settlement. Leave cost blank if no amount is available.</p>
           <div className="flex flex-col-reverse gap-2 border-t border-stone-200 pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Cancel</button><button type="submit" disabled={saving} className="fx-press fx-btn-main min-h-11 rounded-xl px-5 text-sm font-bold disabled:opacity-50">{saving ? 'Saving…' : 'Save maintenance record'}</button></div>
         </form>
       </section>
