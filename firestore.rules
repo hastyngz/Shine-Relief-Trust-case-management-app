@@ -811,9 +811,33 @@ service cloud.firestore {
     }
 
     // Schedules - Field activity and visit timelines
+    function isValidTripRequestCreate() {
+      return request.resource.data.type != 'transport_trip' || (
+        request.resource.data.tripApprovalStatus == 'Pending' &&
+        request.resource.data.tripRequestedByUid == request.auth.uid &&
+        request.resource.data.assignedStaffId == request.auth.uid &&
+        !request.resource.data.keys().hasAny(['tripApprovedByUid', 'tripApprovedAt'])
+      );
+    }
+
+    function isValidTripApprovalUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isManagerOrAdmin() && resource.data.type == 'transport_trip' &&
+        resource.data.tripApprovalStatus == 'Pending' &&
+        request.resource.data.tripApprovalStatus in ['Approved', 'Rejected'] &&
+        request.resource.data.tripApprovedByUid == request.auth.uid &&
+        request.resource.data.tripApprovedAt is string &&
+        changed.hasOnly(['tripApprovalStatus', 'tripApprovedByUid', 'tripApprovedByName', 'tripApprovedAt', 'tripApprovalNote', 'status', 'updatedAt', 'updatedBy']) &&
+        (request.resource.data.tripApprovalStatus != 'Approved' || request.resource.data.status == 'Scheduled') &&
+        (request.resource.data.tripApprovalStatus != 'Rejected' || request.resource.data.status == 'Cancelled');
+    }
+
     match /schedules/{id} {
       allow read: if isStaffActive();
-      allow create, update: if isManagerOrStaff();
+      allow create: if isManagerOrStaff() && isValidTripRequestCreate();
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'tripApprovalStatus', 'tripApprovedByUid', 'tripApprovedByName', 'tripApprovedAt', 'tripApprovalNote'
+      ]) ? isValidTripApprovalUpdate() : isManagerOrStaff();
       allow delete: if isManagerOrStaff();
     }
 
