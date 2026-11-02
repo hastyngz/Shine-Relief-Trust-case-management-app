@@ -144,13 +144,28 @@ const pettyCashOfflineEntry = {
   recordedByUid: 'uid-a',
   createdAt: T1,
 };
+const pettyCashReceiptOfflineEntry = {
+  ...pettyCashOfflineEntry,
+  id: 'PCASH_OFFLINE_RECEIPT_001',
+  date: '2026-11-02',
+  type: 'cash_received',
+  amountMWK: 10000,
+  description: 'Synthetic offline replenishment',
+  reference: 'OFFLINE-TRANSFER-001',
+  recordedAt: T2,
+  createdAt: T2,
+};
 const pettyCashQueueChanges = computeChangeEntries(
-  db({ pettyCashTransactions: [pettyCashOfflineEntry] }),
+  db({ pettyCashTransactions: [pettyCashReceiptOfflineEntry, pettyCashOfflineEntry] }),
   db(),
 );
-assert.equal(pettyCashQueueChanges.length, 1, 'petty cash opening float creates one per-record offline change');
-assert.equal(pettyCashQueueChanges[0].collection, 'pettyCashTransactions', 'petty cash records use their dedicated Firestore collection');
-assert.equal(pettyCashQueueChanges[0].recordId, pettyCashOfflineEntry.id, 'petty cash record ID is retained in the queue');
+assert.equal(pettyCashQueueChanges.length, 2, 'petty cash opening and receipt create two per-record offline changes');
+assert.deepEqual(
+  pettyCashQueueChanges.map((entry) => entry.recordId),
+  [pettyCashOfflineEntry.id, pettyCashReceiptOfflineEntry.id],
+  'opening float is queued before later transactions even though the local ledger is newest-first',
+);
+assert.ok(pettyCashQueueChanges.every((entry) => entry.collection === 'pettyCashTransactions'), 'petty cash records use their dedicated Firestore collection');
 
 
 function girl(id: string, updatedAt: string, name = 'Girl ' + id) {
