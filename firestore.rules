@@ -439,16 +439,20 @@ service cloud.firestore {
              request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
             ? canEditHealthRecords()
             : isManagerOrStaff());
-      allow update: if resource.data.keys().hasAny(['versionOf'])
-        ? false
-        : request.resource.data.diff(resource.data).affectedKeys().hasAny(['supersededBy'])
-          ? isValidAttachmentSupersede(id)
-          : (request.resource.data.targetType == 'safeguardingCase'
-            ? canWriteSafeguardingAttachment(request.resource.data.targetId)
-            : (request.resource.data.targetType == 'healthFollowUp' ||
-               request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
-              ? canEditHealthRecords()
-              : isManagerOrAdmin());
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasAny(['supersededBy'])
+        ? isValidAttachmentSupersede(id)
+        : resource.data.keys().hasAny(['supersededBy'])
+          ? false
+          : resource.data.keys().hasAny(['versionOf'])
+            ? isManagerOrAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'filingMetadata', 'filingAudit', 'filingMetadataUpdatedAt'
+              ])
+            : (request.resource.data.targetType == 'safeguardingCase'
+              ? canWriteSafeguardingAttachment(request.resource.data.targetId)
+              : (request.resource.data.targetType == 'healthFollowUp' ||
+                 request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
+                ? canEditHealthRecords()
+                : isManagerOrAdmin());
       allow delete: if resource.data.keys().hasAny(['versionOf', 'supersededBy'])
         ? false
         : resource.data.targetType == 'safeguardingCase'
