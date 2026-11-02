@@ -1190,4 +1190,41 @@ assert.equal((await loadQueue()).length, 1, 'a rejected keep-mine resolution pre
 await persistQueue([], 'uid-a');
 await import('../src/services/offlineSync').then(({ persistSyncConflicts }) => persistSyncConflicts([]));
 
+
+const pettyCashAppendRecord = {
+  id: 'PCASH_APPEND_RETRY_001',
+  date: '2026-11-02',
+  type: 'cash_received',
+  amountMWK: 25000,
+  description: 'Synthetic float replenishment',
+  reference: 'TRANSFER-RETRY-001',
+  recordedAt: T1,
+  recordedBy: 'Synthetic manager',
+  recordedByUid: 'uid-a',
+  createdAt: T1,
+};
+server.seed('pettyCashTransactions', pettyCashAppendRecord.id, pettyCashAppendRecord);
+const identicalPettyCashRetry = await syncChangeEntriesToFirestore([{
+  collection: 'pettyCashTransactions',
+  recordId: pettyCashAppendRecord.id,
+  operation: 'set',
+  data: pettyCashAppendRecord,
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: T1,
+}], { uid: 'uid-a', name: 'Synthetic manager' });
+assert.equal(identicalPettyCashRetry.conflicts.length, 0, 'identical petty-cash queue retries are idempotent');
+assert.equal(identicalPettyCashRetry.applied, 1, 'identical petty-cash queue retry is acknowledged as applied');
+const changedPettyCashRetry = await syncChangeEntriesToFirestore([{
+  collection: 'pettyCashTransactions',
+  recordId: pettyCashAppendRecord.id,
+  operation: 'set',
+  data: { ...pettyCashAppendRecord, amountMWK: 99999 },
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: T2,
+}], { uid: 'uid-a', name: 'Synthetic manager' });
+assert.equal(changedPettyCashRetry.conflicts.length, 1, 'a different record with an existing petty-cash ID is surfaced as a conflict');
+assert.equal(server.get('pettyCashTransactions', pettyCashAppendRecord.id).amountMWK, 25000, 'petty-cash retry never overwrites an existing ledger entry');
+
 console.log('Offline per-record queue and conflict tests passed.');
