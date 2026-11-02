@@ -44,7 +44,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
     assetMaintenanceExpenses, assetMaintenanceTotal, unpaid, unpaidTotal,
     financeRegister, handover, procurementCommitments, procurementCommittedTotal,
     procurementPaidTotal, procurementOutstandingTotal, procurementPaymentsThisMonth,
-    transportTrips, transportFuel,
+    pettyCashExpensesThisMonth, transportTrips, transportFuel,
   } = financeSummary;
 
 
@@ -163,6 +163,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
           ['Asset maintenance costs (included above)', mwk(assetMaintenanceTotal)],
           ['Transport fuel recorded this month', mwk(transportFuel)],
           ['Transport trips recorded this month', transportTrips.length],
+          ['Petty-cash expenses this month (separate cashbook)', mwk(pettyCashExpensesThisMonth)],
           ['Approved / purchased procurement commitments', mwk(procurementCommittedTotal)],
           ['Procurement payments recorded this month', mwk(procurementPaymentsThisMonth)],
           ['Procurement balance outstanding', mwk(procurementOutstandingTotal)],
