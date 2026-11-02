@@ -148,7 +148,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [spreadsheetAnalysis, setSpreadsheetAnalysis] = useState<SpreadsheetAnalysis | null>(null);
   const [spreadsheetKindOverride, setSpreadsheetKindOverride] = useState<SpreadsheetKind | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetImportPreview | null>(null);
-  const [aiMappingConsent, setAiMappingConsent] = useState(false);
+  const [aiMappingRequested, setAiMappingRequested] = useState(false);
   const [aiMappingBusy, setAiMappingBusy] = useState(false);
   const [aiMappingError, setAiMappingError] = useState('');
   const [aiMappingResult, setAiMappingResult] = useState<{
@@ -256,6 +256,15 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     if (removals.length) setAutomaticDuplicateRemovals((current) => [...current, ...removals]);
   }, [previewItems]);
 
+  useEffect(() => {
+    if (!selectedFile || !spreadsheetAnalysis || !spreadsheetPreview || aiMappingRequested || !(isAdmin || role === 'Manager')) return;
+    const rulesAreUnsure = spreadsheetAnalysis.detectedKind === 'unknown' || (
+      spreadsheetPreview.lines.length > 0 && spreadsheetPreview.lines.every((line) => line.kind === 'unmapped')
+    );
+    if (!rulesAreUnsure) return;
+    void handleRequestSpreadsheetAIMapping();
+  }, [selectedFile, spreadsheetAnalysis, spreadsheetPreview, aiMappingRequested, isAdmin, role]);
+
   const prepareContactReview = async (candidates: ContactCandidate[]) => {
     const existingContacts = await listContacts().catch(() => db.contacts || []);
     setContactReview(candidates.map((candidate) => {
@@ -280,7 +289,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
     setSelectedFile(file);
     setDocumentStructure([]);
-    setAiMappingConsent(false);
+    setAiMappingRequested(false);
     setAiMappingBusy(false);
     setAiMappingError('');
     setAiMappingResult(null);
@@ -711,7 +720,19 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         })),
       ],
       blockerOverrideReason: importBlockers.length ? blockerOverrideReason.trim() : undefined,
-      sourceData: spreadsheetPreview?.sourceData,
+      sourceData: spreadsheetPreview
+        ? {
+          ...spreadsheetPreview.sourceData,
+          ...(aiMappingRequested ? {
+            aiMapping: {
+              requested: true,
+              applied: aiMappingApplied,
+              provider: aiMappingResult?.provider,
+              model: aiMappingResult?.model,
+            },
+          } : {}),
+        }
+        : undefined,
       status: 'completed',
       summary: `Batch imported ${selectedItems.length} records and ${approvedContacts.length} contacts from ${selectedFile.name} (Reporting period: ${reportMetadata?.reportingPeriod || 'Not provided'})`,
     };
@@ -754,11 +775,12 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   };
 
   const handleRequestSpreadsheetAIMapping = async () => {
-    if (!selectedFile || !spreadsheetAnalysis || !aiMappingConsent) return;
+    if (!selectedFile || !spreadsheetAnalysis || aiMappingRequested) return;
     if (!(isAdmin || role === 'Manager')) {
       setAiMappingError('AI spreadsheet mapping is available to Administrators and Managers only.');
       return;
     }
+    setAiMappingRequested(true);
     setAiMappingBusy(true);
     setAiMappingError('');
     setAiMappingApplied(false);
@@ -1799,24 +1821,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 </p>
                 {isAdmin || role === 'Manager' ? (
                   <>
-                    <label className="mt-3 flex items-start gap-2 text-xs text-violet-950">
-                      <input
-                        type="checkbox"
-                        checked={aiMappingConsent}
-                        onChange={(event) => setAiMappingConsent(event.target.checked)}
-                        className="mt-0.5"
-                      />
-                      <span>
-                        I authorize sending the worksheet names and capped sample from <strong>{selectedFile?.name || 'this workbook'}</strong> (not its filename) to the external AI providers described above for a mapping suggestion. I will review the result before using it.
-                      </span>
-                    </label>
+                    <p className="mt-3 text-xs font-semibold text-violet-950">
+                      Automatic mapping is enabled for Administrators and Managers. It runs once when the rule-based parser is unsure or produces only unmapped rows. You will still approve any suggestion before it changes the review preview.
+                    </p>
                     <button
                       type="button"
                       className="mt-3 rounded-lg bg-violet-800 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={!aiMappingConsent || aiMappingBusy || !selectedFile || !spreadsheetAnalysis}
+                      disabled={aiMappingRequested || aiMappingBusy || !selectedFile || !spreadsheetAnalysis}
                       onClick={() => void handleRequestSpreadsheetAIMapping()}
                     >
-                      {aiMappingBusy ? 'Requesting suggestion…' : 'Suggest mapping with AI'}
+                      {aiMappingBusy ? 'Requesting suggestion…' : aiMappingRequested ? 'AI mapping requested' : 'Suggest mapping with AI'}
                     </button>
                   </>
                 ) : (
