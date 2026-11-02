@@ -840,9 +840,11 @@ service cloud.firestore {
         (isManagerOrAdmin() || (isStaffActive() && resource.data.assignedStaffId == request.auth.uid)) &&
         changed.hasOnly(['status', 'completedAt', 'transportDetails', 'updatedAt', 'updatedBy']) &&
         request.resource.data.status == 'Completed' &&
-        request.resource.data.transportDetails.diff(resource.data.transportDetails).affectedKeys().hasOnly(['endOdometerKm']) &&
-        request.resource.data.transportDetails.endOdometerKm is number &&
-        request.resource.data.transportDetails.endOdometerKm >= resource.data.transportDetails.startOdometerKm;
+        request.resource.data.get('transportDetails', {}) is map &&
+        resource.data.get('transportDetails', {}) is map &&
+        request.resource.data.get('transportDetails', {}).diff(resource.data.get('transportDetails', {})).affectedKeys().hasOnly(['endOdometerKm']) &&
+        request.resource.data.get('transportDetails', {}).get('endOdometerKm', null) is number &&
+        request.resource.data.get('transportDetails', {}).get('endOdometerKm', 0) >= resource.data.get('transportDetails', {}).get('startOdometerKm', 0);
     }
 
     match /schedules/{id} {
