@@ -232,6 +232,7 @@ async function run() {
     assert.equal(result.model, 'synthetic-provider/test-model');
     assert.ok(capturedMappingRequest.messages[0].content.includes('untrusted data'));
     assert.ok(capturedMappingRequest.messages[1].content.includes('Synthetic beans'));
+    assert.equal(capturedMappingRequest.messages[1].content.includes('synthetic-budget.xlsx'), false);
     assert.equal(capturedMappingRequest.messages[1].content.includes('Maria Chipelesa'), false);
   } finally {
     globalThis.fetch = fetchBeforeMapping;

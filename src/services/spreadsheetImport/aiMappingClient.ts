@@ -27,7 +27,7 @@ export async function requestSpreadsheetAIMapping(
     throw new Error(`AI mapping supports up to ${SPREADSHEET_AI_LIMITS.sheets} worksheets at a time. Use manual mapping for larger workbooks.`);
   }
   const request: SpreadsheetAIRequest = {
-    fileLabel: file.name.slice(0, 160),
+    fileLabel: 'Spreadsheet workbook',
     sheets: workbook.SheetNames.map((name) => {
       const allRows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
         header: 1,

@@ -1790,10 +1790,10 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                   It cannot import data or change records. The suggestion is untrusted and must be reviewed.
                 </p>
                 <p className="mt-2 text-xs text-violet-950">
-                  If you choose to continue, only the first 35 rows and first 16 columns of up to 8 sheets are sent as text to OpenRouter
+                  If you choose to continue, worksheet names and only the first 35 rows and first 16 columns of up to 8 sheets are sent as text to OpenRouter
                   (up to 160 characters per cell and 24,000 characters total),
-                  which routes requests to the model providers configured for the SHINE backend. The workbook file itself is not uploaded,
-                  but sample cell values do leave the SHINE app environment; provider retention and processing terms can differ.
+                  which routes requests to the model providers configured for the SHINE backend. The original filename and full workbook are not sent;
+                  the parser may use the filename locally for period inference. Sample cell values do leave the SHINE app environment, and provider terms can differ.
                 </p>
                 {isAdmin || role === 'Manager' ? (
                   <>
@@ -1805,7 +1805,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                         className="mt-0.5"
                       />
                       <span>
-                        I authorize sending the capped sample from <strong>{selectedFile?.name || 'this workbook'}</strong> to the external AI providers described above for a mapping suggestion. I will review the result before using it.
+                        I authorize sending the worksheet names and capped sample from <strong>{selectedFile?.name || 'this workbook'}</strong> (not its filename) to the external AI providers described above for a mapping suggestion. I will review the result before using it.
                       </span>
                     </label>
                     <button
