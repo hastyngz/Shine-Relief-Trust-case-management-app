@@ -195,6 +195,9 @@ jobs:
       - name: Test automatic asset maintenance finance posting
         run: npm run test:asset-maintenance
 
+      - name: Test vehicle service reporting
+        run: npm run test:transport-logistics
+
       - name: Test hash routing
         run: npm run test:routing
 
