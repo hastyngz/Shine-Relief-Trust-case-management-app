@@ -1,4 +1,5 @@
 import type { AppDatabase, HouseholdExpense } from '../types';
+import { getProcurementPaymentSummary } from '../services/procurementLifecycle';
 
 export interface FinancePeriodSummary {
   budgets: NonNullable<AppDatabase['budgets']>;
@@ -12,6 +13,11 @@ export interface FinancePeriodSummary {
   unpaidTotal: number;
   financeRegister: HouseholdExpense[];
   handover: NonNullable<AppDatabase['procurementLists']>;
+  procurementCommitments: NonNullable<AppDatabase['procurementLists']>;
+  procurementCommittedTotal: number;
+  procurementPaidTotal: number;
+  procurementOutstandingTotal: number;
+  procurementPaymentsThisMonth: number;
   transportTrips: NonNullable<AppDatabase['schedules']>;
   transportFuel: number;
 }
@@ -39,7 +45,16 @@ export function getFinancePeriodSummary(db: AppDatabase, period: string): Financ
     ...expenses,
     ...unpaid.filter((expense) => !registerIds.has(expense.id)),
   ].sort((left, right) => right.date.localeCompare(left.date));
-  const handover = (db.procurementLists || []).filter((item) => item.status === 'purchased' && !item.financeHandedOverAt);
+  const procurementCommitments = (db.procurementLists || []).filter((item) => item.status === 'approved' || item.status === 'purchased');
+  const procurementCommittedTotal = procurementCommitments.reduce((total, item) => total + (Number(item.totalMWK) || 0), 0);
+  const procurementPaidTotal = procurementCommitments.reduce((total, item) => total + getProcurementPaymentSummary(item).paidMWK, 0);
+  const procurementOutstandingTotal = procurementCommitments.reduce((total, item) => total + getProcurementPaymentSummary(item).outstandingMWK, 0);
+  const procurementPaymentsThisMonth = validPeriod(period)
+    ? procurementCommitments.reduce((total, item) => total + (item.payments || [])
+      .filter((payment) => typeof payment.date === 'string' && payment.date.startsWith(period))
+      .reduce((paid, payment) => paid + (Number(payment.amountMWK) || 0), 0), 0)
+    : 0;
+  const handover = procurementCommitments.filter((item) => item.status === 'purchased' && Boolean(item.receivedAt) && !item.financeHandedOverAt);
   const transportTrips = validPeriod(period)
     ? (db.schedules || []).filter((item) => item.type === 'transport_trip' && item.scheduledDate.startsWith(period))
     : [];
@@ -48,6 +63,8 @@ export function getFinancePeriodSummary(db: AppDatabase, period: string): Financ
   return {
     budgets, budget, budgetActual, expenses, expenseActual,
     assetMaintenanceExpenses, assetMaintenanceTotal, unpaid, unpaidTotal,
-    financeRegister, handover, transportTrips, transportFuel,
+    financeRegister, handover, procurementCommitments, procurementCommittedTotal,
+    procurementPaidTotal, procurementOutstandingTotal, procurementPaymentsThisMonth,
+    transportTrips, transportFuel,
   };
 }
