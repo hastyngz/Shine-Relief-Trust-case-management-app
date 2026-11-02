@@ -1660,6 +1660,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                       <option key={stockItem.id} value={stockItem.id} disabled={stockItem.unit !== item.unit}>{stockItem.stockCode} · {stockItem.name} ({stockItem.unit}){stockItem.unit !== item.unit ? ' · unit mismatch' : ''}</option>
                                     ))}
                                   </select>
+                                  <span className="mt-1 block font-normal text-stone-500">For partial deliveries, link every received line to an inventory item. “Not inventory tracked” is available for a single full-receipt acknowledgement only.</span>
                                   {savedReceiptIntent && <span className="mt-1 block font-normal text-amber-900">Saved receipt retry intent; keep this selection unchanged until it completes.</span>}
                                 </label>
                               )}
