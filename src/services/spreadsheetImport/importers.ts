@@ -184,7 +184,7 @@ function quantityAndUnit(value: unknown): { quantity?: number; unit?: string } {
   const rawUnit = match[2].trim().toLowerCase().replace(/\s+/g, ' ');
   const aliases: Record<string, string> = {
     kg: 'kg', kgs: 'kg', kilogram: 'kg', kilograms: 'kg', g: 'g', gs: 'g', gram: 'g', grams: 'g',
-    litre: 'litre', litres: 'litre', liter: 'litre', liters: 'litre', l: 'litre', ls: 'litre',
+    litre: 'litre', litres: 'litre', liter: 'litre', liters: 'litre', ltr: 'litre', ltrs: 'litre', l: 'litre', ls: 'litre',
     bar: 'bar', bars: 'bar', piece: 'piece', pieces: 'piece', pc: 'piece', pcs: 'piece',
     roll: 'roll', rolls: 'roll', tray: 'tray', trays: 'tray', bag: 'bag', bags: 'bag',
     bottle: 'bottle', bottles: 'bottle', tube: 'tube', tubes: 'tube', pad: 'pad', pads: 'pad',
@@ -240,6 +240,10 @@ function categoryFrom(value: string): BudgetCategory {
     [/activit|session|event/, 'Programme activities'],
     [/administration|office/, 'Administration'],
     [/education|school|bursary|fees/, 'Education'],
+    [/ufa|maize|flour|rice|sugar|salt|oil|soya|eggs?|beans|bonya|vegg(?:ies|etables?)?|tomatoes?|onions?|fish|meat|milk|bread|groundnuts|nsima/, 'Food'],
+    [/soap|surf|detergent|toothpaste|lotion|glycerine|vaseline|sanitary|pads?|tissues?|toilet paper|jik|bleach/, 'Household supplies'],
+    [/charcoal|firewood|gas|paraffin/, 'Utilities'],
+    [/locks?|padlocks?|bulbs?|buckets?|mats?|blankets?/, 'Equipment'],
   ];
   return categories.find(([pattern]) => pattern.test(normalized(value)))?.[1] || 'Other';
 }
@@ -459,7 +463,7 @@ function parseBudgetRows(
   const headerIndex = headerRowIndex(rows, 'budget-monthly');
   const headers = rows[headerIndex] || [];
   const quantityIndex = columnIndex(headers, [/^qty$/, /quantity/]);
-  const costIndex = columnIndex(headers, [/^cost$/, /unit cost/, /cost per item/, /price/]);
+  const costIndex = columnIndex(headers, [/^cost$/, /unit cost/, /cost per item/, /^cost (?:item|each|per)\b/, /price/]);
   const labelIndex = columnIndex(headers, [/description/, /^item$/, /^item name$/, /particulars/, /^name$/]);
   const programmeIndex = columnIndex(headers, [/^programme$/, /^program$/]);
   const frequencyIndex = columnIndex(headers, [/frequency/, /times per/, /occurrences/]);
@@ -478,6 +482,7 @@ function parseBudgetRows(
     if (!nonEmptyRow(row)) return;
     const sourceRow = headerIndex + offset + 2;
     const rawLabel = text(row[labelIndex >= 0 ? labelIndex : 0]);
+    if (/^(?:grand\s*|sub\s*)?total$/i.test(rawLabel)) return;
     if (programmeIndex >= 0 && text(row[programmeIndex])) programmeLabel = text(row[programmeIndex]);
     const unitDetails = labelUnit(rawLabel);
     const parsedQuantity = quantityAndUnit(row[quantityIndex]);
@@ -512,8 +517,14 @@ function parseBudgetRows(
       : undefined;
     const programme = overrideProgramme
       ? { id: overrideProgramme.id, label: overrideProgramme.name }
-      : programmeFrom(programmeLabel, categorySection);
+      : (() => {
+        const rowProgramme = programmeFrom(programmeLabel, categorySection);
+        return rowProgramme.id
+          ? rowProgramme
+          : programmeFrom(reportingHeaderText, options.sourceName || '');
+      })();
     const note = `Original label: ${originalLabel}`;
+    const unit = text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit';
     const activeMonths = monthColumns.filter(({ index }) => number(row[index]) !== undefined && number(row[index]) !== 0);
     if (activeMonths.length > 0) {
       activeMonths.forEach(({ index, month }) => {
@@ -526,7 +537,7 @@ function parseBudgetRows(
           kind: 'budget', sheet: sheetName, row: sourceRow, programmeId: programme.id,
           programme: programme.label || 'Unassigned - programme review required',
           category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
-          unit: text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit',
+          unit,
           quantity, unitCost, budgetAmount: recomputedAmount, period: `${year}-${String(month).padStart(2, '0')}`,
           periodType: 'monthly', month, notes: `${note}${amountNote}`,
         });
@@ -535,14 +546,16 @@ function parseBudgetRows(
       const calculatedAmount = quantity * unitCost * (frequency || 1);
       const budgetAmount = sourceTotal ?? calculatedAmount;
       const amountNote = sourceTotal !== undefined && Math.abs(sourceTotal - calculatedAmount) > 0.01
-        ? `; source total MWK ${sourceTotal} differs from quantity × frequency × unit cost MWK ${calculatedAmount}; verify before import`
+        ? `; source total MWK ${sourceTotal} differs from quantity × frequency × unit cost MWK ${calculatedAmount}; verify before import${frequency !== undefined && quantity > 1 && Math.abs(sourceTotal - unitCost * frequency) <= 0.01
+          ? `. Cost × frequency equals the source total, so the cost looks like a price per pack/lot rather than per ${unit}`
+          : ''}`
         : '';
       const frequencyNote = frequency !== undefined ? `; frequency ${frequency}` : '';
       lines.push({
         kind: 'budget', sheet: sheetName, row: sourceRow, programmeId: programme.id,
         programme: programme.label || 'Unassigned - programme review required',
         category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
-        unit: text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit',
+        unit,
         quantity, unitCost, budgetAmount,
         period: sourcePeriodMonth ? `${year}-${String(sourcePeriodMonth).padStart(2, '0')}` : `Annual ${year}`,
         periodType: sourcePeriodMonth ? 'monthly' : 'annual', month: sourcePeriodMonth,
