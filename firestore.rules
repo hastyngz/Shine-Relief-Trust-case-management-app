@@ -444,7 +444,11 @@ service cloud.firestore {
         : resource.data.keys().hasAny(['supersededBy'])
           ? false
           : resource.data.keys().hasAny(['versionOf'])
-            ? isManagerOrAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            ? isManagerOrAdmin() &&
+              (resource.data.targetType != 'safeguardingCase' || canWriteSafeguardingAttachment(resource.data.targetId)) &&
+              ((resource.data.targetType != 'healthFollowUp' &&
+                !(resource.data.get('category', '') in ['Medical Document', 'Prescription'])) || canEditHealthRecords()) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'filingMetadata', 'filingAudit', 'filingMetadataUpdatedAt'
               ])
             : (request.resource.data.targetType == 'safeguardingCase'
