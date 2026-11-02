@@ -53,6 +53,9 @@ export async function postProcurementDeliveryMovements(args: {
   const errors = validateProcurementDelivery({ list: validationList, date: args.date, reference: args.reference, quantities: args.quantities, deliveryId: args.deliveryId });
   if (errors.length) throw new Error(errors.join(' '));
   if (args.choices.length !== args.list.items.length || args.choices.some((choice, index) => choice.itemIndex !== index)) throw new Error('Choose an inventory link for every line before posting.');
+  if (args.quantities.some((quantity, index) => quantity > 0 && !args.choices[index]?.inventoryItemId)) {
+    throw new Error('Partial deliveries must link each received line to an inventory item so the receipt can be verified and audited. Use the full-receipt workflow for items that are not inventory tracked.');
+  }
   const inventoryById = new Map(args.inventoryItems.map((item) => [item.id, item]));
   for (let i = 0; i < args.list.items.length; i++) {
     const quantity = args.quantities[i];
