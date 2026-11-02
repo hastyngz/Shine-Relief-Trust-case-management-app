@@ -443,7 +443,7 @@ service cloud.firestore {
             existsAfter(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE))
         );
       allow update: if false;
-      // Administrator deletion is reserved for operational reset or controlled backup replacement.
+      // Administrator deletion is reserved for the explicit operational reset; backup replacement never prunes ledger history.
       allow delete: if isAdmin();
     }
 
