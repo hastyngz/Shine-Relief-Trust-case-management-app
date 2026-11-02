@@ -24,7 +24,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
   const [paymentReference, setPaymentReference] = useState('');
   const [settlementError, setSettlementError] = useState('');
   const [settlementNotice, setSettlementNotice] = useState('');
-  const [pettyCashType, setPettyCashType] = useState<'opening_balance' | 'cash_received' | 'expense' | 'cash_returned'>(db.pettyCashTransactions?.some((entry) => entry.type === 'opening_balance') ? 'cash_received' : 'opening_balance');
+  const [pettyCashType, setPettyCashType] = useState<'opening_balance' | 'cash_received' | 'expense' | 'cash_returned' | 'adjustment_in' | 'adjustment_out'>(db.pettyCashTransactions?.some((entry) => entry.type === 'opening_balance') ? 'cash_received' : 'opening_balance');
   const [pettyCashDate, setPettyCashDate] = useState(today);
   const [pettyCashAmount, setPettyCashAmount] = useState('');
   const [pettyCashDescription, setPettyCashDescription] = useState('');
@@ -216,6 +216,8 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
           ['Cash received', pettyCashSummary.cashReceivedMWK],
           ['Cash returned', pettyCashSummary.cashReturnedMWK],
           ['Cash expenses', pettyCashSummary.expensesMWK],
+          ['Corrections in', pettyCashSummary.adjustmentsInMWK],
+          ['Corrections out', pettyCashSummary.adjustmentsOutMWK],
         ].map(([label, amount]) => <div key={String(label)} className="rounded-xl bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold">{mwk(Number(amount))}</p></div>)}
       </div>
       {pettyCashNotice && <p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">{pettyCashNotice}</p>}
@@ -223,7 +225,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
         <label className="text-xs font-semibold text-stone-600">Transaction type
           <select value={pettyCashType} onChange={(event) => setPettyCashType(event.target.value as typeof pettyCashType)} disabled={pettyCashTransactions.some((entry) => entry.type === 'opening_balance') && pettyCashType === 'opening_balance'} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm">
             {!pettyCashTransactions.some((entry) => entry.type === 'opening_balance') && <option value="opening_balance">Opening cash float</option>}
-            <option value="cash_received">Cash received / replenishment</option><option value="expense">Cash expense</option><option value="cash_returned">Cash returned to float</option>
+            <option value="cash_received">Cash received / replenishment</option><option value="expense">Cash expense</option><option value="cash_returned">Cash returned to float</option><option value="adjustment_in">Correction in (+)</option><option value="adjustment_out">Correction out (−)</option>
           </select>
         </label>
         <label className="text-xs font-semibold text-stone-600">Transaction date<input type="date" value={pettyCashDate} max={today} onChange={(event) => setPettyCashDate(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
@@ -232,13 +234,13 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
         <label className="text-xs font-semibold text-stone-600 sm:col-span-2">Description<input value={pettyCashDescription} onChange={(event) => setPettyCashDescription(event.target.value)} maxLength={250} placeholder="What was the cash used for / received from?" className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
         <label className="text-xs font-semibold text-stone-600 sm:col-span-2">Receipt / voucher / transfer reference<input value={pettyCashReference} onChange={(event) => setPettyCashReference(event.target.value)} maxLength={120} placeholder="Required audit reference" className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm" /></label>
         {pettyCashError && <p role="alert" className="text-xs text-red-700 sm:col-span-2">{pettyCashError}</p>}
-        <div className="flex items-center justify-between gap-2 sm:col-span-2"><p className="text-[11px] text-stone-500">Entries cannot be edited or deleted. Check the date, amount and reference before saving; contact an Administrator if an entry is incorrect.</p><button type="submit" className="min-h-10 shrink-0 rounded-lg bg-teal-800 px-4 text-xs font-bold text-white">Record entry</button></div>
+        <div className="flex items-center justify-between gap-2 sm:col-span-2"><p className="text-[11px] text-stone-500">Entries cannot be edited or deleted. Use a correction entry with the original voucher/entry reference to correct an error; opening-float errors require Administrator review.</p><button type="submit" className="min-h-10 shrink-0 rounded-lg bg-teal-800 px-4 text-xs font-bold text-white">Record entry</button></div>
       </form>
       <div className="mt-4"><h3 className="text-sm font-bold">Ledger history</h3>
         {pettyCashSummary.entries.length === 0 ? <p className="mt-2 rounded-xl bg-stone-50 p-4 text-sm text-stone-600">No petty-cash opening float or transactions have been recorded.</p> : <div className="mt-2 divide-y divide-stone-100">
           {[...pettyCashSummary.entries].reverse().map((entry) => <article key={entry.id} className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0"><p className="font-semibold">{entry.description}</p><p className="text-xs text-stone-500">{entry.date} · {entry.type.replaceAll('_', ' ')} · {entry.reference}{entry.category ? ' · ' + entry.category : ''}</p><p className="text-[11px] text-stone-500">Recorded by {entry.recordedBy}</p></div>
-            <div className="text-left sm:text-right"><p className={entry.type === 'expense' ? 'font-bold text-rose-700' : 'font-bold text-emerald-800'}>{entry.type === 'expense' ? '− ' : '+ '}{mwk(entry.amountMWK)}</p><p className="text-xs text-stone-500">Balance after: {mwk(entry.balanceAfterMWK)}</p></div>
+            <div className="text-left sm:text-right"><p className={entry.type === 'expense' || entry.type === 'adjustment_out' ? 'font-bold text-rose-700' : 'font-bold text-emerald-800'}>{entry.type === 'expense' || entry.type === 'adjustment_out' ? '− ' : '+ '}{mwk(entry.amountMWK)}</p><p className="text-xs text-stone-500">Balance after: {mwk(entry.balanceAfterMWK)}</p></div>
           </article>)}
         </div>}
       </div>
