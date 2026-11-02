@@ -43,8 +43,12 @@ const modules: ModuleCard[] = [
 ];
 
 export const AdministrationHub: React.FC<AdministrationHubProps> = ({ db, onNavigate }) => {
-  const { isAdmin } = useAuth();
-  const visibleModules = modules.filter((item) => item.title !== 'Staff & Personnel' || isAdmin);
+  const { isAdmin, staffProfile } = useAuth();
+  const managerOrAdmin = Boolean(isAdmin || staffProfile?.role === 'Manager');
+  const visibleModules = modules.filter((item) =>
+    (item.title !== 'Staff & Personnel' || isAdmin) &&
+    (managerOrAdmin || !['admin-performance', 'finance-admin'].includes(item.view || ''))
+  );
   const availableCount = visibleModules.filter((item) => item.status === 'Available now').length;
   const upcomingCount = visibleModules.length - availableCount;
   const staffCount = db.employees?.length || 0;
