@@ -1,6 +1,6 @@
 import React, { FormEvent, useRef, useState } from 'react';
 import { CalendarClock, X } from 'lucide-react';
-import type { AssetHistoryEntry, AssetRecord } from '../types';
+import type { AssetRecord } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { recordAssetMaintenance } from '../utils/storage';
 import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
