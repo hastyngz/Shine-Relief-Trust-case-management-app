@@ -907,6 +907,19 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const countEarlyYears = previewItems.filter((i) => i.classification === 'EARLY_YEARS_RECORD').length;
   const countWorkplans = previewItems.filter((i) => i.classification === 'WORKPLAN_PRIORITY').length;
   const countBudgets = previewItems.filter((i) => i.classification === 'BUDGET_FINANCIAL').length;
+  const countPeople = previewItems.filter((i) =>
+    i.classification === 'PEOPLE_DIRECTORY_RECORD' || i.classification === 'CONTACT_DIRECTORY_RECORD'
+    || i.targetEntity === 'person' || i.targetEntity === 'contact').length;
+  const countHouseholds = previewItems.filter((i) =>
+    i.classification === 'HOUSEHOLD_RECORD' || i.targetEntity === 'household').length;
+  const countEducationalFollowUps = previewItems.filter((i) =>
+    i.classification === 'EDUCATIONAL_FOLLOW_UP' || i.targetEntity === 'educationalFollowUp').length;
+  const countHealthFollowUps = previewItems.filter((i) =>
+    i.classification === 'HEALTH_MEDICAL_FOLLOW_UP' || i.targetEntity === 'healthFollowUp').length;
+  const countFamilyFollowUps = previewItems.filter((i) =>
+    i.classification === 'FAMILY_GUARDIAN_FOLLOW_UP' || i.targetEntity === 'familyFollowUp').length;
+  const countGeneral = previewItems.filter((i) =>
+    i.classification === 'GENERAL_REPORT_INFO' || i.targetEntity === 'general').length;
   const countAgriculture = previewItems.filter(
     (i) => i.classification === 'AGRICULTURE_PRACTICAL_SKILLS'
   ).length;
@@ -915,7 +928,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     (i) => i.targetEntity !== 'employee' && (i.classification === 'UNCLASSIFIED_REVIEW' || !i.classification)
   ).length;
   const countContacts = contactReview.length;
-  const countEmployees = previewItems.filter((item) => item.targetEntity === 'employee').length;
+  const countEmployees = previewItems.filter((item) => item.targetEntity === 'employee' || item.targetEntity === 'payroll').length;
 
   const selectedCount = previewItems.filter((i) => i.selected).length + contactReview.filter((item) => item.confirmed && (item.status !== 'possible' || item.contactId)).length;
 
@@ -1050,12 +1063,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   // Tab Filtering
   const filteredItems = previewItems.filter((item) => {
     // Category Tab
-    if (activeTab === 'EMPLOYEES' && item.targetEntity !== 'employee') return false;
+    if (activeTab === 'EMPLOYEES' && item.targetEntity !== 'employee' && item.targetEntity !== 'payroll') return false;
     if (activeTab === 'HISTORICAL' && item.classification !== 'INDIVIDUAL_GIRL_HISTORICAL' && item.resultType !== 'HISTORICAL_RECORD') return false;
     if (activeTab === 'ACTIVITIES' && item.classification !== 'GROUP_ACTIVITY' && item.classification !== 'PROGRAMME_ACTIVITY') return false;
     if (activeTab === 'EARLY_YEARS' && item.classification !== 'EARLY_YEARS_RECORD') return false;
     if (activeTab === 'WORKPLANS' && item.classification !== 'WORKPLAN_PRIORITY') return false;
     if (activeTab === 'BUDGETS' && item.classification !== 'BUDGET_FINANCIAL') return false;
+    if (activeTab === 'PEOPLE' && item.classification !== 'PEOPLE_DIRECTORY_RECORD' && item.classification !== 'CONTACT_DIRECTORY_RECORD' && item.targetEntity !== 'person' && item.targetEntity !== 'contact') return false;
+    if (activeTab === 'HOUSEHOLDS' && item.classification !== 'HOUSEHOLD_RECORD' && item.targetEntity !== 'household') return false;
+    if (activeTab === 'EDUCATION' && item.classification !== 'EDUCATIONAL_FOLLOW_UP' && item.targetEntity !== 'educationalFollowUp') return false;
+    if (activeTab === 'HEALTH' && item.classification !== 'HEALTH_MEDICAL_FOLLOW_UP' && item.targetEntity !== 'healthFollowUp') return false;
+    if (activeTab === 'FAMILY' && item.classification !== 'FAMILY_GUARDIAN_FOLLOW_UP' && item.targetEntity !== 'familyFollowUp') return false;
+    if (activeTab === 'GENERAL' && item.classification !== 'GENERAL_REPORT_INFO' && item.targetEntity !== 'general') return false;
     if (activeTab === 'AGRICULTURE' && item.classification !== 'AGRICULTURE_PRACTICAL_SKILLS') return false;
     if (activeTab === 'PHOTOS' && item.classification !== 'PHOTO_HIGHLIGHT') return false;
     if (activeTab === 'UNCLASSIFIED' && item.classification !== 'UNCLASSIFIED_REVIEW') return false;
@@ -2109,7 +2128,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           )}
 
           {/* Category Filter Cards with Real Calculated Counts */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
             <button
               onClick={() => setActiveTab('ALL')}
               className={`p-2.5 rounded-xl border text-left transition-all ${
@@ -2183,6 +2202,66 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             </button>
 
             <button
+              onClick={() => setActiveTab('PEOPLE')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'PEOPLE' ? 'border-teal-600 bg-teal-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-teal-700 uppercase">People / Contacts</p>
+              <p className="text-base font-black text-teal-900 mt-0.5">{countPeople}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('HOUSEHOLDS')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'HOUSEHOLDS' ? 'border-orange-600 bg-orange-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-orange-700 uppercase">Households</p>
+              <p className="text-base font-black text-orange-900 mt-0.5">{countHouseholds}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('EDUCATION')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'EDUCATION' ? 'border-sky-600 bg-sky-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-sky-700 uppercase">Education follow-ups</p>
+              <p className="text-base font-black text-sky-900 mt-0.5">{countEducationalFollowUps}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('HEALTH')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'HEALTH' ? 'border-rose-600 bg-rose-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-rose-700 uppercase">Health follow-ups</p>
+              <p className="text-base font-black text-rose-900 mt-0.5">{countHealthFollowUps}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('FAMILY')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'FAMILY' ? 'border-pink-600 bg-pink-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-pink-700 uppercase">Family follow-ups</p>
+              <p className="text-base font-black text-pink-900 mt-0.5">{countFamilyFollowUps}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('GENERAL')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'GENERAL' ? 'border-stone-600 bg-stone-100 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-stone-700 uppercase">General information</p>
+              <p className="text-base font-black text-stone-950 mt-0.5">{countGeneral}</p>
+            </button>
+
+            <button
               onClick={() => setActiveTab('AGRICULTURE')}
               className={`p-2.5 rounded-xl border text-left transition-all ${
                 activeTab === 'AGRICULTURE'
@@ -2216,6 +2295,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             >
               <p className="text-[10px] font-semibold text-cyan-800 uppercase">Employees / Payroll</p>
               <p className="text-base font-black text-cyan-950 mt-0.5">{countEmployees}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('UNCLASSIFIED')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'UNCLASSIFIED' ? 'border-red-600 bg-red-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-red-700 uppercase">Needs review</p>
+              <p className="text-base font-black text-red-900 mt-0.5">{countUnclassified}</p>
             </button>
 
             <div className="p-2.5 rounded-xl border border-teal-200 bg-teal-50 text-left">
