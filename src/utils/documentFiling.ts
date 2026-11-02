@@ -42,3 +42,20 @@ export function sortFilingAttachmentsNewestFirst(attachments: PhotoAttachment[])
     })
     .map(({ attachment }) => attachment);
 }
+
+export type FilingExpiryStatus = 'Expired' | 'Due within 30 days' | 'Current' | 'No expiry date' | 'Invalid date';
+
+/** Evaluate a date-only expiry value without relying on JavaScript date normalization. */
+export function getFilingExpiryStatus(expiryDate: string | undefined, today: string): FilingExpiryStatus {
+  if (!expiryDate) return 'No expiry date';
+  const valid = (value: string) => {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  if (!valid(expiryDate) || !valid(today)) return 'Invalid date';
+  if (expiryDate < today) return 'Expired';
+  const due = new Date(`${today}T00:00:00.000Z`);
+  due.setUTCDate(due.getUTCDate() + 30);
+  return expiryDate <= due.toISOString().slice(0, 10) ? 'Due within 30 days' : 'Current';
+}
