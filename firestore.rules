@@ -372,6 +372,13 @@ service cloud.firestore {
 
     // Ordinary staff may record/edit operational expense details, but payment settlement
     // fields and payment-status audit events are reserved for Managers/Administrators.
+    function expenseCreatePaymentFieldsAllowed() {
+      return request.resource.data.get('paymentStatus', 'Payment Outstanding') == 'Payment Outstanding' &&
+        request.resource.data.get('datePaid', null) == null &&
+        request.resource.data.get('paymentMethod', null) == null &&
+        request.resource.data.get('paymentReference', null) == null;
+    }
+
     function expensePaymentFieldsUnchanged() {
       let before = resource.data;
       let after = request.resource.data;
@@ -395,7 +402,7 @@ service cloud.firestore {
 
     match /expenses/{id} {
       allow read: if isStaffActive();
-      allow create: if isManagerOrStaff();
+      allow create: if isManagerOrAdmin() || (isManagerOrStaff() && expenseCreatePaymentFieldsAllowed());
       allow update: if isManagerOrAdmin() ||
         (isManagerOrStaff() && expensePaymentFieldsUnchanged() && expenseAuditTrailSafeForStaffUpdate());
       allow delete: if isManagerOrStaff();
