@@ -566,6 +566,11 @@ export interface HouseholdExpense {
   }>;
   girlId?: string;
   activityId?: string;
+  /** Optional organisational cost centre for non-household expenditure. */
+  costCentre?: string;
+  /** Origin of automatically posted records, used to prevent duplicate finance entries. */
+  sourceType?: 'asset_maintenance';
+  sourceRecordId?: string;
 }
 
 export interface HouseholdActivity {
@@ -1522,6 +1527,12 @@ export interface AssetHistoryEntry {
   newValue?: string;
   recordedBy: string;
   recordedAt: string;
+  /** Stable operation ID makes retries safe when a maintenance entry posts a finance expense. */
+  operationId?: string;
+  costMWK?: number;
+  supplier?: string;
+  invoiceReference?: string;
+  linkedExpenseId?: string;
 }
 
 export interface AssetRecord {
