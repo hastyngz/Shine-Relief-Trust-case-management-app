@@ -4,6 +4,7 @@ import { EmployeeRecord, EmployeeContractFields, ContractStatus, EmployeeCategor
 import { appendEmployeeAuditLog, COLLECTIONS, getEmployeeSalaryHistory } from '../services/firestoreSync';
 import { flushPendingOfflineSnapshots, loadQueue, queueOfflineRecordsForSync } from '../services/offlineSync';
 import { calculateGratuity, getContractDateValidationError } from '../services/gratuityService';
+import { isValidInventoryDate } from '../utils/inventory';
 
 
 interface EmployeeContractPanelProps {
