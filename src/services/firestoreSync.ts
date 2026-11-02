@@ -1149,10 +1149,39 @@ export async function syncEntireDatabaseToFirestore(
             a.id.localeCompare(b.id)
           )
         : records;
-      orderedRecords?.forEach((record) => operations.push({
-        ref: doc(firestore, collectionName, record.id),
-        data: sanitizeForFirestore(record),
-      }));
+      if (field === 'pettyCashTransactions') {
+        const ledgerRecords = orderedRecords || [];
+        const openingRecords = ledgerRecords.filter((record) => (record as any).type === 'opening_balance');
+        if (ledgerRecords.length && (
+          openingRecords.length !== 1 ||
+          openingRecords[0].id !== 'PETTY_CASH_OPENING_BALANCE' ||
+          ledgerRecords.some((record) => (record as any).type !== 'opening_balance' && String((record as any).date || '') < String((openingRecords[0] as any).date || '')) ||
+          new Set(ledgerRecords.map((record) => record.id)).size !== ledgerRecords.length
+        )) {
+          throw new Error('The backup contains an invalid petty-cash ledger. It must include one opening float and unique, chronologically valid entries.');
+        }
+        const existingSnapshot = await getDocs(collection(firestore, collectionName));
+        const existingById = new Map(existingSnapshot.docs.map((record) => [record.id, record.data()]));
+        for (const record of ledgerRecords) {
+          const safeRecord = sanitizeForFirestore(record);
+          const existingRecord = existingById.get(record.id);
+          if (existingRecord) {
+            if (stableContentHash(existingRecord) !== stableContentHash(safeRecord)) {
+              throw new Error(`The backup petty-cash entry ${record.id} differs from the server ledger. Append-only financial history cannot be overwritten during restore.`);
+            }
+            continue;
+          }
+          operations.push({
+            ref: doc(firestore, collectionName, record.id),
+            data: safeRecord,
+          });
+        }
+      } else {
+        orderedRecords?.forEach((record) => operations.push({
+          ref: doc(firestore, collectionName, record.id),
+          data: sanitizeForFirestore(record),
+        }));
+      }
     }
 
     if (db.historicalRecords) {
