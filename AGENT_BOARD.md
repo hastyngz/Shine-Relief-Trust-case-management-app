@@ -1345,3 +1345,11 @@ Suggestion format:
 - Managers and Administrators are the only approvers. The decision uses a direct Firestore transaction (not a local offline queue), records approver identity/time, and is rejected if the request is no longer pending. Approved trips may be completed; pending, rejected and legacy trips without an approval record cannot be completed through this module.
 - Firestore rules require the requester UID on new transport-trip records and reject client-side approval changes by staff; approval transitions are limited to Manager/Administrator and only from Pending to Approved/Rejected.
 - Added a rules-emulator regression test for staff denial and manager approval. Exact-head CI is running; no Firestore rules deployment or production deployment has occurred. Android/weak-network testing remains outstanding. — Mosaic (ChatGPT), 2026-11-02
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · trip approval enforcement hardening
+- Confirmed the existing trip-approval role boundary includes both Manager and Administrator in the UI, approval service, and Firestore helper.
+- Tightened schedule rules so staff cannot move a pending trip to In Progress or Completed. Starting a journey requires an approved request; completion now requires an already-started trip and a valid ending odometer. Approval fields remain protected from staff edits.
+- Added an explicit Start approved trip action and changed the in-progress dashboard count to exclude pending requests.
+- Expanded Firestore emulator tests for pending-trip bypass attempts, approved-trip lifecycle, odometer-gated completion, and Administrator approval.
+- Verification: pending exact-head CI. No Firestore rules deployment or production change.

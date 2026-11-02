@@ -832,6 +832,18 @@ service cloud.firestore {
         (request.resource.data.tripApprovalStatus != 'Rejected' || request.resource.data.status == 'Cancelled');
     }
 
+    function isValidTripStartUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return resource.data.type == 'transport_trip' &&
+        resource.data.tripApprovalStatus == 'Approved' &&
+        request.resource.data.tripApprovalStatus == 'Approved' &&
+        (isManagerOrAdmin() || (isStaffActive() && resource.data.assignedStaffId == request.auth.uid)) &&
+        resource.data.status == 'Scheduled' &&
+        request.resource.data.status == 'In Progress' &&
+        changed.hasOnly(['status', 'updatedAt', 'updatedBy']) &&
+        request.resource.data.get('transportDetails', {}) == resource.data.get('transportDetails', {});
+    }
+
     function isValidTripCompletionUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return resource.data.type == 'transport_trip' &&
@@ -839,7 +851,9 @@ service cloud.firestore {
         request.resource.data.tripApprovalStatus == 'Approved' &&
         (isManagerOrAdmin() || (isStaffActive() && resource.data.assignedStaffId == request.auth.uid)) &&
         changed.hasOnly(['status', 'completedAt', 'transportDetails', 'updatedAt', 'updatedBy']) &&
+        resource.data.status == 'In Progress' &&
         request.resource.data.status == 'Completed' &&
+        request.resource.data.get('completedAt', null) is string &&
         request.resource.data.get('transportDetails', {}) is map &&
         resource.data.get('transportDetails', {}) is map &&
         request.resource.data.get('transportDetails', {}).diff(resource.data.get('transportDetails', {})).affectedKeys().hasOnly(['endOdometerKm']) &&
@@ -852,8 +866,10 @@ service cloud.firestore {
       allow create: if isManagerOrStaff() && isValidTripRequestCreate();
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'tripApprovalStatus', 'tripApprovedByUid', 'tripApprovedByName', 'tripApprovedAt', 'tripApprovalNote'
-      ]) ? isValidTripApprovalUpdate() : resource.data.type == 'transport_trip'
-        ? isValidTripCompletionUpdate()
+      ]) ? isValidTripApprovalUpdate() : (resource.data.type == 'transport_trip' || request.resource.data.type == 'transport_trip')
+        ? (resource.data.status == 'Scheduled' && request.resource.data.status == 'In Progress'
+          ? isValidTripStartUpdate()
+          : isValidTripCompletionUpdate())
         : isManagerOrStaff();
       allow delete: if resource.data.type == 'transport_trip' ? isManagerOrAdmin() : isManagerOrStaff();
     }

@@ -680,9 +680,18 @@ async function run() {
 
     const trip = { id: 'trip-1', type: 'transport_trip', title: 'Test trip', scheduledDate: '2026-11-10', assignedStaffId: 'worker', assignedStaffName: 'worker', status: 'Scheduled', tripApprovalStatus: 'Pending', tripRequestedByUid: 'worker', tripRequestedByName: 'worker', transportDetails: { vehicleAssetId: 'vehicle-1', vehicleLabel: 'VEH-001', driverName: 'worker', origin: 'Office', destination: 'Zomba', purpose: 'Field visit', startOdometerKm: 100 } };
     await assertSucceeds(setDoc(doc(worker, 'schedules/trip-1'), trip));
+    await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'In Progress' }));
+    await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed' }));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'worker', tripApprovedAt: '2026-11-02T00:00:00.000Z' }));
     await assertSucceeds(updateDoc(doc(manager, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'manager', tripApprovedByName: 'manager', tripApprovedAt: '2026-11-02T00:00:00.000Z', tripApprovalNote: '', status: 'Scheduled', updatedAt: '2026-11-02T00:00:00.000Z', updatedBy: 'manager' }));
-    await assertSucceeds(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed', completedAt: '2026-11-10T12:00:00.000Z', transportDetails: { vehicleAssetId: 'vehicle-1', vehicleLabel: 'VEH-001', driverName: 'worker', origin: 'Office', destination: 'Zomba', purpose: 'Field visit', startOdometerKm: 100, endOdometerKm: 125 }, updatedAt: '2026-11-10T12:00:00.000Z', updatedBy: 'worker' }));
+    await assertSucceeds(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'In Progress', updatedAt: '2026-11-02T01:00:00.000Z', updatedBy: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed', completedAt: '2026-11-10T12:00:00.000Z', transportDetails: { ...trip.transportDetails, destination: 'Blantyre', endOdometerKm: 125 }, updatedAt: '2026-11-10T12:00:00.000Z', updatedBy: 'worker' }));
+    await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed', completedAt: '2026-11-10T12:00:00.000Z', updatedAt: '2026-11-10T12:00:00.000Z', updatedBy: 'worker' }));
+    await assertSucceeds(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed', completedAt: '2026-11-10T12:00:00.000Z', transportDetails: { ...trip.transportDetails, endOdometerKm: 125 }, updatedAt: '2026-11-10T12:00:00.000Z', updatedBy: 'worker' }));
+
+    const adminTrip = { ...trip, id: 'trip-admin-approval' };
+    await assertSucceeds(setDoc(doc(worker, 'schedules/trip-admin-approval'), adminTrip));
+    await assertSucceeds(updateDoc(doc(admin, 'schedules/trip-admin-approval'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'admin', tripApprovedByName: 'admin', tripApprovedAt: '2026-11-02T03:00:00.000Z', tripApprovalNote: '', status: 'Scheduled', updatedAt: '2026-11-02T03:00:00.000Z', updatedBy: 'admin' }));
 
     console.log('Firestore rules tests passed.');
   } finally {
