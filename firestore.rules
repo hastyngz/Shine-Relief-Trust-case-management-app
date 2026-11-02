@@ -422,7 +422,8 @@ service cloud.firestore {
           'category', 'recordedAt', 'recordedBy', 'recordedByUid', 'createdAt'
         ]) &&
         request.resource.data.date is string &&
-        request.resource.data.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) &&
+        request.resource.data.date.size() == 10 &&
+        request.resource.data.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])') &&
         request.resource.data.amountMWK is int && request.resource.data.amountMWK > 0 &&
         request.resource.data.description is string &&
         request.resource.data.description.size() >= 3 && request.resource.data.description.size() <= 250 &&
