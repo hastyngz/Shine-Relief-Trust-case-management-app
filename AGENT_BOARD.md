@@ -1326,3 +1326,9 @@ Suggestion format:
 - Firestore rules require the version record and supersession pointer to be written atomically by a Manager/Administrator; version records cannot be edited/deleted, and superseded source files cannot be deleted. Safeguarding attachment versions still require the existing case-specific write permission.
 - Added emulator rule tests for staff denial, valid manager version creation, immutable version records and protected prior versions. Exact-head CI is pending; no rules deployment has occurred.
 - Remaining: retention schedule, controlled document approval and automated reminders. Manual Android/weak-signal validation remains outstanding. — Mosaic (ChatGPT), 2026-11-02
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · document version failure-path review
+- Follow-up review traced deletion through both Firestore and the R2 Worker. The Worker now refuses to delete any attachment that is part of a version chain, before issuing the R2 delete.
+- Version upload now reads the current source from the Firestore server, verifies ambiguous batch outcomes before retry/cleanup, and only attempts orphan cleanup when the server confirms the batch did not commit. Managers/admins can clean unindexed failed-upload objects; ordinary staff cannot.
+- Added a Worker regression test proving historical version deletion is rejected before R2 is called. Exact-head CI remains pending; no Worker or Firestore production deployment. — Mosaic (ChatGPT), 2026-11-02
