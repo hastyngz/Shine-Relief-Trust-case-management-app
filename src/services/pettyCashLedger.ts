@@ -17,6 +17,8 @@ export interface PettyCashLedgerSummary {
   cashReceivedMWK: number;
   expensesMWK: number;
   cashReturnedMWK: number;
+  adjustmentsInMWK: number;
+  adjustmentsOutMWK: number;
   currentBalanceMWK: number;
   entries: Array<PettyCashTransaction & { balanceAfterMWK: number }>;
 }
@@ -37,6 +39,8 @@ export function getPettyCashLedgerSummary(
   let cashReceivedMWK = 0;
   let expensesMWK = 0;
   let cashReturnedMWK = 0;
+  let adjustmentsInMWK = 0;
+  let adjustmentsOutMWK = 0;
   let balance = 0;
   const entries = ordered.map((entry) => {
     if (entry.type === 'opening_balance') {
@@ -48,6 +52,12 @@ export function getPettyCashLedgerSummary(
     } else if (entry.type === 'cash_returned') {
       cashReturnedMWK += entry.amountMWK;
       balance += entry.amountMWK;
+    } else if (entry.type === 'adjustment_in') {
+      adjustmentsInMWK += entry.amountMWK;
+      balance += entry.amountMWK;
+    } else if (entry.type === 'adjustment_out') {
+      adjustmentsOutMWK += entry.amountMWK;
+      balance -= entry.amountMWK;
     } else {
       expensesMWK += entry.amountMWK;
       balance -= entry.amountMWK;
@@ -56,7 +66,7 @@ export function getPettyCashLedgerSummary(
   });
   return {
     openingBalanceMWK, cashReceivedMWK, expensesMWK, cashReturnedMWK,
-    currentBalanceMWK: balance, entries,
+    adjustmentsInMWK, adjustmentsOutMWK, currentBalanceMWK: balance, entries,
   };
 }
 
@@ -67,7 +77,7 @@ export function validatePettyCashTransaction(
 ): string[] {
   const errors: string[] = [];
   if (!isValidPettyCashDate(draft.date) || draft.date > today) errors.push('Enter a valid transaction date that is not in the future.');
-  if (!['opening_balance', 'cash_received', 'expense', 'cash_returned'].includes(draft.type)) errors.push('Select a valid petty-cash transaction type.');
+  if (!['opening_balance', 'cash_received', 'expense', 'cash_returned', 'adjustment_in', 'adjustment_out'].includes(draft.type)) errors.push('Select a valid petty-cash transaction type.');
   if (!Number.isFinite(draft.amountMWK) || draft.amountMWK <= 0 || !Number.isSafeInteger(draft.amountMWK)) errors.push('Enter a positive whole-number amount in MWK.');
   if (typeof draft.description !== 'string' || draft.description.trim().length < 3 || draft.description.trim().length > 250) errors.push('Enter a description between 3 and 250 characters.');
   if (typeof draft.reference !== 'string' || draft.reference.trim().length < 2 || draft.reference.trim().length > 120) errors.push('Enter a receipt, voucher or transfer reference between 2 and 120 characters.');
@@ -84,7 +94,7 @@ export function validatePettyCashTransaction(
     const latestDate = summary.entries[summary.entries.length - 1]?.date;
     if (latestDate && draft.date < latestDate) errors.push('Backdated entries are not allowed. Record transactions in date order or use a referenced reversal.');
     const currentBalance = summary.currentBalanceMWK;
-    if (draft.type === 'expense' && draft.amountMWK > currentBalance) {
+    if ((draft.type === 'expense' || draft.type === 'adjustment_out') && draft.amountMWK > currentBalance) {
       errors.push(`This expense exceeds the available petty-cash balance of MWK ${currentBalance.toLocaleString()}.`);
     }
   }
