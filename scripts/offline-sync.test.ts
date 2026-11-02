@@ -132,6 +132,26 @@ const { syncChangeEntriesToFirestore, persistImportAuditToFirestore } = await im
 const T1 = '2026-01-01T10:00:00.000Z';
 const T2 = '2026-01-01T11:00:00.000Z';
 const T3 = '2026-01-01T12:00:00.000Z';
+const pettyCashOfflineEntry = {
+  id: 'PETTY_CASH_OPENING_BALANCE',
+  date: '2026-11-02',
+  type: 'opening_balance',
+  amountMWK: 50000,
+  description: 'Synthetic opening float',
+  reference: 'OPEN-TEST-001',
+  recordedAt: T1,
+  recordedBy: 'Synthetic manager',
+  recordedByUid: 'uid-a',
+  createdAt: T1,
+};
+const pettyCashQueueChanges = computeChangeEntries(
+  db({ pettyCashTransactions: [pettyCashOfflineEntry] }),
+  db(),
+);
+assert.equal(pettyCashQueueChanges.length, 1, 'petty cash opening float creates one per-record offline change');
+assert.equal(pettyCashQueueChanges[0].collection, 'pettyCashTransactions', 'petty cash records use their dedicated Firestore collection');
+assert.equal(pettyCashQueueChanges[0].recordId, pettyCashOfflineEntry.id, 'petty cash record ID is retained in the queue');
+
 
 function girl(id: string, updatedAt: string, name = 'Girl ' + id) {
   return { id, fullName: name, updatedAt, createdAt: T1 } as any;
