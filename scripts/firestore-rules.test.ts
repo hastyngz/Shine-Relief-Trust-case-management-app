@@ -527,6 +527,9 @@ async function run() {
       reference: 'TRANSFER-TEST-001', recordedAt: '2026-11-02T09:00:00.000Z', createdAt: '2026-11-02T09:00:00.000Z',
     });
     await assertSucceeds(pettyCashRestoreBatch.commit());
+    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/actor-spoof-001'), {
+      ...pettyCashOpening, id: 'actor-spoof-001', type: 'cash_received', recordedByUid: 'admin',
+    }));
     await assertSucceeds(setDoc(doc(manager, 'pettyCashTransactions/adjustment-in-001'), {
       ...pettyCashOpening, id: 'adjustment-in-001', type: 'adjustment_in', amountMWK: 1000,
       reference: 'CORRECTS-ENTRY-001', recordedAt: '2026-11-02T09:30:00.000Z', createdAt: '2026-11-02T09:30:00.000Z',
