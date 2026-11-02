@@ -1582,7 +1582,7 @@ export interface AssetRecord {
   updatedByUid?: string;
 }
 
-export type PettyCashTransactionType = 'opening_balance' | 'cash_received' | 'expense' | 'cash_returned';
+export type PettyCashTransactionType = 'opening_balance' | 'cash_received' | 'expense' | 'cash_returned' | 'adjustment_in' | 'adjustment_out';
 
 export interface PettyCashTransaction {
   id: string;
