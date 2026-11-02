@@ -39,6 +39,18 @@ async function main() {
   assert.deepEqual(retry.movementIds, [`prcd_${id.slice(9)}_0`]);
   assert.equal(retry.duplicateCount, 1);
   assert.equal(calls[1].id, calls[0].id, 'retry must use the same server id');
+  const resumed = await postProcurementDeliveryMovements({
+    uid: 'synthetic-staff', list: { ...list, receivedQuantitiesByLine: { line_0: 4 } },
+    deliveryId: id, date: '2026-10-29', reference: 'DN-SYNTHETIC',
+    quantities: [4, 0], choices, inventoryItems: inventory, storage,
+    postMovement: async (payload) => poster(payload, true),
+  });
+  assert.equal(resumed.duplicateCount, 1, 'a partially committed delivery must retry against the same receipt ledger without double-counting');
+  await assert.rejects(postProcurementDeliveryMovements({
+    uid: 'synthetic-staff', list, deliveryId: 'delivery_87654320', date: '2026-10-29', reference: 'DN-UNTRACKED',
+    quantities: [4, 1], choices, inventoryItems: inventory, storage: new MemoryStorage(),
+    postMovement: async () => { throw new Error('untracked partial line must be rejected before posting'); },
+  }), /must link each received line to an inventory item/);
   await assert.rejects(postProcurementDeliveryMovements({
     uid: 'synthetic-staff', list, deliveryId: 'delivery_87654321', date: '2026-10-29', reference: 'DN-CHANGED',
     quantities: [2, 0], choices, inventoryItems: inventory, storage,
