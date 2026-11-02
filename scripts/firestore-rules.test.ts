@@ -678,7 +678,7 @@ async function run() {
     await assertFails(updateDoc(doc(worker, 'procurementLists/procurement-test'), { financeReference: 'FORGED-REF' }));
     await assertSucceeds(updateDoc(doc(manager, 'procurementLists/procurement-test'), { financeHandedOverAt: '2026-01-04T00:00:00.000Z', financeHandedOverBy: 'manager', financeReference: 'INV-TEST' }));
 
-    const trip = { id: 'trip-1', type: 'transport_trip', title: 'Test trip', scheduledDate: '2026-11-10', assignedStaffId: 'worker', assignedStaffName: 'worker', status: 'Scheduled', tripApprovalStatus: 'Pending', tripRequestedByUid: 'worker', tripRequestedByName: 'worker' };
+    const trip = { id: 'trip-1', type: 'transport_trip', title: 'Test trip', scheduledDate: '2026-11-10', assignedStaffId: 'worker', assignedStaffName: 'worker', status: 'Scheduled', tripApprovalStatus: 'Pending', tripRequestedByUid: 'worker', tripRequestedByName: 'worker', transportDetails: { vehicleAssetId: 'vehicle-1', vehicleLabel: 'VEH-001', driverName: 'worker', origin: 'Office', destination: 'Zomba', purpose: 'Field visit', startOdometerKm: 100 } };
     await assertSucceeds(setDoc(doc(worker, 'schedules/trip-1'), trip));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'worker', tripApprovedAt: '2026-11-02T00:00:00.000Z' }));
     await assertSucceeds(updateDoc(doc(manager, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'manager', tripApprovedByName: 'manager', tripApprovedAt: '2026-11-02T00:00:00.000Z', tripApprovalNote: '', status: 'Scheduled', updatedAt: '2026-11-02T00:00:00.000Z', updatedBy: 'manager' }));
