@@ -96,7 +96,7 @@ async function applyProcurementMovement(uid: string, options: { id?: string; sou
   });
   batch.set(movementRef, movement);
   const procurementRef = doc(db, 'procurementLists/' + sourceId);
-  const receivedMap = {};
+  const receivedMap: Record<string, number> = {};
   receivedMap['line_' + sourceLineIndex] = quantity;
   batch.update(procurementRef, {
     receivedQuantitiesByLine: receivedMap,
