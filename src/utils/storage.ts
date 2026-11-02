@@ -29,6 +29,7 @@ import {
   AISettings,
   InventoryItem,
   AssetRecord,
+  AssetHistoryEntry,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getActiveWorkspaceUid, getWorkspaceStorageKey } from '../services/accountWorkspace';
@@ -37,6 +38,8 @@ import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { excludeSafeguardingCaseActions } from '../services/healthRecordAccess';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
 import { linkPayrollRecordsToStaffAccount } from './payrollLink';
+import { buildAssetMaintenanceExpense, addAssetMaintenanceExpense } from './assetMaintenance';
+import { isValidInventoryDate } from './inventory';
 import {
   deleteAnnualBudgetPlanFromFirestore,
   clearAllFirestoreCollections,
@@ -1957,6 +1960,106 @@ export function saveAssetRecord(asset: AssetRecord): AssetRecord {
   }
   // Shared database event feeds the conflict-aware offline queue.
   return saved;
+}
+
+export interface RecordAssetMaintenanceInput {
+  assetId: string;
+  operationId: string;
+  date: string;
+  workDone: string;
+  costMWK?: number;
+  supplier?: string;
+  invoiceReference?: string;
+  nextServiceDate?: string;
+  actor: string;
+  actorUid?: string;
+}
+
+/**
+ * Persist the asset history and its finance expense in one local database write.
+ * The stable operationId links both records and makes a retry idempotent.
+ */
+export function recordAssetMaintenance(input: RecordAssetMaintenanceInput): {
+  asset: AssetRecord;
+  expense?: HouseholdExpense;
+} {
+  const db = getDatabase();
+  if (!input.operationId.trim()) throw new Error('A maintenance operation ID is required.');
+  if (!input.workDone.trim()) throw new Error('Describe the maintenance or repair work completed.');
+  if (!isValidInventoryDate(input.date)) throw new Error('Enter a real calendar date for the maintenance work.');
+  if (input.nextServiceDate && !isValidInventoryDate(input.nextServiceDate)) {
+    throw new Error('Enter a real calendar date for the next service date.');
+  }
+  if (input.costMWK !== undefined && (!Number.isFinite(input.costMWK) || input.costMWK <= 0)) {
+    throw new Error('Maintenance cost must be a positive amount in MWK.');
+  }
+
+  const assetIndex = (db.assets || []).findIndex((entry) => entry.id === input.assetId);
+  if (assetIndex < 0) throw new Error('This asset is no longer in the register. Refresh the asset list and try again.');
+  const currentAsset = db.assets![assetIndex];
+  const previousHistoryEntry = (currentAsset.history || []).find((entry) =>
+    entry.operationId === input.operationId || entry.id === input.operationId
+  );
+  if (previousHistoryEntry) {
+    const existingExpense = (db.expenses || []).find((expense) =>
+      expense.sourceType === 'asset_maintenance' && expense.sourceRecordId === input.operationId
+    );
+    return { asset: currentAsset, expense: existingExpense };
+  }
+
+  const now = new Date().toISOString();
+  const expense = input.costMWK === undefined ? undefined : buildAssetMaintenanceExpense({
+    asset: currentAsset,
+    historyEntryId: input.operationId,
+    expenseId: generateFollowUpId('EXP'),
+    date: input.date,
+    workDone: input.workDone,
+    amountMWK: input.costMWK,
+    supplier: input.supplier,
+    invoiceReference: input.invoiceReference,
+    actor: input.actor,
+    now,
+  });
+  const linkedExpense = expense
+    ? (db.expenses || []).find((entry) =>
+        entry.sourceType === 'asset_maintenance' && entry.sourceRecordId === input.operationId
+      ) || expense
+    : undefined;
+  const historyEntry: AssetHistoryEntry = {
+    id: input.operationId,
+    operationId: input.operationId,
+    date: input.date,
+    action: 'Maintenance',
+    note: `${input.workDone.trim()}${input.costMWK === undefined ? '' : ` · Cost posted to Finance: MWK ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(input.costMWK)}`}${input.supplier?.trim() ? ` · Supplier: ${input.supplier.trim()}` : ''}${input.invoiceReference?.trim() ? ` · Invoice: ${input.invoiceReference.trim()}` : ''}${input.nextServiceDate ? ` · Next service: ${input.nextServiceDate}` : ''}`,
+    recordedBy: input.actor,
+    recordedAt: now,
+    costMWK: input.costMWK,
+    supplier: input.supplier?.trim() || undefined,
+    invoiceReference: input.invoiceReference?.trim() || undefined,
+    linkedExpenseId: linkedExpense?.id,
+  };
+  const updatedAsset: AssetRecord = {
+    ...currentAsset,
+    nextServiceDate: input.nextServiceDate || currentAsset.nextServiceDate,
+    history: [...(currentAsset.history || []), historyEntry],
+    updatedAt: now,
+    updatedBy: input.actor,
+    updatedByUid: input.actorUid,
+  };
+  const previousAssets = [...(db.assets || [])];
+  const previousExpenses = [...(db.expenses || [])];
+  db.assets![assetIndex] = updatedAsset;
+  if (expense) {
+    const result = addAssetMaintenanceExpense(db.expenses || [], expense);
+    db.expenses = result.expenses;
+  }
+  const saved = saveDatabase(db);
+  if (!saved.ok) {
+    db.assets = previousAssets;
+    db.expenses = previousExpenses;
+    throw new Error('Could not save the maintenance record and finance expense on this device. Check available storage and try again.');
+  }
+  return { asset: updatedAsset, expense: linkedExpense };
 }
 
 export function addCustomPersonType(type: string): string[] {
