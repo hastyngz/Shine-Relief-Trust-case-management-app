@@ -115,10 +115,15 @@ const server = readFileSync(join(root, 'server.ts'), 'utf8');
 assert.ok(/app\.post\('\/api\/ai\/chat', aiLimiter/.test(server), 'AI chat is limited');
 assert.ok(/app\.post\('\/api\/ai\/transcribe', aiLimiter/.test(server), 'AI transcribe is limited');
 assert.ok(/app\.post\('\/api\/ai\/analyze-document', aiLimiter/.test(server), 'AI document analysis is limited');
+assert.ok(/app\.post\('\/api\/ai\/map-spreadsheet', aiLimiter/.test(server), 'Node mapping endpoint is limited');
 assert.ok(/app\.put\('\/api\/storage\/object', storageLimiter/.test(server), 'storage upload is limited');
 assert.ok(/app\.get\('\/api\/storage\/object', storageLimiter/.test(server), 'storage download is limited');
 assert.ok(/app\.get\('\/api\/storage\/download-url', storageLimiter/.test(server), 'storage download URLs are limited');
 assert.ok(/app\.delete\('\/api\/storage\/object', storageLimiter/.test(server), 'storage delete is limited');
+const workerAI = readFileSync(join(root, 'workers/r2-storage/aiBackend.ts'), 'utf8');
+assert.ok(/url\.pathname === '\/api\/ai\/map-spreadsheet'/.test(workerAI), 'Worker dispatches the mapping route');
+assert.ok(/AI_MAPPING_LIMITER/.test(workerAI), 'Worker mapping route requires its rate-limit binding');
+assert.ok(/key: `spreadsheet-mapping:\$\{staff\.uid\}`/.test(workerAI), 'Worker mapping limits by authenticated staff UID');
 for (const route of [
   "app.get('/api/safeguarding/cases'",
   "app.get('/api/safeguarding/count'",

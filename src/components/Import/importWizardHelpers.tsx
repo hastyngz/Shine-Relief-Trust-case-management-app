@@ -37,6 +37,7 @@ export function spreadsheetLineToPreview(
 ): ImportPreviewItem {
   const id = `spreadsheet_${line.sheet}_${line.row}`;
   if (line.kind === 'budget') {
+    const arithmeticMismatch = /source (?:total|month amount).*differs/i.test(line.notes);
     return {
       tempId: id,
       resultType: 'NEW_RECORD',
@@ -45,7 +46,7 @@ export function spreadsheetLineToPreview(
       classificationLabel: 'Budget line',
       isDateUnknown: false,
       title: line.itemDescription,
-      summary: `${line.period} · ${line.quantity} ${line.unit} × MWK ${line.unitCost.toLocaleString()} = MWK ${line.budgetAmount.toLocaleString()}`,
+      summary: `${line.period} · ${line.quantity} ${line.unit} × MWK ${line.unitCost.toLocaleString()} · Budget amount MWK ${line.budgetAmount.toLocaleString()}`,
       originalSnippet: `${line.sheet}!row ${line.row} · ${line.notes}`,
       extractedData: {
         ...line,
@@ -53,8 +54,10 @@ export function spreadsheetLineToPreview(
         financialYear: line.period.match(/20\d{2}/)?.[0],
       },
       isHistorical: false,
-      selected: true,
-      warningOrConflict: line.programmeId ? undefined : 'Select the programme before importing this budget line.',
+      selected: !arithmeticMismatch,
+      warningOrConflict: arithmeticMismatch
+        ? 'The source amount differs from the quantity/frequency calculation. Review the source values before selecting this budget line.'
+        : line.programmeId ? undefined : 'Select the programme before importing this budget line.',
       missingFields: line.programmeId ? [] : ['Programme'],
     };
   }
@@ -127,6 +130,7 @@ export function spreadsheetLineToPreview(
   if (line.kind === 'procurement') {
     const unclearCount = line.items.filter((item) => item.priceStatus === 'unclear').length;
     const missingCount = line.items.filter((item) => item.priceStatus === 'missing').length;
+    const quantityNeedsReview = line.items.some((item) => /Quantity needs review:/i.test(item.note || ''));
     return {
       tempId: id,
       resultType: 'NEW_RECORD',
@@ -139,7 +143,10 @@ export function spreadsheetLineToPreview(
       originalSnippet: JSON.stringify(line.items),
       extractedData: { ...line, spreadsheetKind: 'item-list' },
       isHistorical: false,
-      selected: true,
+      selected: !quantityNeedsReview,
+      warningOrConflict: quantityNeedsReview
+        ? 'At least one quantity could not be read as a number. Review the line details before selecting this procurement list.'
+        : undefined,
     };
   }
   if (line.kind === 'projection') {

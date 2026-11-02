@@ -1,4 +1,4 @@
-import { analyzeDocument, processAIChat, transcribeAudio } from '../../src/server/aiService';
+import { analyzeDocument, processAIChat, transcribeAudio, suggestSpreadsheetMapping } from '../../src/server/aiService';
 import type { AppDatabase } from '../../src/types';
 
 const firestoreRoot = (projectId: string) =>
@@ -234,19 +234,69 @@ async function auditSafely(env: Record<string, string>, entry: Record<string, an
 export async function handleAIRequest(request: Request, env: Record<string, string>, staff: any): Promise<Response> {
   const url = new URL(request.url);
   if (request.method !== 'POST') return json({ error: 'AI endpoint not found.' }, 404);
+  if (url.pathname === '/api/ai/map-spreadsheet') {
+    if (staff.role !== 'Administrator' && staff.role !== 'Manager') {
+      return json({ error: 'AI spreadsheet mapping is available to Administrators and Managers only.' }, 403);
+    }
+    const limiter = (env as any).AI_MAPPING_LIMITER;
+    if (!limiter || typeof limiter.limit !== 'function') {
+      return json({ error: 'AI spreadsheet mapping is not configured.' }, 503);
+    }
+    try {
+      const limit = await limiter.limit({ key: `spreadsheet-mapping:${staff.uid}` });
+      if (!limit?.success) return json({ error: 'Too many spreadsheet mapping requests. Wait a minute and try again.' }, 429);
+    } catch (error) {
+      console.error('AI spreadsheet rate limiter unavailable:', String(error).slice(0, 180));
+      return json({ error: 'AI spreadsheet mapping is temporarily unavailable.' }, 503);
+    }
+  }
   const contentLength = Number(request.headers.get('Content-Length') || 0);
   if (contentLength > 35 * 1024 * 1024) return json({ error: 'Request payload is too large.' }, 413);
 
   let body: any;
   try {
-    body = await request.json();
+    if (url.pathname === '/api/ai/map-spreadsheet') {
+      if (!request.headers.get('Content-Type')?.toLowerCase().includes('application/json')) {
+        return json({ error: 'A JSON mapping request is required.' }, 415);
+      }
+      const rawBody = await request.text();
+      if (new TextEncoder().encode(rawBody).byteLength > 64 * 1024) {
+        return json({ error: 'The spreadsheet mapping request is too large.' }, 413);
+      }
+      body = JSON.parse(rawBody);
+    } else {
+      body = await request.json();
+    }
   } catch {
     return json({ error: 'A valid JSON request body is required.' }, 400);
   }
 
   try {
+    if (url.pathname === '/api/ai/map-spreadsheet' && body?.consentConfirmed !== true) {
+      return json({ error: 'Confirm external AI processing for this workbook before requesting a mapping.' }, 400);
+    }
     const settings = await getSettings(env);
     if (settings.enabled === false) return json({ error: 'AI features are disabled by an Administrator.' }, 403);
+
+    if (url.pathname === '/api/ai/map-spreadsheet') {
+      try {
+        const result = await suggestSpreadsheetMapping({ fileLabel: body?.fileLabel, sheets: body?.sheets });
+        await auditSafely(env, {
+          userId: staff.uid, userEmail: staff.email, userRole: staff.role,
+          timestamp: new Date().toISOString(), aiFunction: 'spreadsheet_mapping', status: 'success',
+          recordIdsAccessed: [], reviewStatus: 'human_review_required',
+        });
+        return json({ proposal: result.proposal, provider: 'OpenRouter', model: result.model });
+      } catch (error) {
+        console.error('Spreadsheet mapping failed:', String(error instanceof Error ? error.message : error).slice(0, 200));
+        await auditSafely(env, {
+          userId: staff.uid, userEmail: staff.email, userRole: staff.role,
+          timestamp: new Date().toISOString(), aiFunction: 'spreadsheet_mapping', status: 'failure',
+          recordIdsAccessed: [], errorMessage: 'mapping_provider_or_validation_failure',
+        });
+        return json({ error: 'AI could not suggest a mapping. Your workbook was not imported; use manual type selection or try again.' }, 502);
+      }
+    }
 
     if (url.pathname === '/api/ai/chat') {
       if (settings.naturalLanguageSearch === false) return json({ error: 'Natural-language AI search is disabled by an Administrator.' }, 403);

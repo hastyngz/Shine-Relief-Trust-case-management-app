@@ -357,3 +357,25 @@ The management report history needs its own manager/admin-only collection; the e
 - **Claimed files:** `server.ts`, `src/server/aiService.ts` (or a dedicated mapping service), `src/components/Import/DataImportWizard.tsx`, `src/services/spreadsheetImport/detector.ts`, `src/services/spreadsheetImport/importers.ts`, `scripts/spreadsheet-import.test.ts`, and a new focused synthetic test as needed. No staff-invitation files or `message.md` edits.
 - **Goal:** Add authenticated, rate-limited AI suggestions for spreadsheet kind and supported column mappings; validate model output against an allowlist; feed only owner-confirmed suggestions into a review preview; preserve deterministic validation and explicit final import confirmation. Strengthen parsing for the owner-provided item-budget example (combined numeric quantity/unit and header aliases) with synthetic regression coverage.
 - **Boundaries:** No bulk workbook upload; send only capped table structure/sample cells needed for mapping, with per-file user notice/confirmation. No external AI-provider scope beyond this importer feature. No automatic database writes based solely on AI output, no real-data import, no production config changes or deployment. — Manus, 2026-11-02
+
+- **Claim scope clarification:** add `src/components/Import/importWizardHelpers.tsx` to the claimed set because the budget review conversion now marks source-total arithmetic conflicts as warnings and deselects them by default. — Manus, 2026-11-02
+
+- **Claim scope clarification:** also edit `scripts/rate-limit.test.ts` and `scripts/cloudflare-deployment-smoke.test.ts` to verify the new mapping route is rate-limited and included in the expected server deployment surface. — Manus, 2026-11-02
+
+- **Claim scope clarification:** the browser API points to `workers/r2-storage/aiBackend.ts`; I am inspecting and will update that Worker route/runtime (and only its required Worker tests/config) so the feature is implemented where the browser actually connects. I will remove redundant Node-only route code if the Worker is the sole supported target. — Manus, 2026-11-02
+
+- **Claim scope clarification:** add `src/services/spreadsheetImport/applyAIMapping.ts` as a browser-only helper, keeping shared Worker validation code free of the XLSX library runtime. — Manus, 2026-11-02
+
+- **Claim scope clarification:** include `package.json` and `scripts/phase2-import-ai.test.ts` so the new synthetic Worker access-control, consent, limiter, and payload-size regressions run through the standard test command. — Manus, 2026-11-02
+
+- **Claim scope clarification:** add `docs/ai-assisted-spreadsheet-mapping.md` documenting the consent boundary, sample caps, review-only behavior, Worker access/rate-limit controls, tests, and production release gates. — Manus, 2026-11-02
+
+- **Claim scope clarification:** `VITE_R2_API_URL` defaults to same-origin, so local development uses `server.ts` while configured production uses the Worker; retain equivalent authenticated routes in both runtimes. Wrangler rate-limit configuration is repository-only and has not been deployed or applied to the live Cloudflare account. — Manus, 2026-11-02
+
+- **Claim scope clarification:** include `.github/workflows/shine-checks.yml` and register `npm run test:spreadsheet-import` in the checks job; the live deployment smoke remains a separate post-deploy check. — Manus, 2026-11-02
+
+### 2026-11-02 · Manus · AI-assisted spreadsheet mapping implementation
+- Implemented consent-gated, text-sample-only mapping in both the same-origin Node development API and the production Cloudflare Worker. Only Admin/Manager requests pass; the Worker requires its UID-keyed AI mapping rate-limit binding and fails closed if that binding is unavailable. Model output is allowlisted and schema-validated; users review and apply it to a cloned workbook before normal deterministic preview/import controls.
+- Added deterministic budget/procurement parsing hardening: embedded quantities/units (e.g. `50kgs`), safer description-vs-item-number header selection, optional programme/month mapping, preservation of declared budget totals with discrepancy warnings and deselection, and manual review for unreadable procurement quantities. Added explicit external-provider disclosure and sample caps.
+- Local checks passed after synchronizing to Replit head `ab4b875`: `npm run lint`, `npm run build`, `npm run test:phase2`, `npm run test:spreadsheet-import`, `npm run test:rate-limit`, GitHub Actions YAML parse, and Wrangler Worker `--dry-run` (5 requests/60 seconds binding recognized). The new spreadsheet test is registered in Actions; exact-head CI for this change is still pending.
+- No deployment, live configuration change, user workbook upload, or production data write. Before deployment, verify the OpenRouter Worker secret/model configuration, confirm the new rate-limit namespace is unique in the target Cloudflare account, review current external-provider terms, and complete the Android/PWA weak-signal acceptance gates. — Manus, 2026-11-02

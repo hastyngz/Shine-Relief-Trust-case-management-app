@@ -15,3 +15,12 @@ CORS_ALLOWED_ORIGINS = "https://shine-relief-trust-cms.web.app,https://shine-rel
 [[kv_namespaces]]
 binding = "KV"
 id = "91b798c7acfc4ad4829bf1dd5c609a68"
+
+# Best-effort mapping throttle; Cloudflare's Worker binding is approximate per location.
+[[ratelimits]]
+name = "AI_MAPPING_LIMITER"
+namespace_id = "2026110201"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60

@@ -3,6 +3,8 @@ import { BudgetCategory, BudgetPeriodType, ContractStatus, EmployeeCategory, Emp
 import { ProgrammeId, PROGRAMMES } from '../../data/programmes';
 import { SpreadsheetAnalysis, SpreadsheetCell, SpreadsheetKind } from './detector';
 import { matchNameCandidates } from './nameMatcher';
+import { applySpreadsheetAIMapping } from './applyAIMapping';
+import type { SpreadsheetAIMappingProposal } from './aiMapping';
 
 export interface ImportedBudgetLine {
   kind: 'budget';
@@ -144,8 +146,13 @@ const MONTHS: Array<{ label: RegExp; month: number }> = [
   { label: /^may\b/i, month: 5 }, { label: /^jun(?:e)?\b/i, month: 6 },
   { label: /^jul(?:y)?\b/i, month: 7 }, { label: /^aug(?:ust)?\b/i, month: 8 },
   { label: /^sep(?:t(?:ember)?)?\b/i, month: 9 }, { label: /^oct(?:ober)?\b/i, month: 10 },
-  { label: /^nov(?:ember)?\b/i, month: 11 }, { label: /^dec(?:ember)?\b/i, month: 12 },
+  { label: /^nov(?:e|ember)?\b/i, month: 11 }, { label: /^dec(?:ember)?\b/i, month: 12 },
 ];
+
+function monthFromLabel(value: string): number | undefined {
+  const words = value.match(/[a-z]+/gi) || [];
+  return MONTHS.find(({ label }) => words.some((word) => label.test(word)))?.month;
+}
 
 function text(value: unknown): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -163,10 +170,26 @@ export function isValidPayrollEmployeeName(value: unknown): boolean {
 
 function number(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const cleaned = text(value).replace(/[,\sMWK]/gi, '');
+  const cleaned = text(value).replace(/[ ,MWK]/gi, '');
   if (!cleaned) return undefined;
   const result = Number(cleaned);
   return Number.isFinite(result) ? result : undefined;
+}
+
+function quantityAndUnit(value: unknown): { quantity?: number; unit?: string } {
+  const direct = number(value);
+  if (direct !== undefined) return { quantity: direct };
+  const match = text(value).replace(/,/g, '').match(/^(\d+(?:\.\d+)?)\s*([a-z][a-z -]{0,18})$/i);
+  if (!match) return {};
+  const rawUnit = match[2].trim().toLowerCase().replace(/\s+/g, ' ');
+  const aliases: Record<string, string> = {
+    kg: 'kg', kgs: 'kg', kilogram: 'kg', kilograms: 'kg', g: 'g', gs: 'g', gram: 'g', grams: 'g',
+    litre: 'litre', litres: 'litre', liter: 'litre', liters: 'litre', l: 'litre', ls: 'litre',
+    bar: 'bar', bars: 'bar', piece: 'piece', pieces: 'piece', pc: 'piece', pcs: 'piece',
+    roll: 'roll', rolls: 'roll', tray: 'tray', trays: 'tray', bag: 'bag', bags: 'bag',
+    bottle: 'bottle', bottles: 'bottle', tube: 'tube', tubes: 'tube', pad: 'pad', pads: 'pad',
+  };
+  return { quantity: Number(match[1]), unit: aliases[rawUnit] || rawUnit };
 }
 
 function labelUnit(raw: string): { label: string; unit?: string } {
@@ -431,15 +454,20 @@ function parseContractRows(
 function parseBudgetRows(
   sheetName: string,
   rows: unknown[][],
+  options: { sourceName?: string; programmeId?: string; periodMonth?: number } = {},
 ): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
   const headerIndex = headerRowIndex(rows, 'budget-monthly');
   const headers = rows[headerIndex] || [];
   const quantityIndex = columnIndex(headers, [/^qty$/, /quantity/]);
-  const costIndex = columnIndex(headers, [/^cost$/, /unit cost/, /price/]);
-  const labelIndex = columnIndex(headers, [/item/, /description/, /particulars/, /name/]);
+  const costIndex = columnIndex(headers, [/^cost$/, /unit cost/, /cost per item/, /price/]);
+  const labelIndex = columnIndex(headers, [/description/, /^item$/, /^item name$/, /particulars/, /^name$/]);
   const programmeIndex = columnIndex(headers, [/^programme$/, /^program$/]);
+  const frequencyIndex = columnIndex(headers, [/frequency/, /times per/, /occurrences/]);
+  const totalIndex = columnIndex(headers, [/^total(?: amount)?$/, /total cost/, /budget amount/]);
   const monthColumns = findMonthColumns(headers);
-  const year = inferYear(sheetName, rows);
+  const year = inferYear(sheetName, rows, options.sourceName || '');
+  const reportingHeaderText = `${sheetName} ${rows.slice(0, headerIndex + 1).flat().map(text).join(' ')}`;
+  const sourcePeriodMonth = options.periodMonth || monthFromLabel(reportingHeaderText) || monthFromLabel(options.sourceName || '');
   let categorySection = '';
   let programmeLabel = '';
   let lastLabel = '';
@@ -452,9 +480,12 @@ function parseBudgetRows(
     const rawLabel = text(row[labelIndex >= 0 ? labelIndex : 0]);
     if (programmeIndex >= 0 && text(row[programmeIndex])) programmeLabel = text(row[programmeIndex]);
     const unitDetails = labelUnit(rawLabel);
+    const parsedQuantity = quantityAndUnit(row[quantityIndex]);
     const embeddedQuantity = rawLabel.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|bars?|teachers?|boxes|box|litres?|liters?|bags?|pieces?|pcs|months?|days?|visits?|students?|girls?)$/i)?.[1];
-    const quantity = number(row[quantityIndex]) ?? number(embeddedQuantity);
+    const quantity = parsedQuantity.quantity ?? number(embeddedQuantity);
     const unitCost = number(row[costIndex]);
+    const frequency = number(row[frequencyIndex]);
+    const sourceTotal = number(row[totalIndex]);
     if (!rawLabel && quantity === undefined && unitCost === undefined) return;
 
     if (rawLabel && quantity === undefined && unitCost === undefined) {
@@ -476,7 +507,12 @@ function parseBudgetRows(
       return;
     }
     lastLabel = originalLabel;
-    const programme = programmeFrom(programmeLabel, categorySection);
+    const overrideProgramme = options.programmeId
+      ? PROGRAMMES.find((candidate) => candidate.id === options.programmeId)
+      : undefined;
+    const programme = overrideProgramme
+      ? { id: overrideProgramme.id, label: overrideProgramme.name }
+      : programmeFrom(programmeLabel, categorySection);
     const note = `Original label: ${originalLabel}`;
     const activeMonths = monthColumns.filter(({ index }) => number(row[index]) !== undefined && number(row[index]) !== 0);
     if (activeMonths.length > 0) {
@@ -490,19 +526,27 @@ function parseBudgetRows(
           kind: 'budget', sheet: sheetName, row: sourceRow, programmeId: programme.id,
           programme: programme.label || 'Unassigned - programme review required',
           category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
-          unit: text(row[columnIndex(headers, [/unit/])]) || unitDetails.unit || 'unit',
+          unit: text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit',
           quantity, unitCost, budgetAmount: recomputedAmount, period: `${year}-${String(month).padStart(2, '0')}`,
           periodType: 'monthly', month, notes: `${note}${amountNote}`,
         });
       });
     } else {
+      const calculatedAmount = quantity * unitCost * (frequency || 1);
+      const budgetAmount = sourceTotal ?? calculatedAmount;
+      const amountNote = sourceTotal !== undefined && Math.abs(sourceTotal - calculatedAmount) > 0.01
+        ? `; source total MWK ${sourceTotal} differs from quantity × frequency × unit cost MWK ${calculatedAmount}; verify before import`
+        : '';
+      const frequencyNote = frequency !== undefined ? `; frequency ${frequency}` : '';
       lines.push({
         kind: 'budget', sheet: sheetName, row: sourceRow, programmeId: programme.id,
         programme: programme.label || 'Unassigned - programme review required',
         category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
-        unit: text(row[columnIndex(headers, [/unit/])]) || unitDetails.unit || 'unit',
-        quantity, unitCost, budgetAmount: quantity * unitCost, period: `Annual ${year}`,
-        periodType: 'annual', notes: note,
+        unit: text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit',
+        quantity, unitCost, budgetAmount,
+        period: sourcePeriodMonth ? `${year}-${String(sourcePeriodMonth).padStart(2, '0')}` : `Annual ${year}`,
+        periodType: sourcePeriodMonth ? 'monthly' : 'annual', month: sourcePeriodMonth,
+        notes: `${note}${frequencyNote}${amountNote}`,
       });
     }
   });
@@ -602,7 +646,7 @@ function parseItemListRows(sheetName: string, rows: unknown[][]): ImportedProcur
   const specIndex = columnIndex(headers, [/specification/, /details/]);
   const quantityIndex = columnIndex(headers, [/qty|quantity/]);
   const unitIndex = columnIndex(headers, [/^unit$/]);
-  const priceIndex = columnIndex(headers, [/unit price/, /^price$/, /rate/]);
+  const priceIndex = columnIndex(headers, [/unit price/, /^price$/, /cost per item/, /cost item/, /rate/]);
   const totalIndex = columnIndex(headers, [/total/, /amount/]);
   const noteIndex = columnIndex(headers, [/notes?/, /remarks?/]);
   if (labelIndex < 0 && itemNumberIndex < 0) return null;
@@ -612,17 +656,22 @@ function parseItemListRows(sheetName: string, rows: unknown[][]): ImportedProcur
   rows.slice(headerIndex + 1).forEach((row) => {
     if (!nonEmptyRow(row)) return;
     const description = text(row[labelIndex >= 0 ? labelIndex : 0]) || previousDescription;
-    const quantity = number(row[quantityIndex]) ?? 1;
+    const parsedQuantity = quantityAndUnit(row[quantityIndex]);
+    const rawQuantity = text(row[quantityIndex]);
+    const quantity = parsedQuantity.quantity ?? 1;
     const unitPrice = number(row[priceIndex]);
     const total = number(row[totalIndex]);
-    const note = text(row[noteIndex]);
+    const quantityWarning = rawQuantity && parsedQuantity.quantity === undefined
+      ? `Quantity needs review: ${rawQuantity}`
+      : '';
+    const note = [text(row[noteIndex]), quantityWarning].filter(Boolean).join('; ');
     if (!description || /^(total|grand total)$/i.test(description)) return;
     previousDescription = description;
     items.push({
       description,
       specification: text(row[specIndex]) || undefined,
       quantity,
-      unit: text(row[unitIndex]) || 'item',
+      unit: text(row[unitIndex]) || parsedQuantity.unit || 'item',
       unitPriceMWK: unitPrice,
       totalMWK: total ?? (unitPrice === undefined ? undefined : unitPrice * quantity),
       note: note || undefined,
@@ -1029,18 +1078,30 @@ export async function createSpreadsheetImportPreview(
   kind: SpreadsheetKind,
   employees: EmployeeRecord[] = [],
   sourceName = '',
+  mappingProposal?: SpreadsheetAIMappingProposal,
 ): Promise<SpreadsheetImportPreview> {
   const XLSX = await import('xlsx');
+  const sourceWorkbook = mappingProposal
+    ? await applySpreadsheetAIMapping(workbook, mappingProposal)
+    : workbook;
+  const selectedKind = mappingProposal?.kind || kind;
   const lines: ImportedSpreadsheetLine[] = [];
   const procurementGroups: ImportedProcurementLine[] = [];
   const sheetStats = analysis.sheets.map((sheet) => {
-    const rawRows = worksheetRows(XLSX, workbook.Sheets[sheet.name]);
+    const rawRows = worksheetRows(XLSX, sourceWorkbook.Sheets[sheet.name]);
     let result: { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number };
-    if (kind === 'budget-monthly') {
-      result = parseBudgetRows(sheet.name, rawRows);
-    } else if (kind === 'workplan-matrix') {
+    const aiSheetMapping = mappingProposal?.sheets.find((candidate) => candidate.name === sheet.name);
+    if (mappingProposal && aiSheetMapping && aiSheetMapping.columns.length === 0 && sheet.rowsRead > 0) {
+      result = { lines: [], imported: 0, skipped: 0 };
+    } else if (selectedKind === 'budget-monthly') {
+      result = parseBudgetRows(sheet.name, rawRows, {
+        sourceName,
+        programmeId: mappingProposal?.programmeId,
+        periodMonth: mappingProposal?.periodMonth,
+      });
+    } else if (selectedKind === 'workplan-matrix') {
       result = parseWorkplanRows(sheet.name, rawRows);
-    } else if (kind === 'item-list' || kind === 'back-to-school') {
+    } else if (selectedKind === 'item-list' || selectedKind === 'back-to-school') {
       const procurement = parseItemListRows(sheet.name, rawRows);
       if (procurement) procurementGroups.push(procurement);
       result = {
@@ -1048,22 +1109,22 @@ export async function createSpreadsheetImportPreview(
         imported: procurement?.items.length || 0,
         skipped: Math.max(0, rawRows.slice(1).filter(nonEmptyRow).length - (procurement?.items.length || 0)),
       };
-    } else if (kind === 'profit-loss') {
+    } else if (selectedKind === 'profit-loss') {
       const projection = parseProjectionRows(sheet.name, rawRows);
       result = { lines: projection ? [projection] : [], imported: projection ? 1 : 0, skipped: projection ? 0 : 1 };
-    } else if (kind === 'payroll-grid') {
+    } else if (selectedKind === 'payroll-grid') {
       result = parsePayrollRows(sheet.name, rawRows, employees, sourceName);
     } else {
       result = { lines: rawRows.slice(1).filter(nonEmptyRow).map((values, index) => ({
         kind: 'unmapped', sheet: sheet.name, row: index + 2,
-        reason: `No importer is configured for detected kind "${kind}" yet`, values,
+        reason: `No importer is configured for detected kind "${selectedKind}" yet`, values,
       })), imported: 0, skipped: rawRows.slice(1).filter(nonEmptyRow).length };
     }
     lines.push(...result.lines);
     return { sheet: sheet.name, rowsRead: sheet.rowsRead, imported: result.imported, skipped: result.skipped };
   });
 
-  if (kind === 'item-list' || kind === 'back-to-school') {
+  if (selectedKind === 'item-list' || selectedKind === 'back-to-school') {
     const merged = new Map<string, ImportedProcurementLine['items'][number]>();
     procurementGroups.forEach((group) => group.items.forEach((item, index) => {
       const key = item.itemNumber ? `number:${normalized(item.itemNumber)}` : `description:${normalized(item.description)}:${index}`;
@@ -1105,7 +1166,7 @@ export async function createSpreadsheetImportPreview(
       })),
     })),
   };
-  return { kind, lines, sheetStats, formulaDisagreements: formulaDisagreements(analysis), sourceData };
+  return { kind: selectedKind, lines, sheetStats, formulaDisagreements: formulaDisagreements(analysis), sourceData };
 }
 
 export function availableProgrammeOptions(): Array<{ id: ProgrammeId; name: string }> {

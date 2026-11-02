@@ -3,7 +3,7 @@ import express from 'express';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument } from './src/server/aiService';
+import { processAIChat, AIChatRequest, transcribeAudio, analyzeDocument, suggestSpreadsheetMapping } from './src/server/aiService';
 import { AIRequestAuthError, adminFirestore, authenticateAIRequest, getAISettings, loadAIRecords, notifyCaseAction, resolveAuthenticatedUid, writeAIAudit, writeSafeguardingAudit } from './src/server/firebaseAdmin';
 import { deleteR2Object, getR2DownloadUrl, getR2Object, putR2Object } from './src/server/r2Storage';
 import { createRateLimiter, getRateLimitConfig } from './src/server/rateLimit';
@@ -283,6 +283,46 @@ async function startServer() {
     } catch (err: any) {
       const status = err instanceof AIRequestAuthError ? err.statusCode : 500;
       res.status(status).json({ error: err.message || 'Could not analyze document.' });
+    }
+  });
+
+  app.post('/api/ai/map-spreadsheet', aiLimiter, async (req, res) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    let staff: Awaited<ReturnType<typeof authenticateAIRequest>> | undefined;
+    try {
+      staff = await authenticateAIRequest(req.headers.authorization);
+      if (staff.status !== 'Active') return res.status(403).json({ error: 'Active staff access is required.' });
+      if (staff.role !== 'Administrator' && staff.role !== 'Manager') {
+        return res.status(403).json({ error: 'AI spreadsheet mapping is available to Administrators and Managers only.' });
+      }
+      const bodyLength = Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8');
+      if (bodyLength > 64 * 1024) return res.status(413).json({ error: 'The spreadsheet mapping request is too large.' });
+      if (req.body?.consentConfirmed !== true) {
+        return res.status(400).json({ error: 'Confirm external AI processing for this workbook before requesting a mapping.' });
+      }
+      const aiSettings = await getAISettings();
+      if (aiSettings.enabled === false) return res.status(403).json({ error: 'AI features are disabled by an Administrator.' });
+
+      const result = await suggestSpreadsheetMapping({ fileLabel: req.body?.fileLabel, sheets: req.body?.sheets });
+      try {
+        await writeAIAudit({
+          userId: staff.uid,
+          userEmail: staff.email,
+          userRole: staff.role,
+          timestamp: new Date().toISOString(),
+          aiFunction: 'spreadsheet_mapping',
+          status: 'success',
+          recordIdsAccessed: [],
+          reviewStatus: 'human_review_required',
+        });
+      } catch (auditError) {
+        console.error('Spreadsheet AI mapping audit write failed:', String(auditError).slice(0, 180));
+      }
+      res.json({ proposal: result.proposal, provider: 'OpenRouter', model: result.model });
+    } catch (err: any) {
+      if (err instanceof AIRequestAuthError) return res.status(err.statusCode).json({ error: err.message });
+      console.error('Spreadsheet AI mapping request failed:', String(err?.message || err).slice(0, 240));
+      res.status(502).json({ error: 'AI could not suggest a mapping. Your workbook was not imported; use manual type selection or try again.' });
     }
   });
 

@@ -16,7 +16,7 @@ async function run() {
   assert.equal(bundleResponse.status, 200, 'The deployed JavaScript asset should be available');
   const bundle = await bundleResponse.text();
   assert.ok(bundle.includes(workerUrl), 'The deployed frontend should point to the Cloudflare Worker');
-  for (const route of ['/api/ai/chat', '/api/ai/transcribe', '/api/ai/analyze-document']) {
+  for (const route of ['/api/ai/chat', '/api/ai/transcribe', '/api/ai/analyze-document', '/api/ai/map-spreadsheet']) {
     assert.ok(bundle.includes(route), `The deployed frontend should include ${route}`);
   }
 
@@ -39,6 +39,14 @@ async function run() {
   });
   assert.equal(aiResponse.status, 401, 'AI route should require Firebase authentication');
   assert.match(aiResponse.headers.get('content-type') || '', /application\/json/);
+
+  const mappingResponse = await fetch(`${workerUrl}/api/ai/map-spreadsheet`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ consentConfirmed: true }),
+  });
+  assert.equal(mappingResponse.status, 401, 'Spreadsheet AI mapping should require Firebase authentication');
+  assert.match(mappingResponse.headers.get('content-type') || '', /application\/json/);
 
   const storageResponse = await fetch(`${workerUrl}/api/storage/object?path=smoke-test`, {
     headers: { Origin: origin },

@@ -4,8 +4,11 @@ import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook, detectSpreadsheetKind } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview, isValidPayrollEmployeeName } from '../src/services/spreadsheetImport/importers';
 import { spreadsheetEmployeeLineToPreview } from '../src/services/spreadsheetImport/employeePreview';
+import { applySpreadsheetAIMapping } from '../src/services/spreadsheetImport/applyAIMapping';
+import { validateSpreadsheetAIRequest, validateSpreadsheetAIMappingProposal } from '../src/services/spreadsheetImport/aiMapping';
 import { matchNameCandidates } from '../src/services/spreadsheetImport/nameMatcher';
 import { extractEarlyYearsMetrics } from '../src/services/docxParserService';
+import { spreadsheetLineToPreview } from '../src/components/Import/importWizardHelpers';
 
 function workbook(rows: Array<Array<string | number>>, sheetName = 'Sheet1'): XLSX.WorkBook {
   const result = XLSX.utils.book_new();
@@ -81,10 +84,24 @@ assert.equal(budgetLines[0].itemDescription, 'Maize');
 const listWorkbook = workbook([
   ['Item No', 'Description', 'Quantity', 'Unit', 'Unit Price', 'Notes'],
   ['1', 'Pipe fittings', 4, 'pieces', '', 'Price not clearly written'],
+  ['2', 'Maize meal', '50kgs', '', 500, ''],
 ]);
 const listPreview = await createSpreadsheetImportPreview(listWorkbook, await analyzeSpreadsheetWorkbook(listWorkbook), 'item-list');
 const listLine = listPreview.lines.find((line) => line.kind === 'procurement');
 assert.equal(listLine?.items[0].priceStatus, 'unclear');
+assert.equal(listLine?.items[1].quantity, 50);
+assert.equal(listLine?.items[1].unit, 'kg');
+const unreadableQuantityWorkbook = workbook([
+  ['Item No', 'Description', 'Quantity', 'Unit Price'],
+  ['1', 'Synthetic supply', 'unknown', 500],
+]);
+const unreadableQuantityLine = (await createSpreadsheetImportPreview(
+  unreadableQuantityWorkbook,
+  await analyzeSpreadsheetWorkbook(unreadableQuantityWorkbook),
+  'item-list',
+)).lines.find((line) => line.kind === 'procurement');
+assert.match(unreadableQuantityLine?.items[0].note || '', /Quantity needs review/);
+assert.equal(spreadsheetLineToPreview(unreadableQuantityLine!).selected, false);
 
 const projectionWorkbook = workbook([
   ['Fish & Chicken P&L 2026'],
@@ -395,4 +412,114 @@ assert.equal(cycleMetrics.caregiverCount, 2);
 assert.equal(cycleMetrics.classesStartDate, '21 September 2026');
 assert.equal(cycleMetrics.feedingProgrammeStartDate, '28 September 2026');
 
-console.log('Spreadsheet detection, formula preservation and budget/list/projection preview tests passed.');
+const irregularBudget = workbook([
+  ['CHILD HOUSE BUDGET · NOVEMBER 2026'],
+  ['Items for review'],
+  ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)'],
+  ['1', 'Ufa', '50kgs', 2, 80000, 160000],
+  ['2', 'Rice', '4kgs', 1, 3000, 12000],
+  ['3', 'Cooking Oil', '2L', 1, 14000, 19000],
+  ['4', 'Lamp', 'lampsome', 1, 5000, 5000],
+], 'Budget sheet');
+const irregularRequest = validateSpreadsheetAIRequest({
+  fileLabel: 'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+  sheets: [{
+    name: 'Budget sheet',
+    rows: [
+      ['CHILD HOUSE BUDGET · NOVEMBER 2026'],
+      ['Items for review'],
+      ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)'],
+      ['1', 'Synthetic maize meal', '50kgs', '2', '80000', '160000'],
+    ],
+  }],
+});
+const mappingProposal = validateSpreadsheetAIMappingProposal({
+  kind: 'budget-monthly',
+  confidence: 0.91,
+  programmeId: 'child-house',
+  periodMonth: 11,
+  summary: 'This is a child-house monthly budget with a non-standard item table.',
+  warnings: ['The declared totals do not consistently match quantity × frequency × unit cost.'],
+  sheets: [{
+    name: 'Budget sheet',
+    headerRow: 2,
+    columns: [
+      { sourceColumn: 0, field: 'itemNumber', confidence: 0.95 },
+      { sourceColumn: 1, field: 'description', confidence: 0.96 },
+      { sourceColumn: 2, field: 'quantity', confidence: 0.99 },
+      { sourceColumn: 3, field: 'frequency', confidence: 0.94 },
+      { sourceColumn: 4, field: 'unitCost', confidence: 0.9 },
+      { sourceColumn: 5, field: 'totalAmount', confidence: 0.98 },
+    ],
+    warnings: [],
+  }],
+}, irregularRequest);
+const mappedWorkbook = await applySpreadsheetAIMapping(irregularBudget, mappingProposal);
+assert.equal(mappedWorkbook.Sheets['Budget sheet']['C3'].v, 'Quantity');
+assert.equal(irregularBudget.Sheets['Budget sheet']['C3'].v, 'QTY', 'AI mapping must not mutate the original workbook');
+const irregularAnalysis = await analyzeSpreadsheetWorkbook(irregularBudget);
+const aiMappedBudget = await createSpreadsheetImportPreview(
+  irregularBudget,
+  irregularAnalysis,
+  'item-list',
+  [],
+  'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+  mappingProposal,
+);
+assert.equal(aiMappedBudget.kind, 'budget-monthly', 'The explicit proposal may override a wrong deterministic kind');
+const mappedBudgetLines = aiMappedBudget.lines.filter((line) => line.kind === 'budget');
+assert.equal(mappedBudgetLines.length, 3);
+assert.equal(mappedBudgetLines[0].itemDescription, 'Ufa');
+assert.equal(mappedBudgetLines[0].quantity, 50);
+assert.equal(mappedBudgetLines[0].unit, 'kg');
+assert.equal(mappedBudgetLines[0].unitCost, 80000);
+assert.equal(mappedBudgetLines[0].budgetAmount, 160000, 'Preserve the reported total rather than silently replacing it with a calculation');
+assert.equal(mappedBudgetLines[0].programmeId, 'child-house');
+assert.equal(mappedBudgetLines[0].period, '2026-11');
+assert.equal(mappedBudgetLines[0].periodType, 'monthly');
+assert.match(mappedBudgetLines[0].notes, /source total MWK 160000 differs/);
+assert.equal(spreadsheetLineToPreview(mappedBudgetLines[0]).selected, false, 'Arithmetic conflicts require deliberate item selection');
+assert.equal(spreadsheetLineToPreview(mappedBudgetLines[1]).selected, true, 'Consistent rows remain available for review');
+assert.ok(aiMappedBudget.lines.some((line) => line.kind === 'unmapped' && line.reason.includes('Missing item label, quantity, or unit cost')));
+
+const explicitAprilBudget = workbook([
+  ['Child House budget · April 2026'],
+  ['Description', 'Quantity', 'Frequency', 'Unit Cost', 'Total Amount'],
+  ['Synthetic maize', 2, 1, 50, 100],
+], 'Budget');
+const aprilBudgetPreview = await createSpreadsheetImportPreview(
+  explicitAprilBudget,
+  await analyzeSpreadsheetWorkbook(explicitAprilBudget),
+  'budget-monthly',
+  [],
+  'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+);
+assert.equal(aprilBudgetPreview.lines.find((line) => line.kind === 'budget')?.period, '2026-04');
+
+const filenameMonthBudget = workbook([
+  ['Programme', 'Item Description', 'QTY', 'Frequency', 'Unit Cost', 'Total Amount'],
+  ['Child House', 'Synthetic rice', 1, 1, 50, 50],
+], 'Budget');
+const filenameMonthPreview = await createSpreadsheetImportPreview(
+  filenameMonthBudget,
+  await analyzeSpreadsheetWorkbook(filenameMonthBudget),
+  'budget-monthly',
+  [],
+  'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+);
+assert.equal(filenameMonthPreview.lines.find((line) => line.kind === 'budget')?.period, '2026-11');
+
+assert.throws(() => validateSpreadsheetAIMappingProposal({
+  kind: 'unknown', confidence: 1, summary: 'bad', sheets: [],
+}, irregularRequest), /unsupported spreadsheet type/);
+assert.throws(() => validateSpreadsheetAIMappingProposal({
+  kind: 'budget-monthly', confidence: 1, summary: 'bad', sheets: [{
+    name: 'Budget sheet', headerRow: 2,
+    columns: [{ sourceColumn: 99, field: 'quantity', confidence: 1 }], warnings: [],
+  }],
+}, irregularRequest), /unsupported column mapping/);
+assert.throws(() => validateSpreadsheetAIRequest({
+  fileLabel: 'too-large.xlsx',
+  sheets: [{ name: 'one', rows: [Array.from({ length: 33 }, () => 'x')] }],
+}), /too many columns/);
+console.log('Spreadsheet detection, formula preservation, AI mapping validation, and import-preview tests passed.');

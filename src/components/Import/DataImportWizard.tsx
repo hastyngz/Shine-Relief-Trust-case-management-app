@@ -17,6 +17,8 @@ import { ContactCandidate, ConfirmedContactCandidate, listContacts, matchContact
 import { ACTIVITY_CATEGORY_OPTIONS, DueDatePeriodChoice, getDueDateRange, serializeDueDatePeriod } from '../../services/ingestionRules';
 import { DocumentStructureNode, ReportMetadata } from '../../services/docxParserService';
 import { SpreadsheetAnalysis, SpreadsheetKind } from '../../services/spreadsheetImport/detector';
+import { SpreadsheetAIMappingProposal } from '../../services/spreadsheetImport/aiMapping';
+import { requestSpreadsheetAIMapping } from '../../services/spreadsheetImport/aiMappingClient';
 import {
   createSpreadsheetImportPreview,
   ImportedSpreadsheetLine,
@@ -146,6 +148,15 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [spreadsheetAnalysis, setSpreadsheetAnalysis] = useState<SpreadsheetAnalysis | null>(null);
   const [spreadsheetKindOverride, setSpreadsheetKindOverride] = useState<SpreadsheetKind | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetImportPreview | null>(null);
+  const [aiMappingConsent, setAiMappingConsent] = useState(false);
+  const [aiMappingBusy, setAiMappingBusy] = useState(false);
+  const [aiMappingError, setAiMappingError] = useState('');
+  const [aiMappingResult, setAiMappingResult] = useState<{
+    proposal: SpreadsheetAIMappingProposal;
+    provider: string;
+    model?: string;
+  } | null>(null);
+  const [aiMappingApplied, setAiMappingApplied] = useState(false);
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
   const [qualityDataSource, setQualityDataSource] = useState('');
   const [qualityCollectionMethod, setQualityCollectionMethod] = useState('');
@@ -269,6 +280,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
     setSelectedFile(file);
     setDocumentStructure([]);
+    setAiMappingConsent(false);
+    setAiMappingBusy(false);
+    setAiMappingError('');
+    setAiMappingResult(null);
+    setAiMappingApplied(false);
     automaticChangeKeys.current.clear();
     automaticDuplicateKeys.current.clear();
     setAutomaticChanges([]);
@@ -717,6 +733,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
   const handleSpreadsheetKindChange = async (kind: SpreadsheetKind) => {
     setSpreadsheetKindOverride(kind);
+    setAiMappingApplied(false);
     if (!selectedFile || !spreadsheetAnalysis) return;
     const XLSX = await import('xlsx');
     const workbook = XLSX.read(await selectedFile.arrayBuffer(), {
@@ -734,6 +751,61 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     setPreviewItems(parsed.lines.map((line) =>
       spreadsheetLineToPreview(line, db.workplans || [])
     ));
+  };
+
+  const handleRequestSpreadsheetAIMapping = async () => {
+    if (!selectedFile || !spreadsheetAnalysis || !aiMappingConsent) return;
+    if (!(isAdmin || role === 'Manager')) {
+      setAiMappingError('AI spreadsheet mapping is available to Administrators and Managers only.');
+      return;
+    }
+    setAiMappingBusy(true);
+    setAiMappingError('');
+    setAiMappingApplied(false);
+    try {
+      const result = await requestSpreadsheetAIMapping(selectedFile, true);
+      setAiMappingResult(result);
+    } catch (error) {
+      setAiMappingError(error instanceof Error ? error.message : 'AI could not suggest a mapping.');
+    } finally {
+      setAiMappingBusy(false);
+    }
+  };
+
+  const handleApplySpreadsheetAIMapping = async () => {
+    if (!selectedFile || !spreadsheetAnalysis || !aiMappingResult) return;
+    const { proposal } = aiMappingResult;
+    if (proposal.kind === 'payroll-grid' && !(isAdmin || role === 'Manager')) {
+      setAiMappingError('Payroll spreadsheet imports are restricted to Administrators and Managers.');
+      return;
+    }
+    setIsParsing(true);
+    setAiMappingError('');
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await selectedFile.arrayBuffer(), {
+        type: 'array',
+        cellFormula: true,
+        cellNF: true,
+        cellText: true,
+      });
+      const parsed = await createSpreadsheetImportPreview(
+        workbook,
+        spreadsheetAnalysis,
+        proposal.kind,
+        db.employees || [],
+        selectedFile.name,
+        proposal,
+      );
+      setSpreadsheetKindOverride(proposal.kind);
+      setSpreadsheetPreview(parsed);
+      setPreviewItems(parsed.lines.map((line) => spreadsheetLineToPreview(line, db.workplans || [])));
+      setAiMappingApplied(true);
+    } catch (error) {
+      setAiMappingError(error instanceof Error ? error.message : 'The suggested mapping could not be applied.');
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   const handleSpreadsheetProgrammeChange = (tempId: string, programmeId: string) => {
@@ -1711,6 +1783,100 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                   );
                 })}
               </div>
+              <section className="mt-4 rounded-lg border border-violet-200 bg-violet-50 p-3" aria-label="AI spreadsheet mapping">
+                <h4 className="text-sm font-bold text-violet-950">AI mapping assistance (optional)</h4>
+                <p className="mt-1 text-xs text-violet-950">
+                  AI can suggest a spreadsheet type and column mapping when headings or layouts differ from the usual templates.
+                  It cannot import data or change records. The suggestion is untrusted and must be reviewed.
+                </p>
+                <p className="mt-2 text-xs text-violet-950">
+                  If you choose to continue, only the first 35 rows and first 16 columns of up to 8 sheets are sent as text to OpenRouter
+                  (up to 160 characters per cell and 24,000 characters total),
+                  which routes requests to the model providers configured for the SHINE backend. The workbook file itself is not uploaded,
+                  but sample cell values do leave the SHINE app environment; provider retention and processing terms can differ.
+                </p>
+                {isAdmin || role === 'Manager' ? (
+                  <>
+                    <label className="mt-3 flex items-start gap-2 text-xs text-violet-950">
+                      <input
+                        type="checkbox"
+                        checked={aiMappingConsent}
+                        onChange={(event) => setAiMappingConsent(event.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        I authorize sending the capped sample from <strong>{selectedFile?.name || 'this workbook'}</strong> to the external AI providers described above for a mapping suggestion. I will review the result before using it.
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      className="mt-3 rounded-lg bg-violet-800 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!aiMappingConsent || aiMappingBusy || !selectedFile || !spreadsheetAnalysis}
+                      onClick={() => void handleRequestSpreadsheetAIMapping()}
+                    >
+                      {aiMappingBusy ? 'Requesting suggestion…' : 'Suggest mapping with AI'}
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-3 text-xs font-semibold text-violet-950">AI mapping is restricted to Administrators and Managers.</p>
+                )}
+                {aiMappingError && <p role="alert" className="mt-2 text-xs font-semibold text-red-800">{aiMappingError}</p>}
+                {aiMappingResult && (
+                  <div className="mt-3 rounded-md border border-violet-200 bg-white p-3">
+                    <p className="text-xs font-semibold text-stone-900">Suggested type: {aiMappingResult.proposal.kind}</p>
+                    <p className="mt-1 text-xs text-stone-700">{aiMappingResult.proposal.summary}</p>
+                    <p className="mt-1 text-[11px] text-stone-600">
+                      Provider: {aiMappingResult.provider}{aiMappingResult.model ? ` · Model: ${aiMappingResult.model}` : ''} · Model confidence estimate: {Math.round(aiMappingResult.proposal.confidence * 100)}% (not a verified probability)
+                    </p>
+                    {aiMappingResult.proposal.programmeId && (
+                      <p className="mt-1 text-xs text-stone-700">
+                        Suggested programme: {PROGRAMMES.find((programme) => programme.id === aiMappingResult.proposal.programmeId)?.name || aiMappingResult.proposal.programmeId}
+                      </p>
+                    )}
+                    {aiMappingResult.proposal.periodMonth && (
+                      <p className="mt-1 text-xs text-stone-700">
+                        Suggested budget month: {new Date(2000, aiMappingResult.proposal.periodMonth - 1, 1).toLocaleString('en', { month: 'long' })}
+                      </p>
+                    )}
+                    <div className="mt-2 space-y-2">
+                      {aiMappingResult.proposal.sheets.map((sheet) => (
+                        <div key={sheet.name} className="rounded border border-stone-200 p-2">
+                          <p className="text-xs font-semibold">{sheet.name} · header row {sheet.headerRow + 1}</p>
+                          {sheet.columns.length > 0 ? (
+                            <ul className="mt-1 grid gap-1 text-[11px] text-stone-700 sm:grid-cols-2">
+                              {sheet.columns.map((column) => (
+                                <li key={`${sheet.name}:${column.sourceColumn}:${column.field}`}>
+                                  Column {column.sourceColumn + 1} → {column.field.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}
+                                  {column.explanation ? ` · ${column.explanation}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : <p className="mt-1 text-[11px] text-amber-800">No column mappings were suggested for this sheet.</p>}
+                          {sheet.warnings.length > 0 && (
+                            <ul className="mt-1 list-disc pl-4 text-[11px] text-amber-800">
+                              {sheet.warnings.map((warning, index) => <li key={`${sheet.name}:warning:${index}`}>{warning}</li>)}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {aiMappingResult.proposal.warnings.length > 0 && (
+                      <ul className="mt-2 list-disc pl-4 text-xs text-amber-800">
+                        {aiMappingResult.proposal.warnings.map((warning, index) => <li key={`warning:${index}`}>{warning}</li>)}
+                      </ul>
+                    )}
+                    <button
+                      type="button"
+                      className="mt-3 rounded-lg border border-violet-700 px-3 py-2 text-xs font-semibold text-violet-900 disabled:opacity-60"
+                      disabled={isParsing || aiMappingApplied}
+                      onClick={() => void handleApplySpreadsheetAIMapping()}
+                    >
+                      {aiMappingApplied ? 'Suggestion applied to the review preview' : 'Apply suggestion to review preview'}
+                    </button>
+                    <p className="mt-1 text-[11px] text-stone-600">Applying creates a local preview only. Inspect every row and warning, then use the normal import confirmation if it is correct.</p>
+                  </div>
+                )}
+              </section>
               {spreadsheetPreview && previewItems.some((item) => item.selected && ['activity', 'workplan'].includes(item.targetEntity)) && (
                 <div className="mt-3 space-y-2">
                   {spreadsheetPreview.sheetStats.map((sheet) => (

@@ -3,10 +3,10 @@ import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
 import { analyzeImportRows, assertImportLocalSaveSucceeded } from '../src/services/importService';
-import { processAIChat } from '../src/server/aiService';
+import { processAIChat, suggestSpreadsheetMapping } from '../src/server/aiService';
 import { executeAITool } from '../src/server/aiTools';
 import { AppDatabase, StaffUser } from '../src/types';
-import { getAICollectionsForTool } from '../workers/r2-storage/aiBackend';
+import { getAICollectionsForTool, handleAIRequest } from '../workers/r2-storage/aiBackend';
 
 const staff: StaffUser = {
   id: 'staff-1',
@@ -77,8 +77,58 @@ async function verifyPayrollYearInference() {
   );
 }
 
+async function verifySpreadsheetMappingWorkerGates() {
+  const request = (body: unknown, headers: Record<string, string> = {}) => new Request(
+    'https://worker.test/api/ai/map-spreadsheet',
+    { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) },
+  );
+  const ordinaryStaff = await handleAIRequest(
+    request({ consentConfirmed: true }),
+    {} as any,
+    { uid: 'synthetic-staff-1', role: 'Staff' },
+  );
+  assert.equal(ordinaryStaff.status, 403, 'staff must not access spreadsheet AI mapping');
+
+  const missingLimiter = await handleAIRequest(
+    request({ consentConfirmed: true }),
+    {} as any,
+    { uid: 'synthetic-manager-1', role: 'Manager' },
+  );
+  assert.equal(missingLimiter.status, 503, 'mapping must fail closed when the production rate-limit binding is missing');
+
+  let limiterCalls = 0;
+  const denyingLimiter = { limit: async ({ key }: { key: string }) => {
+    limiterCalls += 1;
+    assert.equal(key, 'spreadsheet-mapping:synthetic-manager-1');
+    return { success: false };
+  } };
+  const throttled = await handleAIRequest(
+    request({ consentConfirmed: true }),
+    { AI_MAPPING_LIMITER: denyingLimiter } as any,
+    { uid: 'synthetic-manager-1', role: 'Manager' },
+  );
+  assert.equal(throttled.status, 429, 'the mapping limiter should reject excess requests');
+  assert.equal(limiterCalls, 1);
+
+  const allowingLimiter = { limit: async () => ({ success: true }) };
+  const noConsent = await handleAIRequest(
+    request({ fileLabel: 'synthetic.xlsx', sheets: [] }),
+    { AI_MAPPING_LIMITER: allowingLimiter } as any,
+    { uid: 'synthetic-manager-1', role: 'Manager' },
+  );
+  assert.equal(noConsent.status, 400, 'external processing must have explicit workbook consent');
+
+  const oversized = await handleAIRequest(
+    request({ consentConfirmed: true, padding: 'x'.repeat(65 * 1024) }),
+    { AI_MAPPING_LIMITER: allowingLimiter } as any,
+    { uid: 'synthetic-manager-1', role: 'Manager' },
+  );
+  assert.equal(oversized.status, 413, 'mapping requests must have a strict byte cap');
+}
+
 async function run() {
   await verifyPayrollYearInference();
+  await verifySpreadsheetMappingWorkerGates();
   const healthPreview = analyzeImportRows([
     {
       GirlID: 'SG-001',
@@ -142,6 +192,51 @@ async function run() {
     globalThis.fetch = originalFetch;
     if (originalOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
+  }
+
+  const fetchBeforeMapping = globalThis.fetch;
+  const keyBeforeMapping = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'synthetic-test-key';
+  let capturedMappingRequest: any;
+  globalThis.fetch = async (_input, init) => {
+    capturedMappingRequest = JSON.parse(String(init?.body || '{}'));
+    return new Response(JSON.stringify({
+      model: 'synthetic-provider/test-model',
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'budget-monthly',
+        confidence: 0.93,
+        programmeId: 'child-house',
+        periodMonth: 11,
+        summary: 'Synthetic monthly budget table.',
+        warnings: [],
+        sheets: [{
+          name: 'Synthetic budget',
+          headerRow: 0,
+          columns: [
+            { sourceColumn: 0, field: 'description', confidence: 0.9 },
+            { sourceColumn: 1, field: 'quantity', confidence: 0.9 },
+          ],
+          warnings: [],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const result = await suggestSpreadsheetMapping({
+      fileLabel: 'synthetic-budget.xlsx',
+      sheets: [{ name: 'Synthetic budget', rows: [['Item', 'Qty'], ['Synthetic beans', '2']] }],
+    });
+    assert.equal(result.proposal.kind, 'budget-monthly');
+    assert.equal(result.proposal.programmeId, 'child-house');
+    assert.equal(result.proposal.periodMonth, 11);
+    assert.equal(result.model, 'synthetic-provider/test-model');
+    assert.ok(capturedMappingRequest.messages[0].content.includes('untrusted data'));
+    assert.ok(capturedMappingRequest.messages[1].content.includes('Synthetic beans'));
+    assert.equal(capturedMappingRequest.messages[1].content.includes('Maria Chipelesa'), false);
+  } finally {
+    globalThis.fetch = fetchBeforeMapping;
+    if (keyBeforeMapping === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = keyBeforeMapping;
   }
 
   
