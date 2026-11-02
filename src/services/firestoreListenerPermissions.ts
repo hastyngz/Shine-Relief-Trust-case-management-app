@@ -23,7 +23,8 @@ export function shouldSubscribeToCollection(
   if (
     (colName === 'whatIfScenarios' ||
       colName === 'projectProjections' ||
-      colName === 'employees') &&
+      colName === 'employees' ||
+      colName === 'pettyCashTransactions') &&
     options.canReadManagementPlanning !== true
   ) {
     return false;
