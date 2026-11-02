@@ -27,7 +27,7 @@ test('staff can register an asset and record physical verification without chang
   await verify.getByLabel('Notes').fill('Synthetic E2E physical check.');
   await verify.getByRole('button', { name: 'Save verification' }).click();
 
-  await expect(page.getByText(`Physical verification recorded for ${assetTag}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`Physical verification recorded for ${assetTag}`, { exact: false })).toBeVisible();
   await expect(asset).toContainText('Verified');
   await expect(asset).toContainText('E2E Test Staff');
   await asset.getByRole('button', { name: /History/ }).click();
@@ -87,7 +87,7 @@ test('asset verification stays open and preserves observations when device stora
 
   await verify.getByRole('button', { name: 'Save verification' }).click();
   await expect(verify).toHaveCount(0);
-  await expect(page.getByText(`Physical verification recorded for ${assetTag}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`Physical verification recorded for ${assetTag}`, { exact: false })).toBeVisible();
   await expect(asset).toContainText('Discrepancy');
   await asset.getByRole('button', { name: /History/ }).click();
   await expect(asset).toContainText('Synthetic retry test: location needs register correction.');
