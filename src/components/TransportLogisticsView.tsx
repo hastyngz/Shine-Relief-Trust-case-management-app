@@ -26,6 +26,11 @@ export const TransportLogisticsView: React.FC<Props> = ({ db, onRefresh }) => {
     const vehicle=vehicles.find(v=>v.id===vehicleId);
     if(!isValidInventoryDate(date)||!vehicle||!driver.trim()||!origin.trim()||!destination.trim()||!purpose.trim()||!validNumber(start)){setError('Complete the date, registered vehicle, driver, route, purpose and starting odometer.');return;}
     if((fuel&&!validNumber(fuel))||(cost&&!validNumber(cost))){setError('Fuel quantity and cost must be non-negative numbers.');return;}
+    const vehicleTrips = trips.filter(t => t.transportDetails?.vehicleAssetId === vehicle.id);
+    if (vehicleTrips.some(t => t.status !== 'Completed' && t.status !== 'Cancelled')) { setError('This vehicle already has a trip in progress. Complete or cancel it before recording another journey.'); return; }
+    const lastCompleted = [...vehicleTrips].filter(t => t.transportDetails?.endOdometerKm !== undefined).sort((a,b) => b.scheduledDate.localeCompare(a.scheduledDate))[0];
+    if (lastCompleted?.transportDetails?.endOdometerKm !== undefined && Number(start) < lastCompleted.transportDetails.endOdometerKm) { setError('Starting odometer cannot be lower than the last recorded ending odometer for this vehicle.'); return; }
+    if (lastCompleted && date < lastCompleted.scheduledDate) { setError('Trip date cannot be earlier than the latest completed journey for this vehicle.'); return; }
     const result=addScheduleItemWithSaveResult({type:'transport_trip',title:origin.trim()+' → '+destination.trim(),description:purpose.trim(),scheduledDate:date,targetType:'general',assignedStaffId:currentUser?.uid||'unassigned',assignedStaffName:driver.trim(),status:'In Progress',location:origin.trim(),notes:reference.trim()||undefined,createdBy:actor,transportDetails:{vehicleAssetId:vehicle.id,vehicleLabel:vehicle.assetTag+' · '+vehicle.name,driverName:driver.trim(),origin:origin.trim(),destination:destination.trim(),purpose:purpose.trim(),startOdometerKm:Number(start),fuelLitres:fuel?Number(fuel):undefined,fuelCostMWK:cost?Number(cost):undefined,tripReference:reference.trim()||undefined}},actor);
     if(!result.savedLocally){setError('Trip was not saved on this device. Free storage and retry.');return;}
     setOpen(false);setNotice('Trip saved locally and queued for synchronisation.');onRefresh();
