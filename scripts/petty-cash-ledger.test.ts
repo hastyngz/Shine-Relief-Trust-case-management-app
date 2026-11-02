@@ -62,6 +62,10 @@ assert.equal(summary.currentBalanceMWK, 50000);
 assert.deepEqual(summary.entries.map((entry) => entry.balanceAfterMWK), [50000, 60000, 48000, 50000, 49000, 50000]);
 
 assert.ok(validatePettyCashTransaction(transactions, {
+  id: 'PCASH_ADJUSTMENT_OVERSPEND_001', date: today, type: 'adjustment_out', amountMWK: 50001,
+  description: 'Adjustment overspend test', reference: 'CORRECTS-OVERSPEND',
+}, today).some((error) => error.includes('cash outflow')));
+assert.ok(validatePettyCashTransaction(transactions, {
   id: 'PCASH_OVERSPEND_001', date: today, type: 'expense', amountMWK: 50001,
   description: 'Overspend test', reference: 'VOUCHER-OVER',
 }, today).some((error) => error.includes('exceeds the available')));
