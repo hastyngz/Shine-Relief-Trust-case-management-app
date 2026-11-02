@@ -21,6 +21,18 @@ globalThis.fetch = async (input) => {
       },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
+  if (url.includes('firestore.googleapis.com/v1/projects/shine-relief-trust-cms/databases/(default)/documents/attachments/att_123_test12')) {
+    return new Response(JSON.stringify({
+      fields: {
+        id: { stringValue: 'att_123_test12' },
+        targetType: { stringValue: 'girl' },
+        targetId: { stringValue: 'GIRL-SYNTHETIC' },
+        category: { stringValue: 'Receipt' },
+        storagePath: { stringValue: 'attachments/girl/GIRL-SYNTHETIC/att_123_test12_receipt.pdf' },
+        versionOf: { stringValue: 'att_100_base12' },
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
   throw new Error(`Unexpected network request during a rejected upload: ${url}`);
 };
 
@@ -48,6 +60,18 @@ async function upload(contentType, body) {
   }), env);
 }
 
+async function removeVersion() {
+  const path = 'attachments/girl/GIRL-SYNTHETIC/att_123_test12_receipt.pdf';
+  const query = new URLSearchParams({ path });
+  return worker.fetch(new Request(`https://worker.example.invalid/api/storage/object?${query}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: 'Bearer synthetic-id-token',
+      Origin: 'https://shine-relief-trust-cms.web.app',
+    },
+  }), env);
+}
+
 try {
   const spoofedPdf = await upload('application/pdf', new TextEncoder().encode('<html>not a PDF</html>'));
   assert.equal(spoofedPdf.status, 415);
@@ -58,8 +82,12 @@ try {
   assert.equal(unsupportedSvg.status, 415);
   assert.match((await unsupportedSvg.json()).error, /Attachments must be JPEG, PNG, WebP, or PDF/);
 
-  assert.equal(observedFetches.length, 4, 'only the synthetic Firebase identity/profile reads should occur; rejected uploads must never reach R2');
-  console.log('R2 Worker upload validation tests passed.');
+  const protectedVersionDelete = await removeVersion();
+  assert.equal(protectedVersionDelete.status, 403);
+  assert.match((await protectedVersionDelete.json()).error, /retained as history/);
+
+  assert.equal(observedFetches.length, 7, 'rejected uploads and protected version deletion must stop after Firebase authorization reads and never reach R2');
+  console.log('R2 Worker upload validation and immutable-version deletion tests passed.');
 } finally {
   globalThis.fetch = originalFetch;
 }
