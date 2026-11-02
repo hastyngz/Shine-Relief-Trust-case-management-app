@@ -30,6 +30,7 @@ import {
   InventoryItem,
   AssetRecord,
   AssetHistoryEntry,
+  PettyCashTransaction,
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getActiveWorkspaceUid, getWorkspaceStorageKey } from '../services/accountWorkspace';
@@ -40,6 +41,7 @@ import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/ex
 import { linkPayrollRecordsToStaffAccount } from './payrollLink';
 import { buildAssetMaintenanceExpense, addAssetMaintenanceExpense } from './assetMaintenance';
 import { isValidInventoryDate } from './inventory';
+import { createPettyCashTransaction, validatePettyCashTransaction, type PettyCashDraft } from '../services/pettyCashLedger';
 import {
   deleteAnnualBudgetPlanFromFirestore,
   clearAllFirestoreCollections,
@@ -829,6 +831,30 @@ export function addExpense(
     throw error;
   }
   return newItem;
+}
+
+
+export function addPettyCashTransaction(
+  draft: PettyCashDraft,
+  actor: { uid: string; name: string },
+  today: string,
+): PettyCashTransaction {
+  if (!actor.uid || !actor.name.trim()) throw new Error('A signed-in Manager or Administrator is required.');
+  const db = getDatabase();
+  const entries = db.pettyCashTransactions || [];
+  const errors = validatePettyCashTransaction(entries, draft, today);
+  if (errors.length) throw new Error(errors[0]);
+  const now = new Date().toISOString();
+  const record = createPettyCashTransaction(draft, actor, now);
+  const previous = db.pettyCashTransactions;
+  db.pettyCashTransactions = [record, ...entries];
+  try {
+    saveDatabaseOrThrow(db, 'Petty-cash transaction');
+  } catch (error) {
+    db.pettyCashTransactions = previous;
+    throw error;
+  }
+  return record;
 }
 
 export function updateExpense(
