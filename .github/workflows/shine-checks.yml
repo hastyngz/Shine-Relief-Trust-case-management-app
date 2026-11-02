@@ -52,7 +52,7 @@ jobs:
         run: npm run test:administration-overview
 
       - name: Test finance reporting period calculations
-        run: npx tsx scripts/finance-overview.test.ts
+        run: npm run test:finance-overview
 
       - name: Test document filing filters
         run: npm run test:document-filing
