@@ -411,6 +411,8 @@ service cloud.firestore {
     // Petty-cash is a Manager/Administrator-only append-only ledger.
     // The fixed opening-balance ID makes initialisation single-record and
     // prevents any later receipt/expense from preceding the opening float.
+    // Petty-cash is a Manager/Administrator-only append-only ledger.
+    // A fixed opening-balance ID prevents duplicate initial float records.
     match /pettyCashTransactions/{id} {
       allow read: if isManagerOrAdmin();
       allow create: if isManagerOrAdmin() &&
@@ -420,12 +422,32 @@ service cloud.firestore {
           'category', 'recordedAt', 'recordedBy', 'recordedByUid', 'createdAt'
         ]) &&
         request.resource.data.date is string &&
-        request.resource.data.date.matches('^\\d{4}-\\d{2}-\\d{2}
+        request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        request.resource.data.amountMWK is int && request.resource.data.amountMWK > 0 &&
+        request.resource.data.description is string &&
+        request.resource.data.description.size() >= 3 && request.resource.data.description.size() <= 250 &&
+        request.resource.data.reference is string &&
+        request.resource.data.reference.size() >= 2 && request.resource.data.reference.size() <= 120 &&
+        request.resource.data.recordedAt is string && request.resource.data.createdAt is string &&
+        request.resource.data.recordedBy is string && request.resource.data.recordedByUid == request.auth.uid &&
+        (!request.resource.data.keys().hasAny(['category']) ||
+          (request.resource.data.category is string && request.resource.data.category.size() <= 100)) &&
+        (
+          (request.resource.data.type == 'opening_balance' &&
+            id == 'PETTY_CASH_OPENING_BALANCE' &&
+            !exists(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE)) ||
+          (request.resource.data.type in ['cash_received', 'expense', 'cash_returned'] &&
+            id != 'PETTY_CASH_OPENING_BALANCE' &&
+            exists(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE))
+        );
+      allow update, delete: if false;
+    }
+
+    match /householdActivities/{id} {
       allow read: if isStaffActive();
       allow create, update: if isManagerOrStaff();
       allow delete: if isManagerOrStaff();
     }
-
     function isValidAttachmentVersionCreate(versionId) {
       let previousId = request.resource.data.versionOf;
       let previousPath = /databases/$(database)/documents/attachments/$(previousId);
