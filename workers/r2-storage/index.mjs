@@ -416,7 +416,17 @@ async function authorizeRead(staff, storagePath, idToken) {
 }
 
 async function authorizeDelete(staff, storagePath, idToken) {
-  const attachment = await getAttachment(storagePath, idToken);
+  let attachment;
+  try {
+    attachment = await getAttachment(storagePath, idToken);
+  } catch (error) {
+    // A failed version-metadata batch can leave an uploaded but unindexed object.
+    // Only managers/admins may clean up such an orphan; existing indexed files
+    // still require the normal attachment checks below.
+    if (error instanceof ApiError && error.status === 404 &&
+        ['Administrator', 'Manager'].includes(staff.role)) return;
+    throw error;
+  }
   if (attachment.versionOf || attachment.supersededBy) {
     throw new ApiError('Document versions are retained as history and cannot be deleted.', 403);
   }
