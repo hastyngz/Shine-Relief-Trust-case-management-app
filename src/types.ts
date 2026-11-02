@@ -649,6 +649,7 @@ export interface PhotoAttachment {
     expiryDate?: string;
   };
   filingAudit?: Array<{ id: string; action: 'Metadata Updated'; actor: string; at: string; changedFields: string[] }>;
+  filingMetadataUpdatedAt?: string;
 }
 
 // --------------------------------------------------
