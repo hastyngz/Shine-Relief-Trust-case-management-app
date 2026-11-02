@@ -27,6 +27,7 @@ export async function getDoc(ref) {
   const value = serverRecords.get(ref.collection + '/' + ref.id);
   return { exists: () => value !== undefined, data: () => (value ? { ...value } : undefined) };
 }
+export async function getDocFromServer(ref) { return getDoc(ref); }
 // The attachment service uses an explicit server read before versioning. This
 // fake has no cache layer, so its server-only read is the same in-memory lookup.
 export async function getDocFromServer(ref) { return getDoc(ref); }
