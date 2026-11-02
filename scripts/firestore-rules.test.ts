@@ -153,6 +153,11 @@ async function seedData() {
       id: 'medical-photo', targetType: 'girl', targetId: 'girl-1', category: 'Medical Document',
       fileName: 'medical.png', storagePath: 'attachments/girl/girl-1/medical.png',
     });
+    await setDoc(doc(firestore, 'attachments/ordinary-file'), {
+      id: 'ordinary-file', targetType: 'household', targetId: 'household-1', category: 'Receipt',
+      fileName: 'receipt.pdf', storagePath: 'attachments/household/household-1/receipt.pdf',
+      filingMetadata: { documentTitle: 'Receipt', referenceNumber: 'REF-001', documentOwner: 'Finance', classification: 'Internal' },
+    });
     await setDoc(doc(firestore, 'safeguardingCases/case-1'), {
       id: 'case-1',
       girlId: 'girl-1',
@@ -489,6 +494,14 @@ async function run() {
       where('targetId', 'in', ['girl-1', 'household-1']),
     )));
     await assertSucceeds(getDoc(doc(manager, 'attachments/medical-photo')));
+    await assertFails(updateDoc(doc(worker, 'attachments/ordinary-file'), {
+      filingMetadata: { documentTitle: 'Changed', referenceNumber: 'REF-002', documentOwner: 'Finance', classification: 'Internal' },
+    }));
+    await assertSucceeds(updateDoc(doc(manager, 'attachments/ordinary-file'), {
+      filingMetadata: { documentTitle: 'Changed', referenceNumber: 'REF-002', documentOwner: 'Finance', classification: 'Internal' },
+      filingAudit: [{ id: 'audit-1', action: 'Metadata Updated', actor: 'Manager', at: '2026-11-02T00:00:00.000Z', changedFields: ['documentTitle'] }],
+      filingMetadataUpdatedAt: '2026-11-02T00:00:00.000Z',
+    }));
     const safeAttachmentTypes = ['girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity', 'rentPayment', 'expense'];
     await Promise.all(safeAttachmentTypes.map((targetType) => assertSucceeds(getDocs(query(collection(viewer, 'attachments'), where('targetType', '==', targetType), where('category', 'not-in', ['Medical Document', 'Prescription']))))));
     const reportAttachmentTypes = [
