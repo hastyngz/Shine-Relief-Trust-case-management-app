@@ -520,11 +520,13 @@ async function run() {
     await assertFails(getDoc(doc(worker, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE')));
     await assertFails(setDoc(doc(worker, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
     await assertFails(setDoc(doc(viewer, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
-    await assertSucceeds(setDoc(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
-    await assertSucceeds(setDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001'), {
+    const pettyCashRestoreBatch = writeBatch(manager);
+    pettyCashRestoreBatch.set(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening);
+    pettyCashRestoreBatch.set(doc(manager, 'pettyCashTransactions/receipt-manager-001'), {
       ...pettyCashOpening, id: 'receipt-manager-001', type: 'cash_received', amountMWK: 10000,
       reference: 'TRANSFER-TEST-001', recordedAt: '2026-11-02T09:00:00.000Z', createdAt: '2026-11-02T09:00:00.000Z',
-    }));
+    });
+    await assertSucceeds(pettyCashRestoreBatch.commit());
     await assertSucceeds(setDoc(doc(admin, 'pettyCashTransactions/expense-admin-001'), {
       ...pettyCashOpening, id: 'expense-admin-001', type: 'expense', amountMWK: 5000,
       reference: 'VOUCHER-TEST-001', recordedAt: '2026-11-02T10:00:00.000Z', createdAt: '2026-11-02T10:00:00.000Z',
