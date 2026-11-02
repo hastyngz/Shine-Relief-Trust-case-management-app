@@ -417,6 +417,9 @@ async function authorizeRead(staff, storagePath, idToken) {
 
 async function authorizeDelete(staff, storagePath, idToken) {
   const attachment = await getAttachment(storagePath, idToken);
+  if (attachment.versionOf || attachment.supersededBy) {
+    throw new ApiError('Document versions are retained as history and cannot be deleted.', 403);
+  }
   const restrictedHealth = attachment.targetType === 'healthFollowUp' || ['Medical Document', 'Prescription'].includes(attachment.category);
   if (restrictedHealth && !staff.canEditHealthRecords) throw new ApiError('You are not authorized to delete this health attachment.', 403);
   if (attachment.targetType === 'safeguardingCase') {
