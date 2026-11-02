@@ -231,6 +231,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
 
     const payload = {
       employeeId,
+      staffUid: paymentEmployee?.staffUid ?? editingPayroll?.staffUid ?? (db.employees || []).find((employee) => employee.id === employeeId)?.staffUid ?? null,
       employeeName,
       departmentOrProgramme: departmentOrProgramme || 'General programme',
       payPeriod,
@@ -669,11 +670,13 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
           actorName={staffProfile?.fullName || currentUser.displayName || 'SHINE Staff'}
           canEdit={canProcessPayroll && (db.employees || []).some((employee) => employee.id === selectedEmployeeRecord.id)}
           contractDetailsAvailable={(db.employees || []).some((employee) => employee.id === selectedEmployeeRecord.id)}
+          allStaff={allStaff}
           onUpdate={async (employeeId, updates) => {
             const updated = await updateEmployeeRecord(
               employeeId,
               updates,
               staffProfile?.fullName || currentUser.displayName || 'SHINE Staff',
+              currentUser.uid,
             );
             if (!updated) throw new Error('Employee record could not be found.');
             setSelectedEmployeeRecord(updated);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CalendarDays, DollarSign, Save, X } from 'lucide-react';
-import { EmployeeRecord, EmployeeContractFields, ContractStatus, EmployeeCategory, EmploymentStatus, SalaryFrequency, SalaryHistoryRecord, EmploymentPeriod } from '../types';
+import { EmployeeRecord, StaffUser, ContractStatus, EmployeeCategory, EmploymentStatus, SalaryFrequency, SalaryHistoryRecord, EmploymentPeriod } from '../types';
 import { appendEmployeeAuditLog, COLLECTIONS, getEmployeeSalaryHistory } from '../services/firestoreSync';
 import { flushPendingOfflineSnapshots, loadQueue, queueOfflineRecordsForSync } from '../services/offlineSync';
 import { calculateGratuity, getContractDateValidationError } from '../services/gratuityService';
@@ -13,13 +13,14 @@ interface EmployeeContractPanelProps {
   actorName: string;
   canEdit: boolean;
   contractDetailsAvailable?: boolean;
-  onUpdate: (staffId: string, updates: Partial<EmployeeContractFields>) => Promise<void>;
+  allStaff?: StaffUser[];
+  onUpdate: (employeeId: string, updates: Partial<EmployeeRecord>) => Promise<void>;
   onClose: () => void;
 }
 
 const contractStatuses: ContractStatus[] = ['Active', 'Expiring Soon', 'Expired', 'Renewed', 'Completed', 'Terminated', 'Resigned'];
 
-export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ employee, actorUid, actorName, canEdit, contractDetailsAvailable = true, onUpdate, onClose }) => {
+export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ employee, actorUid, actorName, canEdit, contractDetailsAvailable = true, allStaff = [], onUpdate, onClose }) => {
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
     renewalInformation: employee.renewalInformation || '',
     employmentStatus: employee.employmentStatus || 'Active' as EmploymentStatus,
   });
+  const [linkedStaffUid, setLinkedStaffUid] = useState(employee.staffUid || '');
   const [salary, setSalary] = useState({ amount: '', effectiveDate: '', frequency: 'Monthly' as SalaryFrequency, reason: '', notes: '' });
   const [calculationEndDate, setCalculationEndDate] = useState(employee.contractEndDate || new Date().toISOString().slice(0, 10));
 
@@ -95,6 +97,38 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
     : null;
   const currentSalary = salaryHistory.filter((record) => record.effectiveDate <= calculationEndDate).at(-1)?.salaryAmount;
 
+  const saveStaffAccountLink = async () => {
+    if (!canEdit || saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    setError(null);
+    setSaveNotice(null);
+    const nextStaffUid = linkedStaffUid || null;
+    try {
+      await onUpdate(employee.id, { staffUid: nextStaffUid });
+      setSaveNotice(nextStaffUid
+        ? 'Staff account link saved. Existing payroll records for this employee have been assigned to that account.'
+        : 'Staff account link removed. Existing payroll records are no longer visible to the previous account.');
+      try {
+        await appendEmployeeAuditLog({
+          employeeId: employee.id,
+          action: 'payroll_account_link',
+          actorUid,
+          actorName,
+          changedAt: new Date().toISOString(),
+          changes: { staffUid: nextStaffUid },
+        });
+      } catch {
+        setSaveNotice('The staff account link was saved, but its separate audit event could not be recorded. Contact an administrator before treating this change as fully audited.');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'The staff account link could not be saved.');
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
+  };
+
   const saveContract = async () => {
     if (!canEdit || saveLock.current) return;
     const dateValidationError = getContractDateValidationError(contract.contractStartDate, contract.contractEndDate);
@@ -120,7 +154,7 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
         renewalInformation: contract.renewalInformation || undefined,
         status: contract.contractStatus,
       };
-      const updates: Partial<EmployeeContractFields> = { ...contract, originalContractStartDate: originalStart, employmentPeriods: [period, ...existingPeriods.filter((item) => item.id !== period.id)] };
+      const updates: Partial<EmployeeRecord> = { ...contract, originalContractStartDate: originalStart, employmentPeriods: [period, ...existingPeriods.filter((item) => item.id !== period.id)] };
       await onUpdate(employee.id, updates);
       setCalculationEndDate(contract.contractEndDate || calculationEndDate);
       setSaveNotice('Contract details saved.');
@@ -216,7 +250,24 @@ export const EmployeeContractPanel: React.FC<EmployeeContractPanelProps> = ({ em
       {saveNotice && <div role="status" className="mb-3 p-2 bg-amber-50 border border-amber-200 text-xs text-amber-900 rounded-lg">{saveNotice}</div>}
       {!contractDetailsAvailable && <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Contract details are not recorded for this historical payroll entry.</p>}
       <div className="grid md:grid-cols-2 gap-5">
-        {contractDetailsAvailable && <section className="space-y-3">
+        {contractDetailsAvailable && <section className="mb-4 space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+        <div>
+          <h3 className="font-bold text-sm text-teal-900">Payroll self-service account</h3>
+          <p className="mt-1 text-xs leading-5 text-stone-600">Link this employee record to an active SHINE login. The linked account can view only its own payroll records; employee contracts and salary history remain management-only.</p>
+        </div>
+        {canEdit ? <div className="flex flex-col gap-2 sm:flex-row">
+          <label className="min-w-0 flex-1 text-xs text-stone-600">Linked SHINE staff account
+            <select aria-label="Linked SHINE staff account" className="field" value={linkedStaffUid} onChange={(event) => setLinkedStaffUid(event.target.value)}>
+              <option value="">Not linked</option>
+              {allStaff.filter((staff) => staff.status === 'Active' || staff.uid === employee.staffUid).map((staff) => (
+                <option key={staff.uid} value={staff.uid}>{staff.fullName} ({staff.email}){staff.status !== 'Active' ? ' — suspended' : ''}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={saveStaffAccountLink} disabled={saving} className="self-end rounded-lg bg-teal-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save account link'}</button>
+        </div> : <p className="text-xs text-stone-700">{linkedStaffUid ? allStaff.find((staff) => staff.uid === linkedStaffUid)?.fullName || 'Linked SHINE account' : 'No SHINE account linked'}</p>}
+      </section>}
+      {contractDetailsAvailable && <section className="space-y-3">
           <h3 className="font-bold text-sm text-teal-900">Contract information</h3>
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-stone-600">Position<input className="field" value={contract.position} onChange={(e) => setContract({ ...contract, position: e.target.value })} /></label>
