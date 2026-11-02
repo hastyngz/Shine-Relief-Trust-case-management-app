@@ -378,3 +378,10 @@ The asset register now rejects invalid reference-date context before deriving th
 - The monthly expense total includes linked asset-maintenance expenses once; the maintenance subtotal is labelled as included, not added again. Budget actuals and expense records remain separate source figures.
 - Firestore now reserves expense payment-status, amount-due, payment-date/method/reference fields and payment-status audit events for Managers/Administrators. Ordinary staff may still update operational expense details, subject to the safe audit append check. Emulator regressions cover staff denial and Manager settlement.
 - This is not yet a bank statement matcher, petty-cash book, general commitment ledger, or signed financial report. Those require source statements/vouchers and a separately approved transaction model. No live Firebase rules deployment or production finance mutation has occurred. Exact-head CI and mobile/offline acceptance are required.
+
+ 
+### Expense payment role consistency — 2026-11-02
+- The household expense creation form now defaults ordinary Staff to Payment Outstanding and explains that settlement is recorded by a Manager/Administrator. Managers/Administrators retain the ability to record an already-paid expense at creation.
+- Household expense history hides Mark as Paid and amount-due editing from ordinary Staff. The application handler also rejects non-Manager/non-Administrator payment attempts.
+- Firestore rules enforce the same boundary on both create and update: Staff cannot create a record already marked Paid, set payment evidence at creation, or change settlement fields later. Ordinary expense details remain editable. Emulator tests cover paid-at-creation denial and outstanding-expense creation.
+- This closes the older household payment route as a UI bypass. Exact-head CI and browser tests are required; no production rules deployment has occurred.
