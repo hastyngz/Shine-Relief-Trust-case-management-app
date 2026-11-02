@@ -1162,7 +1162,8 @@ export async function syncEntireDatabaseToFirestore(
           throw new Error('The backup contains an invalid petty-cash ledger. It must include one opening float and unique, chronologically valid entries.');
         }
         const existingSnapshot = await getDocs(collection(firestore, collectionName));
-        const existingById = new Map(existingSnapshot.docs.map((record) => [record.id, record.data()]));
+        const existingById = new Map<string, Record<string, any>>();
+        existingSnapshot.docs.forEach((record) => existingById.set(record.id, record.data()));
         for (const record of ledgerRecords) {
           const safeRecord = sanitizeForFirestore(record);
           const existingRecord = existingById.get(record.id);
