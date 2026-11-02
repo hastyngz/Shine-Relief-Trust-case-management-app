@@ -2,12 +2,15 @@ import React from 'react';
 import { Activity, Wallet } from 'lucide-react';
 import type { AppDatabase } from '../types';
 import { getLocalDateInputValue } from '../utils/inventory';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Props { db: AppDatabase; mode: 'performance' | 'finance'; }
 const card='rounded-2xl border border-stone-200 bg-white p-4';
 const mwk=(n:number)=>'MWK '+Math.round(n||0).toLocaleString();
 
 export const AdministrationOversightView: React.FC<Props> = ({db,mode}) => {
+ const { isAdmin, staffProfile } = useAuth();
+ const managerOrAdmin = Boolean(isAdmin || staffProfile?.role === 'Manager');
  const today=getLocalDateInputValue(), period=today.slice(0,7);
  const schedules=db.schedules||[], completed=schedules.filter(s=>s.status==='Completed').length;
  const open=schedules.filter(s=>!['Completed','Cancelled'].includes(s.status)).length;
@@ -24,6 +27,7 @@ export const AdministrationOversightView: React.FC<Props> = ({db,mode}) => {
  const handover=(db.procurementLists||[]).filter(p=>p.status==='purchased'&&!p.financeHandedOverAt);
  const transportTrips=(db.schedules||[]).filter(s=>s.type==='transport_trip'&&s.scheduledDate.startsWith(period));
  const transportFuel=transportTrips.reduce((n,s)=>n+(s.transportDetails?.fuelCostMWK||0),0);
+ if (!managerOrAdmin) return <main className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">This administration summary is restricted to managers and administrators.</main>;
  if(mode==='performance') return <main className="mx-auto max-w-6xl space-y-5 px-1 pb-8">
   <header className="rounded-3xl bg-gradient-to-r from-teal-950 to-emerald-800 p-5 text-white"><div className="flex items-center gap-3"><Activity className="h-7 w-7 text-amber-300"/><div><p className="text-xs font-bold uppercase tracking-widest text-amber-200">Administration · Oversight</p><h1 className="text-2xl font-bold">Administrative Performance</h1></div></div><p className="mt-2 text-sm text-teal-50">Record-based operational indicators from SHINE data currently loaded on this device. These are not independently verified staff appraisals.</p></header>
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Active employees',activeStaff],['Completed tasks',completed],['Open tasks',open],['Overdue tasks',overdue]].map(([l,v])=><div key={String(l)} className={card}><p className="text-xs text-stone-500">{l}</p><p className="mt-1 text-2xl font-bold">{v}</p></div>)}</div>
