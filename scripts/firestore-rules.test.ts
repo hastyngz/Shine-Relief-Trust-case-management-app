@@ -5,7 +5,7 @@ import {
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import assert from 'node:assert/strict';
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getDocsFromServer, orderBy, query, runTransaction, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getDocsFromServer, orderBy, query, runTransaction, setDoc, Timestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -501,6 +501,40 @@ async function run() {
       filingMetadata: { documentTitle: 'Changed', referenceNumber: 'REF-002', documentOwner: 'Finance', classification: 'Internal' },
       filingAudit: [{ id: 'audit-1', action: 'Metadata Updated', actor: 'Manager', at: '2026-11-02T00:00:00.000Z', changedFields: ['documentTitle'] }],
       filingMetadataUpdatedAt: '2026-11-02T00:00:00.000Z',
+    }));
+
+    // Staff cannot create a version or mark the previous file as superseded.
+    const staffVersionBatch = writeBatch(worker);
+    staffVersionBatch.update(doc(worker, 'attachments/ordinary-file'), {
+      versionNumber: 1, supersededBy: 'ordinary-file-v2', updatedAt: '2026-11-02T01:00:00.000Z',
+    });
+    staffVersionBatch.set(doc(worker, 'attachments/ordinary-file-v2'), {
+      id: 'ordinary-file-v2', targetType: 'household', targetId: 'household-1', category: 'Receipt',
+      fileName: 'receipt-v2.pdf', storagePath: 'attachments/household/household-1/receipt-v2.pdf',
+      versionOf: 'ordinary-file', versionNumber: 2, versionNote: 'Corrected receipt',
+      uploadedBy: { uid: 'worker' },
+    });
+    await assertFails(staffVersionBatch.commit());
+
+    // A manager must create the immutable version and supersede the previous one atomically.
+    const managerVersionBatch = writeBatch(manager);
+    managerVersionBatch.update(doc(manager, 'attachments/ordinary-file'), {
+      versionNumber: 1, supersededBy: 'ordinary-file-v2', updatedAt: '2026-11-02T01:00:00.000Z',
+    });
+    managerVersionBatch.set(doc(manager, 'attachments/ordinary-file-v2'), {
+      id: 'ordinary-file-v2', targetType: 'household', targetId: 'household-1', category: 'Receipt',
+      fileName: 'receipt-v2.pdf', storagePath: 'attachments/household/household-1/receipt-v2.pdf',
+      versionOf: 'ordinary-file', versionNumber: 2, versionNote: 'Corrected receipt',
+      uploadedBy: { uid: 'manager' },
+    });
+    await assertSucceeds(managerVersionBatch.commit());
+    await assertSucceeds(getDoc(doc(manager, 'attachments/ordinary-file-v2')));
+    await assertFails(updateDoc(doc(manager, 'attachments/ordinary-file-v2'), { fileName: 'tampered.pdf' }));
+    await assertFails(deleteDoc(doc(manager, 'attachments/ordinary-file-v2')));
+    await assertFails(setDoc(doc(manager, 'attachments/ordinary-file-v3'), {
+      id: 'ordinary-file-v3', targetType: 'household', targetId: 'household-1', category: 'Receipt',
+      fileName: 'receipt-v3.pdf', storagePath: 'attachments/household/household-1/receipt-v3.pdf',
+      versionOf: 'ordinary-file-v2', versionNumber: 3, uploadedBy: { uid: 'manager' },
     }));
     const safeAttachmentTypes = ['girl', 'household', 'educationalFollowUp', 'familyFollowUp', 'householdActivity', 'rentPayment', 'expense'];
     await Promise.all(safeAttachmentTypes.map((targetType) => assertSucceeds(getDocs(query(collection(viewer, 'attachments'), where('targetType', '==', targetType), where('category', 'not-in', ['Medical Document', 'Prescription']))))));
