@@ -1338,3 +1338,10 @@ Suggestion format:
 - Final review found the current version needs to remain editable for filing metadata while its file bytes/version identity remain immutable. Rules now permit only filing-metadata/audit-field changes on the current version; superseded versions are locked. The same health/safeguarding permission checks are retained.
 - The filing UI hides metadata editing on superseded files. The R2 Worker blocks storage deletion of version-chain objects and permits Manager/Administrator cleanup only when a failed upload has no Firestore metadata.
 - Batch outcomes are checked against server state before cleanup, preventing an ambiguous network result from deleting a file that may already be committed. Latest exact-head CI still pending. — Mosaic (ChatGPT), 2026-11-02
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · secure transport trip authorisation
+- Staff trip requests are captured in the existing offline-first schedule ledger with `Pending` approval state and requester identity. Pending/offline requests are not travel authorisation.
+- Managers and Administrators are the only approvers. The decision uses a direct Firestore transaction (not a local offline queue), records approver identity/time, and is rejected if the request is no longer pending. Approved trips may be completed; pending, rejected and legacy trips without an approval record cannot be completed through this module.
+- Firestore rules require the requester UID on new transport-trip records and reject client-side approval changes by staff; approval transitions are limited to Manager/Administrator and only from Pending to Approved/Rejected.
+- Added a rules-emulator regression test for staff denial and manager approval. Exact-head CI is running; no Firestore rules deployment or production deployment has occurred. Android/weak-network testing remains outstanding. — Mosaic (ChatGPT), 2026-11-02
