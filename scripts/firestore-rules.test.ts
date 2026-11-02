@@ -168,6 +168,7 @@ async function seedData() {
     });
     await setDoc(doc(firestore, 'payrollRecords/payroll-manager'), { id: 'payroll-manager', employeeId: 'manager', expectedAmount: 100000, amountPaid: 0 });
     await setDoc(doc(firestore, 'payrollRecords/payroll-worker'), { id: 'payroll-worker', employeeId: 'worker', expectedAmount: 80000, amountPaid: 80000 });
+    await setDoc(doc(firestore, 'payrollRecords/payroll-linked'), { id: 'payroll-linked', employeeId: 'EMP-123', staffUid: 'worker', expectedAmount: 80000, amountPaid: 0 });
     await setDoc(doc(firestore, 'employees/employee-1'), {
       id: 'employee-1',
       fullName: 'Employee One',
@@ -508,6 +509,9 @@ async function run() {
     await assertFails(deleteDoc(doc(manager, 'payrollRecords/payroll-manager')));
     await assertSucceeds(deleteDoc(doc(admin, 'payrollRecords/payroll-manager')));
     await assertSucceeds(getDoc(doc(worker, 'payrollRecords/payroll-worker')));
+    await assertSucceeds(getDoc(doc(worker, 'payrollRecords/payroll-linked')));
+    await assertFails(getDoc(doc(viewer, 'payrollRecords/payroll-linked')));
+    await assertSucceeds(getDocs(query(collection(worker, 'payrollRecords'), where('staffUid', '==', 'worker'))));
     await assertSucceeds(getDoc(doc(manager, 'employees/employee-1')));
     await assertSucceeds(getDoc(doc(admin, 'employees/employee-1')));
     await assertFails(getDoc(doc(viewer, 'employees/employee-1')));
