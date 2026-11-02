@@ -58,6 +58,7 @@
     "test:document-filing": "tsx scripts/document-filing.test.ts",
     "test:safeguarding-export-boundary": "tsx scripts/safeguarding-export-boundary.test.ts",
     "test:administration-overview": "tsx scripts/administration-overview.test.ts",
+    "test:finance-overview": "tsx scripts/finance-overview.test.ts",
     "test:report-export": "tsx scripts/report-export.test.ts",
     "test:asset-filtering": "tsx scripts/asset-filtering.test.ts",
     "test:procurement-filtering": "tsx scripts/procurement-filtering.test.ts",
