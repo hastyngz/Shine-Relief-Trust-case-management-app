@@ -202,6 +202,8 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-stone-50 p-3"><p className="text-2xl font-bold text-stone-900">{attachments.length}</p><p className="text-xs text-stone-600">Accessible indexed files</p></div>
           <div className="rounded-2xl bg-stone-50 p-3"><p className="text-2xl font-bold text-stone-900">{attachments.filter(isImage).length}</p><p className="text-xs text-stone-600">Images</p></div>
+          <div className="rounded-2xl bg-rose-50 p-3"><p className="text-2xl font-bold text-rose-900">{attachments.filter(item => getFilingExpiryStatus(item.filingMetadata?.expiryDate, getLocalDateInputValue()) === 'Expired').length}</p><p className="text-xs text-rose-800">Expired documents</p></div>
+          <div className="rounded-2xl bg-amber-50 p-3"><p className="text-2xl font-bold text-amber-900">{attachments.filter(item => getFilingExpiryStatus(item.filingMetadata?.expiryDate, getLocalDateInputValue()) === 'Due within 30 days').length}</p><p className="text-xs text-amber-800">Due within 30 days</p></div>
           <div className="col-span-2 rounded-2xl bg-emerald-50 p-3 sm:col-span-1"><p className="flex items-center gap-2 text-sm font-bold text-emerald-900"><ShieldCheck className="h-4 w-4" /> Access-aware</p><p className="mt-1 text-xs leading-5 text-emerald-800">Health files follow your current permission. Safeguarding attachments are not included in general search.</p></div>
         </div>
       </header>
