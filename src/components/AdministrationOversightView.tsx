@@ -16,7 +16,7 @@ export const AdministrationOversightView: React.FC<Props> = ({db,mode}) => {
  const today=getLocalDateInputValue(), period=today.slice(0,7);
  const [settlingExpenseId,setSettlingExpenseId]=useState<string|null>(null);
  const [paymentDate,setPaymentDate]=useState(today);
- const [paymentMethod,setPaymentMethod]=useState('Bank transfer');
+ const [paymentMethod,setPaymentMethod]=useState('');
  const [paymentReference,setPaymentReference]=useState('');
  const [settlementError,setSettlementError]=useState('');
  const schedules=db.schedules||[], completed=schedules.filter(s=>s.status==='Completed').length;
@@ -63,7 +63,7 @@ export const AdministrationOversightView: React.FC<Props> = ({db,mode}) => {
     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-semibold">{expense.itemDescription}</p><p className="text-xs text-stone-500">{expense.date}{expense.supplier ? ' · '+expense.supplier : ''}{expense.invoiceReference ? ' · Ref '+expense.invoiceReference : ''}</p></div><div className="sm:text-right"><p className="font-bold">{mwk(expense.totalCost)}</p><p className={expense.paymentStatus==='Paid'?'text-xs text-emerald-800':'text-xs text-amber-800'}>{expense.paymentStatus||'Payment status not recorded'}</p></div></div>
     {expense.paymentStatus!=='Paid' && (settlingExpenseId===expense.id ? <form className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2" onSubmit={(event)=>{event.preventDefault();settleMaintenanceExpense(expense.id);}}>
      <label className="text-xs font-semibold text-stone-600">Payment date<input type="date" value={paymentDate} onChange={event=>setPaymentDate(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm"/></label>
-     <label className="text-xs font-semibold text-stone-600">Payment method<select value={paymentMethod} onChange={event=>setPaymentMethod(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm"><option>Bank transfer</option><option>Cash</option><option>Mobile money</option><option>Cheque</option><option>Other</option></select></label>
+     <label className="text-xs font-semibold text-stone-600">Payment method<select value={paymentMethod} onChange={event=>setPaymentMethod(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm"><option value="">Select payment method</option><option>Bank transfer</option><option>Cash</option><option>Mobile money</option><option>Cheque</option><option>Other</option></select></label>
      <label className="text-xs font-semibold text-stone-600 sm:col-span-2">Payment / bank reference<input value={paymentReference} onChange={event=>setPaymentReference(event.target.value)} placeholder="Receipt, transaction or bank reference" className="mt-1 min-h-10 w-full rounded-lg border border-stone-300 bg-white px-2 text-sm"/></label>
      {settlementError&&<p role="alert" className="text-xs text-red-700 sm:col-span-2">{settlementError}</p>}
      <div className="flex gap-2 sm:col-span-2"><button type="submit" className="min-h-10 rounded-lg bg-teal-800 px-3 text-xs font-bold text-white">Confirm payment recorded</button><button type="button" onClick={()=>{setSettlingExpenseId(null);setSettlementError('');}} className="min-h-10 rounded-lg border border-stone-300 px-3 text-xs font-semibold">Cancel</button></div>
