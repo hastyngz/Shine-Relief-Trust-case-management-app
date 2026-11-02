@@ -1141,8 +1141,15 @@ export async function syncEntireDatabaseToFirestore(
       ['aiSettings', COLLECTIONS.AI_SETTINGS],
     ];
     for (const [field, collectionName] of additionalBackupCollections) {
-      const records = db[field] as Array<{ id: string }> | undefined;
-      records?.forEach((record) => operations.push({
+      const records = db[field] as Array<{ id: string; date?: string; recordedAt?: string }> | undefined;
+      const orderedRecords = field === 'pettyCashTransactions'
+        ? [...(records || [])].sort((a, b) =>
+            String(a.date || '').localeCompare(String(b.date || '')) ||
+            String(a.recordedAt || '').localeCompare(String(b.recordedAt || '')) ||
+            a.id.localeCompare(b.id)
+          )
+        : records;
+      orderedRecords?.forEach((record) => operations.push({
         ref: doc(firestore, collectionName, record.id),
         data: sanitizeForFirestore(record),
       }));
