@@ -17,7 +17,7 @@ export interface FinancePeriodSummary {
 }
 
 const validPeriod = (period: string): boolean => {
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) return false;
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return false;
   return true;
 };
 
