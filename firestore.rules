@@ -449,7 +449,7 @@ service cloud.firestore {
                request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
               ? canEditHealthRecords()
               : isManagerOrAdmin());
-      allow delete: if resource.data.keys().hasAny(['versionOf'])
+      allow delete: if resource.data.keys().hasAny(['versionOf', 'supersededBy'])
         ? false
         : resource.data.targetType == 'safeguardingCase'
           ? canWriteSafeguardingAttachment(resource.data.targetId)
