@@ -399,7 +399,7 @@ service cloud.firestore {
         : (request.resource.data.targetType == 'healthFollowUp' ||
            request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
           ? canEditHealthRecords()
-          : isManagerOrStaff();
+          : isManagerOrAdmin();
       allow delete: if resource.data.targetType == 'safeguardingCase'
         ? canWriteSafeguardingAttachment(resource.data.targetId)
         : (resource.data.targetType == 'healthFollowUp' ||
