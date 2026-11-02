@@ -27,9 +27,8 @@ export async function getDoc(ref) {
   const value = serverRecords.get(ref.collection + '/' + ref.id);
   return { exists: () => value !== undefined, data: () => (value ? { ...value } : undefined) };
 }
-// The attachment service uses an explicit server read before versioning. This
-// fake has no cache layer, so its server-only read is the same in-memory lookup.
-export async function getDocFromServer(ref) { return getDoc(ref); }
+// The fake has no cache layer, so a server-only read aliases its in-memory read.
+export { getDoc as getDocFromServer };
 export async function setDoc(ref, data) { serverRecords.set(ref.collection + '/' + ref.id, { ...data }); }
 export async function updateDoc(ref, data) { const key = ref.collection + '/' + ref.id; const current = serverRecords.get(key); if (current === undefined) throw new Error('No document to update'); serverRecords.set(key, { ...current, ...data }); }
 export async function deleteDoc(ref) { serverRecords.delete(ref.collection + '/' + ref.id); }
