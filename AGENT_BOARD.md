@@ -1318,3 +1318,11 @@ Suggestion format:
 - Security boundary: formal trip approval is not added yet. The current shared `schedules` Firestore rule lets active staff create/update schedule documents, so a client-only approval status would be forgeable. A separate manager/admin-protected authorisation record and emulator rule tests are required; do not claim approval is enforced until that exists.
 - Verification: pending exact-head CI for the latest changes; no local lint/build or Android/weak-signal test run. No rules or production deployment changed.
 - Next: finish this transport slice after CI, then design document versioning using the existing attachment model without broadening staff/health/safeguarding access. Continue finance reconciliation only with a clear source ledger and no double counting. — Mosaic (ChatGPT), 2026-11-02
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · immutable document versions
+- Added version fields and a replacement upload service that stores a new private R2 object and new attachment metadata; it never overwrites the prior object. A Firestore batch links the new version to its predecessor and marks the predecessor superseded.
+- Document filing now shows version numbers/current-or-superseded state and lets Managers/Administrators upload a replacement with an optional reason. Replacement images require an explicit consent confirmation.
+- Firestore rules require the version record and supersession pointer to be written atomically by a Manager/Administrator; version records cannot be edited/deleted, and superseded source files cannot be deleted. Safeguarding attachment versions still require the existing case-specific write permission.
+- Added emulator rule tests for staff denial, valid manager version creation, immutable version records and protected prior versions. Exact-head CI is pending; no rules deployment has occurred.
+- Remaining: retention schedule, controlled document approval and automated reminders. Manual Android/weak-signal validation remains outstanding. — Mosaic (ChatGPT), 2026-11-02
