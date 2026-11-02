@@ -502,6 +502,43 @@ async function run() {
       paymentStatus: 'Payment Outstanding',
       amountDue: 1000,
     }));
+    const pettyCashOpening = {
+      id: 'PETTY_CASH_OPENING_BALANCE',
+      date: '2026-11-02',
+      type: 'opening_balance',
+      amountMWK: 50000,
+      description: 'Synthetic opening float',
+      reference: 'OPEN-TEST-001',
+      recordedAt: '2026-11-02T08:00:00.000Z',
+      createdAt: '2026-11-02T08:00:00.000Z',
+      recordedBy: 'manager',
+      recordedByUid: 'manager',
+    };
+    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/receipt-before-opening'), {
+      ...pettyCashOpening, id: 'receipt-before-opening', type: 'cash_received',
+    }));
+    await assertFails(getDoc(doc(worker, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE')));
+    await assertFails(setDoc(doc(worker, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
+    await assertFails(setDoc(doc(viewer, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
+    await assertSucceeds(setDoc(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
+    await assertSucceeds(setDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001'), {
+      ...pettyCashOpening, id: 'receipt-manager-001', type: 'cash_received', amountMWK: 10000,
+      reference: 'TRANSFER-TEST-001', recordedAt: '2026-11-02T09:00:00.000Z', createdAt: '2026-11-02T09:00:00.000Z',
+    }));
+    await assertSucceeds(setDoc(doc(admin, 'pettyCashTransactions/expense-admin-001'), {
+      ...pettyCashOpening, id: 'expense-admin-001', type: 'expense', amountMWK: 5000,
+      reference: 'VOUCHER-TEST-001', recordedAt: '2026-11-02T10:00:00.000Z', createdAt: '2026-11-02T10:00:00.000Z',
+    }));
+    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE_DUPLICATE'), {
+      ...pettyCashOpening, id: 'PETTY_CASH_OPENING_BALANCE_DUPLICATE',
+    }));
+    await assertFails(updateDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001'), { amountMWK: 1 }));
+    await assertFails(deleteDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001')));
+    await assertFails(setDoc(doc(worker, 'pettyCashTransactions/worker-entry-001'), {
+      ...pettyCashOpening, id: 'worker-entry-001', type: 'cash_received',
+    }));
+    await assertFails(getDoc(doc(viewer, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE')));
+    await assertSucceeds(getDoc(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE')));
     const financeExpense = doc(worker, 'expenses/finance-expense-test');
     await assertSucceeds(updateDoc(financeExpense, { itemDescription: 'Staff may correct expense description' }));
     await assertFails(updateDoc(financeExpense, { paymentStatus: 'Paid' }));
