@@ -207,7 +207,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
 
     <section className={card}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="font-bold">Petty-cash ledger</h2><p className="mt-1 text-xs text-stone-500">Append-only cash movements. Record receipts, replenishments or expenses with their supporting references. Only Managers and Administrators can view or record this ledger.</p></div>
+        <div><h2 className="font-bold">Petty-cash ledger</h2><p className="mt-1 text-xs text-stone-500">Append-only cash movements. Record receipts, replenishments, expenses and corrections with their supporting references. Only Managers and Administrators can view or record this ledger.</p></div>
         <div className="rounded-xl bg-stone-50 px-4 py-3 text-right"><p className="text-xs text-stone-500">Available cash balance</p><p className="text-xl font-bold">{mwk(pettyCashSummary.currentBalanceMWK)}</p></div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
