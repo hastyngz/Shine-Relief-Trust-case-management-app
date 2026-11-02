@@ -41,6 +41,22 @@ const staffWithoutRoster = filterPayrollDataForViewer([], [paidRecord], 'emp-1',
 assert.equal(staffWithoutRoster.employees.length, 1, 'staff can derive a self-only summary from their own payroll record');
 assert.equal(staffWithoutRoster.employees[0].id, 'emp-1');
 assert.equal(staffWithoutRoster.employees[0].salaryMWK, 80000);
+
+// A payroll employee has a stable internal EMP-* ID; the separate staff UID
+// must control self-service access without exposing another employee's record.
+const linkedPayrollRecord = { ...paidRecord, id: 'pay-linked', employeeId: 'EMP-123', staffUid: 'worker-uid' } as unknown as PayrollRecord;
+const linkedStaffView = filterPayrollDataForViewer([], [linkedPayrollRecord], 'worker-uid', false);
+assert.deepEqual(linkedStaffView.records.map((record) => record.id), ['pay-linked']);
+assert.equal(linkedStaffView.employees[0].id, 'EMP-123');
+assert.equal((linkedStaffView.employees[0] as EmployeeRecord & { staffUid?: string }).staffUid, 'worker-uid');
+assert.deepEqual(filterPayrollDataForViewer([], [linkedPayrollRecord], 'another-uid', false).records, []);
+const conflictingPayrollLink = { ...linkedPayrollRecord, employeeId: 'worker-uid', staffUid: 'another-uid' } as unknown as PayrollRecord;
+assert.deepEqual(filterPayrollDataForViewer([], [conflictingPayrollLink], 'worker-uid', false).records, [],
+  'an explicit link to another staff account must override any coincidental employeeId/UID match');
+const linkedEmployee = { ...employees[0], staffUid: 'worker-uid' } as EmployeeRecord;
+const linkedSummary = buildMonthlyPayrollSummary('2026-09', [linkedEmployee], salaryHistory, []);
+assert.equal((linkedSummary.employees[0] as typeof linkedSummary.employees[number] & { staffUid?: string }).staffUid, 'worker-uid');
+assert.equal((employeeRecordFromPayrollRecord(linkedPayrollRecord) as EmployeeRecord & { staffUid?: string }).staffUid, 'worker-uid');
 const managerPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'manager-uid', true);
 assert.equal(managerPayroll.employees.length, employees.length);
 assert.equal(managerPayroll.records.length, 2);
