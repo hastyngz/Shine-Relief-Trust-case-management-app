@@ -344,7 +344,8 @@ The asset register now rejects invalid reference-date context before deriving th
 - Dedicated Administration route and journey register added.
 - Journeys link to existing active vehicle assets and use the existing offline-first schedule ledger; fields include driver, route, purpose, trip reference, start/end odometer, fuel quantity and fuel cost.
 - Prevents a second active journey for the same vehicle and rejects a starting odometer lower than the last completed reading or a journey date earlier than the previous completed journey.
-- Still outstanding: dedicated vehicle service/fuel-card registers, trip authorisation/approval workflow, transport document attachment workflow, and formal fuel-efficiency/maintenance reporting.
+- Vehicle service reporting now reads the existing Asset Register service dates and maintenance history, flags overdue/due-soon/missing/invalid service dates, and displays recent work, supplier, reference and linked Finance status without double-counting maintenance costs.
+- Still outstanding: trip authorisation/approval workflow, fuel-card register and transport document attachment workflow. A secure approval workflow needs a dedicated permission boundary: the current shared `schedules` rules allow active staff to create/update schedule records, so an approval field on that collection would be staff-editable and must not be treated as authoritative. Do not implement manager approval in the UI alone; first design a separate rules-protected authorisation record and emulator tests.
 
 ### Administrative Performance
 - Dedicated record-based overview added for active employees, schedule completion, open/overdue work, meetings, workplans, household activities and overdue compliance.
