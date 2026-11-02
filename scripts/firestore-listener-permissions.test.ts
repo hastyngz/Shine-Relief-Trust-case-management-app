@@ -6,9 +6,11 @@ import { aggregateFirestoreSnapshotMetadata } from '../src/services/firestoreSna
 assert.equal(shouldSubscribeToCollection('whatIfScenarios'), false);
 assert.equal(shouldSubscribeToCollection('projectProjections', {}), false);
 assert.equal(shouldSubscribeToCollection('employees', {}), false);
+assert.equal(shouldSubscribeToCollection('pettyCashTransactions', {}), false);
 assert.equal(shouldSubscribeToCollection('whatIfScenarios', { canReadManagementPlanning: true }), true);
 assert.equal(shouldSubscribeToCollection('projectProjections', { canReadManagementPlanning: true }), true);
 assert.equal(shouldSubscribeToCollection('employees', { canReadManagementPlanning: true }), true);
+assert.equal(shouldSubscribeToCollection('pettyCashTransactions', { canReadManagementPlanning: true }), true);
 
 // Case-action listeners must be UID-scoped for non-management callers.
 assert.equal(shouldSubscribeToCollection('caseActions'), false);
