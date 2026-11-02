@@ -5,6 +5,7 @@ import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory
 import { useAuth } from '../contexts/AuthContext';
 import { updateExpense } from '../utils/storage';
 import { getFinancePeriodSummary } from '../utils/financeOverview';
+import { getProcurementPaymentSummary } from '../services/procurementLifecycle';
 
 interface Props { db: AppDatabase; mode: 'performance' | 'finance'; }
 const card = 'rounded-2xl border border-stone-200 bg-white p-4';
@@ -32,7 +33,9 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
   const {
     budgets, budget, budgetActual, expenses, expenseActual,
     assetMaintenanceExpenses, assetMaintenanceTotal, unpaid, unpaidTotal,
-    financeRegister, handover, transportTrips, transportFuel,
+    financeRegister, handover, procurementCommitments, procurementCommittedTotal,
+    procurementPaidTotal, procurementOutstandingTotal, procurementPaymentsThisMonth,
+    transportTrips, transportFuel,
   } = financeSummary;
 
   const settleExpense = (expenseId: string) => {
@@ -121,11 +124,45 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
           ['Asset maintenance costs (included above)', mwk(assetMaintenanceTotal)],
           ['Transport fuel recorded this month', mwk(transportFuel)],
           ['Transport trips recorded this month', transportTrips.length],
-          ['Purchased lists awaiting finance handover', handover.length],
+          ['Approved / purchased procurement commitments', mwk(procurementCommittedTotal)],
+          ['Procurement payments recorded this month', mwk(procurementPaymentsThisMonth)],
+          ['Procurement balance outstanding', mwk(procurementOutstandingTotal)],
+          ['Received orders awaiting finance handover', handover.length],
           ['Invoices requiring payment follow-up', unpaid.length],
           ['Budget variance (budget actuals less budget)', mwk(budgetActual - budget)],
         ].map(([label, value]) => <div key={String(label)} className="flex justify-between gap-3 py-3 text-sm"><span>{label}</span><strong>{value}</strong></div>)}
       </div>
+    </section>
+    <section className={card}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div><h2 className="font-bold">Procurement commitments and payment register</h2><p className="mt-1 text-xs text-stone-500">Approved and purchased orders only. Payment entries come from the existing procurement payment history; they are not added to expense actuals or treated as bank-verified transactions.</p></div>
+        <div className="text-right text-xs text-stone-600"><p>Committed: <strong>{mwk(procurementCommittedTotal)}</strong></p><p>Paid: <strong>{mwk(procurementPaidTotal)}</strong></p><p>Outstanding: <strong>{mwk(procurementOutstandingTotal)}</strong></p></div>
+      </div>
+      {procurementCommitments.length === 0 ? <p className="mt-3 rounded-xl bg-stone-50 p-4 text-sm text-stone-600">No approved or purchased procurement commitments are recorded.</p> : <div className="mt-3 divide-y divide-stone-100">
+        {procurementCommitments.map((list) => {
+          const paymentSummary = getProcurementPaymentSummary(list);
+          return <article key={list.id} className="py-3 text-sm">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-semibold">{list.title}</p>
+                <p className="text-xs text-stone-500">{list.status === 'purchased' ? 'Purchased' : 'Approved'}{list.purchaseOrderReference ? ' · PO ' + list.purchaseOrderReference : ''}{list.orderedAt ? ' · Ordered ' + list.orderedAt.slice(0, 10) : ''}</p>
+                {list.financeHandedOverAt && <p className="text-xs text-emerald-800">Finance handover: {list.financeReference || 'Reference not recorded'} · {list.financeHandedOverAt.slice(0, 10)}</p>}
+                {list.status === 'purchased' && list.receivedAt && !list.financeHandedOverAt && <p className="text-xs text-amber-800">Received; awaiting finance handover</p>}
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-right text-xs sm:min-w-64">
+                <div><p className="text-stone-500">Committed</p><strong>{mwk(list.totalMWK)}</strong></div>
+                <div><p className="text-stone-500">Paid</p><strong>{mwk(paymentSummary.paidMWK)}</strong></div>
+                <div><p className="text-stone-500">Balance</p><strong>{mwk(paymentSummary.outstandingMWK)}</strong></div>
+              </div>
+            </div>
+            {(list.payments || []).length > 0 && <div className="mt-2 rounded-lg bg-stone-50 p-2">
+              <p className="text-[11px] font-semibold text-stone-600">Recorded procurement payments</p>
+              {(list.payments || []).map((payment) => <p key={payment.id} className="mt-1 text-xs text-stone-600">{payment.date} · {mwk(payment.amountMWK)} · {payment.method || 'Method not recorded'} · {payment.reference}</p>)}
+            </div>}
+            {paymentSummary.overpaid && <p className="mt-2 text-xs font-semibold text-rose-700">Warning: recorded procurement payments exceed the order value.</p>}
+          </article>;
+        })}
+      </div>}
     </section>
     <section className={card}>
       <h2 className="font-bold">Expense and invoice register</h2>
