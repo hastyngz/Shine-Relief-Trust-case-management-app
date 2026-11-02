@@ -4,6 +4,7 @@ import type { AppDatabase } from '../types';
 import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { updateExpense } from '../utils/storage';
+import { getFinancePeriodSummary } from '../utils/financeOverview';
 
 interface Props { db: AppDatabase; mode: 'performance' | 'finance'; }
 const card = 'rounded-2xl border border-stone-200 bg-white p-4';
@@ -13,7 +14,8 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
   const { isAdmin, staffProfile, currentUser } = useAuth();
   const managerOrAdmin = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const today = getLocalDateInputValue();
-  const period = today.slice(0, 7);
+  const [period, setPeriod] = useState(today.slice(0, 7));
+  const financeSummary = getFinancePeriodSummary(db, period);
   const [settlingExpenseId, setSettlingExpenseId] = useState<string | null>(null);
   const [paymentDate, setPaymentDate] = useState(today);
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -27,23 +29,11 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
   const overdue = schedules.filter((item) => item.scheduledDate < today && !['Completed', 'Cancelled'].includes(item.status)).length;
   const completion = schedules.length ? Math.round((completed / schedules.length) * 100) : null;
   const activeStaff = (db.employees || []).filter((employee) => employee.employmentStatus === 'Active').length;
-  const budgets = (db.budgets || []).filter((item) => item.period === period);
-  const budget = budgets.reduce((total, item) => total + (Number(item.budgetAmount) || 0), 0);
-  const budgetActual = budgets.reduce((total, item) => total + (Number(item.actualExpenditure) || 0), 0);
-  const expenses = (db.expenses || []).filter((expense) => expense.date.startsWith(period));
-  const expenseActual = expenses.reduce((total, expense) => total + (Number(expense.totalCost) || 0), 0);
-  const assetMaintenanceExpenses = expenses.filter((expense) => expense.sourceType === 'asset_maintenance');
-  const assetMaintenanceTotal = assetMaintenanceExpenses.reduce((total, expense) => total + (Number(expense.totalCost) || 0), 0);
-  const unpaid = (db.expenses || []).filter((expense) => expense.paymentStatus === 'Payment Outstanding');
-  const unpaidTotal = unpaid.reduce((total, expense) => total + (Number(expense.amountDue ?? expense.totalCost) || 0), 0);
-  const registerIds = new Set(expenses.map((expense) => expense.id));
-  const financeRegister = [
-    ...expenses,
-    ...unpaid.filter((expense) => !registerIds.has(expense.id)),
-  ].sort((left, right) => right.date.localeCompare(left.date));
-  const handover = (db.procurementLists || []).filter((item) => item.status === 'purchased' && !item.financeHandedOverAt);
-  const transportTrips = schedules.filter((item) => item.type === 'transport_trip' && item.scheduledDate.startsWith(period));
-  const transportFuel = transportTrips.reduce((total, item) => total + (item.transportDetails?.fuelCostMWK || 0), 0);
+  const {
+    budgets, budget, budgetActual, expenses, expenseActual,
+    assetMaintenanceExpenses, assetMaintenanceTotal, unpaid, unpaidTotal,
+    financeRegister, handover, transportTrips, transportFuel,
+  } = financeSummary;
 
   const settleExpense = (expenseId: string) => {
     if (!isValidInventoryDate(paymentDate) || paymentDate > today) {
@@ -118,7 +108,12 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
       ].map(([label, value]) => <div key={String(label)} className={card}><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-lg font-bold">{value}</p></div>)}
     </div>
     <section className={card}>
-      <h2 className="font-bold">Finance follow-up · {period}</h2>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div><h2 className="font-bold">Finance follow-up · {period}</h2><p className="mt-1 text-xs text-stone-500">Monthly figures use this selected calendar month. Older unpaid expenses remain visible in the register.</p></div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">Reporting month
+          <input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} className="min-h-10 rounded-lg border border-stone-300 bg-white px-2 text-sm text-stone-900" />
+        </label>
+      </div>
       <div className="mt-3 divide-y divide-stone-100">
         {[
           ['Expense actuals this month (includes asset maintenance)', mwk(expenseActual)],

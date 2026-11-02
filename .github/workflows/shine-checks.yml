@@ -51,6 +51,9 @@ jobs:
       - name: Test administration operational attention summaries
         run: npm run test:administration-overview
 
+      - name: Test finance reporting period calculations
+        run: npx tsx scripts/finance-overview.test.ts
+
       - name: Test document filing filters
         run: npm run test:document-filing
 
