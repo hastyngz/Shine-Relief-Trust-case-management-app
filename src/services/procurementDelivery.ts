@@ -46,9 +46,16 @@ export async function postProcurementDeliveryMovements(args: {
   if (raw && !intent) throw new Error('Saved delivery retry details are invalid. No stock movement was submitted; contact an Administrator.');
   const validationList = intent ? {
     ...args.list,
+    deliveries: (args.list.deliveries || []).filter((delivery) => delivery.id !== intent?.deliveryId),
     receivedQuantities: args.list.items.map((_, index) => Math.max(
       0, Number(args.list.receivedQuantities?.[index] || 0) - Number(intent?.quantities[index] || 0),
     )),
+    receivedQuantitiesByLine: Object.fromEntries(Object.entries(args.list.receivedQuantitiesByLine || {}).map(([key, value]) => {
+      const lineIndex = key.startsWith('line_') ? Number(key.slice(5)) : Number(key);
+      return [key, Number.isInteger(lineIndex) && lineIndex >= 0
+        ? Math.max(0, Number(value || 0) - Number(intent?.quantities[lineIndex] || 0))
+        : value];
+    })),
   } : args.list;
   const errors = validateProcurementDelivery({ list: validationList, date: args.date, reference: args.reference, quantities: args.quantities, deliveryId: args.deliveryId });
   if (errors.length) throw new Error(errors.join(' '));

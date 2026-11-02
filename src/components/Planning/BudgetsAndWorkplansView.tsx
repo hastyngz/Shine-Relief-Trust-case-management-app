@@ -252,12 +252,6 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     setDeliveryPosting((current) => ({ ...current, [list.id]: true }));
     try {
       const pending = readProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
-      if (pending && getProcurementDeliveryHistory(list, db.inventoryItems || []).some((delivery) => delivery.id === pending.deliveryId)) {
-        clearProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
-        setReceiptPostingStatus((current) => ({ ...current, [list.id]: 'Delivery history was already saved; cleared the completed retry intent without adding stock again.' }));
-        onRefresh();
-        return;
-      }
       const draft = deliveryDrafts[list.id];
       const quantities = pending?.quantities || (draft?.quantities || list.items.map(() => '0')).map((value) => Number(value || 0));
       const date = pending?.date || draft?.date || new Date().toISOString().slice(0, 10);
