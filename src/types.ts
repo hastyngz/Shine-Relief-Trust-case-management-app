@@ -655,6 +655,12 @@ export interface PhotoAttachment {
   };
   filingAudit?: Array<{ id: string; action: 'Metadata Updated'; actor: string; at: string; changedFields: string[] }>;
   filingMetadataUpdatedAt?: string;
+  /** Immutable file-version chain; the previous file remains separately stored. */
+  versionOf?: string;
+  versionNumber?: number;
+  versionNote?: string;
+  supersededBy?: string;
+  updatedAt?: string;
 }
 
 // --------------------------------------------------
