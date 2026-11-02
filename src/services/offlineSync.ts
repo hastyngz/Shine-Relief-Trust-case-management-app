@@ -71,6 +71,7 @@ export const SYNC_COLLECTION_FIELDS: ReadonlyArray<[keyof AppDatabase, string]> 
   ['projectProjections', 'projectProjections'],
   ['inventoryItems', 'inventoryItems'],
   ['assets', 'assets'],
+  ['pettyCashTransactions', 'pettyCashTransactions'],
 ];
 
 const FIELD_BY_COLLECTION = new Map<string, keyof AppDatabase>(
