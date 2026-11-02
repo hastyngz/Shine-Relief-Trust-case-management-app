@@ -389,6 +389,6 @@ The asset register now rejects invalid reference-date context before deriving th
 
 ### Finance Administration — reporting period scope (2026-11-02)
 - Finance Administration now allows Managers/Administrators to select the calendar month used by the monthly budget, budget actual, expense actual, asset-maintenance subset and transport totals. All these monthly figures derive from one tested helper and one selected period, preventing the page from silently mixing reporting months.
-- The expense register continues to include older unpaid entries regardless of the selected month, while the monthly expense total remains limited to the selected month. Asset-maintenance costs remain a labelled subset and are not added twice.
-- Invalid month values produce an empty monthly scope rather than silently falling back to the current month. Synthetic regression tests cover month switching, older unpaid carry-forward, and asset-maintenance inclusion.
+- The expense register includes all unpaid entries regardless of the selected month, including entries dated outside that month, while the monthly expense total remains limited to the selected month. Asset-maintenance costs remain a labelled subset and are not added twice.
+- Invalid month values produce an empty monthly scope rather than silently falling back to the current month. Synthetic regression tests cover month switching, unpaid carry-forward across periods, and asset-maintenance inclusion.
 - This is a reporting-scope correction only. It does not create a petty-cash ledger, general commitments register, bank statement matcher, approval matrix, or signed financial report.
