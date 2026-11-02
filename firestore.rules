@@ -431,7 +431,8 @@ service cloud.firestore {
         request.resource.data.reference.size() >= 2 && request.resource.data.reference.size() <= 120 &&
         request.resource.data.recordedAt is string && request.resource.data.createdAt is string &&
         request.resource.data.recordedBy is string && request.resource.data.recordedBy.size() > 0 &&
-        request.resource.data.recordedByUid == request.auth.uid &&
+        request.resource.data.recordedByUid is string && request.resource.data.recordedByUid.size() > 0 &&
+        (request.resource.data.recordedByUid == request.auth.uid || isAdmin()) &&
         (!request.resource.data.keys().hasAny(['category']) ||
           (request.resource.data.category is string && request.resource.data.category.size() <= 100)) &&
         (
