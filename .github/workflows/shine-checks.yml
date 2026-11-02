@@ -54,6 +54,9 @@ jobs:
       - name: Test finance reporting period calculations
         run: npm run test:finance-overview
 
+      - name: Test petty cash ledger calculations
+        run: npm run test:petty-cash
+
       - name: Test document filing filters
         run: npm run test:document-filing
 
