@@ -155,6 +155,8 @@ export function getDatabase(): AppDatabase {
       projectProjections: parsed.projectProjections || [],
       inventoryItems: Array.isArray(parsed.inventoryItems) ? parsed.inventoryItems : [],
       assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+    pettyCashTransactions: Array.isArray(parsed.pettyCashTransactions) ? parsed.pettyCashTransactions : [] ,
+      pettyCashTransactions: Array.isArray(parsed.pettyCashTransactions) ? parsed.pettyCashTransactions : [],
     };
   } catch (error) {
     databaseReadRecoveryRequired = true;
