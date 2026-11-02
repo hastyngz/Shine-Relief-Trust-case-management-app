@@ -438,7 +438,7 @@ service cloud.firestore {
           (request.resource.data.type == 'opening_balance' &&
             id == 'PETTY_CASH_OPENING_BALANCE' &&
             !exists(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE)) ||
-          (request.resource.data.type in ['cash_received', 'expense', 'cash_returned'] &&
+          (request.resource.data.type in ['cash_received', 'expense', 'cash_returned', 'adjustment_in', 'adjustment_out'] &&
             id != 'PETTY_CASH_OPENING_BALANCE' &&
             existsAfter(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE))
         );
