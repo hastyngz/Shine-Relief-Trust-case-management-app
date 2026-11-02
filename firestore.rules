@@ -153,7 +153,6 @@ service cloud.firestore {
     }
 
     function isValidProcurementReceiptLedgerUpdate(id) {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
       let movementId = request.resource.data.get('lastReceiptMovementId', '');
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
       let movement = getAfter(movementPath).data;
@@ -161,15 +160,14 @@ service cloud.firestore {
       let oldMap = resource.data.get('receivedQuantitiesByLine', {});
       let oldArray = resource.data.get('receivedQuantities', []);
       let newMap = request.resource.data.get('receivedQuantitiesByLine', {});
-      let oldLedger = oldMap.get('line_' + string(lineIndex), oldMap.get(string(lineIndex), 0));
+      let priorLedger = oldMap.get('line_' + string(lineIndex), oldMap.get(string(lineIndex), 0));
       let legacy = oldArray.size() > lineIndex ? oldArray[lineIndex] : 0;
-      let prior = oldLedger > legacy ? oldLedger : legacy;
-      let next = newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0));
+      let prior = priorLedger > legacy ? priorLedger : legacy;
       return resource.data.id == id &&
         resource.data.status == 'purchased' &&
         request.resource.data.status == resource.data.status &&
-        changed.hasAll(['receivedQuantitiesByLine', 'lastReceiptMovementId']) &&
-        changed.hasOnly(['receivedQuantitiesByLine', 'lastReceiptMovementId', 'updatedAt', 'updatedBy']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAll(['receivedQuantitiesByLine', 'lastReceiptMovementId']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedQuantitiesByLine', 'lastReceiptMovementId', 'updatedAt', 'updatedBy']) &&
         newMap.diff(oldMap).affectedKeys().hasOnly(['line_' + string(lineIndex), string(lineIndex)]) &&
         movementId is string && movementId.size() > 0 &&
         existsAfter(movementPath) &&
@@ -179,12 +177,11 @@ service cloud.firestore {
         movement.sourceLineIndex is int &&
         movement.sourceLineIndex >= 0 &&
         movement.recordedByUid == request.auth.uid &&
-        next == prior + movement.quantity &&
+        newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0)) == prior + movement.quantity &&
         request.resource.data.items is list &&
         request.resource.data.items.size() > lineIndex &&
-        next <= request.resource.data.items[lineIndex].quantity;
+        newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0)) <= request.resource.data.items[lineIndex].quantity;
     }
-
     function isValidProcurementReceiptSource(itemId) {
       let procurementPath = /databases/$(database)/documents/procurementLists/$(request.resource.data.sourceId);
       let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
