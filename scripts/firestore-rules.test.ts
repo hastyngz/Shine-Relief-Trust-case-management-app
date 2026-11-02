@@ -531,6 +531,7 @@ async function run() {
     await assertSucceeds(getDoc(doc(manager, 'attachments/ordinary-file-v2')));
     await assertFails(updateDoc(doc(manager, 'attachments/ordinary-file-v2'), { fileName: 'tampered.pdf' }));
     await assertFails(deleteDoc(doc(manager, 'attachments/ordinary-file-v2')));
+    await assertFails(deleteDoc(doc(admin, 'attachments/ordinary-file')));
     await assertFails(setDoc(doc(manager, 'attachments/ordinary-file-v3'), {
       id: 'ordinary-file-v3', targetType: 'household', targetId: 'household-1', category: 'Receipt',
       fileName: 'receipt-v3.pdf', storagePath: 'attachments/household/household-1/receipt-v3.pdf',
