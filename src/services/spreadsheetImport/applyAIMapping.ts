@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import type * as XLSX from 'xlsx';
 import type { SpreadsheetAIField, SpreadsheetAIMappingProposal } from './aiMapping';
 
 const FIELD_HEADERS: Record<SpreadsheetAIField, string> = {
@@ -30,10 +30,11 @@ const FIELD_HEADERS: Record<SpreadsheetAIField, string> = {
 };
 
 /** Clone the workbook and replace only user-approved mapped header cells with canonical labels. */
-export function applySpreadsheetAIMapping(
+export async function applySpreadsheetAIMapping(
   workbook: XLSX.WorkBook,
   proposal: SpreadsheetAIMappingProposal,
-): XLSX.WorkBook {
+): Promise<XLSX.WorkBook> {
+  const XLSXRuntime = await import('xlsx');
   const mapped: XLSX.WorkBook = { ...workbook, Sheets: { ...workbook.Sheets } };
   for (const sheetMapping of proposal.sheets) {
     const original = workbook.Sheets[sheetMapping.name];
@@ -41,7 +42,7 @@ export function applySpreadsheetAIMapping(
     const sheet: XLSX.WorkSheet = { ...original };
     mapped.Sheets[sheetMapping.name] = sheet;
     sheetMapping.columns.forEach(({ sourceColumn, field }) => {
-      const address = XLSX.utils.encode_cell({ r: sheetMapping.headerRow, c: sourceColumn });
+      const address = XLSXRuntime.utils.encode_cell({ r: sheetMapping.headerRow, c: sourceColumn });
       const existing = sheet[address];
       if (!existing) return;
       const canonicalHeader = FIELD_HEADERS[field];
