@@ -1,13 +1,14 @@
 import React from 'react';
 import { Activity, Wallet } from 'lucide-react';
 import type { AppDatabase } from '../types';
+import { getLocalDateInputValue } from '../utils/inventory';
 
 interface Props { db: AppDatabase; mode: 'performance' | 'finance'; }
 const card='rounded-2xl border border-stone-200 bg-white p-4';
 const mwk=(n:number)=>'MWK '+Math.round(n||0).toLocaleString();
 
 export const AdministrationOversightView: React.FC<Props> = ({db,mode}) => {
- const today=new Date().toISOString().slice(0,10), period=today.slice(0,7);
+ const today=getLocalDateInputValue(), period=today.slice(0,7);
  const schedules=db.schedules||[], completed=schedules.filter(s=>s.status==='Completed').length;
  const open=schedules.filter(s=>!['Completed','Cancelled'].includes(s.status)).length;
  const overdue=schedules.filter(s=>s.scheduledDate<today&&!['Completed','Cancelled'].includes(s.status)).length;
