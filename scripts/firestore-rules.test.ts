@@ -682,6 +682,7 @@ async function run() {
     await assertSucceeds(setDoc(doc(worker, 'schedules/trip-1'), trip));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'In Progress' }));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'Completed' }));
+    await assertFails(updateDoc(doc(manager, 'schedules/trip-1'), { status: 'In Progress' }));
     await assertFails(updateDoc(doc(worker, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'worker', tripApprovedAt: '2026-11-02T00:00:00.000Z' }));
     await assertSucceeds(updateDoc(doc(manager, 'schedules/trip-1'), { tripApprovalStatus: 'Approved', tripApprovedByUid: 'manager', tripApprovedByName: 'manager', tripApprovedAt: '2026-11-02T00:00:00.000Z', tripApprovalNote: '', status: 'Scheduled', updatedAt: '2026-11-02T00:00:00.000Z', updatedBy: 'manager' }));
     await assertSucceeds(updateDoc(doc(worker, 'schedules/trip-1'), { status: 'In Progress', updatedAt: '2026-11-02T01:00:00.000Z', updatedBy: 'worker' }));

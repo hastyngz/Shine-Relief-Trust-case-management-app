@@ -835,6 +835,7 @@ service cloud.firestore {
     function isValidTripStartUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return resource.data.type == 'transport_trip' &&
+        request.resource.data.type == 'transport_trip' &&
         resource.data.tripApprovalStatus == 'Approved' &&
         request.resource.data.tripApprovalStatus == 'Approved' &&
         (isManagerOrAdmin() || (isStaffActive() && resource.data.assignedStaffId == request.auth.uid)) &&
@@ -847,6 +848,7 @@ service cloud.firestore {
     function isValidTripCompletionUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return resource.data.type == 'transport_trip' &&
+        request.resource.data.type == 'transport_trip' &&
         resource.data.tripApprovalStatus == 'Approved' &&
         request.resource.data.tripApprovalStatus == 'Approved' &&
         (isManagerOrAdmin() || (isStaffActive() && resource.data.assignedStaffId == request.auth.uid)) &&
