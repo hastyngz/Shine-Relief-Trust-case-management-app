@@ -1152,10 +1152,11 @@ export async function syncEntireDatabaseToFirestore(
       if (field === 'pettyCashTransactions') {
         const ledgerRecords = orderedRecords || [];
         const openingRecords = ledgerRecords.filter((record) => (record as any).type === 'opening_balance');
+        const openingRecord = openingRecords[0];
         if (ledgerRecords.length && (
-          openingRecords.length !== 1 ||
-          openingRecords[0].id !== 'PETTY_CASH_OPENING_BALANCE' ||
-          ledgerRecords.some((record) => (record as any).type !== 'opening_balance' && String((record as any).date || '') < String((openingRecords[0] as any).date || '')) ||
+          !openingRecord || openingRecords.length !== 1 ||
+          openingRecord.id !== 'PETTY_CASH_OPENING_BALANCE' ||
+          ledgerRecords.some((record) => (record as any).type !== 'opening_balance' && String((record as any).date || '') < String((openingRecord as any).date || '')) ||
           new Set(ledgerRecords.map((record) => record.id)).size !== ledgerRecords.length
         )) {
           throw new Error('The backup contains an invalid petty-cash ledger. It must include one opening float and unique, chronologically valid entries.');
