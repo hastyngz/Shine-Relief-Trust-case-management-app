@@ -1300,6 +1300,10 @@ export async function syncEntireDatabaseToFirestore(
       });
 
       for (const colName of collectionNames) {
+        // Petty-cash is append-only financial history. Backup replacement may
+        // add missing identical records, but must never prune ledger entries;
+        // only the explicit administrator reset clears this collection.
+        if (colName === COLLECTIONS.PETTY_CASH_TRANSACTIONS) continue;
         const snapshot = await getDocs(collection(firestore, colName));
         const staleRecords = snapshot.docs.filter(
           (record) => !restoredIds.get(colName)?.has(record.id)
