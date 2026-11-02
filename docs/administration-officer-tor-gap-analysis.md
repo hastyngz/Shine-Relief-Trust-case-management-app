@@ -352,9 +352,11 @@ The asset register now rejects invalid reference-date context before deriving th
 - Still outstanding: management-approved KPI catalogue, targets/denominators/weights, period-specific verified reporting, manager review and staff appraisal workflow.
 
 ### Finance Administration
-- Dedicated read-only current-month reconciliation overview added for budget, budget actuals, expense entries, outstanding invoices and purchased procurement lists awaiting finance handover.
-- Budget actuals and expense totals are kept separate to avoid accidental double-counting. No payment approval or bank reconciliation authority is added.
-- Still outstanding: formal invoice register, payment reconciliation against bank/cash evidence, petty cash reconciliation, commitment register, delegated approval matrix and signed finance reports.
+- Dedicated current-month reconciliation overview added for budget, budget actuals, expense entries, outstanding invoices and purchased procurement lists awaiting finance handover.
+- Asset maintenance costs entered in the Asset Register now automatically create one Repairs expense under the Administration & Operations cost centre. The expense is linked to the maintenance history event by a stable source ID, stored with the asset update in one local database write, and enters the normal offline sync queue. Repeated submission with the same operation ID does not create a duplicate expense.
+- Maintenance expenses default to Payment Outstanding; manager/admin users can record the payment date, method and reference after checking the receipt, bank transaction or cash voucher. The existing expense audit trail records the payment-status change.
+- Asset maintenance totals are shown as a subset of monthly expense actuals, explicitly labelled as already included so they are not added twice. Organisation-wide asset costs use a reserved non-household cost-centre ID and are excluded from individual household totals.
+- Still outstanding: formal invoice register beyond linked maintenance references, petty cash reconciliation, general commitment register, delegated approval matrix, bank/cash statement matching and signed finance reports.
 
 ### Documents & Filing
 - Existing permission-aware attachment index extended with document title, reference number, owner, classification label, expiry/review date and an audit trail for metadata changes.
