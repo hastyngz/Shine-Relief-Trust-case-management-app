@@ -192,6 +192,9 @@ jobs:
       - name: Test physical asset verification
         run: npm run test:asset-verification
 
+      - name: Test automatic asset maintenance finance posting
+        run: npm run test:asset-maintenance
+
       - name: Test hash routing
         run: npm run test:routing
 
