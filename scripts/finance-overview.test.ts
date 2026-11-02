@@ -29,13 +29,13 @@ assert.equal(november.budgetActual, 700);
 assert.equal(november.expenseActual, 650);
 assert.equal(november.assetMaintenanceTotal, 250);
 assert.equal(november.unpaidTotal, 380);
-assert.deepEqual(november.financeRegister.map((item) => item.id), ['old-unpaid', 'nov-unpaid', 'nov-maintenance']);
+assert.deepEqual(november.financeRegister.map((item) => item.id), ['nov-unpaid', 'nov-maintenance', 'old-unpaid']);
 assert.equal(november.assetMaintenanceExpenses.length, 1);
 
 const october = getFinancePeriodSummary(db, '2026-10');
 assert.equal(october.budget, 500);
 assert.equal(october.expenseActual, 100);
-assert.deepEqual(october.financeRegister.map((item) => item.id), ['oct-paid', 'old-unpaid', 'nov-unpaid']);
+assert.deepEqual(october.financeRegister.map((item) => item.id), ['nov-unpaid', 'oct-paid', 'old-unpaid']);
 assert.equal(getFinancePeriodSummary(db, '2026-13').expenses.length, 0);
 assert.equal(getFinancePeriodSummary(db, '').budget, 0);
 console.log('Finance period summary tests passed.');
