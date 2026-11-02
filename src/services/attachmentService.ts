@@ -8,7 +8,6 @@ import {
   where,
   onSnapshot,
   updateDoc,
-  getDoc,
   getDocFromServer,
   writeBatch,
 } from 'firebase/firestore';
