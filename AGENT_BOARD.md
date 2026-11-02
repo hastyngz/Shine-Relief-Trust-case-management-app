@@ -1379,7 +1379,7 @@ Suggestion format:
 - Firestore rules now enforce the same boundary on expense creation and update, with emulator coverage for Staff paid-at-creation denial and unpaid expense creation. — Mosaic (ChatGPT), 2026-11-02
 
 ### 2026-11-02 · Finance Administration · Petty cash ledger
-- Added an append-only petty-cash ledger for opening float, cash received/replenishment, cash expenses and cash returned, with running balance, required references and actor identity.
+- Added an append-only petty-cash ledger for opening float, cash received/replenishment, cash expenses, cash returned and correction-in/correction-out movements, with running balance, required references and actor identity.
 - Added Manager/Administrator-only Firestore access, offline queue mapping, idempotent append retry handling, backup/restore and reset integration, plus calculation, queue, listener and Firestore rules tests. Queue and restore writes are ordered opening-float first; backup replacement merges missing entries, refuses conflicting IDs and never prunes petty-cash history.
 - Balance/chronology checks run in the app before queueing; Firestore rules enforce role, record shape, one opening-float document and immutability, but do not calculate the cross-document balance. Physical cash verification remains a management control.
 - No opening float or production data has been entered; no Firestore rules deployment. Exact-head CI and local build/type checks remain pending. — Mosaic (ChatGPT), 2026-11-02
