@@ -3,7 +3,7 @@ import { Download, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Pap
 import type { AppDatabase, PhotoAttachment } from '../types';
 import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, type FilingRecordType } from '../utils/documentFiling';
 import { useAuth } from '../contexts/AuthContext';
-import { getFilingAttachmentMetadata } from '../services/attachmentService';
+import { getFilingAttachmentMetadata, updateAttachmentFilingMetadata } from '../services/attachmentService';
 import { getStoredFile } from '../services/r2StorageClient';
 
 interface DocumentsFilingViewProps {
@@ -38,7 +38,8 @@ const targetLabel = (type: string) => targetLabels[type] || type;
 const isImage = (attachment: PhotoAttachment) => attachment.contentType?.startsWith('image/');
 
 export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, onOpenTarget }) => {
-  const { canViewHealthRecords, currentUser } = useAuth();
+  const { canViewHealthRecords, currentUser, isAdmin, staffProfile } = useAuth();
+  const canManageFiling = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [attachments, setAttachments] = useState<PhotoAttachment[]>([]);
   const [search, setSearch] = useState('');
   const [fileFilter, setFileFilter] = useState<FileFilter>('All files');
@@ -49,6 +50,13 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   const [error, setError] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [editingFiling, setEditingFiling] = useState<PhotoAttachment | null>(null);
+  const [filingTitle, setFilingTitle] = useState('');
+  const [filingReference, setFilingReference] = useState('');
+  const [filingOwner, setFilingOwner] = useState('');
+  const [filingClass, setFilingClass] = useState<'Public' | 'Internal' | 'Confidential' | 'Restricted'>('Internal');
+  const [filingExpiry, setFilingExpiry] = useState('');
+  const [savingFiling, setSavingFiling] = useState(false);
   const loadRequestId = useRef(0);
 
   const load = async (refresh = false) => {
@@ -110,6 +118,38 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
     }
   };
 
+  const startFilingEdit = (attachment: PhotoAttachment) => {
+    const metadata = attachment.filingMetadata;
+    setEditingFiling(attachment);
+    setFilingTitle(metadata?.documentTitle || attachment.caption || attachment.fileName);
+    setFilingReference(metadata?.referenceNumber || '');
+    setFilingOwner(metadata?.documentOwner || attachment.uploadedBy?.name || '');
+    setFilingClass(metadata?.classification || 'Internal');
+    setFilingExpiry(metadata?.expiryDate || '');
+    setError(''); setNotice('');
+  };
+
+  const saveFiling = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingFiling) return;
+    setSavingFiling(true); setError(''); setNotice('');
+    try {
+      const metadata = {
+        documentTitle: filingTitle.trim(),
+        referenceNumber: filingReference.trim(),
+        documentOwner: filingOwner.trim(),
+        classification: filingClass,
+        expiryDate: filingExpiry || undefined,
+      };
+      await updateAttachmentFilingMetadata(editingFiling, metadata, staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff');
+      setAttachments((current) => current.map((item) => item.id === editingFiling.id ? { ...item, filingMetadata: metadata } : item));
+      setEditingFiling(null);
+      setNotice('Filing metadata saved and an audit entry recorded.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Filing metadata could not be saved. Check your connection and permissions.');
+    } finally { setSavingFiling(false); }
+  };
+
   const openLinkedRecord = (attachment: PhotoAttachment) => {
     onOpenTarget(attachment.targetType, attachment.targetId);
   };
@@ -152,7 +192,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">Administration · Phase 1</p>
             <h1 id="documents-filing-title" className="mt-1 text-2xl font-bold text-stone-900">Document index</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Search existing attachments, identify the record they belong to, and download a file when needed. This view indexes existing private files; it does not duplicate uploads or pretend that version control and compliance tracking are already implemented.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Search existing private attachments, maintain filing references, document ownership, classification and expiry dates, and return to linked records. Metadata changes are audited; file version history and automated access restrictions by classification are not yet implemented.</p>
           </div>
           <button type="button" onClick={() => void load(true)} disabled={loading || refreshing} className="fx-press inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60" aria-label="Refresh document index">
             <LoaderCircle className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Refresh</span>
@@ -217,6 +257,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                   </div>
                   <p className="mt-2 break-words text-xs leading-5 text-stone-600">Linked record: <span className="font-semibold">{linkedName(attachment)}</span></p>
                   <p className="mt-1 text-xs text-stone-500">{attachment.date || 'Date not recorded'} · {formatBytes(attachment.fileSize)} · Uploaded by {attachment.uploadedBy?.name || 'Staff'}</p>
+                  {attachment.filingMetadata && <p className="mt-2 text-xs text-stone-600">Ref: {attachment.filingMetadata.referenceNumber} · Owner: {attachment.filingMetadata.documentOwner} · {attachment.filingMetadata.classification || 'Internal'}{attachment.filingMetadata.expiryDate ? ' · Expires '+attachment.filingMetadata.expiryDate : ''}</p>}
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
@@ -226,11 +267,13 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                 <button type="button" onClick={() => openLinkedRecord(attachment)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">
                   <ExternalLink className="h-4 w-4" /> Open linked record
                 </button>
+                {canManageFiling && <button type="button" onClick={() => startFilingEdit(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">Edit filing details</button>}
               </div>
             </article>
           ))}
         </div>
       )}
+      {editingFiling && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4"><section role="dialog" aria-modal="true" aria-labelledby="filing-edit-title" className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"><h2 id="filing-edit-title" className="text-xl font-bold">Filing details</h2><p className="mt-1 text-sm text-stone-600">These details describe and help track the file. Classification is a label and does not itself change who can access the attachment.</p><form onSubmit={saveFiling} className="mt-4 space-y-3"><label className="block text-sm font-semibold">Document title<input required value={filingTitle} onChange={e=>setFilingTitle(e.target.value)} className="field mt-1 min-h-11 w-full"/></label><label className="block text-sm font-semibold">Reference number<input required value={filingReference} onChange={e=>setFilingReference(e.target.value)} className="field mt-1 min-h-11 w-full" placeholder="e.g. SHINE/HR/2026/001"/></label><label className="block text-sm font-semibold">Document owner<input required value={filingOwner} onChange={e=>setFilingOwner(e.target.value)} className="field mt-1 min-h-11 w-full"/></label><label className="block text-sm font-semibold">Classification<select value={filingClass} onChange={e=>setFilingClass(e.target.value as typeof filingClass)} className="field mt-1 min-h-11 w-full"><option>Public</option><option>Internal</option><option>Confidential</option><option>Restricted</option></select></label><label className="block text-sm font-semibold">Expiry / review date<input type="date" value={filingExpiry} onChange={e=>setFilingExpiry(e.target.value)} className="field mt-1 min-h-11 w-full"/></label><div className="flex gap-2 pt-2"><button type="button" onClick={()=>setEditingFiling(null)} disabled={savingFiling} className="min-h-11 flex-1 rounded-xl border border-stone-300">Cancel</button><button type="submit" disabled={savingFiling} className="min-h-11 flex-1 rounded-xl bg-teal-800 font-bold text-white disabled:opacity-50">{savingFiling?'Saving…':'Save filing details'}</button></div></form></section></div>}
     </section>
   );
 };
