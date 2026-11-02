@@ -15,6 +15,38 @@ Use a laptop with Chrome. Test with demo/test records only—never use real girl
 
 Cloudflare KV remains intentionally disconnected and is outside this release gate.
 
+## 0.1 Production data migration gate — petty-cash balance checkpoint
+
+The revised petty-cash rules require `pettyCashLedgerState/current` to match the
+existing append-only ledger. Do not deploy those rules until the existing ledger
+has been checked and the checkpoint has been initialized:
+
+1. Obtain owner approval, schedule a maintenance window, and verify an approved
+   Firestore backup using the organization's established backup procedure.
+2. From the reviewed release commit, run a read-only dry run against the
+   owner-confirmed production project:
+
+   ```sh
+   npx tsx scripts/migrate-petty-cash-ledger-state.ts --project "<CONFIRMED_PROJECT_ID>"
+   ```
+
+3. Review the counts. Stop if malformed entries or conflicts are reported; do
+   not hand-edit ledger data or choose a balance from a client snapshot.
+4. Only after owner approval of the dry run and backup, apply with explicit
+   project confirmation:
+
+   ```sh
+   npx tsx scripts/migrate-petty-cash-ledger-state.ts --project "<CONFIRMED_PROJECT_ID>" --apply --confirm-project "<CONFIRMED_PROJECT_ID>"
+   ```
+
+5. Require a zero-conflict, zero-malformed result and `Checkpoint status:
+   current`. The script never prints ledger entries or balances. Re-run the dry
+   run and confirm the checkpoint is still current.
+6. Deploy the strict rules and matching frontend in the approved maintenance
+   window. The rules require each entry and its balance checkpoint to be
+   committed together; older clients may temporarily retain pending entries
+   until they reload the updated app.
+
 ## 1. Offline edit and recovery
 1. Open SHINE while online and sign in.
 2. Open a test girl's record, make a harmless change, and save.

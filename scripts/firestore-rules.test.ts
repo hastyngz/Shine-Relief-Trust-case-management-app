@@ -520,31 +520,117 @@ async function run() {
     await assertFails(getDoc(doc(worker, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE')));
     await assertFails(setDoc(doc(worker, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
     await assertFails(setDoc(doc(viewer, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening));
-    const pettyCashRestoreBatch = writeBatch(manager);
-    pettyCashRestoreBatch.set(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening);
-    pettyCashRestoreBatch.set(doc(manager, 'pettyCashTransactions/receipt-manager-001'), {
+    const openingBatch = writeBatch(manager);
+    openingBatch.set(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE'), pettyCashOpening);
+    openingBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 50000, latestDate: pettyCashOpening.date,
+      lastTransactionId: pettyCashOpening.id, updatedAt: pettyCashOpening.recordedAt,
+    });
+    await assertSucceeds(openingBatch.commit());
+    const receipt = {
       ...pettyCashOpening, id: 'receipt-manager-001', type: 'cash_received', amountMWK: 10000,
       reference: 'TRANSFER-TEST-001', recordedAt: '2026-11-02T09:00:00.000Z', createdAt: '2026-11-02T09:00:00.000Z',
+    };
+    const receiptBatch = writeBatch(manager);
+    receiptBatch.set(doc(manager, `pettyCashTransactions/${receipt.id}`), receipt);
+    receiptBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 60000, latestDate: receipt.date,
+      lastTransactionId: receipt.id, updatedAt: receipt.recordedAt,
     });
-    await assertSucceeds(pettyCashRestoreBatch.commit());
-    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/actor-spoof-001'), {
-      ...pettyCashOpening, id: 'actor-spoof-001', type: 'cash_received', recordedByUid: 'admin',
+    await assertSucceeds(receiptBatch.commit());
+    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/standalone-write-001'), {
+      ...pettyCashOpening, id: 'standalone-write-001', type: 'cash_received',
     }));
-    await assertSucceeds(setDoc(doc(manager, 'pettyCashTransactions/adjustment-in-001'), {
+    await assertFails(updateDoc(doc(admin, 'pettyCashLedgerState/current'), { balanceMWK: 999999 }));
+    await assertFails(deleteDoc(doc(admin, 'pettyCashLedgerState/current')));
+    const spoofedActor = {
+      ...pettyCashOpening, id: 'actor-spoof-001', type: 'cash_received', amountMWK: 1,
+      recordedBy: 'Forged Manager', recordedAt: '2026-11-02T09:15:00.000Z',
+      createdAt: '2026-11-02T09:15:00.000Z',
+    };
+    const spoofBatch = writeBatch(manager);
+    spoofBatch.set(doc(manager, `pettyCashTransactions/${spoofedActor.id}`), spoofedActor);
+    spoofBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 60001, latestDate: spoofedActor.date,
+      lastTransactionId: spoofedActor.id, updatedAt: spoofedActor.recordedAt,
+    });
+    await assertFails(spoofBatch.commit());
+    const spoofedUid = {
+      ...pettyCashOpening, id: 'actor-uid-spoof-001', type: 'cash_received', amountMWK: 1,
+      recordedByUid: 'admin', recordedAt: '2026-11-02T09:16:00.000Z',
+      createdAt: '2026-11-02T09:16:00.000Z',
+    };
+    const spoofedUidBatch = writeBatch(manager);
+    spoofedUidBatch.set(doc(manager, `pettyCashTransactions/${spoofedUid.id}`), spoofedUid);
+    spoofedUidBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 60001, latestDate: spoofedUid.date,
+      lastTransactionId: spoofedUid.id, updatedAt: spoofedUid.recordedAt,
+    });
+    await assertFails(spoofedUidBatch.commit());
+    const adjustment = {
       ...pettyCashOpening, id: 'adjustment-in-001', type: 'adjustment_in', amountMWK: 1000,
       reference: 'CORRECTS-ENTRY-001', recordedAt: '2026-11-02T09:30:00.000Z', createdAt: '2026-11-02T09:30:00.000Z',
-    }));
-    await assertSucceeds(setDoc(doc(admin, 'pettyCashTransactions/expense-admin-001'), {
+    };
+    const adjustmentBatch = writeBatch(manager);
+    adjustmentBatch.set(doc(manager, `pettyCashTransactions/${adjustment.id}`), adjustment);
+    adjustmentBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 61000, latestDate: adjustment.date,
+      lastTransactionId: adjustment.id, updatedAt: adjustment.recordedAt,
+    });
+    await assertSucceeds(adjustmentBatch.commit());
+    const expense = {
       ...pettyCashOpening, id: 'expense-admin-001', type: 'expense', amountMWK: 5000,
       reference: 'VOUCHER-TEST-001', recordedAt: '2026-11-02T10:00:00.000Z', createdAt: '2026-11-02T10:00:00.000Z',
-    }));
+      recordedBy: 'admin', recordedByUid: 'admin',
+    };
+    const expenseBatch = writeBatch(admin);
+    expenseBatch.set(doc(admin, `pettyCashTransactions/${expense.id}`), expense);
+    expenseBatch.set(doc(admin, 'pettyCashLedgerState/current'), {
+      balanceMWK: 56000, latestDate: expense.date,
+      lastTransactionId: expense.id, updatedAt: expense.recordedAt,
+    });
+    await assertSucceeds(expenseBatch.commit());
+    const adminActorSpoof = {
+      ...expense, id: 'expense-admin-actor-spoof-001', amountMWK: 1,
+      recordedBy: 'manager', recordedByUid: 'manager',
+      recordedAt: '2026-11-02T10:01:00.000Z', createdAt: '2026-11-02T10:01:00.000Z',
+    };
+    const adminActorSpoofBatch = writeBatch(admin);
+    adminActorSpoofBatch.set(doc(admin, `pettyCashTransactions/${adminActorSpoof.id}`), adminActorSpoof);
+    adminActorSpoofBatch.set(doc(admin, 'pettyCashLedgerState/current'), {
+      balanceMWK: 55999, latestDate: adminActorSpoof.date,
+      lastTransactionId: adminActorSpoof.id, updatedAt: adminActorSpoof.recordedAt,
+    });
+    await assertFails(adminActorSpoofBatch.commit());
     await assertFails(setDoc(doc(manager, 'pettyCashTransactions/PETTY_CASH_OPENING_BALANCE_DUPLICATE'), {
       ...pettyCashOpening, id: 'PETTY_CASH_OPENING_BALANCE_DUPLICATE',
     }));
     await assertFails(updateDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001'), { amountMWK: 1 }));
     await assertFails(deleteDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001')));
-    await assertSucceeds(deleteDoc(doc(admin, 'pettyCashTransactions/receipt-manager-001')));
+    await assertFails(deleteDoc(doc(admin, 'pettyCashTransactions/receipt-manager-001')));
     await assertFails(updateDoc(doc(admin, 'pettyCashTransactions/expense-admin-001'), { amountMWK: 1 }));
+    const firstConcurrentOutflow = {
+      ...pettyCashOpening, id: 'concurrent-outflow-001', type: 'expense', amountMWK: 30000,
+      reference: 'VOUCHER-CONCURRENT-001', recordedAt: '2026-11-02T11:00:00.000Z', createdAt: '2026-11-02T11:00:00.000Z',
+    };
+    const firstConcurrentBatch = writeBatch(manager);
+    firstConcurrentBatch.set(doc(manager, `pettyCashTransactions/${firstConcurrentOutflow.id}`), firstConcurrentOutflow);
+    firstConcurrentBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 26000, latestDate: firstConcurrentOutflow.date,
+      lastTransactionId: firstConcurrentOutflow.id, updatedAt: firstConcurrentOutflow.recordedAt,
+    });
+    await assertSucceeds(firstConcurrentBatch.commit());
+    const staleConcurrentOutflow = {
+      ...pettyCashOpening, id: 'concurrent-outflow-002', type: 'expense', amountMWK: 30000,
+      reference: 'VOUCHER-CONCURRENT-002', recordedAt: '2026-11-02T11:01:00.000Z', createdAt: '2026-11-02T11:01:00.000Z',
+    };
+    const staleConcurrentBatch = writeBatch(manager);
+    staleConcurrentBatch.set(doc(manager, `pettyCashTransactions/${staleConcurrentOutflow.id}`), staleConcurrentOutflow);
+    staleConcurrentBatch.set(doc(manager, 'pettyCashLedgerState/current'), {
+      balanceMWK: 26000, latestDate: staleConcurrentOutflow.date,
+      lastTransactionId: staleConcurrentOutflow.id, updatedAt: staleConcurrentOutflow.recordedAt,
+    });
+    await assertFails(staleConcurrentBatch.commit());
     await assertFails(setDoc(doc(manager, 'pettyCashTransactions/invalid-date-001'), {
       ...pettyCashOpening, id: 'invalid-date-001', type: 'cash_received', date: '2026-13-45',
     }));

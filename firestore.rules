@@ -408,9 +408,98 @@ service cloud.firestore {
       allow delete: if isManagerOrStaff();
     }
 
-    // Petty-cash is a Manager/Administrator-only append-only ledger.
-    // The fixed opening-balance ID makes initialisation single-record and
-    // prevents any later receipt/expense from preceding the opening float.
+    function pettyCashLedgerStatePath() {
+      return /databases/$(database)/documents/pettyCashLedgerState/current;
+    }
+
+    function pettyCashActorNameMatchesAuth() {
+      let staffPath = /databases/$(database)/documents/staffUsers/$(request.auth.uid);
+      let tokenName = request.auth.token.get('name', '');
+      let tokenEmail = request.auth.token.get('email', '');
+      return (
+          exists(staffPath) &&
+          request.resource.data.recordedBy == getStaffDoc(request.auth.uid).data.fullName
+        ) ||
+        (
+          !exists(staffPath) &&
+          isHastings() &&
+          request.resource.data.recordedBy ==
+            (tokenName is string && tokenName.size() > 0 ? tokenName : tokenEmail)
+        );
+    }
+
+    function isValidPettyCashLedgerState() {
+      return request.resource.data.keys().hasOnly([
+          'balanceMWK', 'latestDate', 'lastTransactionId', 'updatedAt'
+        ]) &&
+        request.resource.data.balanceMWK is int &&
+        request.resource.data.balanceMWK >= 0 &&
+        request.resource.data.latestDate is string &&
+        request.resource.data.latestDate.size() == 10 &&
+        request.resource.data.lastTransactionId is string &&
+        request.resource.data.lastTransactionId.size() > 0 &&
+        request.resource.data.updatedAt is string;
+    }
+
+    function pettyCashStateMatchesNewEntry(entryId) {
+      let entryPath = /databases/$(database)/documents/pettyCashTransactions/$(entryId);
+      let entry = getAfter(entryPath).data;
+      return !exists(entryPath) &&
+        existsAfter(entryPath) &&
+        entry.id == entryId &&
+        request.resource.data.lastTransactionId == entryId &&
+        request.resource.data.latestDate == entry.date &&
+        request.resource.data.updatedAt == entry.recordedAt;
+    }
+
+    function pettyCashEntryMatchesState(id) {
+      let state = getAfter(pettyCashLedgerStatePath()).data;
+      let currentState = get(pettyCashLedgerStatePath()).data;
+      return existsAfter(pettyCashLedgerStatePath()) &&
+        state.lastTransactionId == id &&
+        state.latestDate == request.resource.data.date &&
+        state.updatedAt == request.resource.data.recordedAt &&
+        (
+          (!exists(pettyCashLedgerStatePath()) &&
+            request.resource.data.type == 'opening_balance' &&
+            state.balanceMWK == request.resource.data.amountMWK) ||
+          (exists(pettyCashLedgerStatePath()) &&
+            request.resource.data.type in ['cash_received', 'cash_returned', 'adjustment_in'] &&
+            request.resource.data.date >= currentState.latestDate &&
+            state.balanceMWK == currentState.balanceMWK + request.resource.data.amountMWK) ||
+          (exists(pettyCashLedgerStatePath()) &&
+            request.resource.data.type in ['expense', 'adjustment_out'] &&
+            request.resource.data.date >= currentState.latestDate &&
+            request.resource.data.amountMWK <= currentState.balanceMWK &&
+            state.balanceMWK == currentState.balanceMWK - request.resource.data.amountMWK)
+        );
+    }
+
+    // Petty cash is an append-only, Manager/Administrator-only ledger. Every
+    // movement and its balance checkpoint must be written atomically.
+    match /pettyCashLedgerState/{id} {
+      allow read: if isManagerOrAdmin() && id == 'current';
+      allow create: if isManagerOrAdmin() &&
+        id == 'current' &&
+        isValidPettyCashLedgerState() &&
+        pettyCashStateMatchesNewEntry(request.resource.data.lastTransactionId) &&
+        request.resource.data.lastTransactionId == 'PETTY_CASH_OPENING_BALANCE';
+      allow update: if isManagerOrAdmin() &&
+        id == 'current' &&
+        isValidPettyCashLedgerState() &&
+        pettyCashStateMatchesNewEntry(request.resource.data.lastTransactionId) &&
+        request.resource.data.lastTransactionId != 'PETTY_CASH_OPENING_BALANCE' &&
+        (
+          request.resource.data.balanceMWK == resource.data.balanceMWK + getAfter(
+            /databases/$(database)/documents/pettyCashTransactions/$(request.resource.data.lastTransactionId)
+          ).data.amountMWK ||
+          request.resource.data.balanceMWK == resource.data.balanceMWK - getAfter(
+            /databases/$(database)/documents/pettyCashTransactions/$(request.resource.data.lastTransactionId)
+          ).data.amountMWK
+        );
+      allow delete: if false;
+    }
+
     match /pettyCashTransactions/{id} {
       allow read: if isManagerOrAdmin();
       allow create: if isManagerOrAdmin() &&
@@ -421,7 +510,7 @@ service cloud.firestore {
         ]) &&
         request.resource.data.date is string &&
         request.resource.data.date.size() == 10 &&
-        request.resource.data.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])') &&
+        request.resource.data.date.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$') &&
         request.resource.data.amountMWK is int && request.resource.data.amountMWK > 0 &&
         request.resource.data.description is string &&
         request.resource.data.description.size() >= 3 && request.resource.data.description.size() <= 250 &&
@@ -430,7 +519,8 @@ service cloud.firestore {
         request.resource.data.recordedAt is string && request.resource.data.createdAt is string &&
         request.resource.data.recordedBy is string && request.resource.data.recordedBy.size() > 0 &&
         request.resource.data.recordedByUid is string && request.resource.data.recordedByUid.size() > 0 &&
-        (request.resource.data.recordedByUid == request.auth.uid || isAdmin()) &&
+        request.resource.data.recordedByUid == request.auth.uid &&
+        pettyCashActorNameMatchesAuth() &&
         (!request.resource.data.keys().hasAny(['category']) ||
           (request.resource.data.category is string && request.resource.data.category.size() <= 100)) &&
         (
@@ -440,10 +530,10 @@ service cloud.firestore {
           (request.resource.data.type in ['cash_received', 'expense', 'cash_returned', 'adjustment_in', 'adjustment_out'] &&
             id != 'PETTY_CASH_OPENING_BALANCE' &&
             existsAfter(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE))
-        );
+        ) &&
+        pettyCashEntryMatchesState(id);
       allow update: if false;
-      // Administrator deletion is reserved for the explicit operational reset; backup replacement never prunes ledger history.
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
 
     match /householdActivities/{id} {

@@ -1219,6 +1219,12 @@ const pettyCashAppendRecord = {
   createdAt: T1,
 };
 server.seed('pettyCashTransactions', pettyCashAppendRecord.id, pettyCashAppendRecord);
+server.seed('pettyCashLedgerState', 'current', {
+  balanceMWK: 25000,
+  latestDate: pettyCashAppendRecord.date,
+  lastTransactionId: pettyCashAppendRecord.id,
+  updatedAt: pettyCashAppendRecord.recordedAt,
+});
 const identicalPettyCashRetry = await syncChangeEntriesToFirestore([{
   collection: 'pettyCashTransactions',
   recordId: pettyCashAppendRecord.id,
@@ -1241,5 +1247,117 @@ const changedPettyCashRetry = await syncChangeEntriesToFirestore([{
 }], { uid: 'uid-a', name: 'Synthetic manager' });
 assert.equal(changedPettyCashRetry.conflicts.length, 1, 'a different record with an existing petty-cash ID is surfaced as a conflict');
 assert.equal(server.get('pettyCashTransactions', pettyCashAppendRecord.id).amountMWK, 25000, 'petty-cash retry never overwrites an existing ledger entry');
+const queuedPettyCashOutflow = {
+  ...pettyCashAppendRecord,
+  id: 'PCASH_OFFLINE_OUTFLOW_001',
+  type: 'expense',
+  amountMWK: 20000,
+  reference: 'VOUCHER-OFFLINE-001',
+  recordedAt: T2,
+  createdAt: T2,
+};
+const queuedOutflowResult = await syncChangeEntriesToFirestore([{
+  collection: 'pettyCashTransactions',
+  recordId: queuedPettyCashOutflow.id,
+  operation: 'set',
+  data: queuedPettyCashOutflow,
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: T2,
+}], { uid: 'uid-a', name: 'Synthetic manager' });
+assert.equal(queuedOutflowResult.applied, 1, 'offline petty-cash retry atomically appends the entry and balance checkpoint');
+assert.equal(server.get('pettyCashLedgerState', 'current').balanceMWK, 5000, 'offline retry updates the server balance from its current value');
+const overdrawnPettyCashResult = await syncChangeEntriesToFirestore([{
+  collection: 'pettyCashTransactions',
+  recordId: 'PCASH_OFFLINE_OVERDRAW_001',
+  operation: 'set',
+  data: { ...queuedPettyCashOutflow, id: 'PCASH_OFFLINE_OVERDRAW_001', amountMWK: 6000 },
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: T2,
+}], { uid: 'uid-a', name: 'Synthetic manager' });
+assert.match(overdrawnPettyCashResult.conflicts[0]?.reason || '', /exceeds the available petty-cash balance/,
+  'an overdrawn queued petty-cash entry becomes an actionable conflict instead of aborting sync');
+assert.equal(server.get('pettyCashTransactions', 'PCASH_OFFLINE_OVERDRAW_001'), undefined, 'overdrawn offline retry remains unwritten');
+const queuedOverdrawnEntry = {
+  ownerUid: 'uid-a',
+  collection: 'pettyCashTransactions',
+  recordId: 'PCASH_OFFLINE_OVERDRAW_002',
+  operation: 'set' as const,
+  data: { ...queuedPettyCashOutflow, id: 'PCASH_OFFLINE_OVERDRAW_002', amountMWK: 6000 },
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: T2,
+};
+const queuedLaterReceipt = {
+  ownerUid: 'uid-a',
+  collection: 'pettyCashTransactions',
+  recordId: 'PCASH_OFFLINE_RECEIPT_AFTER_CONFLICT_001',
+  operation: 'set' as const,
+  data: {
+    ...queuedPettyCashOutflow,
+    id: 'PCASH_OFFLINE_RECEIPT_AFTER_CONFLICT_001',
+    type: 'cash_received',
+    amountMWK: 1000,
+    reference: 'TRANSFER-AFTER-CONFLICT-001',
+    recordedAt: '2026-11-02T11:03:00.000Z',
+    createdAt: '2026-11-02T11:03:00.000Z',
+  },
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: '2026-11-02T11:03:00.000Z',
+};
+await persistQueue([queuedOverdrawnEntry, queuedLaterReceipt], 'uid-a');
+const overdrawnFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Synthetic manager' } });
+assert.equal(overdrawnFlush.applied, 1, 'a validation conflict does not block later queued petty-cash entries');
+assert.equal(overdrawnFlush.conflicts.length, 1, 'flush returns the invalid ledger transition as a conflict');
+assert.equal((await loadQueue()).length, 1, 'only the unresolved ledger entry remains queued');
+const overdrawnConflict = (await readSyncConflicts()).find((conflict) => conflict.recordId === queuedOverdrawnEntry.recordId);
+assert.match(overdrawnConflict?.reason || '', /exceeds the available petty-cash balance/,
+  'the stored conflict preserves the validation reason for user review');
+assert.equal(server.get('pettyCashLedgerState', 'current').balanceMWK, 6000,
+  'a later valid receipt updates the authoritative balance after the conflict');
+assert.equal(await resolveSyncConflict(overdrawnConflict!.id, 'keep-mine', {
+  uid: 'uid-a', name: 'Synthetic manager',
+}), false, 'invalid append-only ledger entries cannot be retried as Keep mine');
+assert.equal(await resolveSyncConflict(overdrawnConflict!.id, 'keep-theirs', {
+  uid: 'uid-a', name: 'Synthetic manager',
+}), true, 'Keep theirs discards the unresolved invalid ledger write');
+assert.equal((await loadQueue()).length, 0, 'resolving the invalid ledger conflict clears its queue entry');
+assert.equal(server.all().some(([key]: [string, unknown]) => key.startsWith('caseActionAuditLogs/')), false,
+  'petty-cash conflicts do not leak ledger identifiers into general case-action audit records');
+await persistQueue([{
+  ownerUid: 'uid-a',
+  collection: 'pettyCashTransactions',
+  recordId: pettyCashAppendRecord.id,
+  operation: 'delete',
+  data: null,
+  baseUpdatedAt: null,
+  baseHash: null,
+  queuedAt: T2,
+}], 'uid-a');
+const { persistSyncConflicts } = await import('../src/services/offlineSync');
+await persistSyncConflicts([{
+  ownerUid: 'uid-a',
+  id: `pettyCashTransactions::${pettyCashAppendRecord.id}`,
+  collection: 'pettyCashTransactions',
+  recordId: pettyCashAppendRecord.id,
+  localData: null,
+  localOperation: 'delete',
+  baseUpdatedAt: null,
+  serverData: pettyCashAppendRecord,
+  serverUpdatedAt: null,
+  serverUpdatedBy: 'Synthetic manager',
+  detectedAt: T2,
+  detectedBy: 'Synthetic manager',
+}]);
+assert.equal(await resolveSyncConflict(`pettyCashTransactions::${pettyCashAppendRecord.id}`, 'keep-mine', {
+  uid: 'uid-a', name: 'Synthetic manager',
+}), false, 'append-only ledger conflicts cannot resolve by deleting or overwriting history');
+assert.equal((await loadQueue()).length, 1, 'rejected ledger deletion resolution keeps the queued change visible');
+assert.equal(await resolveSyncConflict(`pettyCashTransactions::${pettyCashAppendRecord.id}`, 'keep-theirs', {
+  uid: 'uid-a', name: 'Synthetic manager',
+}), true, 'Keep theirs discards a pending attempt to delete immutable ledger history');
+assert.equal((await loadQueue()).length, 0);
 
 console.log('Offline per-record queue and conflict tests passed.');

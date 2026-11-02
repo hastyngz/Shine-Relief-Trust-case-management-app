@@ -124,7 +124,7 @@ export const DataModal: React.FC<DataModalProps> = ({
     try {
       await resetDatabaseToSeed();
       setConfirmReset(false);
-      setMessage({ text: 'Operational records cleared from Cloud Firestore and local storage. Staff access, messaging and designated audit records are preserved.', type: 'success' });
+      setMessage({ text: 'Operational records cleared from Cloud Firestore and local storage. The append-only petty-cash ledger, staff access, messaging and designated audit records are preserved.', type: 'success' });
       onDataChanged();
     } catch (err) {
       setMessage({ text: 'Could not clear all records: ' + String(err), type: 'error' });
@@ -262,7 +262,7 @@ export const DataModal: React.FC<DataModalProps> = ({
                 {confirmReset ? (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2">
                     <p className="text-xs text-red-800 font-semibold">
-                      Are you sure? This deletes operational records across case management, finance, staff/payroll, inventory/assets, programmes and planning from Cloud Firestore and this device. Staff sign-in, messaging, safeguarding cases and designated audit/report history are preserved.
+                      Are you sure? This deletes operational records across case management, finance, staff/payroll, inventory/assets, programmes and planning from Cloud Firestore and this device. The append-only petty-cash ledger, staff sign-in, messaging, safeguarding cases and designated audit/report history are preserved. Sync or resolve pending petty-cash entries first.
                     </p>
                     <div className="flex gap-2">
                       <button

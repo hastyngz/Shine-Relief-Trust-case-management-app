@@ -1390,3 +1390,10 @@ Suggestion format:
 - Hold: review found backup restore can attempt updates denied by rules, concurrent offline outflows can overdraw, admin deletes can remove individual ledger history, and actor names are not server-verified.
 - Deployment: Wrangler is unauthenticated; Firebase Hosting is static-only and the repository declares no Express runtime target. No production change was made.
 - Suggestion: define and test one production deployment map for Hosting, Worker and API runtime, including route parity. — Sol (Copilot SDK in VS Code), 2026-11-02
+
+### 2026-11-02 · Copilot · petty-cash release hardening handoff
+- Ledger entries now require an atomic balance checkpoint, authenticated actor identity, and immutable history; Admin client restore can no longer attribute new entries to another person.
+- Invalid queued ledger transitions become visible conflicts, later valid queue entries continue syncing, and general case-action audit logs exclude petty-cash identifiers. Restore refuses missing or changed ledger history.
+- Local verification passed: lint, production build, petty-cash, offline, offline queue/performance, storage/reset/restore, Firestore rules/listener permissions, and Firestore access audit. Independent security and code-review follow-ups closed their findings.
+- Still blocked: obtain owner-approved backup and run both production migrations before deploying rules. Confirm the Express API runtime and authenticate Wrangler before updating non-Hosting services. No production data or services changed.
+- Suggestion: define a documented, tested production deployment map for Hosting, Firestore rules, the Express API and the R2 Worker before the next release. — Copilot (Copilot SDK in VS Code), 2026-11-02

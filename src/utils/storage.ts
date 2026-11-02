@@ -34,7 +34,7 @@ import {
 } from '../types';
 import { INITIAL_DATABASE } from '../data/seedData';
 import { getActiveWorkspaceUid, getWorkspaceStorageKey } from '../services/accountWorkspace';
-import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, markDatabaseResetRecoveryRequired, setLastSyncedSnapshotOrThrow } from '../services/offlineSync';
+import { clearOfflineChangesAfterDatabaseReset, getLastSyncedSnapshot, inspectPendingOfflineChanges, isDatabaseResetRecoveryRequired, loadQueue, markDatabaseResetRecoveryRequired, recordOfflineChanges, setLastSyncedSnapshotOrThrow } from '../services/offlineSync';
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { excludeSafeguardingCaseActions } from '../services/healthRecordAccess';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
@@ -232,9 +232,19 @@ function saveDatabaseOrThrow(db: AppDatabase, recordType: string): void {
 export async function clearAllDatabase(): Promise<AppDatabase> {
   const resetUid = getActiveWorkspaceUid();
   if (!resetUid) throw new Error('An authenticated workspace is required to reset the SHINE database.');
+  const currentDatabase = getDatabase();
+  if ((currentDatabase.pettyCashTransactions || []).length && !getLastSyncedSnapshot()) {
+    throw new Error('The saved petty-cash ledger has no confirmed server baseline. Reconnect and allow synchronization to finish before resetting operational records.');
+  }
+  await recordOfflineChanges(currentDatabase);
+  const pendingChanges = await loadQueue();
+  if (pendingChanges.some((entry) => entry.collection === 'pettyCashTransactions')) {
+    throw new Error('Sync or resolve pending petty-cash entries before resetting operational records. Financial ledger history is retained during reset.');
+  }
   // Use a private seed copy so the app never exposes the shared seed singleton
   // as mutable state after a reset.
   const initial = cloneInitialDatabase();
+  initial.pettyCashTransactions = [...(currentDatabase.pettyCashTransactions || [])];
   // Lock offline replay before the first destructive cloud operation. If any
   // later step fails, queued edits stay paused instead of recreating deleted data.
   markDatabaseResetRecoveryRequired();

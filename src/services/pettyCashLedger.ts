@@ -23,6 +23,92 @@ export interface PettyCashLedgerSummary {
   entries: Array<PettyCashTransaction & { balanceAfterMWK: number }>;
 }
 
+export interface PettyCashLedgerState {
+  balanceMWK: number;
+  latestDate: string;
+  lastTransactionId: string;
+  updatedAt: string;
+}
+
+export class PettyCashLedgerValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PettyCashLedgerValidationError';
+  }
+}
+
+export function isPettyCashTransaction(value: unknown): value is PettyCashTransaction {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === 'string' &&
+    record.id.length > 0 &&
+    isValidPettyCashDate(record.date) &&
+    ['opening_balance', 'cash_received', 'expense', 'cash_returned', 'adjustment_in', 'adjustment_out'].includes(String(record.type)) &&
+    Number.isSafeInteger(record.amountMWK) &&
+    Number(record.amountMWK) > 0 &&
+    typeof record.description === 'string' &&
+    record.description.length >= 3 && record.description.length <= 250 &&
+    typeof record.reference === 'string' &&
+    record.reference.length >= 2 && record.reference.length <= 120 &&
+    (record.category === undefined || typeof record.category === 'string') &&
+    (record.category === undefined || record.category.length <= 100) &&
+    typeof record.recordedAt === 'string' &&
+    record.recordedAt.length > 0 &&
+    typeof record.recordedBy === 'string' &&
+    record.recordedBy.length > 0 &&
+    typeof record.recordedByUid === 'string' &&
+    record.recordedByUid.length > 0 &&
+    typeof record.createdAt === 'string';
+}
+
+export function getNextPettyCashLedgerState(
+  current: PettyCashLedgerState | null,
+  transaction: PettyCashTransaction,
+): PettyCashLedgerState {
+  if (!Number.isSafeInteger(transaction.amountMWK) || transaction.amountMWK <= 0) {
+    throw new PettyCashLedgerValidationError('Petty-cash amounts must be positive whole-number MWK values.');
+  }
+  if (!isValidPettyCashDate(transaction.date)) {
+    throw new PettyCashLedgerValidationError('Petty-cash transaction date is invalid.');
+  }
+
+  if (!current) {
+    if (transaction.type !== 'opening_balance' || transaction.id !== PETTY_CASH_OPENING_BALANCE_ID) {
+      throw new PettyCashLedgerValidationError('The petty-cash ledger state is missing. Restore or initialize the opening float before recording movements.');
+    }
+    return {
+      balanceMWK: transaction.amountMWK,
+      latestDate: transaction.date,
+      lastTransactionId: transaction.id,
+      updatedAt: transaction.recordedAt,
+    };
+  }
+
+  if (transaction.type === 'opening_balance' || transaction.id === PETTY_CASH_OPENING_BALANCE_ID) {
+    throw new PettyCashLedgerValidationError('The petty-cash opening float can only be recorded once.');
+  }
+  if (transaction.date < current.latestDate) {
+    throw new PettyCashLedgerValidationError('Backdated petty-cash entries are not allowed.');
+  }
+
+  const isOutflow = transaction.type === 'expense' || transaction.type === 'adjustment_out';
+  if (isOutflow && transaction.amountMWK > current.balanceMWK) {
+    throw new PettyCashLedgerValidationError(`This cash outflow exceeds the available petty-cash balance of MWK ${current.balanceMWK.toLocaleString()}.`);
+  }
+  const isInflow = transaction.type === 'cash_received' ||
+    transaction.type === 'cash_returned' ||
+    transaction.type === 'adjustment_in';
+
+  if (!isOutflow && !isInflow) throw new PettyCashLedgerValidationError('Select a valid petty-cash transaction type.');
+
+  return {
+    balanceMWK: current.balanceMWK + (isOutflow ? -transaction.amountMWK : transaction.amountMWK),
+    latestDate: transaction.date,
+    lastTransactionId: transaction.id,
+    updatedAt: transaction.recordedAt,
+  };
+}
+
 export function isValidPettyCashDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const timestamp = Date.parse(`${value}T00:00:00.000Z`);

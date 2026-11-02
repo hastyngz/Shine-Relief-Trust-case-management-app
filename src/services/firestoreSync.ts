@@ -22,6 +22,12 @@ import { aggregateFirestoreSnapshotMetadata } from './firestoreSnapshotState';
 import { planImportAuditWrites, type ImportAuditSourceShape } from './importAuditPersistence';
 import { BACKUP_RESTORE_COLLECTIONS, OPERATIONAL_COLLECTIONS_TO_CLEAR } from './firestoreResetPolicy';
 import {
+  getNextPettyCashLedgerState,
+  isPettyCashTransaction,
+  PettyCashLedgerValidationError,
+  type PettyCashLedgerState,
+} from './pettyCashLedger';
+import {
   AppDatabase,
   Girl,
   Household,
@@ -173,6 +179,7 @@ export const COLLECTIONS = {
   INVENTORY_ITEMS: 'inventoryItems',
   ASSETS: 'assets',
   PETTY_CASH_TRANSACTIONS: 'pettyCashTransactions',
+  PETTY_CASH_LEDGER_STATE: 'pettyCashLedgerState',
 } as const;
 
 export async function persistPhase2Record(collectionName: string, record: Record<string, any>): Promise<void> {
@@ -1139,6 +1146,7 @@ export async function syncEntireDatabaseToFirestore(
       ['whatIfScenarios', COLLECTIONS.WHAT_IF_SCENARIOS],
       ['intelligenceSuggestions', COLLECTIONS.INTELLIGENCE_SUGGESTIONS],
       ['aiSettings', COLLECTIONS.AI_SETTINGS],
+      ['pettyCashTransactions', COLLECTIONS.PETTY_CASH_TRANSACTIONS],
     ];
     for (const [field, collectionName] of additionalBackupCollections) {
       const records = db[field] as Array<{ id: string; date?: string; recordedAt?: string }> | undefined;
@@ -1162,22 +1170,33 @@ export async function syncEntireDatabaseToFirestore(
           throw new Error('The backup contains an invalid petty-cash ledger. It must include one opening float and unique, chronologically valid entries.');
         }
         const existingSnapshot = await getDocs(collection(firestore, collectionName));
-        const existingById = new Map<string, Record<string, any>>();
-        existingSnapshot.docs.forEach((record) => existingById.set(record.id, record.data()));
+        const existingById = new Map<string, PettyCashTransaction>();
+        existingSnapshot.docs.forEach((snapshotRecord) => {
+          const record = snapshotRecord.data();
+          if (!isPettyCashTransaction(record) || record.id !== snapshotRecord.id) {
+            throw new Error('The server petty-cash ledger contains an invalid entry. Restore stopped without changing its history.');
+          }
+          existingById.set(snapshotRecord.id, record);
+        });
         for (const record of ledgerRecords) {
           const safeRecord = sanitizeForFirestore(record);
+          if (!isPettyCashTransaction(safeRecord)) {
+            throw new Error('The backup contains an invalid petty-cash entry. Correct the backup before restoring.');
+          }
           const existingRecord = existingById.get(record.id);
           if (existingRecord) {
             if (stableContentHash(existingRecord) !== stableContentHash(safeRecord)) {
-              throw new Error(`The backup petty-cash entry ${record.id} differs from the server ledger. Append-only financial history cannot be overwritten during restore.`);
+              throw new Error('The backup contains a petty-cash entry that differs from the server ledger. Append-only financial history cannot be overwritten during restore.');
             }
             continue;
           }
-          operations.push({
-            ref: doc(firestore, collectionName, record.id),
-            data: safeRecord,
-          });
+          throw new Error('The backup contains a petty-cash entry missing from the server ledger. Restore cannot recreate historical financial entries; use the approved server-side recovery process.');
         }
+        db.pettyCashTransactions = [...existingById.values()].sort((a, b) =>
+          String(b.date).localeCompare(String(a.date)) ||
+          String(b.recordedAt).localeCompare(String(a.recordedAt)) ||
+          b.id.localeCompare(a.id)
+        );
       } else {
         orderedRecords?.forEach((record) => operations.push({
           ref: doc(firestore, collectionName, record.id),
@@ -1279,7 +1298,6 @@ export async function syncEntireDatabaseToFirestore(
       ['projectProjections', COLLECTIONS.PROJECT_PROJECTIONS],
       ['inventoryItems', COLLECTIONS.INVENTORY_ITEMS],
       ['assets', COLLECTIONS.ASSETS],
-      ['pettyCashTransactions', COLLECTIONS.PETTY_CASH_TRANSACTIONS],
     ];
     for (const [field, collectionName] of phase2Collections) {
       const records = db[field] as Array<{ id: string }> | undefined;
@@ -1301,9 +1319,8 @@ export async function syncEntireDatabaseToFirestore(
       });
 
       for (const colName of collectionNames) {
-        // Petty-cash is append-only financial history. Backup replacement may
-        // add missing identical records, but must never prune ledger entries;
-        // only the explicit administrator reset clears this collection.
+        // Petty-cash is append-only financial history. Backup replacement and
+        // operational reset must never prune ledger entries.
         if (colName === COLLECTIONS.PETTY_CASH_TRANSACTIONS) continue;
         const snapshot = await getDocs(collection(firestore, colName));
         const staleRecords = snapshot.docs.filter(
@@ -1346,6 +1363,7 @@ export type SyncChangeResult = {
     data: Record<string, any> | null;
     updatedAt: string | null;
     updatedBy: string | null;
+    reason?: string;
   }>;
 };
 
@@ -1372,6 +1390,50 @@ function stableContentHash(value: unknown): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+type PettyCashAppendResult =
+  | { kind: 'applied' }
+  | { kind: 'conflict'; data: Record<string, any> | null; reason: string };
+
+async function appendPettyCashTransaction(
+  transactionRecord: PettyCashTransaction,
+): Promise<PettyCashAppendResult> {
+  const recordRef = doc(firestore, COLLECTIONS.PETTY_CASH_TRANSACTIONS, transactionRecord.id);
+  const stateRef = doc(firestore, COLLECTIONS.PETTY_CASH_LEDGER_STATE, 'current');
+  const safeRecord = sanitizeForFirestore(transactionRecord);
+
+  return runTransaction(firestore, async (transaction) => {
+    const [existingRecord, stateSnapshot] = await Promise.all([
+      transaction.get(recordRef),
+      transaction.get(stateRef),
+    ]);
+    if (existingRecord.exists()) {
+      return stableContentHash(existingRecord.data()) === stableContentHash(safeRecord)
+        ? { kind: 'applied' }
+        : {
+            kind: 'conflict',
+            data: existingRecord.data(),
+            reason: 'A different petty-cash entry already uses this ID. Ledger entries cannot be overwritten.',
+          };
+    }
+
+    const currentState = stateSnapshot.exists()
+      ? stateSnapshot.data() as PettyCashLedgerState
+      : null;
+    let nextState: PettyCashLedgerState;
+    try {
+      nextState = getNextPettyCashLedgerState(currentState, transactionRecord);
+    } catch (error) {
+      if (error instanceof PettyCashLedgerValidationError) {
+        return { kind: 'conflict', data: null, reason: error.message };
+      }
+      throw error;
+    }
+    transaction.set(recordRef, safeRecord);
+    transaction.set(stateRef, nextState);
+    return { kind: 'applied' };
+  });
 }
 
 export async function syncChangeEntriesToFirestore(
@@ -1402,6 +1464,48 @@ export async function syncChangeEntriesToFirestore(
       entry.operation !== 'delete' && Boolean(entry.data);
     const ref = doc(firestore, entry.collection, entry.recordId);
     try {
+      if (entry.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS) {
+        if (entry.operation === 'delete') {
+          const existingRecord = await getDoc(ref);
+          const serverData = existingRecord.exists() ? existingRecord.data() : null;
+          result.conflicts.push({
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: serverData,
+            updatedAt: null,
+            updatedBy: typeof serverData?.recordedBy === 'string' ? serverData.recordedBy : null,
+            reason: 'Petty-cash ledger entries are append-only and cannot be deleted.',
+          });
+          continue;
+        }
+
+        if (!isPettyCashTransaction(entry.data) || entry.data.id !== entry.recordId) {
+          result.conflicts.push({
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: null,
+            updatedAt: null,
+            updatedBy: null,
+            reason: 'The queued petty-cash entry is invalid and was retained for review.',
+          });
+          continue;
+        }
+        const appendResult = await appendPettyCashTransaction(entry.data);
+        if (appendResult.kind === 'conflict') {
+          result.conflicts.push({
+            collection: entry.collection,
+            recordId: entry.recordId,
+            data: appendResult.data,
+            updatedAt: null,
+            updatedBy: typeof appendResult.data?.recordedBy === 'string' ? appendResult.data.recordedBy : null,
+            reason: appendResult.reason,
+          });
+        } else {
+          result.applied += 1;
+        }
+        continue;
+      }
+
       if (isImportAudit && entry.data) {
         const sourceRef = doc(firestore, COLLECTIONS.RESTRICTED_IMPORT_SOURCES, entry.recordId);
         const sourceRecord: RestrictedImportSourceData | undefined = sourceData
@@ -1567,7 +1671,8 @@ export async function syncChangeEntriesToFirestore(
       const isSensitiveEmployeeRecord =
         entry.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
         entry.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS;
-      if (isImportAudit || isRestrictedImportSource || isSensitiveEmployeeRecord) {
+      const isSensitivePettyCashRecord = entry.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS;
+      if (isImportAudit || isRestrictedImportSource || isSensitiveEmployeeRecord || isSensitivePettyCashRecord) {
         console.error('Offline sync failed for a restricted record; contents and document IDs were not logged.');
       } else {
         console.error(`Offline sync failed for ${entry.collection}/${entry.recordId}:`, err);

@@ -611,7 +611,7 @@ function mergeConflicts(existing: SyncConflict[], incoming: SyncConflict[]): Syn
 
 function conflictFromEntry(
   entry: OfflineChangeEntry,
-  server: { data: Record<string, any> | null; updatedAt: string | null; updatedBy: string | null },
+  server: { data: Record<string, any> | null; updatedAt: string | null; updatedBy: string | null; reason?: string },
   detectedBy: string | null,
 ): SyncConflict {
   return {
@@ -625,6 +625,7 @@ function conflictFromEntry(
     serverData: server.data,
     serverUpdatedAt: server.updatedAt,
     serverUpdatedBy: server.updatedBy,
+    reason: server.reason,
     detectedAt: new Date().toISOString(),
     detectedBy,
   };
@@ -722,7 +723,8 @@ export async function flushPendingOfflineSnapshots(
         // conflict store for manager/admin review.
         if (
           conflict.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
-          conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS
+          conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS ||
+          conflict.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS
         ) return Promise.resolve();
         return appendSyncConflictAudit({
           action: 'conflict_detected',
@@ -756,13 +758,14 @@ export async function resolveSyncConflict(
   if (getActiveWorkspaceUid() !== actor.uid) return false;
   const conflict = conflicts.find((candidate) => candidate.id === conflictId);
   if (!conflict || conflict.ownerUid !== actor.uid) return false;
-  // Append-only HR records cannot safely be overwritten under Firestore rules.
-  // Keep-theirs may discard the queued duplicate; a legitimate change must be
-  // entered as a new record with a fresh ID.
+  // Append-only HR and petty-cash records cannot be safely overwritten under
+  // Firestore rules. Keep-theirs may discard the queued attempt; a legitimate
+  // change must be entered as a new record with a fresh ID.
   if (
     resolution === 'keep-mine' &&
     (conflict.collection === COLLECTIONS.EMPLOYEE_SALARY_HISTORY ||
-      conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS)
+      conflict.collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS ||
+      conflict.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS)
   ) return false;
 
   const remaining = conflicts.filter((candidate) => candidate.id !== conflictId);

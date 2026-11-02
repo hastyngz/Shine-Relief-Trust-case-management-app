@@ -1685,6 +1685,7 @@ export interface SyncConflict {
   serverData: Record<string, any> | null;
   serverUpdatedAt: string | null;
   serverUpdatedBy: string | null;
+  reason?: string;
   detectedAt: string;
   detectedBy: string | null;
 }

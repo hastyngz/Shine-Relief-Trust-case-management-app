@@ -39,6 +39,8 @@ for (const collection of [
   'reportHistory',
   'reportExports',
   'managementProcurementReportHistory',
+  'pettyCashTransactions',
+  'pettyCashLedgerState',
 ]) {
   assert.ok(!operational.has(collection), `operational reset must preserve ${collection}`);
 }
@@ -50,6 +52,7 @@ assert.equal(new Set(OPERATIONAL_COLLECTIONS_TO_CLEAR).size, OPERATIONAL_COLLECT
 import { readFileSync } from 'node:fs';
 
 const firestoreSyncSource = readFileSync(new URL('../src/services/firestoreSync.ts', import.meta.url), 'utf8');
+const storageSource = readFileSync(new URL('../src/utils/storage.ts', import.meta.url), 'utf8');
 const collectionBlock = firestoreSyncSource.match(/export const COLLECTIONS = \{([\s\S]*?)\} as const;/);
 assert.ok(collectionBlock, 'Firestore collection registry must remain discoverable for reset coverage checks');
 const registeredCollections = Array.from(collectionBlock[1].matchAll(/^\s*[A-Z_]+:\s*'([^']+)'\s*,?\s*$/gm), (match) => match[1]);
@@ -72,6 +75,8 @@ const intentionallyRetained = new Set([
   'reportHistory',
   'reportExports',
   'managementProcurementReportHistory',
+  'pettyCashTransactions',
+  'pettyCashLedgerState',
 ]);
 const classifiedCollections = new Set([...operational, ...intentionallyRetained]);
 for (const collection of registeredCollections) {
@@ -103,3 +108,7 @@ assert.match(resetBody, /OPERATIONAL_COLLECTIONS_TO_CLEAR\.filter\(\s*\(name\) =
   'attachment metadata must be excluded from the first destructive collection pass');
 assert.match(resetBody, /new Set\(\s*attachmentSnapshot\.docs/,
   'duplicate attachment storage paths must be deleted only once per reset attempt');
+assert.match(storageSource, /initial\.pettyCashTransactions = \[\.\.\.\(currentDatabase\.pettyCashTransactions \|\| \[\]\)\]/,
+  'local operational reset must retain the append-only petty-cash ledger');
+assert.match(storageSource, /pendingChanges\.some\(\(entry\) => entry\.collection === 'pettyCashTransactions'\)/,
+  'operational reset must stop rather than discard pending petty-cash entries');

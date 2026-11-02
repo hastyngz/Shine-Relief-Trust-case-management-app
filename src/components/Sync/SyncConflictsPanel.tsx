@@ -31,6 +31,11 @@ function isAppendOnlyEmployeeCollection(collection: string): boolean {
     collection === COLLECTIONS.EMPLOYEE_AUDIT_LOGS;
 }
 
+function isAppendOnlyConflictCollection(collection: string): boolean {
+  return isAppendOnlyEmployeeCollection(collection) ||
+    collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS;
+}
+
 function friendlyCollection(collection: string): string {
   return collection
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -96,8 +101,10 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
       setMessage('This conflict has no verified owner and cannot be resolved from this account. Its data has been preserved.');
       return;
     }
-    if (resolution === 'keep-mine' && isAppendOnlyEmployeeCollection(conflict.collection)) {
-      setMessage('Salary history and HR audit records are append-only. Keep the server version for this duplicate ID; enter a legitimate new salary change as a new record.');
+    if (resolution === 'keep-mine' && isAppendOnlyConflictCollection(conflict.collection)) {
+      setMessage(conflict.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS
+        ? 'Petty-cash ledger entries are append-only. Keep the server ledger, then review the date and available balance before entering a corrected transaction.'
+        : 'Salary history and HR audit records are append-only. Keep the server version for this duplicate ID; enter a legitimate new salary change as a new record.');
       return;
     }
     setBusyId(conflict.id);
@@ -108,8 +115,8 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
         setMessage('This conflict cannot be resolved with that option or its ownership could not be verified. It has been preserved.');
         return;
       }
-      // HR conflicts must not be copied into the general case-action audit log.
-      if (!isAppendOnlyEmployeeCollection(conflict.collection)) {
+      // HR and petty-cash conflicts must not be copied into the general case-action audit log.
+      if (!isAppendOnlyConflictCollection(conflict.collection)) {
         try {
           await appendSyncConflictAudit({
             action: 'conflict_resolved',
@@ -131,9 +138,13 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
         const result = await flushPendingOfflineSnapshots({ actor });
         setMessage(result.applied > 0 ? 'Your version was saved.' : 'Saved locally; it will sync when online.');
       } else {
-        setMessage(isAppendOnlyEmployeeCollection(conflict.collection)
-          ? 'The existing server record was kept. Add a new salary record if the intended change is legitimate.'
-          : 'The other staff member\u2019s version was kept.');
+        if (conflict.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS) {
+          setMessage("The pending ledger write was discarded from this device's sync queue. Reopen the ledger to load server state before entering a corrected transaction.");
+        } else {
+          setMessage(isAppendOnlyEmployeeCollection(conflict.collection)
+            ? 'The existing server record was kept. Add a new salary record if the intended change is legitimate.'
+            : 'The other staff member\u2019s version was kept.');
+        }
       }
       await refresh();
     } catch (error) {
@@ -193,6 +204,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                 const localUpdatedAt = conflict.localData?.updatedAt ?? conflict.baseUpdatedAt;
                 const isDelete = conflict.localOperation === 'delete';
                 const isAppendOnlyEmployeeConflict = isAppendOnlyEmployeeCollection(conflict.collection);
+                const isAppendOnlyPettyCashConflict = conflict.collection === COLLECTIONS.PETTY_CASH_TRANSACTIONS;
                 return (
                   <li key={conflict.id} className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
                     <div className="flex items-start gap-2">
@@ -202,7 +214,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                           {friendlyCollection(conflict.collection)} · <span className="font-mono">{conflict.recordId}</span>
                         </p>
                         <p className="mt-1 text-[11px] leading-relaxed text-stone-700">
-                          Changed on another device
+                          {conflict.reason || 'Changed on another device'}
                           {conflict.serverUpdatedBy ? ` by ${conflict.serverUpdatedBy}` : ''}
                           {conflict.serverUpdatedAt ? ` on ${new Date(conflict.serverUpdatedAt).toLocaleString()}` : ''}.
                           Your change{isDelete ? ' (deletion)' : ''} was made
@@ -213,6 +225,11 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                             This HR record is append-only. It cannot overwrite an existing record with the same ID; keep the server version and add a new record if the salary change is legitimate.
                           </p>
                         )}
+                        {isAppendOnlyPettyCashConflict && (
+                          <p className="mt-2 text-[11px] font-semibold text-amber-900">
+                            Petty-cash ledger entries are append-only. Keep the server ledger, then reopen it and review the date and available balance before entering a corrected transaction with a new ID.
+                          </p>
+                        )}
                         {(!currentUser || conflict.ownerUid !== currentUser.uid) && (
                           <p className="mt-2 text-[11px] font-semibold text-amber-900">
                             Owner not verified. This conflict is preserved and cannot be resolved in this session.
@@ -221,7 +238,7 @@ export const SyncConflictsPanel: React.FC<SyncConflictsPanelProps> = ({ isOpen, 
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={busyId === conflict.id || !currentUser || conflict.ownerUid !== currentUser.uid || isAppendOnlyEmployeeConflict}
+                            disabled={busyId === conflict.id || !currentUser || conflict.ownerUid !== currentUser.uid || isAppendOnlyConflictCollection(conflict.collection)}
                             onClick={() => handleResolve(conflict, 'keep-mine')}
                             className="rounded-lg bg-teal-800 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-teal-700 disabled:opacity-50"
                           >

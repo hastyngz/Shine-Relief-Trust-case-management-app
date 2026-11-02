@@ -46,6 +46,7 @@ const requiredMappings: Array<[string, string, string]> = [
   ['projectProjections', 'PROJECT_PROJECTIONS', 'projectProjections'],
   ['inventoryItems', 'INVENTORY_ITEMS', 'inventoryItems'],
   ['assets', 'ASSETS', 'assets'],
+  ['pettyCashTransactions', 'PETTY_CASH_TRANSACTIONS', 'pettyCashTransactions'],
 ];
 
 for (const [field, collection, firestoreCollectionName] of requiredMappings) {
@@ -63,6 +64,12 @@ assert.ok(source.includes('const collectionNames: readonly string[] = BACKUP_RES
   'backup replacement must use the shared collection policy');
 assert.ok(!BACKUP_RESTORE_COLLECTIONS.includes('employeeSalaryHistory' as never),
   'replacement must not delete salary history that is not represented by AppDatabase backups');
+assert.ok(source.includes('The backup contains a petty-cash entry missing from the server ledger'),
+  'backup restore must refuse to recreate missing historical petty-cash entries');
+assert.match(source, /backup contains a petty-cash entry that differs from the server ledger/,
+  'backup restore must refuse to alter existing append-only petty-cash records');
+assert.match(source, /if \(colName === COLLECTIONS\.PETTY_CASH_TRANSACTIONS\) continue/,
+  'backup replacement must not delete append-only petty-cash history');
 assert.ok(storageSource.includes("String(attachment.targetType) !== 'safeguardingCase'"),
   'general database backups must exclude safeguarding attachments');
 
