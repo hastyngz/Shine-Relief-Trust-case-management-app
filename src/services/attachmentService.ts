@@ -8,6 +8,8 @@ import {
   where,
   onSnapshot,
   updateDoc,
+  getDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { firestore } from '../firebase';
 import {
@@ -277,6 +279,133 @@ export async function uploadPhotoAttachment(
   }
 
   return attachment;
+}
+
+
+export interface UploadAttachmentVersionParams {
+  previousVersion: PhotoAttachment;
+  file: File;
+  versionNote?: string;
+  confirmImageConsent?: boolean;
+  user: {
+    uid: string;
+    fullName?: string;
+    email: string;
+    role?: StaffRole;
+  };
+}
+
+/**
+ * Stores a replacement as a new immutable attachment document and marks the
+ * previous document as superseded in the same Firestore batch. The old R2
+ * object and metadata remain available for download.
+ */
+export async function uploadAttachmentVersion(params: UploadAttachmentVersionParams): Promise<PhotoAttachment> {
+  const { previousVersion, file, user } = params;
+  if (user.role !== 'Administrator' && user.role !== 'Manager') {
+    throw new Error('Only a Manager or Administrator can upload a document version.');
+  }
+  if (!previousVersion.id || previousVersion.supersededBy) {
+    throw new Error('Only the current document version can be replaced. Refresh the document list and try again.');
+  }
+  const note = params.versionNote?.trim() || '';
+  if (note.length > 500) throw new Error('The version note must be 500 characters or fewer.');
+  const fileValidationError = getAttachmentFileValidationError(file);
+  if (fileValidationError) throw new Error(fileValidationError);
+  if (file.type.startsWith('image/') && params.confirmImageConsent !== true) {
+    throw new Error('Confirm that consent for this replacement image has been checked before uploading.');
+  }
+
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid || ownerUid !== user.uid) throw new Error('An authenticated SHINE workspace is required to upload a version.');
+  const previousRef = doc(firestore, ATTACHMENTS_COLLECTION, previousVersion.id);
+  const previousSnapshot = await getDoc(previousRef);
+  if (!previousSnapshot.exists()) throw new Error('The original document could not be found. Refresh and try again.');
+  const current = previousSnapshot.data() as PhotoAttachment;
+  if (current.storagePath !== previousVersion.storagePath || current.supersededBy ||
+      current.targetType !== previousVersion.targetType || current.targetId !== previousVersion.targetId) {
+    throw new Error('This document changed or was replaced by someone else. Refresh the list before uploading another version.');
+  }
+
+  const optimizedFile = await compressImage(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.82 });
+  const optimizedValidationError = getAttachmentFileValidationError(optimizedFile);
+  if (optimizedValidationError) throw new Error(optimizedValidationError);
+
+  const versionId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `attachments/${current.targetType}/${current.targetId}/${versionId}_${cleanName}`;
+  const now = new Date().toISOString();
+  const versionNumber = Number.isInteger(current.versionNumber) && (current.versionNumber || 0) > 0
+    ? current.versionNumber as number
+    : 1;
+  const contentType = optimizedFile.type || 'application/octet-stream';
+
+  await uploadStoredFile(storagePath, optimizedFile, contentType, {
+    'Target-Type': current.targetType,
+    'Target-Id': current.targetId,
+    Category: current.category,
+  });
+
+  const nextVersion: PhotoAttachment = {
+    id: versionId,
+    targetType: current.targetType,
+    targetId: current.targetId,
+    fileName: file.name,
+    fileSize: optimizedFile.size,
+    contentType,
+    storagePath,
+    downloadUrl: '',
+    caption: current.caption,
+    ...(file.type.startsWith('image/') ? {
+      consent: true,
+      consentCheckedAt: now,
+      consentCheckedBy: user.fullName || user.email,
+    } : {}),
+    category: current.category,
+    date: now.slice(0, 10),
+    uploadedBy: {
+      uid: user.uid,
+      name: user.fullName || user.email.split('@')[0],
+      email: user.email,
+      role: user.role,
+    },
+    createdAt: now,
+    filingMetadata: current.filingMetadata,
+    filingAudit: current.filingAudit,
+    filingMetadataUpdatedAt: current.filingMetadataUpdatedAt,
+    versionOf: current.id,
+    versionNumber: versionNumber + 1,
+    versionNote: note || undefined,
+  };
+
+  try {
+    const batch = writeBatch(firestore);
+    batch.update(previousRef, {
+      versionNumber,
+      supersededBy: versionId,
+      updatedAt: now,
+    });
+    batch.set(doc(firestore, ATTACHMENTS_COLLECTION, versionId), sanitizeForFirestore(nextVersion));
+    await batch.commit();
+  } catch (error) {
+    try {
+      await deleteStoredFile(storagePath);
+    } catch {
+      throw new Error('The version record was not saved and its uploaded file could not be removed. Contact an administrator with the document reference so the orphan can be cleaned up.');
+    }
+    throw error;
+  }
+
+  if (getActiveWorkspaceUid() !== ownerUid) {
+    throw new Error('The version was saved, but the active SHINE workspace changed. Refresh the document list before continuing.');
+  }
+  try {
+    nextVersion.downloadUrl = await getStoredFileDownloadUrl(storagePath);
+  } catch {
+    // The private file remains downloadable from the attachment record on demand.
+    nextVersion.downloadUrl = '';
+  }
+  return nextVersion;
 }
 
 /**
