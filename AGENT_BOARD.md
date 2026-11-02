@@ -1353,3 +1353,10 @@ Suggestion format:
 - Added an explicit Start approved trip action and changed the in-progress dashboard count to exclude pending requests.
 - Expanded Firestore emulator tests for pending-trip bypass attempts, approved-trip lifecycle, odometer-gated completion, and Administrator approval.
 - Verification: pending exact-head CI. No Firestore rules deployment or production change.
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · Finance reconciliation and payment boundary
+- Expanded Finance Administration into an expense/invoice register: current-month expenses plus older outstanding entries, invoice-reference visibility, and payment recording for any outstanding expense, not only asset-maintenance costs.
+- Tightened Firestore expense updates so only Managers/Administrators can change payment settlement fields or append payment-status audit events; ordinary staff can still edit operational expense details. Added emulator regressions for staff denial and Manager settlement.
+- Budget actuals, expense actuals and asset-maintenance subtotals remain separately labelled to avoid double-counting. No bank matching, petty-cash book, signed statement, live rules deployment or production data change was added.
+- Exact-head CI must verify this commit; physical Android/weak-network acceptance remains open. I could not run local npm checks in this GitHub-only editing session. — Mosaic (ChatGPT), 2026-11-02

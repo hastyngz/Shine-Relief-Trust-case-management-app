@@ -370,9 +370,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Ordinary staff may record/edit operational expense details, but payment settlement
+    // fields and payment-status audit events are reserved for Managers/Administrators.
+    function expensePaymentFieldsUnchanged() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return after.get('paymentStatus', null) == before.get('paymentStatus', null) &&
+        after.get('amountDue', null) == before.get('amountDue', null) &&
+        after.get('datePaid', null) == before.get('datePaid', null) &&
+        after.get('paymentMethod', null) == before.get('paymentMethod', null) &&
+        after.get('paymentReference', null) == before.get('paymentReference', null);
+    }
+
+    function expenseAuditTrailSafeForStaffUpdate() {
+      let before = resource.data.get('auditTrail', []);
+      let after = request.resource.data.get('auditTrail', []);
+      return after == before ||
+        (before is list && after is list &&
+          after.size() == before.size() + 1 &&
+          after.hasAll(before) &&
+          after[after.size() - 1].get('action', '') == 'updated' &&
+          !after[after.size() - 1].keys().hasAny(['previousStatus', 'newStatus']));
+    }
+
     match /expenses/{id} {
       allow read: if isStaffActive();
-      allow create, update: if isManagerOrStaff();
+      allow create: if isManagerOrStaff();
+      allow update: if isManagerOrAdmin() ||
+        (isManagerOrStaff() && expensePaymentFieldsUnchanged() && expenseAuditTrailSafeForStaffUpdate());
       allow delete: if isManagerOrStaff();
     }
 

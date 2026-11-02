@@ -65,6 +65,19 @@ async function seedData() {
       status: 'completed',
       sourceData: { rows: [{ syntheticLabel: 'legacy-private-row' }] },
     });
+    await setDoc(doc(firestore, 'expenses/finance-expense-test'), {
+      id: 'finance-expense-test',
+      householdId: 'household-1',
+      date: '2026-11-02',
+      category: 'Repairs',
+      itemDescription: 'Synthetic finance permission fixture',
+      quantity: '1',
+      unitCost: 1000,
+      totalCost: 1000,
+      paymentStatus: 'Payment Outstanding',
+      amountDue: 1000,
+      auditTrail: [{ action: 'created', by: 'manager', at: '2026-11-02T00:00:00.000Z', newStatus: 'Payment Outstanding' }],
+    });
     await setDoc(doc(firestore, 'caseActions/action-1'), {
       id: 'action-1',
       title: 'Visit school',
@@ -465,6 +478,28 @@ async function run() {
     await assertSucceeds(setDoc(doc(worker, 'caseActions/action-created-worker'), selfAssignedAction('worker')));
     await assertFails(setDoc(doc(viewer, 'rentPayments/viewer-write-denied'), { id: 'viewer-write-denied' }));
     await assertFails(setDoc(doc(viewer, 'expenses/viewer-write-denied'), { id: 'viewer-write-denied' }));
+    const financeExpense = doc(worker, 'expenses/finance-expense-test');
+    await assertSucceeds(updateDoc(financeExpense, { itemDescription: 'Staff may correct expense description' }));
+    await assertFails(updateDoc(financeExpense, { paymentStatus: 'Paid' }));
+    await assertFails(updateDoc(financeExpense, { amountDue: 0 }));
+    await assertFails(updateDoc(financeExpense, { datePaid: '2026-11-02' }));
+    await assertFails(updateDoc(financeExpense, {
+      auditTrail: [
+        { action: 'created', by: 'manager', at: '2026-11-02T00:00:00.000Z', newStatus: 'Payment Outstanding' },
+        { action: 'payment-status-changed', by: 'worker', at: '2026-11-02T01:00:00.000Z', previousStatus: 'Payment Outstanding', newStatus: 'Paid' },
+      ],
+    }));
+    await assertSucceeds(updateDoc(doc(manager, 'expenses/finance-expense-test'), {
+      paymentStatus: 'Paid',
+      amountDue: 0,
+      datePaid: '2026-11-02',
+      paymentMethod: 'Bank transfer',
+      paymentReference: 'SYNTHETIC-TRANSFER-001',
+      auditTrail: [
+        { action: 'created', by: 'manager', at: '2026-11-02T00:00:00.000Z', newStatus: 'Payment Outstanding' },
+        { action: 'payment-status-changed', by: 'manager', at: '2026-11-02T01:00:00.000Z', previousStatus: 'Payment Outstanding', newStatus: 'Paid' },
+      ],
+    }));
     await assertFails(setDoc(doc(viewer, 'householdActivities/viewer-write-denied'), { id: 'viewer-write-denied' }));
     await assertFails(updateDoc(doc(viewer, 'caseActions/action-1'), { status: 'Completed' }));
     await assertFails(getDoc(doc(viewer, 'caseActions/action-2')));
