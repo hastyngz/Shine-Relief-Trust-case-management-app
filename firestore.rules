@@ -832,13 +832,28 @@ service cloud.firestore {
         (request.resource.data.tripApprovalStatus != 'Rejected' || request.resource.data.status == 'Cancelled');
     }
 
+    function isValidTripCompletionUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return resource.data.type == 'transport_trip' &&
+        resource.data.tripApprovalStatus == 'Approved' &&
+        request.resource.data.tripApprovalStatus == 'Approved' &&
+        (isManagerOrAdmin() || (isStaffActive() && resource.data.assignedStaffId == request.auth.uid)) &&
+        changed.hasOnly(['status', 'completedAt', 'transportDetails', 'updatedAt', 'updatedBy']) &&
+        request.resource.data.status == 'Completed' &&
+        request.resource.data.transportDetails.diff(resource.data.transportDetails).affectedKeys().hasOnly(['endOdometerKm']) &&
+        request.resource.data.transportDetails.endOdometerKm is number &&
+        request.resource.data.transportDetails.endOdometerKm >= resource.data.transportDetails.startOdometerKm;
+    }
+
     match /schedules/{id} {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() && isValidTripRequestCreate();
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'tripApprovalStatus', 'tripApprovedByUid', 'tripApprovedByName', 'tripApprovedAt', 'tripApprovalNote'
-      ]) ? isValidTripApprovalUpdate() : isManagerOrStaff();
-      allow delete: if isManagerOrStaff();
+      ]) ? isValidTripApprovalUpdate() : resource.data.type == 'transport_trip'
+        ? isValidTripCompletionUpdate()
+        : isManagerOrStaff();
+      allow delete: if resource.data.type == 'transport_trip' ? isManagerOrAdmin() : isManagerOrStaff();
     }
 
     match /meetings/{id} {
