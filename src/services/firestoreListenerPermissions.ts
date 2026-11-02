@@ -18,8 +18,8 @@ export function shouldSubscribeToCollection(
     return false;
   }
   // These collections are manager/admin-only in firestore.rules. Employees
-  // contains employment and salary-related details and must not be loaded for
-  // ordinary staff or view-only sessions.
+  // contains employment/salary details and petty cash contains financial
+  // balances; neither should load for ordinary staff or view-only sessions.
   if (
     (colName === 'whatIfScenarios' ||
       colName === 'projectProjections' ||
