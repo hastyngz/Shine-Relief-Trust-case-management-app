@@ -1137,8 +1137,8 @@ function MainAppContent() {
     id: string,
     payment: Pick<HouseholdExpense, 'datePaid' | 'paymentMethod' | 'paymentReference'>,
   ) => {
-    if (isViewOnly) {
-      showToast('View-only accounts cannot change payment status.');
+    if (!(isAdmin || role === 'Manager')) {
+      showToast('Only Managers and Administrators can record expense payments.');
       return;
     }
     const existing = db.expenses.find((expense) => expense.id === id);

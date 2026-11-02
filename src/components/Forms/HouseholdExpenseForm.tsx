@@ -4,6 +4,7 @@ import { ShoppingBag, X } from 'lucide-react';
 import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 import { PROGRAMMES } from '../../data/programmes';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface HouseholdExpenseFormProps {
   household: Household;
@@ -32,6 +33,8 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
   onSave,
   onCancel,
 }) => {
+  const { isAdmin, staffProfile } = useAuth();
+  const canRecordPayment = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState<ExpenseCategory>('Groceries');
   const [itemDescription, setItemDescription] = useState('');
@@ -48,7 +51,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
   const [programme, setProgramme] = useState('');
   const [budgetCategory, setBudgetCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Payment Outstanding'>('Paid');
+  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Payment Outstanding'>(canRecordPayment ? 'Paid' : 'Payment Outstanding');
   const [amountDue, setAmountDue] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [datePaid, setDatePaid] = useState(new Date().toISOString().slice(0, 10));
@@ -335,13 +338,21 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
         <fieldset className="rounded-lg border border-stone-200 p-3">
           <legend className="px-1 text-xs font-bold text-stone-800">Payment</legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-stone-700">Payment status
-              <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as 'Paid' | 'Payment Outstanding')} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
-                <option value="Paid">Paid</option>
-                <option value="Payment Outstanding">Payment Outstanding</option>
-              </select>
-              {paymentStatus === 'Payment Outstanding' && <span className="mt-1 block font-normal text-stone-600">The expense has been recorded, but the supplier has not yet been paid.</span>}
-            </label>
+            {canRecordPayment ? (
+              <label className="text-xs font-semibold text-stone-700">Payment status
+                <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as 'Paid' | 'Payment Outstanding')} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+                  <option value="Paid">Paid</option>
+                  <option value="Payment Outstanding">Payment Outstanding</option>
+                </select>
+                {paymentStatus === 'Payment Outstanding' && <span className="mt-1 block font-normal text-stone-600">The expense has been recorded, but the supplier has not yet been paid.</span>}
+              </label>
+            ) : (
+              <div className="text-xs text-stone-700">
+                <p className="font-semibold">Payment status</p>
+                <p className="mt-1 font-bold text-amber-800">Payment Outstanding</p>
+                <p className="mt-1 font-normal text-stone-600">Staff can record the expense. A Manager or Administrator records settlement after checking payment evidence.</p>
+              </div>
+            )}
             {paymentStatus === 'Payment Outstanding' ? (
               <>
                 <label className="text-xs font-semibold text-stone-700">Amount due (MWK)

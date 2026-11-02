@@ -83,7 +83,8 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   onAddActivity,
   onAskAI,
 }) => {
-  const { isViewOnly } = useAuth();
+  const { isViewOnly, isAdmin, staffProfile } = useAuth();
+  const canRecordPayment = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [activeTab, setActiveTab] = useState<HouseTab>('overview');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('All');
   const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('All');
@@ -166,7 +167,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
       quantity: editingExpense.quantity.trim(),
       unitCost,
       totalCost,
-      ...(expense.paymentStatus === 'Payment Outstanding' ? { amountDue: amountDue || totalCost } : {}),
+      ...(expense.paymentStatus === 'Payment Outstanding' && canRecordPayment ? { amountDue: amountDue || totalCost } : {}),
       supplier: editingExpense.supplier.trim(),
       supplierContactPerson: editingExpense.supplierContactPerson.trim(),
       supplierPhone: editingExpense.supplierPhone.trim(),
@@ -756,7 +757,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           {(exp.paymentStatus || 'Paid') === 'Payment Outstanding' ? (
                             <div>
                               <span className="font-bold text-amber-800">Outstanding · {formatMWK(exp.amountDue ?? exp.totalCost)}</span>
-                              {!isViewOnly && onMarkExpensePaid && (
+                              {canRecordPayment && onMarkExpensePaid && (
                                 payingExpenseId === exp.id ? (
                                   <div className="mt-2 min-w-48 space-y-2 rounded border border-stone-200 bg-white p-2">
                                     <label className="block text-[10px] font-semibold text-stone-700">Date paid
@@ -840,7 +841,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                               <label className="text-[10px] font-semibold text-stone-700">Total cost (MWK)
                                 <input type="number" min="1" step="1" value={editingExpense.totalCost} onChange={(event) => setEditingExpense({ ...editingExpense, totalCost: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
                               </label>
-                              {exp.paymentStatus === 'Payment Outstanding' && (
+                              {exp.paymentStatus === 'Payment Outstanding' && canRecordPayment && (
                                 <label className="text-[10px] font-semibold text-stone-700">Amount due (MWK)
                                   <input type="number" min="1" step="1" value={editingExpense.amountDue} onChange={(event) => setEditingExpense({ ...editingExpense, amountDue: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
                                 </label>
