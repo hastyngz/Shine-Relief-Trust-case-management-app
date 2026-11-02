@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import type { EmployeeRecord, PayrollRecord, SalaryHistoryRecord } from '../src/types';
+import { linkPayrollRecordsToStaffAccount } from '../src/utils/payrollLink';
 import {
   buildMonthlyPayrollSummary,
   employeeRecordFromPayrollRecord,
@@ -28,12 +29,12 @@ assert.equal(summary.outstandingCount, 1);
 assert.equal(payrollTaskStatus(summary), 'Open');
 
 const paidRecord: PayrollRecord = {
-  id: 'pay-1', employeeId: 'emp-1', employeeName: 'Alex Example', payPeriod: '2026-09',
+  id: 'pay-1', employeeId: 'emp-1', staffUid: 'emp-1', employeeName: 'Alex Example', payPeriod: '2026-09',
   payPeriodStartDate: '2026-09-01', payPeriodEndDate: '2026-09-30', applicableSalary: 80000,
   salaryHistoryRecordIds: ['salary-1-new'], expectedAmount: 80000, amountPaid: 80000,
   paymentStatus: 'Paid', createdBy: '', createdByUid: '', createdAt: '', updatedBy: '', updatedByUid: '', updatedAt: '',
 };
-const otherRecord: PayrollRecord = { ...paidRecord, id: 'pay-former', employeeId: 'emp-former', employeeName: 'Former Example' };
+const otherRecord: PayrollRecord = { ...paidRecord, id: 'pay-former', employeeId: 'emp-former', staffUid: 'emp-former', employeeName: 'Former Example' };
 const staffPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'emp-1', false);
 assert.deepEqual(staffPayroll.employees.map((employee) => employee.id), ['emp-1']);
 assert.deepEqual(staffPayroll.records.map((record) => record.id), ['pay-1']);
@@ -57,6 +58,13 @@ const linkedEmployee = { ...employees[0], staffUid: 'worker-uid' } as EmployeeRe
 const linkedSummary = buildMonthlyPayrollSummary('2026-09', [linkedEmployee], salaryHistory, []);
 assert.equal((linkedSummary.employees[0] as typeof linkedSummary.employees[number] & { staffUid?: string }).staffUid, 'worker-uid');
 assert.equal((employeeRecordFromPayrollRecord(linkedPayrollRecord) as EmployeeRecord & { staffUid?: string }).staffUid, 'worker-uid');
+const linkedRecords = linkPayrollRecordsToStaffAccount([paidRecord, otherRecord], 'emp-1', 'new-staff-uid', '2026-11-02T08:00:00.000Z', 'Synthetic Manager', 'manager-uid');
+assert.equal(linkedRecords.updatedCount, 1);
+assert.equal(linkedRecords.records[0].staffUid, 'new-staff-uid');
+assert.equal(linkedRecords.records[0].updatedByUid, 'manager-uid');
+assert.equal(linkedRecords.records[1], otherRecord, 'linking one employee must not change another employee payroll');
+const unlinkedRecords = linkPayrollRecordsToStaffAccount(linkedRecords.records, 'emp-1', null, '2026-11-02T08:05:00.000Z', 'Synthetic Manager', 'manager-uid');
+assert.equal(unlinkedRecords.records[0].staffUid, null);
 const managerPayroll = filterPayrollDataForViewer(employees, [paidRecord, otherRecord], 'manager-uid', true);
 assert.equal(managerPayroll.employees.length, employees.length);
 assert.equal(managerPayroll.records.length, 2);

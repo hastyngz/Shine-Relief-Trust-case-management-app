@@ -124,6 +124,8 @@ export interface StaffUser extends EmployeeContractFields {
 export interface EmployeeRecord extends EmployeeContractFields {
   id: string;
   fullName: string;
+  /** Firebase UID for the SHINE account allowed to view this employee's own payroll. */
+  staffUid?: string | null;
   department?: string;
   positionTitle?: string;
   sourceYear?: number;
@@ -734,6 +736,8 @@ export type PayrollPaymentMethod = 'Cash' | 'Bank transfer' | 'Mobile money' | '
 export interface PayrollRecord {
   id: string;
   employeeId: string;
+  /** Explicit authenticated staff account link; never inferred from the internal employeeId. */
+  staffUid?: string | null;
   employeeName: string;
   departmentOrProgramme?: string;
   employeeCategory?: EmployeeCategory;

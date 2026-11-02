@@ -7,6 +7,7 @@ import { isValidInventoryDate } from '../utils/inventory';
 
 export interface MonthlyPayrollEmployee {
   employeeId: string;
+  staffUid?: string | null;
   employeeName: string;
   department?: string;
   positionTitle?: string;
@@ -31,8 +32,8 @@ export function filterPayrollDataForViewer(
 ): PayrollViewerData {
   if (canProcessPayroll) return { employees, records };
   if (!viewerUid) return { employees: [], records: [] };
-  const visibleRecords = records.filter((record) => record.employeeId === viewerUid);
-  const visibleEmployees = employees.filter((employee) => employee.id === viewerUid);
+  const visibleRecords = records.filter((record) => record.staffUid === viewerUid);
+  const visibleEmployees = employees.filter((employee) => employee.staffUid === viewerUid);
   // Staff cannot read the manager-only employees collection. If their own
   // payroll record is available, derive a minimal self-only summary profile.
   if (visibleEmployees.length === 0 && visibleRecords.length > 0) {
@@ -57,6 +58,7 @@ export interface MonthlyPayrollSummary {
 export function employeeRecordFromPayrollRecord(record: PayrollRecord): EmployeeRecord {
   return {
     id: record.employeeId,
+    staffUid: record.staffUid,
     fullName: record.employeeName,
     department: record.departmentOrProgramme,
     salaryMWK: record.applicableSalary,
@@ -119,6 +121,7 @@ export function buildMonthlyPayrollSummary(
     if (employee.employmentStatus && employee.employmentStatus !== 'Active') return;
     employees.set(employee.id, {
       employeeId: employee.id,
+      staffUid: employee.staffUid,
       employeeName: employee.fullName,
       department: employee.department,
       positionTitle: employee.positionTitle,

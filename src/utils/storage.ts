@@ -36,6 +36,7 @@ import { clearOfflineChangesAfterDatabaseReset, inspectPendingOfflineChanges, is
 import { getAllAttachmentMetadata } from '../services/attachmentService';
 import { excludeSafeguardingCaseActions } from '../services/healthRecordAccess';
 import { updateExpenseWithAudit, withExpenseCreationAudit } from '../services/expenseAudit';
+import { linkPayrollRecordsToStaffAccount } from './payrollLink';
 import {
   deleteAnnualBudgetPlanFromFirestore,
   clearAllFirestoreCollections,
@@ -1314,7 +1315,8 @@ export function deletePayrollRecord(id: string): boolean {
 export async function updateEmployeeRecord(
   id: string,
   updates: Partial<EmployeeRecord>,
-  auditActor?: string
+  auditActor?: string,
+  auditActorUid?: string
 ): Promise<EmployeeRecord | null> {
   const db = getDatabase();
   if (!db.employees) db.employees = [];
@@ -1331,11 +1333,25 @@ export async function updateEmployeeRecord(
     updatedBy: auditActor || existing.updatedBy,
   };
   const previousEmployees = [...db.employees];
+  const previousPayrollRecords = [...(db.payrollRecords || [])];
+  const hasStaffLinkUpdate = Object.prototype.hasOwnProperty.call(updates, 'staffUid');
+  if (hasStaffLinkUpdate && typeof updates.staffUid === 'string' && updates.staffUid
+    && db.employees.some((employee) => employee.id !== id && employee.staffUid === updates.staffUid)) {
+    throw new Error('This SHINE staff account is already linked to another employee record.');
+  }
   db.employees[index] = updated;
+  if (hasStaffLinkUpdate) {
+    const linked = linkPayrollRecordsToStaffAccount(
+      db.payrollRecords || [], id, updates.staffUid ?? null, now,
+      auditActor || 'SHINE Staff', auditActorUid || 'system',
+    );
+    db.payrollRecords = linked.records;
+  }
   try {
-    saveDatabaseOrThrow(db, 'Employee record');
+    saveDatabaseOrThrow(db, hasStaffLinkUpdate ? 'Employee and payroll account link' : 'Employee record');
   } catch (error) {
     db.employees = previousEmployees;
+    db.payrollRecords = previousPayrollRecords;
     throw error;
   }
   return updated;
