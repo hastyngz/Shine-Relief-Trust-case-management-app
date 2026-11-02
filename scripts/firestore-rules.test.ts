@@ -529,7 +529,15 @@ async function run() {
     });
     await assertSucceeds(managerVersionBatch.commit());
     await assertSucceeds(getDoc(doc(manager, 'attachments/ordinary-file-v2')));
+    await assertSucceeds(updateDoc(doc(manager, 'attachments/ordinary-file-v2'), {
+      filingMetadata: { documentTitle: 'Updated current version', referenceNumber: 'REF-002', documentOwner: 'Finance', classification: 'Internal' },
+      filingAudit: [{ id: 'audit-v2', action: 'Metadata Updated', actor: 'Manager', at: '2026-11-02T02:00:00.000Z', changedFields: ['documentTitle'] }],
+      filingMetadataUpdatedAt: '2026-11-02T02:00:00.000Z',
+    }));
     await assertFails(updateDoc(doc(manager, 'attachments/ordinary-file-v2'), { fileName: 'tampered.pdf' }));
+    await assertFails(updateDoc(doc(manager, 'attachments/ordinary-file'), {
+      filingMetadata: { documentTitle: 'Tampered old version', referenceNumber: 'REF-001', documentOwner: 'Finance', classification: 'Internal' },
+    }));
     await assertFails(deleteDoc(doc(manager, 'attachments/ordinary-file-v2')));
     await assertFails(deleteDoc(doc(admin, 'attachments/ordinary-file')));
     await assertFails(setDoc(doc(manager, 'attachments/ordinary-file-v3'), {
