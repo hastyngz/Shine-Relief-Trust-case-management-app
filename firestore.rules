@@ -439,7 +439,7 @@ service cloud.firestore {
             !exists(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE)) ||
           (request.resource.data.type in ['cash_received', 'expense', 'cash_returned'] &&
             id != 'PETTY_CASH_OPENING_BALANCE' &&
-            exists(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE))
+            existsAfter(/databases/$(database)/documents/pettyCashTransactions/PETTY_CASH_OPENING_BALANCE))
         );
       allow update: if false;
       // Administrator deletion is reserved for the explicit operational reset.
