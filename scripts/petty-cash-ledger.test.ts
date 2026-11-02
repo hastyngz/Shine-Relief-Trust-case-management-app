@@ -38,13 +38,28 @@ const returned = {
 assert.deepEqual(validatePettyCashTransaction(transactions, returned, today), []);
 transactions.push(createPettyCashTransaction(returned, actor, '2026-11-02T10:00:00.000Z'));
 
+const correctionOut = {
+  id: 'PCASH_CORRECTION_OUT_001', date: '2026-11-02', type: 'adjustment_out' as const,
+  amountMWK: 1000, description: 'Reverse duplicated cash receipt', reference: 'CORRECTS-PCASH-RECEIPT_001',
+};
+assert.deepEqual(validatePettyCashTransaction(transactions, correctionOut, today), []);
+transactions.push(createPettyCashTransaction(correctionOut, actor, '2026-11-02T11:00:00.000Z'));
+const correctionIn = {
+  id: 'PCASH_CORRECTION_IN_001', date: '2026-11-02', type: 'adjustment_in' as const,
+  amountMWK: 1000, description: 'Reverse duplicated cash expense', reference: 'CORRECTS-PCASH-EXPENSE_001',
+};
+assert.deepEqual(validatePettyCashTransaction(transactions, correctionIn, today), []);
+transactions.push(createPettyCashTransaction(correctionIn, actor, '2026-11-02T12:00:00.000Z'));
+
 const summary = getPettyCashLedgerSummary(transactions);
 assert.equal(summary.openingBalanceMWK, 50000);
 assert.equal(summary.cashReceivedMWK, 10000);
 assert.equal(summary.expensesMWK, 12000);
 assert.equal(summary.cashReturnedMWK, 2000);
+assert.equal(summary.adjustmentsInMWK, 1000);
+assert.equal(summary.adjustmentsOutMWK, 1000);
 assert.equal(summary.currentBalanceMWK, 50000);
-assert.deepEqual(summary.entries.map((entry) => entry.balanceAfterMWK), [50000, 60000, 48000, 50000]);
+assert.deepEqual(summary.entries.map((entry) => entry.balanceAfterMWK), [50000, 60000, 48000, 50000, 49000, 50000]);
 
 assert.ok(validatePettyCashTransaction(transactions, {
   id: 'PCASH_OVERSPEND_001', date: today, type: 'expense', amountMWK: 50001,
