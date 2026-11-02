@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Activity, Wallet } from 'lucide-react';
 import type { AppDatabase } from '../types';
 import { getLocalDateInputValue, isValidInventoryDate } from '../utils/inventory';
@@ -50,6 +50,11 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
 
   const pettyCashTransactions = db.pettyCashTransactions || [];
   const pettyCashSummary = getPettyCashLedgerSummary(pettyCashTransactions);
+  useEffect(() => {
+    if (pettyCashTransactions.some((entry) => entry.type === 'opening_balance')) {
+      setPettyCashType((current) => current === 'opening_balance' ? 'cash_received' : current);
+    }
+  }, [pettyCashTransactions]);
   const recordPettyCashTransaction = (event: React.FormEvent) => {
     event.preventDefault();
     const uid = currentUser?.uid;
