@@ -1332,3 +1332,9 @@ Suggestion format:
 - Follow-up review traced deletion through both Firestore and the R2 Worker. The Worker now refuses to delete any attachment that is part of a version chain, before issuing the R2 delete.
 - Version upload now reads the current source from the Firestore server, verifies ambiguous batch outcomes before retry/cleanup, and only attempts orphan cleanup when the server confirms the batch did not commit. Managers/admins can clean unindexed failed-upload objects; ordinary staff cannot.
 - Added a Worker regression test proving historical version deletion is rejected before R2 is called. Exact-head CI remains pending; no Worker or Firestore production deployment. — Mosaic (ChatGPT), 2026-11-02
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · version workflow permission correction
+- Final review found the current version needs to remain editable for filing metadata while its file bytes/version identity remain immutable. Rules now permit only filing-metadata/audit-field changes on the current version; superseded versions are locked. The same health/safeguarding permission checks are retained.
+- The filing UI hides metadata editing on superseded files. The R2 Worker blocks storage deletion of version-chain objects and permits Manager/Administrator cleanup only when a failed upload has no Firestore metadata.
+- Batch outcomes are checked against server state before cleanup, preventing an ambiguous network result from deleting a file that may already be committed. Latest exact-head CI still pending. — Mosaic (ChatGPT), 2026-11-02
