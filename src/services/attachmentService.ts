@@ -298,7 +298,7 @@ export async function updateAttachmentFilingMetadata(
   }
   if (metadata.expiryDate) {
     const expiry = new Date(`${metadata.expiryDate}T00:00:00.000Z`);
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(metadata.expiryDate) ||
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(metadata.expiryDate) ||
         !Number.isFinite(expiry.getTime()) || expiry.toISOString().slice(0, 10) !== metadata.expiryDate) {
       throw new Error('Enter a valid document expiry date.');
     }
