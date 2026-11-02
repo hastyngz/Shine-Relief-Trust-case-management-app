@@ -280,6 +280,46 @@ export async function uploadPhotoAttachment(
 }
 
 /**
+ * Updates filing metadata without changing the stored file. Metadata edits are
+ * audited and remain subject to the attachment's existing Firestore rules.
+ */
+export async function updateAttachmentFilingMetadata(
+  attachment: PhotoAttachment,
+  metadata: NonNullable<PhotoAttachment['filingMetadata']>,
+  actor: string,
+): Promise<void> {
+  const ownerUid = getActiveWorkspaceUid();
+  if (!ownerUid) throw new Error('An authenticated SHINE workspace is required to update filing metadata.');
+  const title = metadata.documentTitle?.trim() || '';
+  const reference = metadata.referenceNumber?.trim() || '';
+  const documentOwner = metadata.documentOwner?.trim() || '';
+  if (!title || !reference || !documentOwner) {
+    throw new Error('Document title, reference number and document owner are required.');
+  }
+  if (metadata.expiryDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(metadata.expiryDate)) {
+    throw new Error('Enter a valid document expiry date.');
+  }
+  const changedFields = ['documentTitle', 'referenceNumber', 'documentOwner', 'classification', 'expiryDate']
+    .filter((key) => (attachment.filingMetadata as Record<string, unknown> | undefined)?.[key] !== (metadata as Record<string, unknown>)[key]);
+  if (!changedFields.length) return;
+  const audit = [...(attachment.filingAudit || []), {
+    id: `FILE-AUDIT-${Date.now().toString(36)}`,
+    action: 'Metadata Updated' as const,
+    actor: actor.trim() || 'SHINE Staff',
+    at: new Date().toISOString(),
+    changedFields,
+  }];
+  await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, attachment.id), {
+    filingMetadata: metadata,
+    filingAudit: audit,
+    filingMetadataUpdatedAt: new Date().toISOString(),
+  });
+  if (getActiveWorkspaceUid() !== ownerUid) {
+    throw new Error('The active SHINE workspace changed while filing metadata was being saved.');
+  }
+}
+
+/**
  * Deletes an attachment from both R2 and Firestore.
  */
 export async function deletePhotoAttachment(
