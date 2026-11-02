@@ -1471,6 +1471,7 @@ export interface InventoryMovement {
   sourceType?: 'procurementReceipt';
   sourceId?: string;
   sourceLineIndex?: number;
+  sourceDeliveryId?: string;
   /** Server-validated stock balance before and after this immutable movement. */
   previousQuantity?: number; newQuantity?: number;
 }
