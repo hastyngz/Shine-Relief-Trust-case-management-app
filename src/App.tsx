@@ -354,6 +354,7 @@ function MainAppContent() {
       canReadCaseReviews: canViewCaseReviews,
       canReadImportSourceData: isAdmin || role === 'Manager',
       canReadManagementPlanning: isAdmin || role === 'Manager',
+      canReadOwnPayroll: isAdmin || role === 'Manager' || role === 'Staff',
       onListenerError: (collectionName, errorCode) => {
         if (getActiveWorkspaceUid() !== currentUser.uid) return;
         setInitialSyncFailure({ collectionName, errorCode });

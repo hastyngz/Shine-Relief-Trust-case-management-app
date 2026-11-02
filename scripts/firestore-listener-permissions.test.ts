@@ -16,11 +16,12 @@ assert.equal(shouldSubscribeToCollection('caseActions', { canViewTeamTasks: fals
 assert.equal(shouldSubscribeToCollection('caseActions', { uid: 'staff-uid', canViewTeamTasks: false }), true);
 assert.equal(shouldSubscribeToCollection('caseActions', { canViewTeamTasks: true }), true);
 
-// Non-management staff must have a UID for payroll, and their listener is
-// constrained by the same employeeId == authenticated UID rule as Firestore.
+// Payroll is manager/admin-wide; only explicitly eligible Staff accounts may
+// start the self-service listener, which is filtered by staffUid.
 assert.equal(shouldSubscribeToCollection('payrollRecords'), false);
-assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: false }), false);
-assert.equal(shouldSubscribeToCollection('payrollRecords', { uid: 'staff-uid', canReadManagementPlanning: false }), true);
+assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: false, uid: 'staff-uid' }), false);
+assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: false, uid: 'staff-uid', canReadOwnPayroll: false }), false);
+assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: false, uid: 'staff-uid', canReadOwnPayroll: true }), true);
 assert.equal(shouldSubscribeToCollection('payrollRecords', { canReadManagementPlanning: true }), true);
 
 // Restricted import source data is opt-in; sensitive follow-up/review listeners

@@ -8,6 +8,7 @@ export function shouldSubscribeToCollection(
     uid?: string;
     canReadImportSourceData?: boolean;
     canReadManagementPlanning?: boolean;
+    canReadOwnPayroll?: boolean;
     canReadHealthRecords?: boolean;
     canReadCaseReviews?: boolean;
     canViewTeamTasks?: boolean;
@@ -33,10 +34,10 @@ export function shouldSubscribeToCollection(
   if (colName === 'caseActions' && options.canViewTeamTasks !== true && !options.uid) {
     return false;
   }
-  // Payroll is manager/admin-wide, but an active staff member may read only
-  // documents whose employeeId matches their authenticated UID. Without a UID,
-  // do not start any payroll listener.
-  if (colName === 'payrollRecords' && options.canReadManagementPlanning !== true && !options.uid) {
+  // Payroll is manager/admin-wide. Only explicitly eligible Staff accounts
+  // may start the self-service listener, which is filtered by staffUid.
+  if (colName === 'payrollRecords' && options.canReadManagementPlanning !== true
+    && (options.canReadOwnPayroll !== true || !options.uid)) {
     return false;
   }
   if (colName === 'healthFollowUps' && options.canReadHealthRecords === false) {

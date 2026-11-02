@@ -1631,6 +1631,7 @@ export function initFirestoreListeners(
     canReadCaseReviews?: boolean;
     canReadImportSourceData?: boolean;
     canReadManagementPlanning?: boolean;
+    canReadOwnPayroll?: boolean;
     onListenerError?: (collectionName: string, errorCode: string) => void;
   } = {}
 ): () => void {
@@ -1773,7 +1774,7 @@ export function initFirestoreListeners(
         ? query(caseActionBase, where('sourceType', '!=', restrictedCaseActionTypes[0]))
         : caseActionBase;
     const source: Query = colName === COLLECTIONS.PAYROLL_RECORDS && options.canReadManagementPlanning !== true
-      ? query(colRef, where('employeeId', '==', options.uid))
+      ? query(colRef, where('staffUid', '==', options.uid))
       : colName === COLLECTIONS.CASE_ACTIONS
         ? caseActionSource
         : colName === COLLECTIONS.HISTORICAL_RECORDS && options.canReadHealthRecords === false

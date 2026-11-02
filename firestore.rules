@@ -607,8 +607,8 @@ service cloud.firestore {
     }
 
     match /payrollRecords/{id} {
-      allow read: if isAdmin() || isManagerOrAdmin() || (
-        isStaffActive() && resource.data.employeeId == request.auth.uid
+      allow read: if isManagerOrAdmin() || (
+        isManagerOrStaff() && resource.data.staffUid == request.auth.uid
       );
       allow create: if isManagerOrAdmin() &&
         request.resource.data.employeeId != null &&
