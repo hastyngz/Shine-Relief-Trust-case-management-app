@@ -1309,3 +1309,12 @@ Suggestion format:
 - Added scripts/asset-maintenance.test.ts covering expense mapping, validation and duplicate-source protection, wired into the main CI workflow. The test-first run on the test-only commit failed as expected because the helper did not yet exist (TS2307); implementation followed.
 - Verification: latest exact-head CI run must complete before this work is called verified. Manual Android/offline sync and Finance settlement checks remain outstanding. No live Firebase rules deployment or production data change.
 - Next: check exact-head CI, resolve any lint/test/build/E2E failures, then continue remaining transport approvals/maintenance reporting, approved KPI catalogue, finance petty-cash/bank reconciliation, and document version control. — Mosaic (ChatGPT), 2026-11-02
+
+
+### 2026-11-02 · Mosaic (ChatGPT) · vehicle service reporting
+- Area: Transport & Logistics and the existing Asset Register maintenance ledger.
+- State: Transport now shows overdue, due-within-30-days, missing/invalid next-service dates and the latest vehicle maintenance entries, including supplier/reference/cost and whether a Finance expense is linked. It reads the Asset Register source records; it does not duplicate maintenance expenses.
+- Tests: added synthetic date-state and service-history coverage in `scripts/transport-logistics.test.ts`, wired into CI.
+- Security boundary: formal trip approval is not added yet. The current shared `schedules` Firestore rule lets active staff create/update schedule documents, so a client-only approval status would be forgeable. A separate manager/admin-protected authorisation record and emulator rule tests are required; do not claim approval is enforced until that exists.
+- Verification: pending exact-head CI for the latest changes; no local lint/build or Android/weak-signal test run. No rules or production deployment changed.
+- Next: finish this transport slice after CI, then design document versioning using the existing attachment model without broadening staff/health/safeguarding access. Continue finance reconciliation only with a clear source ledger and no double counting. — Mosaic (ChatGPT), 2026-11-02
