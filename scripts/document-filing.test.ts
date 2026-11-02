@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { filterFilingAttachments, sortFilingAttachmentsNewestFirst } from '../src/utils/documentFiling';
+import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, getFilingExpiryStatus } from '../src/utils/documentFiling';
 import type { PhotoAttachment } from '../src/types';
 
 const makeAttachment = (overrides: Partial<PhotoAttachment> = {}): PhotoAttachment => ({
@@ -30,4 +30,11 @@ const invalidDate = makeAttachment({ id: 'att-invalid', createdAt: 'not-a-date' 
 const unsorted = [older, newer, invalidDate, receipt];
 assert.deepEqual(sortFilingAttachmentsNewestFirst(unsorted).map((a) => a.id), ['att-newer', 'att-1', 'att-older', 'att-invalid']);
 assert.deepEqual(unsorted.map((a) => a.id), ['att-older', 'att-newer', 'att-invalid', 'att-1'], 'sorting must not mutate the source array');
+
+assert.equal(getFilingExpiryStatus(undefined, '2026-11-02'), 'No expiry date');
+assert.equal(getFilingExpiryStatus('2026-10-31', '2026-11-02'), 'Expired');
+assert.equal(getFilingExpiryStatus('2026-11-20', '2026-11-02'), 'Due within 30 days');
+assert.equal(getFilingExpiryStatus('2027-02-01', '2026-11-02'), 'Current');
+assert.equal(getFilingExpiryStatus('2026-02-30', '2026-11-02'), 'Invalid date');
+assert.equal(getFilingExpiryStatus('2026-11-20', '2026-99-99'), 'Invalid date');
 console.log('Document filing tests passed: filters, empty states, newest-first ordering and invalid legacy dates.');
