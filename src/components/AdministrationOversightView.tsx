@@ -107,7 +107,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {[
         ['Monthly budget', mwk(budget)], ['Budget actuals', mwk(budgetActual)],
-        ['Expense entries', expenses.length], ['Outstanding invoices', mwk(unpaidTotal)],
+        ['Expense entries', expenses.length], ['Outstanding expense invoices', mwk(unpaidTotal)],
       ].map(([label, value]) => <div key={String(label)} className={card}><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-lg font-bold">{value}</p></div>)}
     </div>
     <section className={card}>
