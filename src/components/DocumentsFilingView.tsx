@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Search, ShieldCheck } from 'lucide-react';
 import type { AppDatabase, PhotoAttachment } from '../types';
-import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, type FilingRecordType } from '../utils/documentFiling';
+import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, getFilingExpiryStatus, type FilingRecordType } from '../utils/documentFiling';
+import { getLocalDateInputValue } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { getFilingAttachmentMetadata, updateAttachmentFilingMetadata } from '../services/attachmentService';
 import { getStoredFile } from '../services/r2StorageClient';
@@ -257,7 +258,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                   </div>
                   <p className="mt-2 break-words text-xs leading-5 text-stone-600">Linked record: <span className="font-semibold">{linkedName(attachment)}</span></p>
                   <p className="mt-1 text-xs text-stone-500">{attachment.date || 'Date not recorded'} · {formatBytes(attachment.fileSize)} · Uploaded by {attachment.uploadedBy?.name || 'Staff'}</p>
-                  {attachment.filingMetadata && <p className="mt-2 text-xs text-stone-600">Ref: {attachment.filingMetadata.referenceNumber} · Owner: {attachment.filingMetadata.documentOwner} · {attachment.filingMetadata.classification || 'Internal'}{attachment.filingMetadata.expiryDate ? ' · Expires '+attachment.filingMetadata.expiryDate : ''}</p>}
+                  {attachment.filingMetadata && <p className="mt-2 text-xs text-stone-600">Ref: {attachment.filingMetadata.referenceNumber} · Owner: {attachment.filingMetadata.documentOwner} · {attachment.filingMetadata.classification || 'Internal'}{attachment.filingMetadata.expiryDate ? ' · Expires '+attachment.filingMetadata.expiryDate+' ('+getFilingExpiryStatus(attachment.filingMetadata.expiryDate, getLocalDateInputValue())+')' : ''}</p>}
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
