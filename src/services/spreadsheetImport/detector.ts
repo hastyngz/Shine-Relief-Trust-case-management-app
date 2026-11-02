@@ -108,8 +108,14 @@ function detectRows(rows: string[][], sheetName = ''): SpreadsheetKind {
     return 'back-to-school';
   }
 
+  const titledAsBudget = /\bbudgets?\b/i.test(sheetName) ||
+    rows.slice(0, 6).some((row) => {
+      const filled = row.filter(Boolean);
+      return filled.length === 1 && /\bbudgets?\b/i.test(filled[0]);
+    });
+  const looksLikeRecurringBudget = titledAsBudget || hasHeader(rows, /\bfrequency\b/);
   if (hasQuantity && hasCost && hasHeader(rows, /\b(item|description|particulars|materials|specification)\b/)) {
-    return hasMonthColumns ? 'budget-monthly' : 'item-list';
+    return hasMonthColumns || looksLikeRecurringBudget ? 'budget-monthly' : 'item-list';
   }
 
   if (hasQuantity && hasCost && hasMonthColumns) return 'budget-monthly';
