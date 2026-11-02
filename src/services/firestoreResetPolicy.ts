@@ -52,6 +52,7 @@ export const OPERATIONAL_COLLECTIONS_TO_CLEAR = [
   'projectProjections',
   'inventoryItems',
   'assets',
+  'pettyCashTransactions',
 ] as const;
 
 /**
