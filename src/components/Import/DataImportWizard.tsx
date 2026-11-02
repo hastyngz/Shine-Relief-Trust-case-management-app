@@ -884,6 +884,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   ).length;
   const countEarlyYears = previewItems.filter((i) => i.classification === 'EARLY_YEARS_RECORD').length;
   const countWorkplans = previewItems.filter((i) => i.classification === 'WORKPLAN_PRIORITY').length;
+  const countBudgets = previewItems.filter((i) => i.classification === 'BUDGET_FINANCIAL').length;
   const countAgriculture = previewItems.filter(
     (i) => i.classification === 'AGRICULTURE_PRACTICAL_SKILLS'
   ).length;
@@ -1032,6 +1033,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     if (activeTab === 'ACTIVITIES' && item.classification !== 'GROUP_ACTIVITY' && item.classification !== 'PROGRAMME_ACTIVITY') return false;
     if (activeTab === 'EARLY_YEARS' && item.classification !== 'EARLY_YEARS_RECORD') return false;
     if (activeTab === 'WORKPLANS' && item.classification !== 'WORKPLAN_PRIORITY') return false;
+    if (activeTab === 'BUDGETS' && item.classification !== 'BUDGET_FINANCIAL') return false;
     if (activeTab === 'AGRICULTURE' && item.classification !== 'AGRICULTURE_PRACTICAL_SKILLS') return false;
     if (activeTab === 'PHOTOS' && item.classification !== 'PHOTO_HIGHLIGHT') return false;
     if (activeTab === 'UNCLASSIFIED' && item.classification !== 'UNCLASSIFIED_REVIEW') return false;
@@ -2152,6 +2154,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             >
               <p className="text-[10px] font-semibold text-purple-700 uppercase">Workplans</p>
               <p className="text-base font-black text-purple-900 mt-0.5">{countWorkplans}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('BUDGETS')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'BUDGETS'
+                  ? 'border-amber-600 bg-amber-50 shadow-xs'
+                  : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-amber-800 uppercase">Budgets</p>
+              <p className="text-base font-black text-amber-950 mt-0.5">{countBudgets}</p>
             </button>
 
             <button
