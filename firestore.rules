@@ -145,18 +145,28 @@ service cloud.firestore {
     function isValidProcurementReceiptSource(itemId) {
       let procurementPath = /databases/$(database)/documents/procurementLists/$(request.resource.data.sourceId);
       let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
-      let procurement = get(procurementPath).data;
       let lineIndex = request.resource.data.sourceLineIndex;
-      let receivedMap = procurement.get('receivedQuantitiesByLine', {});
-      let legacyReceived = procurement.get('receivedQuantities', []);
-      let ledgerReceived = receivedMap.get('line_' + string(lineIndex), receivedMap.get(string(lineIndex), 0));
-      let oldReceived = legacyReceived.size() > lineIndex ? legacyReceived[lineIndex] : 0;
-      let alreadyReceived = ledgerReceived > oldReceived ? ledgerReceived : oldReceived;
-      let outstanding = procurement.items[lineIndex].quantity - alreadyReceived;
       return request.resource.data.sourceType == 'procurementReceipt' &&
         request.resource.data.type == 'Received' &&
         request.resource.data.sourceId is string &&
-        request.resource.data.sourceId.matches('^[A-Za-z0-9_-]{1,100}
+        request.resource.data.sourceId.matches('^[A-Za-z0-9_-]{1,100}$') &&
+        request.resource.data.sourceLineIndex is int &&
+        lineIndex >= 0 && lineIndex <= 9999 &&
+        request.resource.data.reference is string &&
+        request.resource.data.reference.size() > 0 &&
+        request.resource.data.reference.size() <= 250 &&
+        exists(procurementPath) &&
+        get(procurementPath).data.id == request.resource.data.sourceId &&
+        get(procurementPath).data.status == 'purchased' &&
+        !get(procurementPath).data.keys().hasAny(['receivedAt']) &&
+        get(procurementPath).data.items is list &&
+        get(procurementPath).data.items.size() > lineIndex &&
+        get(procurementPath).data.items[lineIndex].quantity == request.resource.data.quantity &&
+        get(procurementPath).data.items[lineIndex].unit is string &&
+        get(procurementPath).data.items[lineIndex].unit.size() > 0 &&
+        get(itemPath).data.unit is string &&
+        get(procurementPath).data.items[lineIndex].unit == get(itemPath).data.unit;
+    }
 
     function isValidInventoryMovementCreate(movementId) {
       let itemId = request.resource.data.inventoryItemId;
