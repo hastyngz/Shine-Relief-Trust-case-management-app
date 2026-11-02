@@ -5,7 +5,12 @@ import { analyzeSpreadsheetWorkbook, detectSpreadsheetKind } from '../src/servic
 import { createSpreadsheetImportPreview, isValidPayrollEmployeeName } from '../src/services/spreadsheetImport/importers';
 import { spreadsheetEmployeeLineToPreview } from '../src/services/spreadsheetImport/employeePreview';
 import { applySpreadsheetAIMapping } from '../src/services/spreadsheetImport/applyAIMapping';
-import { validateSpreadsheetAIRequest, validateSpreadsheetAIMappingProposal } from '../src/services/spreadsheetImport/aiMapping';
+import {
+  createSyntheticSpreadsheetAIRequest,
+  restoreSpreadsheetAIMappingSheetNames,
+  validateSpreadsheetAIRequest,
+  validateSpreadsheetAIMappingProposal,
+} from '../src/services/spreadsheetImport/aiMapping';
 import { matchNameCandidates } from '../src/services/spreadsheetImport/nameMatcher';
 import { extractEarlyYearsMetrics } from '../src/services/docxParserService';
 import { spreadsheetLineToPreview } from '../src/components/Import/importWizardHelpers';
@@ -421,18 +426,30 @@ const irregularBudget = workbook([
   ['3', 'Cooking Oil', '2L', 1, 14000, 19000],
   ['4', 'Lamp', 'lampsome', 1, 5000, 5000],
 ], 'Budget sheet');
-const irregularRequest = validateSpreadsheetAIRequest({
-  fileLabel: 'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+const syntheticRequest = createSyntheticSpreadsheetAIRequest([{
+  name: 'Budget sheet',
+  rows: [
+    ['Mary Chifundo budget November 2026'],
+    ['Items for review'],
+    ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)'],
+    ['1', 'Private village and household details', '50kgs', '2', '80000', '160000'],
+  ],
+}]);
+const irregularRequest = validateSpreadsheetAIRequest(syntheticRequest.request);
+const outboundSample = JSON.stringify(irregularRequest);
+assert.equal(outboundSample.includes('Mary Chifundo'), false, 'personal names must never leave the device');
+assert.equal(outboundSample.includes('Private village and household details'), false, 'actual cell values must never leave the device');
+assert.equal(outboundSample.includes('Budget sheet'), false, 'worksheet names must never leave the device');
+assert.equal(outboundSample.includes('SYNTHETIC_NUMBER'), true, 'OpenRouter receives generated value-type examples');
+assert.equal(outboundSample.includes('item no'), true, 'allowlisted column headers are available for mapping');
+assert.throws(() => validateSpreadsheetAIRequest({
+  fileLabel: 'Sanitized spreadsheet structure',
   sheets: [{
-    name: 'Budget sheet',
-    rows: [
-      ['CHILD HOUSE BUDGET · NOVEMBER 2026'],
-      ['Items for review'],
-      ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)'],
-      ['1', 'Synthetic maize meal', '50kgs', '2', '80000', '160000'],
-    ],
+    name: 'Sheet 1',
+    headerRow: 0,
+    rows: [['employee name'], ['Mary Chifundo'], ['SYNTHETIC_TEXT']],
   }],
-});
+}), /Only generated synthetic cell examples/, 'the server-side request validator rejects raw spreadsheet values');
 const mappingProposal = validateSpreadsheetAIMappingProposal({
   kind: 'budget-monthly',
   confidence: 0.91,
@@ -441,7 +458,7 @@ const mappingProposal = validateSpreadsheetAIMappingProposal({
   summary: 'This is a child-house monthly budget with a non-standard item table.',
   warnings: ['The declared totals do not consistently match quantity × frequency × unit cost.'],
   sheets: [{
-    name: 'Budget sheet',
+    name: 'Sheet 1',
     headerRow: 2,
     columns: [
       { sourceColumn: 0, field: 'itemNumber', confidence: 0.95 },
@@ -454,7 +471,9 @@ const mappingProposal = validateSpreadsheetAIMappingProposal({
     warnings: [],
   }],
 }, irregularRequest);
-const mappedWorkbook = await applySpreadsheetAIMapping(irregularBudget, mappingProposal);
+const restoredProposal = restoreSpreadsheetAIMappingSheetNames(mappingProposal, syntheticRequest.originalSheetNames);
+assert.equal(restoredProposal.sheets[0].name, 'Budget sheet', 'original sheet names are restored locally for applying the mapping');
+const mappedWorkbook = await applySpreadsheetAIMapping(irregularBudget, restoredProposal);
 assert.equal(mappedWorkbook.Sheets['Budget sheet']['C3'].v, 'Quantity');
 assert.equal(irregularBudget.Sheets['Budget sheet']['C3'].v, 'QTY', 'AI mapping must not mutate the original workbook');
 const irregularAnalysis = await analyzeSpreadsheetWorkbook(irregularBudget);
@@ -464,7 +483,7 @@ const aiMappedBudget = await createSpreadsheetImportPreview(
   'item-list',
   [],
   'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
-  mappingProposal,
+  restoredProposal,
 );
 assert.equal(aiMappedBudget.kind, 'budget-monthly', 'The explicit proposal may override a wrong deterministic kind');
 const mappedBudgetLines = aiMappedBudget.lines.filter((line) => line.kind === 'budget');
@@ -514,12 +533,20 @@ assert.throws(() => validateSpreadsheetAIMappingProposal({
 }, irregularRequest), /unsupported spreadsheet type/);
 assert.throws(() => validateSpreadsheetAIMappingProposal({
   kind: 'budget-monthly', confidence: 1, summary: 'bad', sheets: [{
-    name: 'Budget sheet', headerRow: 2,
+    name: 'Sheet 1', headerRow: 2,
     columns: [{ sourceColumn: 99, field: 'quantity', confidence: 1 }], warnings: [],
   }],
 }, irregularRequest), /unsupported column mapping/);
 assert.throws(() => validateSpreadsheetAIRequest({
-  fileLabel: 'too-large.xlsx',
-  sheets: [{ name: 'one', rows: [Array.from({ length: 33 }, () => 'x')] }],
+  fileLabel: 'Sanitized spreadsheet structure',
+  sheets: [{
+    name: 'Sheet 1',
+    headerRow: 0,
+    rows: [
+      Array.from({ length: 17 }, (_, index) => `Column ${index + 1}`),
+      ['SYNTHETIC_TEXT'],
+      ['SYNTHETIC_TEXT'],
+    ],
+  }],
 }), /too many columns/);
 console.log('Spreadsheet detection, formula preservation, AI mapping validation, and import-preview tests passed.');

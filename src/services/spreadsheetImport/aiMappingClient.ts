@@ -4,6 +4,8 @@ import {
   SpreadsheetAIRequest,
   SpreadsheetAIMappingProposal,
   SPREADSHEET_AI_LIMITS,
+  createSyntheticSpreadsheetAIRequest,
+  restoreSpreadsheetAIMappingSheetNames,
   validateSpreadsheetAIRequest,
   validateSpreadsheetAIMappingProposal,
 } from './aiMapping';
@@ -26,9 +28,8 @@ export async function requestSpreadsheetAIMapping(
   if (workbook.SheetNames.length > SPREADSHEET_AI_LIMITS.sheets) {
     throw new Error(`AI mapping supports up to ${SPREADSHEET_AI_LIMITS.sheets} worksheets at a time. Use manual mapping for larger workbooks.`);
   }
-  const request: SpreadsheetAIRequest = {
-    fileLabel: 'Spreadsheet workbook',
-    sheets: workbook.SheetNames.map((name) => {
+  const synthetic = createSyntheticSpreadsheetAIRequest(
+    workbook.SheetNames.map((name) => {
       const allRows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
         header: 1,
         raw: false,
@@ -37,14 +38,13 @@ export async function requestSpreadsheetAIMapping(
       });
       return {
         name,
-        // Only the first 35 rows / 16 columns are sent. This is not a file upload.
         rows: allRows.slice(0, SPREADSHEET_AI_LIMITS.rowsPerSheet).map((row) =>
           row.slice(0, 16).map((cell) => String(cell ?? '').slice(0, SPREADSHEET_AI_LIMITS.cellCharacters))
         ),
       };
     }).filter((sheet) => sheet.rows.some((row) => row.some((cell) => cell.trim()))),
-  };
-  const boundedRequest = validateSpreadsheetAIRequest(request);
+  );
+  const boundedRequest: SpreadsheetAIRequest = validateSpreadsheetAIRequest(synthetic.request);
   const token = await user.getIdToken();
   const response = await fetch(`${API_BASE_URL}/api/ai/map-spreadsheet`, {
     method: 'POST',
@@ -58,7 +58,8 @@ export async function requestSpreadsheetAIMapping(
   if (!response.ok) {
     throw new Error(typeof payload?.error === 'string' ? payload.error : 'AI mapping is unavailable.');
   }
-  const proposal = validateSpreadsheetAIMappingProposal(payload?.proposal, boundedRequest);
+  const sanitizedProposal = validateSpreadsheetAIMappingProposal(payload?.proposal, boundedRequest);
+  const proposal = restoreSpreadsheetAIMappingSheetNames(sanitizedProposal, synthetic.originalSheetNames);
   return {
     proposal,
     provider: typeof payload?.provider === 'string' ? payload.provider.slice(0, 80) : 'External AI provider',

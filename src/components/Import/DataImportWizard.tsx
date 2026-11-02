@@ -150,6 +150,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetImportPreview | null>(null);
   const [aiMappingRequested, setAiMappingRequested] = useState(false);
   const [aiMappingBusy, setAiMappingBusy] = useState(false);
+  const [aiMappingAutoAttempted, setAiMappingAutoAttempted] = useState(false);
+  const [spreadsheetAIConsent, setSpreadsheetAIConsent] = useState(false);
   const [aiMappingError, setAiMappingError] = useState('');
   const [aiMappingResult, setAiMappingResult] = useState<{
     proposal: SpreadsheetAIMappingProposal;
@@ -257,13 +259,15 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   }, [previewItems]);
 
   useEffect(() => {
-    if (!selectedFile || !spreadsheetAnalysis || !spreadsheetPreview || aiMappingRequested || !(isAdmin || role === 'Manager')) return;
+    if (!spreadsheetAIConsent || !selectedFile || !spreadsheetAnalysis || !spreadsheetPreview ||
+      aiMappingAutoAttempted || aiMappingRequested || !(isAdmin || role === 'Manager')) return;
     const rulesAreUnsure = spreadsheetAnalysis.detectedKind === 'unknown' || (
       spreadsheetPreview.lines.length > 0 && spreadsheetPreview.lines.every((line) => line.kind === 'unmapped')
     );
     if (!rulesAreUnsure) return;
+    setAiMappingAutoAttempted(true);
     void handleRequestSpreadsheetAIMapping();
-  }, [selectedFile, spreadsheetAnalysis, spreadsheetPreview, aiMappingRequested, isAdmin, role]);
+  }, [spreadsheetAIConsent, selectedFile, spreadsheetAnalysis, spreadsheetPreview, aiMappingAutoAttempted, aiMappingRequested, isAdmin, role]);
 
   const prepareContactReview = async (candidates: ContactCandidate[]) => {
     const existingContacts = await listContacts().catch(() => db.contacts || []);
@@ -291,6 +295,8 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     setDocumentStructure([]);
     setAiMappingRequested(false);
     setAiMappingBusy(false);
+    setAiMappingAutoAttempted(false);
+    setSpreadsheetAIConsent(false);
     setAiMappingError('');
     setAiMappingResult(null);
     setAiMappingApplied(false);
@@ -775,7 +781,11 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   };
 
   const handleRequestSpreadsheetAIMapping = async () => {
-    if (!selectedFile || !spreadsheetAnalysis || aiMappingRequested) return;
+    if (!selectedFile || !spreadsheetAnalysis || aiMappingRequested || aiMappingBusy) return;
+    if (!spreadsheetAIConsent) {
+      setAiMappingError('Choose the sanitized OpenRouter mapping option before requesting a suggestion.');
+      return;
+    }
     if (!(isAdmin || role === 'Manager')) {
       setAiMappingError('AI spreadsheet mapping is available to Administrators and Managers only.');
       return;
@@ -787,6 +797,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     try {
       const result = await requestSpreadsheetAIMapping(selectedFile, true);
       setAiMappingResult(result);
+      setAiMappingRequested(true);
     } catch (error) {
       setAiMappingError(error instanceof Error ? error.message : 'AI could not suggest a mapping.');
     } finally {
@@ -1833,23 +1844,38 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                   It cannot import data or change records. The suggestion is untrusted and must be reviewed.
                 </p>
                 <p className="mt-2 text-xs text-violet-950">
-                  If you choose to continue, worksheet names and only the first 35 rows and first 16 columns of up to 8 sheets are sent as text to OpenRouter
-                  (up to 160 characters per cell and 24,000 characters total),
-                  which routes requests to the model providers configured for the SHINE backend. The original filename and full workbook are not sent;
-                  the parser may use the filename locally for period inference. Sample cell values do leave the SHINE app environment, and provider terms can differ.
+                  OpenRouter receives only allowlisted column headers and two generated example rows that label values as synthetic text, number, date, or blank.
+                  Actual cell values, workbook filenames, and worksheet names are not sent. Headers with unsupported text are replaced with generic column labels,
+                  which may reduce mapping accuracy. OpenRouter and its configured model providers receive this sanitized structure; the mapping is advisory and still requires your review.
                 </p>
                 {isAdmin || role === 'Manager' ? (
                   <>
                     <p className="mt-3 text-xs font-semibold text-violet-950">
-                      Automatic mapping is enabled for Administrators and Managers. It runs once when the rule-based parser is unsure or produces only unmapped rows. You will still approve any suggestion before it changes the review preview.
+                      Mapping is available to Administrators and Managers. If enabled, it runs once when the rule-based parser is unsure; you still approve any suggestion before it changes the review preview.
                     </p>
+                    <label className="mt-3 flex items-start gap-2 text-xs text-violet-950">
+                      <input
+                        type="checkbox"
+                        checked={spreadsheetAIConsent}
+                        onChange={(event) => {
+                          setSpreadsheetAIConsent(event.target.checked);
+                          setAiMappingError('');
+                        }}
+                        className="mt-0.5 h-4 w-4"
+                        style={{ accentColor: 'var(--theme-primary)' }}
+                      />
+                      <span>
+                        Allow OpenRouter to receive only allowlisted column headers and generated synthetic examples for this workbook.
+                        No actual cell values, filename, or worksheet names are sent.
+                      </span>
+                    </label>
                     <button
                       type="button"
-                      className="mt-3 rounded-lg bg-violet-800 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={aiMappingRequested || aiMappingBusy || !selectedFile || !spreadsheetAnalysis}
+                      className="mt-3 min-h-11 rounded-lg bg-violet-800 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!spreadsheetAIConsent || aiMappingRequested || aiMappingBusy || !selectedFile || !spreadsheetAnalysis}
                       onClick={() => void handleRequestSpreadsheetAIMapping()}
                     >
-                      {aiMappingBusy ? 'Requesting suggestion…' : aiMappingRequested ? 'AI mapping requested' : 'Suggest mapping with AI'}
+                      {aiMappingBusy ? 'Requesting suggestion…' : aiMappingRequested ? 'AI mapping requested' : aiMappingError ? 'Try AI mapping again' : 'Suggest mapping with AI'}
                     </button>
                   </>
                 ) : (

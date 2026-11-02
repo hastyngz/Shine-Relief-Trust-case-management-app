@@ -7,6 +7,7 @@ import { processAIChat, suggestSpreadsheetMapping } from '../src/server/aiServic
 import { executeAITool } from '../src/server/aiTools';
 import { AppDatabase, StaffUser } from '../src/types';
 import { getAICollectionsForTool, handleAIRequest } from '../workers/r2-storage/aiBackend';
+import { createSyntheticSpreadsheetAIRequest } from '../src/services/spreadsheetImport/aiMapping';
 
 const staff: StaffUser = {
   id: 'staff-1',
@@ -198,7 +199,9 @@ async function run() {
   const keyBeforeMapping = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = 'synthetic-test-key';
   let capturedMappingRequest: any;
+  let openRouterCalls = 0;
   globalThis.fetch = async (_input, init) => {
+    openRouterCalls += 1;
     capturedMappingRequest = JSON.parse(String(init?.body || '{}'));
     return new Response(JSON.stringify({
       model: 'synthetic-provider/test-model',
@@ -210,7 +213,7 @@ async function run() {
         summary: 'Synthetic monthly budget table.',
         warnings: [],
         sheets: [{
-          name: 'Synthetic budget',
+          name: 'Sheet 1',
           headerRow: 0,
           columns: [
             { sourceColumn: 0, field: 'description', confidence: 0.9 },
@@ -222,18 +225,26 @@ async function run() {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   try {
-    const result = await suggestSpreadsheetMapping({
-      fileLabel: 'synthetic-budget.xlsx',
-      sheets: [{ name: 'Synthetic budget', rows: [['Item', 'Qty'], ['Synthetic beans', '2']] }],
-    });
+    await assert.rejects(() => suggestSpreadsheetMapping({
+      fileLabel: 'raw-private.xlsx',
+      sheets: [{ name: 'Private sheet', headerRow: 0, rows: [['Item', 'Qty'], ['Private names', '2']] }],
+    }), /Only sanitized spreadsheet structure/);
+    assert.equal(openRouterCalls, 0, 'raw client samples are rejected before contacting OpenRouter');
+
+    const syntheticRequest = createSyntheticSpreadsheetAIRequest([{
+      name: 'Private budget for a household',
+      rows: [['Item', 'Qty'], ['Private names', '2']],
+    }]);
+    const result = await suggestSpreadsheetMapping(syntheticRequest.request);
     assert.equal(result.proposal.kind, 'budget-monthly');
     assert.equal(result.proposal.programmeId, 'child-house');
     assert.equal(result.proposal.periodMonth, 11);
     assert.equal(result.model, 'synthetic-provider/test-model');
     assert.ok(capturedMappingRequest.messages[0].content.includes('untrusted data'));
-    assert.ok(capturedMappingRequest.messages[1].content.includes('Synthetic beans'));
-    assert.equal(capturedMappingRequest.messages[1].content.includes('synthetic-budget.xlsx'), false);
-    assert.equal(capturedMappingRequest.messages[1].content.includes('Maria Chipelesa'), false);
+    assert.ok(capturedMappingRequest.messages[1].content.includes('SYNTHETIC_NUMBER'));
+    assert.equal(capturedMappingRequest.messages[1].content.includes('Private names'), false);
+    assert.equal(capturedMappingRequest.messages[1].content.includes('Private budget for a household'), false);
+    assert.equal(capturedMappingRequest.messages[1].content.includes('raw-private.xlsx'), false);
   } finally {
     globalThis.fetch = fetchBeforeMapping;
     if (keyBeforeMapping === undefined) delete process.env.OPENROUTER_API_KEY;
