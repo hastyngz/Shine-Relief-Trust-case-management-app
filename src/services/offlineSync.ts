@@ -84,8 +84,18 @@ export function getDatabaseFieldForCollection(collectionName: string): keyof App
 
 function recordsById(db: AppDatabase, field: keyof AppDatabase): Map<string, Record<string, any>> {
   const records = (db[field] as Array<Record<string, any>> | undefined) || [];
+  // The opening float must reach Firestore before any queued movement that
+  // depends on it. Local arrays are newest-first, so sort this append-only
+  // ledger into transaction order before building its queue entries.
+  const orderedRecords = field === 'pettyCashTransactions'
+    ? [...records].sort((a, b) =>
+        String(a.date || '').localeCompare(String(b.date || '')) ||
+        String(a.recordedAt || '').localeCompare(String(b.recordedAt || '')) ||
+        String(a.id || '').localeCompare(String(b.id || ''))
+      )
+    : records;
   const map = new Map<string, Record<string, any>>();
-  for (const record of records) {
+  for (const record of orderedRecords) {
     if (record && typeof record.id === 'string') map.set(record.id, record);
   }
   return map;
