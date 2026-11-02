@@ -80,7 +80,10 @@ export function validatePettyCashTransaction(
     if (openingEntries.length > 0 || transactions.length > 0) errors.push('The opening balance can only be recorded once, before other petty-cash entries.');
   } else {
     if (openingEntries.length !== 1) errors.push('Record the opening cash float before entering receipts or expenses.');
-    const currentBalance = getPettyCashLedgerSummary(transactions).currentBalanceMWK;
+    const summary = getPettyCashLedgerSummary(transactions);
+    const latestDate = summary.entries[summary.entries.length - 1]?.date;
+    if (latestDate && draft.date < latestDate) errors.push('Backdated entries are not allowed. Record transactions in date order or use a referenced reversal.');
+    const currentBalance = summary.currentBalanceMWK;
     if (draft.type === 'expense' && draft.amountMWK > currentBalance) {
       errors.push(`This expense exceeds the available petty-cash balance of MWK ${currentBalance.toLocaleString()}.`);
     }
