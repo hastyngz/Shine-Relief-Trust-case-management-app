@@ -32,6 +32,8 @@ import { InventoryView } from '../components/InventoryView';
 import { AssetRegisterView } from '../components/AssetRegisterView';
 import { DocumentsFilingView } from '../components/DocumentsFilingView';
 import { ComplianceCalendarView } from '../components/ComplianceCalendarView';
+import { TransportLogisticsView } from '../components/TransportLogisticsView';
+import { AdministrationOversightView } from '../components/AdministrationOversightView';
 import type { PendingPhoto } from '../components/Attachments/FormPhotoSection';
 
 /**
@@ -270,10 +272,13 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
 
       {view === 'operations' && <Phase5OperationsView db={db} onRefresh={reloadData} onNavigateToProgramme={openProgramme} />}
 
-      {view === 'administration' && <AdministrationHub db={db} onNavigate={(nextView) => navigateTo(nextView, nextView === 'staff' ? 'staff' : nextView === 'payroll' || nextView === 'contracts' ? 'payroll' : nextView === 'reports' ? 'reports' : nextView === 'import' ? 'import' : nextView === 'planning' ? 'planning' : nextView === 'inventory' || nextView === 'documents' || nextView === 'compliance' ? 'administration' : 'operations')} />}
+      {view === 'administration' && <AdministrationHub db={db} onNavigate={(nextView) => navigateTo(nextView, nextView === 'staff' ? 'staff' : nextView === 'payroll' || nextView === 'contracts' ? 'payroll' : nextView === 'reports' ? 'reports' : nextView === 'import' ? 'import' : nextView === 'planning' ? 'planning' : nextView === 'inventory' || nextView === 'documents' || nextView === 'compliance' || nextView === 'transport' || nextView === 'admin-performance' || nextView === 'finance-admin' ? 'administration' : 'operations')} />}
 
       {view === 'inventory' && <InventoryView items={db.inventoryItems || []} onRefresh={reloadData} />}
       {view === 'assets' && <AssetRegisterView assets={db.assets || []} onRefresh={reloadData} />}
+      {view === 'transport' && <TransportLogisticsView db={db} onRefresh={reloadData} />}
+      {view === 'admin-performance' && <AdministrationOversightView db={db} mode="performance" />}
+      {view === 'finance-admin' && <AdministrationOversightView db={db} mode="finance" />}
       {view === 'compliance' && <ComplianceCalendarView schedules={db.schedules || []} onRefresh={reloadData} />}
       {view === 'documents' && (
         <DocumentsFilingView
