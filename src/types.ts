@@ -993,6 +993,14 @@ export interface ScheduleItem {
   evidenceReference?: string;
   completionNote?: string;
   complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened'; actor: string; at: string; note?: string }>;
+  /** Server-enforced approval state for offline-first transport trip requests. */
+  tripApprovalStatus?: 'Pending' | 'Approved' | 'Rejected';
+  tripRequestedByUid?: string;
+  tripRequestedByName?: string;
+  tripApprovedByUid?: string;
+  tripApprovedByName?: string;
+  tripApprovedAt?: string;
+  tripApprovalNote?: string;
   /** Operational trip details; transport trips use the shared offline-first schedule ledger. */
   transportDetails?: {
     vehicleAssetId: string;
