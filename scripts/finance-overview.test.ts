@@ -29,6 +29,10 @@ const db = {
     { id: 'not-received-order', title: 'Not received synthetic order', purpose: 'Test handover filter', items: [], totalMWK: 1000, status: 'purchased', createdAt: '2026-11-01', updatedAt: '2026-11-01', createdBy: 'test', updatedBy: 'test' },
     { id: 'draft-order', title: 'Draft synthetic order', purpose: 'Must not count', items: [], totalMWK: 10000, status: 'draft', createdAt: '2026-11-01', updatedAt: '2026-11-01', createdBy: 'test', updatedBy: 'test' },
   ], schedules: [],
+  pettyCashTransactions: [
+    { id: 'nov-petty-expense', date: '2026-11-06', type: 'expense', amountMWK: 1200, description: 'Synthetic petty cash expense', reference: 'PC-VOUCHER-NOV', recordedAt: '2026-11-06T10:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'test', createdAt: '2026-11-06T10:00:00Z' },
+    { id: 'oct-petty-expense', date: '2026-10-05', type: 'expense', amountMWK: 700, description: 'Synthetic petty cash expense', reference: 'PC-VOUCHER-OCT', recordedAt: '2026-10-05T10:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'test', createdAt: '2026-10-05T10:00:00Z' },
+  ],
 } as unknown as AppDatabase;
 
 const november = getFinancePeriodSummary(db, '2026-11');
@@ -44,12 +48,14 @@ assert.equal(november.procurementCommittedTotal, 8000);
 assert.equal(november.procurementPaidTotal, 1500);
 assert.equal(november.procurementOutstandingTotal, 6500);
 assert.equal(november.procurementPaymentsThisMonth, 1000);
+assert.equal(november.pettyCashExpensesThisMonth, 1200);
 assert.deepEqual(november.handover.map((item) => item.id), ['purchased-order']);
 
 const october = getFinancePeriodSummary(db, '2026-10');
 assert.equal(october.budget, 500);
 assert.equal(october.expenseActual, 100);
 assert.equal(october.procurementPaymentsThisMonth, 500);
+assert.equal(october.pettyCashExpensesThisMonth, 700);
 assert.deepEqual(october.financeRegister.map((item) => item.id), ['nov-unpaid', 'oct-paid', 'old-unpaid']);
 assert.equal(getFinancePeriodSummary(db, '2026-13').expenses.length, 0);
 assert.equal(getFinancePeriodSummary(db, '').budget, 0);
