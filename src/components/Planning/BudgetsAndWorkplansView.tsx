@@ -68,7 +68,7 @@ import {
   readProcurementReceiptIntent,
 } from '../../services/procurementInventoryReceipt';
 import { clearProcurementDeliveryIntent, createProcurementDeliveryId, postProcurementDeliveryMovements, readProcurementDeliveryIntent } from '../../services/procurementDelivery';
-import { appendValidatedProcurementPayment, getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary } from '../../services/procurementLifecycle';
+import { appendValidatedProcurementPayment, getProcurementDeliveryHistory, getProcurementDeliveredQuantity, getProcurementOutstandingQuantity, getProcurementPaymentSummary } from '../../services/procurementLifecycle';
 
 type QualityRecordFocus = Pick<NonNullable<QualityIssue['target']>, 'kind' | 'id'>;
 
@@ -252,7 +252,7 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
     setDeliveryPosting((current) => ({ ...current, [list.id]: true }));
     try {
       const pending = readProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
-      if (pending && (list.deliveries || []).some((delivery) => delivery.id === pending.deliveryId)) {
+      if (pending && getProcurementDeliveryHistory(list, db.inventoryItems || []).some((delivery) => delivery.id === pending.deliveryId)) {
         clearProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
         setReceiptPostingStatus((current) => ({ ...current, [list.id]: 'Delivery history was already saved; cleared the completed retry intent without adding stock again.' }));
         onRefresh();
@@ -279,25 +279,12 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         uid: staffProfile.uid, list, deliveryId, date, reference, quantities, choices,
         inventoryItems: db.inventoryItems || [], storage: window.localStorage, postMovement: postInventoryMovement,
       });
-      const delivery = {
-        id: result.intent.deliveryId, date: result.intent.date, reference: result.intent.reference,
-        recordedAt: new Date().toISOString(), recordedBy: actorName,
-        lines: result.intent.quantities.map((quantity, itemIndex) => ({
-          itemIndex, quantity, inventoryItemId: result.intent.choices[itemIndex]?.inventoryItemId ?? null,
-          movementId: result.movementIds.find((id) => id.endsWith(`_${itemIndex}`)),
-        })).filter((line) => line.quantity > 0),
-      };
-      const deliveries = [...(list.deliveries || []), delivery];
-      const receivedQuantities = list.items.map((_, index) => Math.max(
-        Number(list.receivedQuantities?.[index] || 0),
-        deliveries.reduce((sum, row) => sum + row.lines.filter((line) => line.itemIndex === index).reduce((s, line) => s + line.quantity, 0), 0),
-      ));
-      const fullyReceived = list.items.every((item, index) => receivedQuantities[index] >= item.quantity);
-      const saved = saveProcurementList(list, {
-        deliveries, receivedQuantities,
-        ...(fullyReceived ? { receivedAt: new Date().toISOString(), receivedBy: actorName } : {}),
-      });
-      if (!saved) throw new Error('Stock movements were confirmed, but delivery history could not be saved. Retry this exact delivery; stable movement IDs prevent duplicate stock additions.');
+      const fullyReceived = list.items.every((item, index) =>
+        getProcurementOutstandingQuantity(list, index) <= result.intent.quantities[index]);
+      if (fullyReceived && !list.receivedAt) {
+        const saved = saveProcurementList(list, { receivedAt: new Date().toISOString(), receivedBy: actorName });
+        if (!saved) throw new Error('Stock movements were confirmed, but the final receipt acknowledgement could not be saved. Retry this exact delivery; stable movement IDs prevent duplicate stock additions.');
+      }
       clearProcurementDeliveryIntent(window.localStorage, staffProfile.uid, list.id);
       setDeliveryDrafts((current) => ({ ...current, [list.id]: { id: createProcurementDeliveryId(), date: new Date().toISOString().slice(0, 10), reference: '', quantities: list.items.map(() => '0') } }));
       setReceiptPostingStatus((current) => ({ ...current, [list.id]: `Delivery recorded: ${result.movementIds.length} stock movement(s), ${result.duplicateCount} safely confirmed duplicate(s).` }));
@@ -1757,13 +1744,13 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                       {list.status === 'draft' && canApproveProcurement && <div className="space-y-2"><button type="button" onClick={() => approveProcurementList(list)} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Validate &amp; approve</button><p className="text-[11px] text-stone-600">Approval checks item prices, quantities and the three-quote threshold.</p></div>}
                       {list.status === 'approved' && canApproveProcurement && <div className="flex flex-wrap items-end gap-2"><label className="min-w-48 flex-1 text-[11px] font-semibold text-stone-700">Purchase order / order reference<input aria-label="Purchase order reference" className="field mt-1 w-full" value={purchaseOrderDrafts[list.id] ?? list.purchaseOrderReference ?? ''} onChange={(event) => setPurchaseOrderDrafts((current) => ({ ...current, [list.id]: event.target.value }))} /></label><button type="button" onClick={() => markProcurementPurchased(list)} className="rounded-lg bg-teal-800 px-3 py-2 text-xs font-bold text-white hover:bg-teal-900">Record order</button></div>}
                       {list.status === 'purchased' && <div className="space-y-2"><p className="text-[11px] text-stone-700">Order reference: <strong>{list.purchaseOrderReference || 'Not recorded'}</strong>{list.orderedAt ? ` · ordered ${formatDate(list.orderedAt.slice(0, 10))} by ${list.orderedBy || 'staff'}` : ''}</p>
-                        {!list.receivedAt ? (canEdit && !(list.deliveries || []).length && <div className="space-y-1"><p className="text-[11px] text-stone-600">Legacy full-receipt option: use only if every ordered quantity has arrived. To record a partial delivery, use the delivery form below; do not mix workflows.</p><button type="button" disabled={Boolean(receiptPosting[list.id])} onClick={() => void confirmProcurementReceipt(list)} className="rounded-lg border border-teal-800 px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50 disabled:opacity-60">{receiptPosting[list.id] ? 'Posting receipt movements…' : 'Confirm full receipt & post stock'}</button>{(list.deliveries || []).length > 0 && <p className="text-[11px] font-semibold text-amber-900">Partial deliveries have started. Continue using the delivery history workflow below.</p>}</div>) : <div><p className="text-[11px] font-semibold text-emerald-800">Received {formatDate(list.receivedAt.slice(0, 10))} · recorded by {list.receivedBy || 'staff'}</p><p className="text-[11px] text-stone-600">Linked inventory movements visible in the synced register: {(db.inventoryItems || []).reduce((count, stockItem) => count + stockItem.movements.filter((movement) => movement.sourceType === 'procurementReceipt' && movement.sourceId === list.id).length, 0)}</p></div>}
+                        {!list.receivedAt ? (canEdit && !getProcurementDeliveryHistory(list, db.inventoryItems || []).length && <div className="space-y-1"><p className="text-[11px] text-stone-600">Legacy full-receipt option: use only if every ordered quantity has arrived. To record a partial delivery, use the delivery form below; do not mix workflows.</p><button type="button" disabled={Boolean(receiptPosting[list.id])} onClick={() => void confirmProcurementReceipt(list)} className="rounded-lg border border-teal-800 px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50 disabled:opacity-60">{receiptPosting[list.id] ? 'Posting receipt movements…' : 'Confirm full receipt & post stock'}</button>{(list.deliveries || []).length > 0 && <p className="text-[11px] font-semibold text-amber-900">Partial deliveries have started. Continue using the delivery history workflow below.</p>}</div>) : <div><p className="text-[11px] font-semibold text-emerald-800">Received {formatDate(list.receivedAt.slice(0, 10))} · recorded by {list.receivedBy || 'staff'}</p><p className="text-[11px] text-stone-600">Linked inventory movements visible in the synced register: {(db.inventoryItems || []).reduce((count, stockItem) => count + stockItem.movements.filter((movement) => movement.sourceType === 'procurementReceipt' && movement.sourceId === list.id).length, 0)}</p></div>}
                         {receiptPostingStatus[list.id] && <p role="status" className={`text-[11px] ${receiptPostingStatus[list.id].startsWith('Receipt recorded') || receiptPostingStatus[list.id].startsWith('Receipt acknowledgement') || receiptPostingStatus[list.id].startsWith('Delivery recorded') || receiptPostingStatus[list.id].startsWith('Delivery history was already saved') ? 'font-semibold text-emerald-800' : 'font-semibold text-rose-800'}`}>{receiptPostingStatus[list.id]}</p>}
                         {list.receivedAt && !list.financeHandedOverAt && canApproveProcurement && <div className="flex flex-wrap items-end gap-2"><label className="min-w-48 flex-1 text-[11px] font-semibold text-stone-700">Invoice / receipt / voucher reference<input aria-label="Finance handover reference" className="field mt-1 w-full" value={financeReferenceDrafts[list.id] ?? ''} onChange={(event) => setFinanceReferenceDrafts((current) => ({ ...current, [list.id]: event.target.value }))} /></label><button type="button" onClick={() => handOverProcurementToFinance(list)} className="rounded-lg bg-stone-800 px-3 py-2 text-xs font-bold text-white hover:bg-stone-900">Hand over to finance</button></div>}
                         {list.financeHandedOverAt && <p className="text-[11px] font-semibold text-emerald-800">Finance handover recorded {formatDate(list.financeHandedOverAt.slice(0, 10))} · {list.financeReference} · {list.financeHandedOverBy}</p>}
                         <section className="mt-3 space-y-2 rounded-lg border border-stone-200 bg-white p-3">
                           <h5 className="text-xs font-bold text-stone-900">Delivery history</h5>
-                          {(list.deliveries || []).length === 0 ? <p className="text-[11px] text-stone-600">No partial deliveries recorded yet.</p> : (list.deliveries || []).map((delivery) => (
+                          {(list.deliveries || []).length === 0 ? <p className="text-[11px] text-stone-600">No partial deliveries recorded yet.</p> : getProcurementDeliveryHistory(list, db.inventoryItems || []).map((delivery) => (
                             <div key={delivery.id} className="rounded border border-stone-100 p-2 text-[11px] text-stone-700">
                               <p className="font-semibold">{formatDate(delivery.date)} · {delivery.reference} · {delivery.recordedBy}</p>
                               {delivery.lines.map((line) => <p key={line.itemIndex}>{list.items[line.itemIndex]?.description || `Line ${line.itemIndex + 1}`}: {line.quantity} {list.items[line.itemIndex]?.unit || ''}</p>)}

@@ -1,9 +1,39 @@
-import type { ProcurementDelivery, ProcurementList, ProcurementPayment } from '../types';
+import type { InventoryItem, ProcurementDelivery, ProcurementList, ProcurementPayment } from '../types';
 
 export function isValidProcurementDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const timestamp = Date.parse(`${value}T00:00:00.000Z`);
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+}
+
+/** Rebuild delivery history from immutable inventory movements, retaining older saved history. */
+export function getProcurementDeliveryHistory(list: ProcurementList, inventoryItems: InventoryItem[]): ProcurementDelivery[] {
+  const byId = new Map<string, ProcurementDelivery>();
+  for (const delivery of list.deliveries || []) byId.set(delivery.id, { ...delivery, lines: [...delivery.lines] });
+  for (const item of inventoryItems) {
+    for (const movement of item.movements || []) {
+      if (movement.sourceType !== 'procurementReceipt' || movement.sourceId !== list.id || !movement.sourceDeliveryId ||
+        !Number.isInteger(movement.sourceLineIndex) || movement.sourceLineIndex! < 0) continue;
+      const id = movement.sourceDeliveryId;
+      const reference = (movement.reference || '').replace(/^Delivery [^ ]+ · /, '').split(' · procurement ')[0] || id;
+      const existing = byId.get(id);
+      const line = {
+        itemIndex: movement.sourceLineIndex!,
+        quantity: movement.quantity,
+        inventoryItemId: item.id,
+        movementId: movement.id,
+      };
+      if (existing) {
+        if (!existing.lines.some((entry) => entry.movementId === movement.id)) existing.lines.push(line);
+      } else {
+        byId.set(id, {
+          id, date: movement.date, reference, recordedAt: movement.createdAt,
+          recordedBy: movement.recordedBy, lines: [line],
+        });
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date) || a.recordedAt.localeCompare(b.recordedAt));
 }
 
 export function getProcurementDeliveredQuantity(list: ProcurementList, itemIndex: number): number {

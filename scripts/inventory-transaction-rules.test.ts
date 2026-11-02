@@ -64,7 +64,7 @@ async function applyMovement(uid: string, options: { id?: string; type?: 'Receiv
   await batch.commit();
 }
 
-async function applyProcurementMovement(uid: string, options: { id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number } = {}) {
+async function applyProcurementMovement(uid: string, options: { id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string } = {}) {
   const id = options.id || 'mov-proc-synthetic';
   const previous = 10;
   const quantity = options.quantity ?? 3;
@@ -80,12 +80,14 @@ async function applyProcurementMovement(uid: string, options: { id?: string; sou
     reason: 'Procurement receipt: synthetic fixture', recordedBy: `Synthetic ${uid}`,
     recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z', previousQuantity: previous, newQuantity: next,
     sourceType: 'procurementReceipt', sourceId, sourceLineIndex,
+    ...(options.sourceDeliveryId ? { sourceDeliveryId: options.sourceDeliveryId } : {}),
   };
   const embedded = {
     id, inventoryItemId: 'item-synthetic', type: movement.type, quantity, date: movement.date,
     location: movement.location, reference: movement.reference, reason: movement.reason,
     recordedBy: movement.recordedBy, recordedByUid: uid, createdAt: movement.createdAt,
     previousQuantity: previous, newQuantity: next, sourceType: movement.sourceType, sourceId, sourceLineIndex,
+    ...(options.sourceDeliveryId ? { sourceDeliveryId: options.sourceDeliveryId } : {}),
   };
   const batch = writeBatch(db);
   batch.update(itemRef, {
@@ -93,6 +95,15 @@ async function applyProcurementMovement(uid: string, options: { id?: string; sou
     updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
   });
   batch.set(movementRef, movement);
+  const procurementRef = doc(db, 'procurementLists/' + sourceId);
+  const receivedMap = {};
+  receivedMap['line_' + sourceLineIndex] = quantity;
+  batch.update(procurementRef, {
+    receivedQuantitiesByLine: receivedMap,
+    lastReceiptMovementId: id,
+    updatedAt: movement.createdAt,
+    updatedBy: movement.recordedBy,
+  });
   await batch.commit();
 }
 
@@ -121,6 +132,18 @@ async function main() {
       await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
     });
     await assertSucceeds(applyProcurementMovement('staff'));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertSucceeds(applyProcurementMovement('staff', {
+      id: 'mov-proc-partial', quantity: 1, sourceDeliveryId: 'delivery_12345678',
+    }));
 
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
