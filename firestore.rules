@@ -142,6 +142,49 @@ service cloud.firestore {
         inventoryMovementMatchesItem(itemId, movementId);
     }
 
+    function procurementOutstandingQuantity(procurementPath, lineIndex) {
+      let procurement = get(procurementPath).data;
+      let receivedMap = procurement.get('receivedQuantitiesByLine', {});
+      let legacyReceived = procurement.get('receivedQuantities', []);
+      let ledgerReceived = receivedMap.get('line_' + string(lineIndex), receivedMap.get(string(lineIndex), 0));
+      let oldReceived = legacyReceived.size() > lineIndex ? legacyReceived[lineIndex] : 0;
+      let alreadyReceived = ledgerReceived > oldReceived ? ledgerReceived : oldReceived;
+      return procurement.items[lineIndex].quantity - alreadyReceived;
+    }
+
+    function isValidProcurementReceiptLedgerUpdate(id) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let movementId = request.resource.data.get('lastReceiptMovementId', '');
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let movement = getAfter(movementPath).data;
+      let lineIndex = movement.sourceLineIndex;
+      let oldMap = resource.data.get('receivedQuantitiesByLine', {});
+      let oldArray = resource.data.get('receivedQuantities', []);
+      let newMap = request.resource.data.get('receivedQuantitiesByLine', {});
+      let oldLedger = oldMap.get('line_' + string(lineIndex), oldMap.get(string(lineIndex), 0));
+      let legacy = oldArray.size() > lineIndex ? oldArray[lineIndex] : 0;
+      let prior = oldLedger > legacy ? oldLedger : legacy;
+      let next = newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0));
+      return resource.data.id == id &&
+        resource.data.status == 'purchased' &&
+        request.resource.data.status == resource.data.status &&
+        changed.hasAll(['receivedQuantitiesByLine', 'lastReceiptMovementId']) &&
+        changed.hasOnly(['receivedQuantitiesByLine', 'lastReceiptMovementId', 'updatedAt', 'updatedBy']) &&
+        newMap.diff(oldMap).affectedKeys().hasOnly(['line_' + string(lineIndex), string(lineIndex)]) &&
+        movementId is string && movementId.size() > 0 &&
+        existsAfter(movementPath) &&
+        movement.id == movementId &&
+        movement.sourceType == 'procurementReceipt' &&
+        movement.sourceId == id &&
+        movement.sourceLineIndex is int &&
+        movement.sourceLineIndex >= 0 &&
+        movement.recordedByUid == request.auth.uid &&
+        next == prior + movement.quantity &&
+        request.resource.data.items is list &&
+        request.resource.data.items.size() > lineIndex &&
+        next <= request.resource.data.items[lineIndex].quantity;
+    }
+
     function isValidProcurementReceiptSource(itemId) {
       let procurementPath = /databases/$(database)/documents/procurementLists/$(request.resource.data.sourceId);
       let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
@@ -161,7 +204,15 @@ service cloud.firestore {
         !get(procurementPath).data.keys().hasAny(['receivedAt']) &&
         get(procurementPath).data.items is list &&
         get(procurementPath).data.items.size() > lineIndex &&
-        get(procurementPath).data.items[lineIndex].quantity == request.resource.data.quantity &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity > 0 &&
+        procurementOutstandingQuantity(procurementPath, lineIndex) > 0 &&
+        request.resource.data.quantity <= procurementOutstandingQuantity(procurementPath, lineIndex) &&
+        ((request.resource.data.keys().hasAny(['sourceDeliveryId']) &&
+          request.resource.data.sourceDeliveryId is string &&
+          request.resource.data.sourceDeliveryId.matches('^delivery_[A-Za-z0-9_-]{8,100}$')) ||
+         (!request.resource.data.keys().hasAny(['sourceDeliveryId']) &&
+          request.resource.data.quantity == procurementOutstandingQuantity(procurementPath, lineIndex))) &&
         get(procurementPath).data.items[lineIndex].unit is string &&
         get(procurementPath).data.items[lineIndex].unit.size() > 0 &&
         get(itemPath).data.unit is string &&
