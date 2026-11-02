@@ -2,7 +2,17 @@
 
 **Purpose:** move legacy `importAudits/{auditId}.sourceData` to the restricted `restrictedImportSources/{auditId}` collection without exposing source rows to ordinary staff.
 
-**Production status:** no production dry run, apply, data verification, role test, or rules deployment was performed for this task. The production release gate remains closed.
+**Production status (2026-11-02):** On owner-confirmed project
+`shine-relief-trust-cms`, the approved dry run examined 4 audits: 0 required
+repair, 4 were already correct, and there were 0 conflicts, malformed records,
+or failures. The owner reported the approved backup as completed and verified;
+its non-secret reference was not provided for this record. The owner confirmed
+imports and audit rewrite/retention jobs were paused. The apply migrated 0 audit
+records, wrote the completion marker, and reported ordinary-staff audit queries
+enabled. A read-only Admin SDK check confirmed the marker is `complete`. No
+production Firestore rules deployment or role-specific production access test
+was performed; the release gate for rules deployment remains closed pending
+those checks.
 
 ## Why this is required
 

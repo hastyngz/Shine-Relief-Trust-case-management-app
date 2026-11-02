@@ -18,8 +18,8 @@ Cloudflare KV remains intentionally disconnected and is outside this release gat
 ## 0.1 Production data migration gate — petty-cash balance checkpoint
 
 The revised petty-cash rules require `pettyCashLedgerState/current` to match the
-existing append-only ledger. Do not deploy those rules until the existing ledger
-has been checked and the checkpoint has been initialized:
+existing append-only ledger. Do not deploy those rules until the ledger has been
+checked and its checkpoint initialized when entries exist:
 
 1. Obtain owner approval, schedule a maintenance window, and verify an approved
    Firestore backup using the organization's established backup procedure.
@@ -39,9 +39,13 @@ has been checked and the checkpoint has been initialized:
    npx tsx scripts/migrate-petty-cash-ledger-state.ts --project "<CONFIRMED_PROJECT_ID>" --apply --confirm-project "<CONFIRMED_PROJECT_ID>"
    ```
 
-5. Require a zero-conflict, zero-malformed result and `Checkpoint status:
-   current`. The script never prints ledger entries or balances. Re-run the dry
-   run and confirm the checkpoint is still current.
+5. Require zero conflicts and zero malformed entries. If ledger entries exist,
+   require `Checkpoint status: current`. If there are no entries, require
+   `Checkpoint status: not-needed`; the script also rejects an orphaned
+   checkpoint. No checkpoint is initialized for an empty ledger because its
+   first opening-balance transaction creates the entry and checkpoint atomically.
+   The script never prints ledger entries or balances. Re-run the dry run and
+   confirm the same valid status.
 6. Deploy the strict rules and matching frontend in the approved maintenance
    window. The rules require each entry and its balance checkpoint to be
    committed together; older clients may temporarily retain pending entries

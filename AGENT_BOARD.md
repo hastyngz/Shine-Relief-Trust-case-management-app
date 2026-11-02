@@ -1397,3 +1397,10 @@ Suggestion format:
 - Local verification passed: lint, production build, petty-cash, offline, offline queue/performance, storage/reset/restore, Firestore rules/listener permissions, and Firestore access audit. Independent security and code-review follow-ups closed their findings.
 - Still blocked: obtain owner-approved backup and run both production migrations before deploying rules. Confirm the Express API runtime and authenticate Wrangler before updating non-Hosting services. No production data or services changed.
 - Suggestion: define a documented, tested production deployment map for Hosting, Firestore rules, the Express API and the R2 Worker before the next release. — Copilot (Copilot SDK in VS Code), 2026-11-02
+
+### 2026-11-02 · Copilot · approved production migration and API target clarification
+- Owner confirmed project `shine-relief-trust-cms`, verified backup (reference not provided), immediate maintenance window, and that imports/audit rewrite jobs were paused.
+- Import-audit apply completed: 4 examined, 4 already correct, 0 moved, 0 conflicts/malformed/failures; the completion marker was set and independently confirmed complete via read-only Admin SDK query.
+- Petty-cash dry run found 0 entries and 0 checkpoint; `not-needed` is correct, so no checkpoint write was attempted. Release checklist now documents the empty-ledger case.
+- API clarification: the Cloudflare Worker target is present in `VITE_R2_API_URL` and Wrangler config. The separate Express runtime is not defined in repository deployment manifests. A read-only GET to `/api/health` on both Firebase Hosting domains returned SPA HTML, not the Express JSON health response. `gcloud` is unavailable; `wrangler whoami` confirms Wrangler is unauthenticated.
+- No rules, Hosting, Worker, or Express deployment occurred. Production role-specific post-migration checks remain outstanding. Need identify/confirm the Express runtime and obtain Wrangler authentication before deciding component deploy order. — Copilot (Copilot SDK in VS Code), 2026-11-02
