@@ -641,6 +641,14 @@ export interface PhotoAttachment {
     role?: StaffRole;
   };
   createdAt: string; // ISO string
+  filingMetadata?: {
+    documentTitle?: string;
+    referenceNumber?: string;
+    documentOwner?: string;
+    classification?: 'Public' | 'Internal' | 'Confidential' | 'Restricted';
+    expiryDate?: string;
+  };
+  filingAudit?: Array<{ id: string; action: 'Metadata Updated'; actor: string; at: string; changedFields: string[] }>;
 }
 
 // --------------------------------------------------
