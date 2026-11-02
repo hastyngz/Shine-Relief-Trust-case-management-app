@@ -109,7 +109,7 @@ export const AdministrationOversightView: React.FC<Props> = ({ db, mode }) => {
     </div>
     <section className={card}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="font-bold">Finance follow-up · {period}</h2><p className="mt-1 text-xs text-stone-500">Monthly figures use this selected calendar month. Older unpaid expenses remain visible in the register.</p></div>
+        <div><h2 className="font-bold">Finance follow-up · {period}</h2><p className="mt-1 text-xs text-stone-500">Monthly figures use this selected calendar month. Unpaid expenses from other months remain visible in the register.</p></div>
         <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">Reporting month
           <input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} className="min-h-10 rounded-lg border border-stone-300 bg-white px-2 text-sm text-stone-900" />
         </label>
