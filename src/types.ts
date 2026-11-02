@@ -930,6 +930,7 @@ export type ScheduleType =
   | 'girl_followup'
   | 'programme_event'
   | 'staff_assignment'
+  | 'transport_trip'
   | 'other';
 
 export type ScheduleStatus =
@@ -972,6 +973,21 @@ export interface ScheduleItem {
   evidenceReference?: string;
   completionNote?: string;
   complianceHistory?: Array<{ id: string; action: 'Created' | 'Started' | 'Completed' | 'Reopened'; actor: string; at: string; note?: string }>;
+  /** Operational trip details; transport trips use the shared offline-first schedule ledger. */
+  transportDetails?: {
+    vehicleAssetId: string;
+    vehicleLabel: string;
+    driverName: string;
+    origin: string;
+    destination: string;
+    purpose: string;
+    startOdometerKm: number;
+    endOdometerKm?: number;
+    fuelLitres?: number;
+    fuelCostMWK?: number;
+    tripReference?: string;
+    tripNotes?: string;
+  };
 }
 
 export type MeetingStatus = 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
