@@ -4,7 +4,7 @@ import type { AppDatabase, PhotoAttachment } from '../types';
 import { filterFilingAttachments, sortFilingAttachmentsNewestFirst, getFilingExpiryStatus, type FilingRecordType } from '../utils/documentFiling';
 import { getLocalDateInputValue } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
-import { getFilingAttachmentMetadata, updateAttachmentFilingMetadata } from '../services/attachmentService';
+import { getFilingAttachmentMetadata, updateAttachmentFilingMetadata, uploadAttachmentVersion } from '../services/attachmentService';
 import { getStoredFile } from '../services/r2StorageClient';
 
 interface DocumentsFilingViewProps {
@@ -58,6 +58,11 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
   const [filingClass, setFilingClass] = useState<'Public' | 'Internal' | 'Confidential' | 'Restricted'>('Internal');
   const [filingExpiry, setFilingExpiry] = useState('');
   const [savingFiling, setSavingFiling] = useState(false);
+  const [versionTarget, setVersionTarget] = useState<PhotoAttachment | null>(null);
+  const [versionFile, setVersionFile] = useState<File | null>(null);
+  const [versionNote, setVersionNote] = useState('');
+  const [versionImageConsent, setVersionImageConsent] = useState(false);
+  const [savingVersion, setSavingVersion] = useState(false);
   const loadRequestId = useRef(0);
 
   const load = async (refresh = false) => {
@@ -151,6 +156,43 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
     } finally { setSavingFiling(false); }
   };
 
+  const startVersionUpload = (attachment: PhotoAttachment) => {
+    setVersionTarget(attachment);
+    setVersionFile(null);
+    setVersionNote('');
+    setVersionImageConsent(false);
+    setError(''); setNotice('');
+  };
+
+  const saveVersion = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!versionTarget || !versionFile || !currentUser?.uid) return;
+    setSavingVersion(true); setError(''); setNotice('');
+    try {
+      const userEmail = currentUser.email || '';
+      if (!userEmail) throw new Error('Your signed-in account does not have an email address. Sign in again or contact an administrator.');
+      const nextVersion = await uploadAttachmentVersion({
+        previousVersion: versionTarget,
+        file: versionFile,
+        versionNote,
+        confirmImageConsent: versionImageConsent,
+        user: {
+          uid: currentUser.uid,
+          fullName: staffProfile?.fullName || currentUser.displayName || userEmail,
+          email: userEmail,
+          role: staffProfile?.role,
+        },
+      });
+      setAttachments((items) => items.map((item) => item.id === versionTarget.id
+        ? { ...item, versionNumber: item.versionNumber || 1, supersededBy: nextVersion.id }
+        : item).concat(nextVersion));
+      setVersionTarget(null); setVersionFile(null);
+      setNotice(`Version ${nextVersion.versionNumber} uploaded. The previous file remains available in the version history.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The new document version could not be saved. The previous file has been kept.');
+    } finally { setSavingVersion(false); }
+  };
+
   const openLinkedRecord = (attachment: PhotoAttachment) => {
     onOpenTarget(attachment.targetType, attachment.targetId);
   };
@@ -193,7 +235,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">Administration · Phase 1</p>
             <h1 id="documents-filing-title" className="mt-1 text-2xl font-bold text-stone-900">Document index</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Search existing private attachments, maintain filing references, document ownership, classification and expiry dates, and return to linked records. Metadata changes are audited; file version history and automated access restrictions by classification are not yet implemented.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Search existing private attachments, maintain filing references, document ownership, classification and expiry dates, and return to linked records. Managers can upload numbered file versions; earlier files remain available. Classification labels do not themselves change access permissions.</p>
           </div>
           <button type="button" onClick={() => void load(true)} disabled={loading || refreshing} className="fx-press inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60" aria-label="Refresh document index">
             <LoaderCircle className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> <span className="hidden sm:inline">Refresh</span>
@@ -260,6 +302,8 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                   </div>
                   <p className="mt-2 break-words text-xs leading-5 text-stone-600">Linked record: <span className="font-semibold">{linkedName(attachment)}</span></p>
                   <p className="mt-1 text-xs text-stone-500">{attachment.date || 'Date not recorded'} · {formatBytes(attachment.fileSize)} · Uploaded by {attachment.uploadedBy?.name || 'Staff'}</p>
+                  <p className="mt-1 text-xs font-semibold text-stone-600">Version {attachment.versionNumber || 1}{attachment.supersededBy ? ` · Replaced by v${(attachments.find(item => item.id === attachment.supersededBy)?.versionNumber) || 'next'}` : ' · Current version'}</p>
+                  {attachment.versionNote && <p className="mt-1 text-xs text-stone-500">Version note: {attachment.versionNote}</p>}
                   {attachment.filingMetadata && <p className="mt-2 text-xs text-stone-600">Ref: {attachment.filingMetadata.referenceNumber} · Owner: {attachment.filingMetadata.documentOwner} · {attachment.filingMetadata.classification || 'Internal'}{attachment.filingMetadata.expiryDate ? ' · Expires '+attachment.filingMetadata.expiryDate+' ('+getFilingExpiryStatus(attachment.filingMetadata.expiryDate, getLocalDateInputValue())+')' : ''}</p>}
                 </div>
               </div>
@@ -270,12 +314,14 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                 <button type="button" onClick={() => openLinkedRecord(attachment)} className="fx-press inline-flex min-h-10 items-center gap-2 rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">
                   <ExternalLink className="h-4 w-4" /> Open linked record
                 </button>
+                {canManageFiling && !attachment.supersededBy && ((attachment.targetType !== 'healthFollowUp' && attachment.category !== 'Medical Document' && attachment.category !== 'Prescription') || canEditHealthRecords) && <button type="button" onClick={() => startVersionUpload(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-teal-200 px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50">Upload new version</button>}
                 {canManageFiling && ((attachment.targetType !== 'healthFollowUp' && attachment.category !== 'Medical Document' && attachment.category !== 'Prescription') || canEditHealthRecords) && <button type="button" onClick={() => startFilingEdit(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">Edit filing details</button>}
               </div>
             </article>
           ))}
         </div>
       )}
+      {versionTarget && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4"><section role="dialog" aria-modal="true" aria-labelledby="version-upload-title" className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"><h2 id="version-upload-title" className="text-xl font-bold">Upload a new document version</h2><p className="mt-1 text-sm text-stone-600">This creates a new numbered file and keeps the previous version unchanged and downloadable. Only Managers and Administrators can do this.</p><form onSubmit={saveVersion} className="mt-4 space-y-3"><label className="block text-sm font-semibold">Replacement file<input required type="file" onChange={event=>setVersionFile(event.target.files?.[0] || null)} className="field mt-1 min-h-11 w-full p-2" /></label><label className="block text-sm font-semibold">Reason for this version (optional)<textarea value={versionNote} onChange={event=>setVersionNote(event.target.value)} maxLength={500} rows={3} className="field mt-1 w-full" placeholder="e.g. Corrected figures or renewed agreement" /></label>{versionFile?.type.startsWith('image/') && <label className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" checked={versionImageConsent} onChange={event=>setVersionImageConsent(event.target.checked)} className="mt-1" />I confirm that the required consent for this replacement image has been checked.</label>}<div className="flex gap-2 pt-2"><button type="button" onClick={()=>setVersionTarget(null)} disabled={savingVersion} className="min-h-11 flex-1 rounded-xl border border-stone-300">Cancel</button><button type="submit" disabled={savingVersion || !versionFile || (versionFile.type.startsWith('image/') && !versionImageConsent)} className="min-h-11 flex-1 rounded-xl bg-teal-800 font-bold text-white disabled:opacity-50">{savingVersion?'Uploading…':'Upload version'}</button></div></form></section></div>}
       {editingFiling && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4"><section role="dialog" aria-modal="true" aria-labelledby="filing-edit-title" className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"><h2 id="filing-edit-title" className="text-xl font-bold">Filing details</h2><p className="mt-1 text-sm text-stone-600">These details describe and help track the file. Classification is a label and does not itself change who can access the attachment.</p><form onSubmit={saveFiling} className="mt-4 space-y-3"><label className="block text-sm font-semibold">Document title<input required value={filingTitle} onChange={e=>setFilingTitle(e.target.value)} className="field mt-1 min-h-11 w-full"/></label><label className="block text-sm font-semibold">Reference number<input required value={filingReference} onChange={e=>setFilingReference(e.target.value)} className="field mt-1 min-h-11 w-full" placeholder="e.g. SHINE/HR/2026/001"/></label><label className="block text-sm font-semibold">Document owner<input required value={filingOwner} onChange={e=>setFilingOwner(e.target.value)} className="field mt-1 min-h-11 w-full"/></label><label className="block text-sm font-semibold">Classification<select value={filingClass} onChange={e=>setFilingClass(e.target.value as typeof filingClass)} className="field mt-1 min-h-11 w-full"><option>Public</option><option>Internal</option><option>Confidential</option><option>Restricted</option></select></label><label className="block text-sm font-semibold">Expiry / review date<input type="date" value={filingExpiry} onChange={e=>setFilingExpiry(e.target.value)} className="field mt-1 min-h-11 w-full"/></label><div className="flex gap-2 pt-2"><button type="button" onClick={()=>setEditingFiling(null)} disabled={savingFiling} className="min-h-11 flex-1 rounded-xl border border-stone-300">Cancel</button><button type="submit" disabled={savingFiling} className="min-h-11 flex-1 rounded-xl bg-teal-800 font-bold text-white disabled:opacity-50">{savingFiling?'Saving…':'Save filing details'}</button></div></form></section></div>}
     </section>
   );
