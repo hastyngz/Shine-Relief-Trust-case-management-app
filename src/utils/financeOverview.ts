@@ -18,6 +18,7 @@ export interface FinancePeriodSummary {
   procurementPaidTotal: number;
   procurementOutstandingTotal: number;
   procurementPaymentsThisMonth: number;
+  pettyCashExpensesThisMonth: number;
   transportTrips: NonNullable<AppDatabase['schedules']>;
   transportFuel: number;
 }
@@ -54,6 +55,10 @@ export function getFinancePeriodSummary(db: AppDatabase, period: string): Financ
       .filter((payment) => typeof payment.date === 'string' && payment.date.startsWith(period))
       .reduce((paid, payment) => paid + (Number(payment.amountMWK) || 0), 0), 0)
     : 0;
+  const pettyCashExpensesThisMonth = validPeriod(period)
+    ? (db.pettyCashTransactions || []).filter((entry) => entry.type === 'expense' && entry.date.startsWith(period))
+      .reduce((total, entry) => total + (Number(entry.amountMWK) || 0), 0)
+    : 0;
   const handover = procurementCommitments.filter((item) => item.status === 'purchased' && Boolean(item.receivedAt) && !item.financeHandedOverAt);
   const transportTrips = validPeriod(period)
     ? (db.schedules || []).filter((item) => item.type === 'transport_trip' && item.scheduledDate.startsWith(period))
@@ -65,6 +70,7 @@ export function getFinancePeriodSummary(db: AppDatabase, period: string): Financ
     assetMaintenanceExpenses, assetMaintenanceTotal, unpaid, unpaidTotal,
     financeRegister, handover, procurementCommitments, procurementCommittedTotal,
     procurementPaidTotal, procurementOutstandingTotal, procurementPaymentsThisMonth,
+    pettyCashExpensesThisMonth,
     transportTrips, transportFuel,
   };
 }
