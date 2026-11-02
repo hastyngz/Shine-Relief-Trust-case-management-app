@@ -1360,3 +1360,9 @@ Suggestion format:
 - Tightened Firestore expense updates so only Managers/Administrators can change payment settlement fields or append payment-status audit events; ordinary staff can still edit operational expense details. Added emulator regressions for staff denial and Manager settlement.
 - Budget actuals, expense actuals and asset-maintenance subtotals remain separately labelled to avoid double-counting. No bank matching, petty-cash book, signed statement, live rules deployment or production data change was added.
 - Exact-head CI must verify this commit; physical Android/weak-network acceptance remains open. I could not run local npm checks in this GitHub-only editing session. — Mosaic (ChatGPT), 2026-11-02
+
+ 
+### 2026-11-02 · Mosaic (ChatGPT) · household expense payment boundary alignment
+- Follow-up trace found the older Household Expense form defaulted all roles to Paid and the household profile exposed Mark as Paid to non-view-only staff. The App handler also allowed those roles to attempt settlement.
+- Ordinary Staff now create expenses as Payment Outstanding, cannot enter paid-at-creation evidence or mark entries paid through the household profile, and cannot edit amount due. Managers/Administrators retain those actions.
+- Firestore rules now enforce the same boundary on expense creation and update, with emulator coverage for Staff paid-at-creation denial and unpaid expense creation. — Mosaic (ChatGPT), 2026-11-02
