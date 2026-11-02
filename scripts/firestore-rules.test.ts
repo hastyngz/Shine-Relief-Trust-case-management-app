@@ -478,6 +478,30 @@ async function run() {
     await assertSucceeds(setDoc(doc(worker, 'caseActions/action-created-worker'), selfAssignedAction('worker')));
     await assertFails(setDoc(doc(viewer, 'rentPayments/viewer-write-denied'), { id: 'viewer-write-denied' }));
     await assertFails(setDoc(doc(viewer, 'expenses/viewer-write-denied'), { id: 'viewer-write-denied' }));
+    await assertFails(setDoc(doc(worker, 'expenses/worker-paid-expense-denied'), {
+      id: 'worker-paid-expense-denied',
+      householdId: 'household-1',
+      date: '2026-11-02',
+      category: 'Repairs',
+      itemDescription: 'Synthetic paid-at-creation denial',
+      quantity: '1',
+      unitCost: 1000,
+      totalCost: 1000,
+      paymentStatus: 'Paid',
+      datePaid: '2026-11-02',
+    }));
+    await assertSucceeds(setDoc(doc(worker, 'expenses/worker-unpaid-expense-allowed'), {
+      id: 'worker-unpaid-expense-allowed',
+      householdId: 'household-1',
+      date: '2026-11-02',
+      category: 'Repairs',
+      itemDescription: 'Synthetic outstanding expense',
+      quantity: '1',
+      unitCost: 1000,
+      totalCost: 1000,
+      paymentStatus: 'Payment Outstanding',
+      amountDue: 1000,
+    }));
     const financeExpense = doc(worker, 'expenses/finance-expense-test');
     await assertSucceeds(updateDoc(financeExpense, { itemDescription: 'Staff may correct expense description' }));
     await assertFails(updateDoc(financeExpense, { paymentStatus: 'Paid' }));
