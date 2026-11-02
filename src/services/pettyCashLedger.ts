@@ -80,7 +80,7 @@ export function validatePettyCashTransaction(
   if (!['opening_balance', 'cash_received', 'expense', 'cash_returned', 'adjustment_in', 'adjustment_out'].includes(draft.type)) errors.push('Select a valid petty-cash transaction type.');
   if (!Number.isFinite(draft.amountMWK) || draft.amountMWK <= 0 || !Number.isSafeInteger(draft.amountMWK)) errors.push('Enter a positive whole-number amount in MWK.');
   if (typeof draft.description !== 'string' || draft.description.trim().length < 3 || draft.description.trim().length > 250) errors.push('Enter a description between 3 and 250 characters.');
-  if (typeof draft.reference !== 'string' || draft.reference.trim().length < 2 || draft.reference.trim().length > 120) errors.push('Enter a receipt, voucher or transfer reference between 2 and 120 characters.');
+  if (typeof draft.reference !== 'string' || draft.reference.trim().length < 2 || draft.reference.trim().length > 120) errors.push('Enter a receipt, voucher, transfer or correction reference between 2 and 120 characters.');
   if (!draft.id || draft.id.trim().length < 8) errors.push('The petty-cash entry ID is invalid.');
   if (transactions.some((entry) => entry.id === draft.id)) errors.push('This petty-cash entry already exists. Refresh the ledger before retrying.');
 
@@ -89,13 +89,13 @@ export function validatePettyCashTransaction(
     if (draft.id !== PETTY_CASH_OPENING_BALANCE_ID) errors.push('The opening-balance record must use its fixed ledger ID.');
     if (openingEntries.length > 0 || transactions.length > 0) errors.push('The opening balance can only be recorded once, before other petty-cash entries.');
   } else {
-    if (openingEntries.length !== 1) errors.push('Record the opening cash float before entering receipts or expenses.');
+    if (openingEntries.length !== 1) errors.push('Record the opening cash float before entering other petty-cash movements.');
     const summary = getPettyCashLedgerSummary(transactions);
     const latestDate = summary.entries[summary.entries.length - 1]?.date;
-    if (latestDate && draft.date < latestDate) errors.push('Backdated entries are not allowed. Record transactions in date order or use a referenced reversal.');
+    if (latestDate && draft.date < latestDate) errors.push('Backdated entries are not allowed. Record transactions in date order or use a current-dated correction entry.');
     const currentBalance = summary.currentBalanceMWK;
     if ((draft.type === 'expense' || draft.type === 'adjustment_out') && draft.amountMWK > currentBalance) {
-      errors.push(`This expense exceeds the available petty-cash balance of MWK ${currentBalance.toLocaleString()}.`);
+      errors.push(`This cash outflow exceeds the available petty-cash balance of MWK ${currentBalance.toLocaleString()}.`);
     }
   }
   return errors;
