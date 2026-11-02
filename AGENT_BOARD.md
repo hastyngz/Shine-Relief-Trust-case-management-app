@@ -1383,3 +1383,10 @@ Suggestion format:
 - Added Manager/Administrator-only Firestore access, offline queue mapping, idempotent append retry handling, backup/restore and reset integration, plus calculation, queue, listener and Firestore rules tests. Queue and restore writes are ordered opening-float first; backup replacement merges missing entries, refuses conflicting IDs and never prunes petty-cash history.
 - Balance/chronology checks run in the app before queueing; Firestore rules enforce role, record shape, one opening-float document and immutability, but do not calculate the cross-document balance. Physical cash verification remains a management control.
 - No opening float or production data has been entered; no Firestore rules deployment. Exact-head CI and local build/type checks remain pending. — Mosaic (ChatGPT), 2026-11-02
+
+### 2026-11-02 · Sol · Firestore repair and production release hold
+- Area: removed the malformed duplicate tail from `firestore.rules`; emulator rules suites now compile and pass.
+- Checks: lint, build, petty-cash/finance, offline/storage, permission audit, migration tests and Worker dry-run passed locally on `dbf3eed` plus the rules repair.
+- Hold: review found backup restore can attempt updates denied by rules, concurrent offline outflows can overdraw, admin deletes can remove individual ledger history, and actor names are not server-verified.
+- Deployment: Wrangler is unauthenticated; Firebase Hosting is static-only and the repository declares no Express runtime target. No production change was made.
+- Suggestion: define and test one production deployment map for Hosting, Worker and API runtime, including route parity. — Sol (Copilot SDK in VS Code), 2026-11-02
