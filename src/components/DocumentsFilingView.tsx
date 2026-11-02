@@ -315,7 +315,7 @@ export const DocumentsFilingView: React.FC<DocumentsFilingViewProps> = ({ db, on
                   <ExternalLink className="h-4 w-4" /> Open linked record
                 </button>
                 {canManageFiling && !attachment.supersededBy && ((attachment.targetType !== 'healthFollowUp' && attachment.category !== 'Medical Document' && attachment.category !== 'Prescription') || canEditHealthRecords) && <button type="button" onClick={() => startVersionUpload(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-teal-200 px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50">Upload new version</button>}
-                {canManageFiling && ((attachment.targetType !== 'healthFollowUp' && attachment.category !== 'Medical Document' && attachment.category !== 'Prescription') || canEditHealthRecords) && <button type="button" onClick={() => startFilingEdit(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">Edit filing details</button>}
+                {canManageFiling && !attachment.supersededBy && ((attachment.targetType !== 'healthFollowUp' && attachment.category !== 'Medical Document' && attachment.category !== 'Prescription') || canEditHealthRecords) && <button type="button" onClick={() => startFilingEdit(attachment)} className="fx-press inline-flex min-h-10 items-center rounded-xl border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50">Edit filing details</button>}
               </div>
             </article>
           ))}
