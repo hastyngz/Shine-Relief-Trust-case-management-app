@@ -382,30 +382,81 @@ service cloud.firestore {
       allow delete: if isManagerOrStaff();
     }
 
+    function isValidAttachmentVersionCreate(versionId) {
+      let previousId = request.resource.data.versionOf;
+      let previousPath = /databases/$(database)/documents/attachments/$(previousId);
+      let previous = get(previousPath).data;
+      let previousAfter = getAfter(previousPath).data;
+      let previousNumber = previous.get('versionNumber', 1);
+      return isManagerOrAdmin() &&
+        previousId is string && previousId.size() > 0 && previousId != versionId &&
+        exists(previousPath) && existsAfter(previousPath) &&
+        request.resource.data.id == versionId &&
+        request.resource.data.versionNumber is int &&
+        request.resource.data.versionNumber == previousNumber + 1 &&
+        request.resource.data.uploadedBy.uid == request.auth.uid &&
+        request.resource.data.targetType == previous.targetType &&
+        request.resource.data.targetId == previous.targetId &&
+        request.resource.data.category == previous.category &&
+        (!request.resource.data.keys().hasAny(['versionNote']) ||
+          (request.resource.data.versionNote is string && request.resource.data.versionNote.size() <= 500)) &&
+        !previous.keys().hasAny(['supersededBy']) &&
+        previousAfter.supersededBy == versionId &&
+        previousAfter.versionNumber == previousNumber &&
+        previousAfter.diff(previous).affectedKeys().hasOnly(['supersededBy', 'updatedAt', 'versionNumber']) &&
+        (previous.targetType != 'safeguardingCase' || canWriteSafeguardingAttachment(previous.targetId));
+    }
+
+    function isValidAttachmentSupersede(id) {
+      let versionId = request.resource.data.supersededBy;
+      let versionPath = /databases/$(database)/documents/attachments/$(versionId);
+      let versionAfter = getAfter(versionPath).data;
+      let previousNumber = resource.data.get('versionNumber', 1);
+      return isManagerOrAdmin() &&
+        versionId is string && versionId.size() > 0 &&
+        existsAfter(versionPath) &&
+        request.resource.data.versionNumber == previousNumber &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['supersededBy', 'updatedAt', 'versionNumber']) &&
+        versionAfter.versionOf == id &&
+        versionAfter.versionNumber == previousNumber + 1 &&
+        versionAfter.targetType == resource.data.targetType &&
+        versionAfter.targetId == resource.data.targetId &&
+        versionAfter.uploadedBy.uid == request.auth.uid &&
+        (resource.data.targetType != 'safeguardingCase' || canWriteSafeguardingAttachment(resource.data.targetId));
+    }
+
     match /attachments/{id} {
       allow read: if isStaffActive() && (
         (resource.data.targetType != 'safeguardingCase' || canReadSafeguarding(resource.data.targetId)) &&
         ((resource.data.targetType != 'healthFollowUp' &&
           !(resource.data.get('category', '') in ['Medical Document', 'Prescription'])) || canViewHealthRecords())
       );
-      allow create: if request.resource.data.targetType == 'safeguardingCase'
-        ? canWriteSafeguardingAttachment(request.resource.data.targetId)
-        : (request.resource.data.targetType == 'healthFollowUp' ||
-           request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
-          ? canEditHealthRecords()
-          : isManagerOrStaff();
-      allow update: if request.resource.data.targetType == 'safeguardingCase'
-        ? canWriteSafeguardingAttachment(request.resource.data.targetId)
-        : (request.resource.data.targetType == 'healthFollowUp' ||
-           request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
-          ? canEditHealthRecords()
-          : isManagerOrAdmin();
-      allow delete: if resource.data.targetType == 'safeguardingCase'
-        ? canWriteSafeguardingAttachment(resource.data.targetId)
-        : (resource.data.targetType == 'healthFollowUp' ||
-           resource.data.get('category', '') in ['Medical Document', 'Prescription'])
-          ? canEditHealthRecords()
-          : isAdmin() || (isManagerOrStaff() && resource.data.uploadedBy.uid == request.auth.uid);
+      allow create: if request.resource.data.keys().hasAny(['versionOf'])
+        ? isValidAttachmentVersionCreate(id)
+        : (request.resource.data.targetType == 'safeguardingCase'
+          ? canWriteSafeguardingAttachment(request.resource.data.targetId)
+          : (request.resource.data.targetType == 'healthFollowUp' ||
+             request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
+            ? canEditHealthRecords()
+            : isManagerOrStaff());
+      allow update: if resource.data.keys().hasAny(['versionOf'])
+        ? false
+        : request.resource.data.diff(resource.data).affectedKeys().hasAny(['supersededBy'])
+          ? isValidAttachmentSupersede(id)
+          : (request.resource.data.targetType == 'safeguardingCase'
+            ? canWriteSafeguardingAttachment(request.resource.data.targetId)
+            : (request.resource.data.targetType == 'healthFollowUp' ||
+               request.resource.data.get('category', '') in ['Medical Document', 'Prescription'])
+              ? canEditHealthRecords()
+              : isManagerOrAdmin());
+      allow delete: if resource.data.keys().hasAny(['versionOf'])
+        ? false
+        : resource.data.targetType == 'safeguardingCase'
+          ? canWriteSafeguardingAttachment(resource.data.targetId)
+          : (resource.data.targetType == 'healthFollowUp' ||
+             resource.data.get('category', '') in ['Medical Document', 'Prescription'])
+            ? canEditHealthRecords()
+            : isAdmin() || (isManagerOrStaff() && resource.data.uploadedBy.uid == request.auth.uid);
     }
 
     match /caseActions/{actionId} {
