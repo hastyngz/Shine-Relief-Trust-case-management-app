@@ -535,6 +535,13 @@ async function run() {
     await assertFails(updateDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001'), { amountMWK: 1 }));
     await assertFails(deleteDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001')));
     await assertSucceeds(deleteDoc(doc(admin, 'pettyCashTransactions/receipt-manager-001')));
+    await assertFails(updateDoc(doc(admin, 'pettyCashTransactions/expense-admin-001'), { amountMWK: 1 }));
+    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/invalid-date-001'), {
+      ...pettyCashOpening, id: 'invalid-date-001', type: 'cash_received', date: '2026-13-45',
+    }));
+    await assertFails(setDoc(doc(manager, 'pettyCashTransactions/decimal-amount-001'), {
+      ...pettyCashOpening, id: 'decimal-amount-001', type: 'cash_received', amountMWK: 1.5,
+    }));
     await assertFails(setDoc(doc(worker, 'pettyCashTransactions/worker-entry-001'), {
       ...pettyCashOpening, id: 'worker-entry-001', type: 'cash_received',
     }));
