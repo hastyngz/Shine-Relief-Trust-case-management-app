@@ -534,6 +534,7 @@ async function run() {
     }));
     await assertFails(updateDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001'), { amountMWK: 1 }));
     await assertFails(deleteDoc(doc(manager, 'pettyCashTransactions/receipt-manager-001')));
+    await assertSucceeds(deleteDoc(doc(admin, 'pettyCashTransactions/receipt-manager-001')));
     await assertFails(setDoc(doc(worker, 'pettyCashTransactions/worker-entry-001'), {
       ...pettyCashOpening, id: 'worker-entry-001', type: 'cash_received',
     }));
