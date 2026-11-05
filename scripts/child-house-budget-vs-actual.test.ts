@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { HouseholdExpense } from '../src/types';
-import { buildHouseholdBudgetVsActual } from '../src/utils/householdBudget';
+import { buildChildHouseBudgetExpense, buildHouseholdBudgetVsActual } from '../src/utils/householdBudget';
 
 const makeExpense = (overrides: Partial<HouseholdExpense> & Pick<HouseholdExpense, 'id' | 'itemDescription' | 'totalCost'>): HouseholdExpense => ({
   householdId: 'SH-01',
@@ -48,3 +48,42 @@ assert.equal(charcoal.actualAmount, 5000);
 assert.equal(charcoal.overspent, true);
 
 console.log('Child House budget-versus-actual comparison tests passed.');
+
+
+const importedBudget = buildChildHouseBudgetExpense({
+  householdId: 'SH-01',
+  period: '2026-11',
+  quantity: 2,
+  unitCost: 14000,
+  budgetAmount: 28000,
+  itemDescription: 'Cooking oil 2L',
+  category: 'Groceries',
+  unit: 'bottle',
+  frequency: 1,
+  itemNumber: '17',
+  notes: 'Source amount needs review',
+  sourceFileName: 'CHILD_HOUSE_BUDGET-NOVE-2026.xlsx',
+  sheet: 'November',
+  row: 17,
+  createdBy: 'Test User',
+});
+assert.equal(importedBudget.recordType, 'budget');
+assert.equal(importedBudget.householdId, 'SH-01');
+assert.equal(importedBudget.month, '2026-11');
+assert.equal(importedBudget.date, '2026-11-01');
+assert.equal(importedBudget.totalCost, 28000);
+assert.equal(importedBudget.category, 'Groceries');
+assert.equal(importedBudget.itemNumber, undefined);
+assert.equal(importedBudget.budgetLineId, importedBudget.id);
+assert.equal(importedBudget.id, buildChildHouseBudgetExpense({
+  householdId: 'SH-01', period: '2026-11', quantity: 2, unitCost: 14000,
+  budgetAmount: 28000, itemDescription: 'Cooking oil 2L', category: 'Groceries',
+  unit: 'bottle', frequency: 1, itemNumber: '17', notes: 'Source amount needs review',
+  sourceFileName: 'CHILD_HOUSE_BUDGET-NOVE-2026.xlsx', sheet: 'November', row: 17,
+  createdBy: 'Test User',
+}).id);
+assert.throws(() => buildChildHouseBudgetExpense({
+  householdId: 'SH-01', period: 'Annual 2026', quantity: 2, unitCost: 14000,
+  budgetAmount: 28000, itemDescription: 'Cooking oil', sourceFileName: 'budget.xlsx',
+  sheet: 'Annual', row: 2, createdBy: 'Test User',
+}), /specific month/);
