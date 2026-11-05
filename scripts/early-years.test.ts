@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type { EarlyYearsRecord } from '../src/types';
 
 const values = new Map<string, string>();
 let failWrites = false;
@@ -32,7 +33,7 @@ const db = getDatabase();
 db.earlyYearsRecords = [];
 assert.equal(saveDatabase(db).ok, true);
 
-const child = (overrides: Record<string, unknown> = {}) => ({
+const child = (overrides: Partial<EarlyYearsRecord> = {}) => ({
   reportingPeriod: '2026-11',
   sourceDocument: 'Early Years focused test',
   studentName: 'Test Child',
