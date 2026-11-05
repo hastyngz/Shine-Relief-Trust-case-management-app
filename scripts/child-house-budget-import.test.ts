@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
+import { spreadsheetLineToPreview } from '../src/components/Import/importWizardHelpers';
 import type { ImportAuditRecord } from '../src/types';
 import { buildChildHouseBudgetExpense, planChildHouseBudgetImportUndo } from '../src/utils/householdBudget';
 
@@ -67,6 +68,28 @@ const cookingOil = budgetLines.find((line) => line.itemDescription === 'Cooking 
 assert.equal(cookingOil?.budgetAmount, 19000); // Preserve the workbook value for review; do not silently replace it with 28000.
 assert.match(cookingOil?.notes || '', /source total MWK 19000 differs from quantity × frequency × unit cost MWK 28000/);
 
+const expenseNamedPreview = await createSpreadsheetImportPreview(
+  workbook, analysis, analysis.detectedKind, [], 'CHILD_HOUSE_expense-NOVE-2026.xlsx',
+);
+const expenseNamedLine = expenseNamedPreview.lines.find((line) => line.kind === 'budget');
+assert.match(expenseNamedLine?.notes || '', /expense workbook filename but this sheet has budget-style amounts/);
+assert.match(spreadsheetLineToPreview(expenseNamedLine!).warningOrConflict || '', /Do not treat these as actual spending/);
+
+const duplicate18Workbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(duplicate18Workbook, XLSX.utils.aoa_to_sheet([
+  ['CHILD HOUSE BUDGET NOVEMBER 2026'],
+  [],
+  ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)', 'UNIT'],
+  [18, 'Firewood', 1, 1, 20000, 20000, 'bundle'],
+  [18, 'Synthetic charcoal', 1, 1, 20000, 20000, 'bag'],
+]), 'Child House Budget');
+const duplicate18Analysis = await analyzeSpreadsheetWorkbook(duplicate18Workbook);
+const duplicate18Preview = await createSpreadsheetImportPreview(
+  duplicate18Workbook, duplicate18Analysis, duplicate18Analysis.detectedKind, [], 'synthetic_child_house_budget.xlsx',
+);
+const duplicate18Rows = duplicate18Preview.lines.filter((line) => line.kind === 'budget' && line.itemNumber === '18');
+assert.equal(duplicate18Rows.length, 2);
+assert.ok(duplicate18Rows.every((line) => /duplicate item number 18/i.test(line.notes)));
 const duplicateItemNumberRows = budgetLines.filter((line) => line.itemDescription === 'Tea' || line.itemDescription === 'Coffee');
 assert.equal(duplicateItemNumberRows.length, 2);
 assert.ok(duplicateItemNumberRows.every((line) => /duplicate item number 17/i.test(line.notes)));
