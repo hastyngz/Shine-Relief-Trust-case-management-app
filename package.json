@@ -66,7 +66,8 @@
     "test:asset-filtering": "tsx scripts/asset-filtering.test.ts",
     "test:procurement-filtering": "tsx scripts/procurement-filtering.test.ts",
     "test:asset-maintenance": "tsx scripts/asset-maintenance.test.ts",
-    "test:transport-logistics": "tsx scripts/transport-logistics.test.ts"
+    "test:transport-logistics": "tsx scripts/transport-logistics.test.ts",
+    "test:child-house-budget-import": "tsx scripts/child-house-budget-import.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",

@@ -66,6 +66,7 @@ assert.match(cookingOil?.notes || '', /differs from/);
 
 const duplicateItemNumberRows = budgetLines.filter((line) => line.itemDescription === 'Tea' || line.itemDescription === 'Coffee');
 assert.equal(duplicateItemNumberRows.length, 2);
+assert.ok(duplicateItemNumberRows.every((line) => /duplicate item number 17/i.test(line.notes)));
 assert.notEqual(duplicateItemNumberRows[0].row, duplicateItemNumberRows[1].row);
 
 console.log('Child House budget import regression tests passed.');

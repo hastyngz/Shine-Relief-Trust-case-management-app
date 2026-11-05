@@ -18,6 +18,8 @@ export interface ImportedBudgetLine {
   quantity: number;
   unitCost: number;
   budgetAmount: number;
+  itemNumber?: string;
+  frequency?: number;
   period: string;
   periodType: BudgetPeriodType;
   month?: number;
@@ -468,6 +470,7 @@ function parseBudgetRows(
   const programmeIndex = columnIndex(headers, [/^programme$/, /^program$/]);
   const frequencyIndex = columnIndex(headers, [/frequency/, /times per/, /occurrences/]);
   const totalIndex = columnIndex(headers, [/^total(?: amount)?$/, /total cost/, /budget amount/]);
+  const itemNumberIndex = columnIndex(headers, [/^item\s*(?:no|number|#)$/i, /^no\.?$/i, /^number$/i]);
   const monthColumns = findMonthColumns(headers);
   const year = inferYear(sheetName, rows, options.sourceName || '');
   const reportingHeaderText = `${sheetName} ${rows.slice(0, headerIndex + 1).flat().map(text).join(' ')}`;
@@ -491,6 +494,7 @@ function parseBudgetRows(
     const unitCost = number(row[costIndex]);
     const frequency = number(row[frequencyIndex]);
     const sourceTotal = number(row[totalIndex]);
+    const itemNumber = itemNumberIndex >= 0 ? text(row[itemNumberIndex]) || undefined : undefined;
     if (!rawLabel && quantity === undefined && unitCost === undefined) return;
 
     if (rawLabel && quantity === undefined && unitCost === undefined) {
@@ -538,7 +542,7 @@ function parseBudgetRows(
           programme: programme.label || 'Unassigned - programme review required',
           category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
           unit,
-          quantity, unitCost, budgetAmount: recomputedAmount, period: `${year}-${String(month).padStart(2, '0')}`,
+          quantity, unitCost, budgetAmount: recomputedAmount, itemNumber, frequency, period: `${year}-${String(month).padStart(2, '0')}`,
           periodType: 'monthly', month, notes: `${note}${amountNote}`,
         });
       });
@@ -556,12 +560,21 @@ function parseBudgetRows(
         programme: programme.label || 'Unassigned - programme review required',
         category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
         unit,
-        quantity, unitCost, budgetAmount,
+        quantity, unitCost, budgetAmount, itemNumber, frequency,
         period: sourcePeriodMonth ? `${year}-${String(sourcePeriodMonth).padStart(2, '0')}` : `Annual ${year}`,
         periodType: sourcePeriodMonth ? 'monthly' : 'annual', month: sourcePeriodMonth,
         notes: `${note}${frequencyNote}${amountNote}`,
       });
     }
+  });
+  const itemNumberCounts = new Map<string, number>();
+  lines.forEach((line) => {
+    if (line.kind !== 'budget' || !line.itemNumber) return;
+    itemNumberCounts.set(line.itemNumber, (itemNumberCounts.get(line.itemNumber) || 0) + 1);
+  });
+  lines.forEach((line) => {
+    if (line.kind !== 'budget' || !line.itemNumber || (itemNumberCounts.get(line.itemNumber) || 0) < 2) return;
+    line.notes += `; duplicate item number ${line.itemNumber} appears more than once in this sheet; verify the source row`;
   });
   return { lines, imported: lines.filter((line) => line.kind === 'budget').length, skipped };
 }
