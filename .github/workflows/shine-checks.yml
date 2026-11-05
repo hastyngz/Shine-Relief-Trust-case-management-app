@@ -142,6 +142,9 @@ jobs:
       - name: Test Phase 5 case intelligence chain
         run: npm run test:phase5-e2e
 
+      - name: Test Early Years registration and attendance persistence
+        run: npm run test:early-years
+
       - name: Test Phase 5 Firestore permissions in emulator
         run: npm run test:phase5-rules
 
