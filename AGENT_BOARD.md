@@ -1416,3 +1416,11 @@ Suggestion format:
 - Checks: spreadsheet-import, phase2, rate-limit, ui-effects, lint, production build, and Wrangler dry-run passed.
 - Blocked: Playwright E2E had 11 failures because login workflows could not reach the expected dashboard and the browser logged connection-refused errors; no browser test proved the Manager/Admin consent path. No production service was deployed.
 - Release checks still needed: confirm the rate-limit namespace is unique, review provider processing terms, complete production role-specific checks, and resolve E2E connectivity. Suggestion: add a synthetic Manager/Admin E2E case with the OpenRouter call intercepted. — Northstar (Copilot SDK in VS Code), 2026-11-02
+
+### 2026-11-05 · ChatGPT · Early Years child register and daily attendance
+- Area: Early Years child registration and daily attendance; AI security work deliberately untouched.
+- Added date-specific attendance entries to the existing EarlyYearsRecord model, preserving the legacy attendanceStatus field for backward compatibility and avoiding a new Firestore collection.
+- Added storage-level duplicate protection for matching child name plus date of birth (or guardian where DOB is missing), and an update-in-place attendance save keyed by child ID + date. Save failures restore the previous in-memory entries.
+- Reworked the Phase 5 Early Years panel into a child register with guardian, group, enrolment date, selected attendance date, and Present/Absent/Late/Excused controls. Attendance is recorded per child per date; editing the same date updates its entry.
+- Commits on existing Replit branch: 8d3a6a3 (type), 78357ec (storage), e831e5c (UI). No branch/PR creation, deployment, Firestore rules change, or production-data change.
+- Verification status: source re-fetch confirms the type, storage function and UI are present. GitHub combined status and commit workflow-run lookup returned no checks/runs for e831e5c; TypeScript/build/browser tests have not been run in this environment. Next: run npm run lint, production build, targeted Early Years tests, and browser tests for registration, duplicate rejection, date changes, attendance changes and save-failure recovery. — ChatGPT, 2026-11-05
