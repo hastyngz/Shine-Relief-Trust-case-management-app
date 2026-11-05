@@ -126,7 +126,7 @@ export interface ChildHouseBudgetImportInput {
 /** Create a stable, duplicate-safe monthly Child House budget record. */
 export function buildChildHouseBudgetExpense(input: ChildHouseBudgetImportInput): HouseholdExpense {
   if (!input.householdId.trim()) throw new Error('Choose a Child House household before importing its budget.');
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) {
     throw new Error('Child House budget rows must have a specific month (YYYY-MM) before they can be imported into Budget vs Actual.');
   }
   const categoryText = (input.category || '').toLowerCase();

@@ -616,7 +616,7 @@ export async function commitImportBatch(
     if (!data.householdId || !db.households.some((household) => household.id === data.householdId)) {
       throw new Error(`Choose a valid Child House household for ${item.title || item.summary} before importing.`);
     }
-    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(data.period || ''))) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(data.period || ''))) {
       throw new Error(`The Child House budget row ${item.title || item.summary} needs a specific month (YYYY-MM). Annual totals cannot be placed into a monthly comparison.`);
     }
   }

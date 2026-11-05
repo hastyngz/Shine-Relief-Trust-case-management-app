@@ -604,7 +604,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       alert(`Choose the correct household for every selected Child House budget row (${unassignedChildHouseBudgets.length} missing).`);
       return;
     }
-    const nonMonthlyChildHouseBudgets = childHouseBudgets.filter((item) => !/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(item.extractedData.period || '')));
+    const nonMonthlyChildHouseBudgets = childHouseBudgets.filter((item) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(item.extractedData.period || '')));
     if (nonMonthlyChildHouseBudgets.length > 0) {
       alert('Child House Budget vs Actual needs a specific month for each budget row. Annual budget totals must remain in the annual budget register until a month is confirmed.');
       return;
