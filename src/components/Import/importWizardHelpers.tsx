@@ -39,6 +39,7 @@ export function spreadsheetLineToPreview(
   if (line.kind === 'budget') {
     const arithmeticMismatch = /source (?:total|month amount).*differs/i.test(line.notes);
     const duplicateItemNumber = /duplicate item number/i.test(line.notes);
+    const expenseWorkbookCopy = /expense workbook filename but this sheet has budget-style amounts/i.test(line.notes);
     return {
       tempId: id,
       resultType: 'NEW_RECORD',
@@ -55,11 +56,11 @@ export function spreadsheetLineToPreview(
         financialYear: line.period.match(/20\d{2}/)?.[0],
       },
       isHistorical: false,
-      selected: !arithmeticMismatch,
+      selected: !arithmeticMismatch && !expenseWorkbookCopy,
       warningOrConflict: [
         arithmeticMismatch ? 'The source amount differs from the quantity/frequency calculation. Review the source values before selecting this budget line.' : '',
         duplicateItemNumber ? 'This item number appears more than once in the source sheet. Check and correct the row before importing.' : '',
-        /expense workbook filename but this sheet has budget-style amounts/i.test(line.notes) ? 'The file name suggests an expense workbook, but the sheet contains budget-style amounts. Do not treat these as actual spending unless actual expense records are evidenced.' : '',
+        expenseWorkbookCopy ? 'The file name suggests an expense workbook, but the sheet contains budget-style amounts. Do not treat these as actual spending unless actual expense records are evidenced.' : '',
         !line.programmeId ? 'Select the programme before importing this budget line.' : '',
       ].filter(Boolean).join(' ') || undefined,
       missingFields: line.programmeId ? [] : ['Programme'],
