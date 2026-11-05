@@ -103,6 +103,8 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
       {
         householdId: household.id,
         date,
+        month: date.slice(0, 7),
+        recordType: 'actual',
         category,
         itemDescription: itemDescription.trim(),
         quantity: quantity.trim() || '1',

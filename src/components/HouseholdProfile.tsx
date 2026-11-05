@@ -33,6 +33,7 @@ import { PhotoGallery } from './Attachments/PhotoGallery';
 import { PhotoUploadModal } from './Attachments/PhotoUploadModal';
 import { RecordAttachmentBar } from './Attachments/RecordAttachmentBar';
 import { subscribeAllHouseholdAttachments } from '../services/attachmentService';
+import { buildHouseholdBudgetVsActual } from '../utils/householdBudget';
 
 interface HouseholdProfileProps {
   household: Household;
@@ -86,6 +87,10 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const { isViewOnly, isAdmin, staffProfile } = useAuth();
   const canRecordPayment = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [activeTab, setActiveTab] = useState<HouseTab>('overview');
+  const [budgetMonth, setBudgetMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('All');
   const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('All');
   const [payingExpenseId, setPayingExpenseId] = useState<string | null>(null);
@@ -133,8 +138,10 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const unpaidCount = rentPayments.filter((r) => r.paymentStatus === 'Not paid').length;
 
   // Expenses analytics
-  const totalExpenses = expenses.reduce((acc, curr) => acc + curr.totalCost, 0);
-  const filteredExpenses = expenses.filter((e) => {
+  const actualExpenses = expenses.filter((expense) => expense.recordType !== 'budget');
+  const totalExpenses = actualExpenses.reduce((acc, curr) => acc + curr.totalCost, 0);
+  const budgetComparison = buildHouseholdBudgetVsActual(expenses, household.id, budgetMonth);
+  const filteredExpenses = actualExpenses.filter((e) => {
     const categoryMatches = expenseCategoryFilter === 'All' || e.category === expenseCategoryFilter;
     const paymentMatches = expensePaymentFilter === 'All'
       || (e.paymentStatus || 'Paid') === expensePaymentFilter;
@@ -701,6 +708,74 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 )}
               </div>
             </div>
+
+
+            <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-3" aria-label="Child House budget versus actual">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-bold text-stone-900">Monthly Budget vs Actual</h4>
+                  <p className="text-xs text-stone-600">Budget entries are compared with recorded spending for this household.</p>
+                </div>
+                <label className="text-xs font-semibold text-stone-700">
+                  Reporting month
+                  <input
+                    aria-label="Budget comparison month"
+                    type="month"
+                    value={budgetMonth}
+                    onChange={(event) => setBudgetMonth(event.target.value)}
+                    className="ml-2 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs"
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-[10px] uppercase font-semibold text-stone-500">Budget</p>
+                  <p className="text-sm font-bold text-stone-900">{formatMWK(budgetComparison.budgetTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-[10px] uppercase font-semibold text-stone-500">Actual spending</p>
+                  <p className="text-sm font-bold text-stone-900">{formatMWK(budgetComparison.actualTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-[10px] uppercase font-semibold text-stone-500">Variance · actual less budget</p>
+                  <p className={`text-sm font-bold ${budgetComparison.variance > 0 ? 'text-red-700' : 'text-emerald-800'}`}>
+                    {formatMWK(budgetComparison.variance)}
+                    {budgetComparison.percentageUsed !== null && <span className="ml-1 text-[10px] font-medium">({budgetComparison.percentageUsed.toFixed(1)}% used)</span>}
+                  </p>
+                </div>
+              </div>
+              {budgetComparison.rows.length === 0 ? (
+                <p className="text-xs text-stone-500">No budget or actual entries are recorded for this month yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="text-[10px] uppercase text-stone-600 border-b border-stone-200">
+                      <tr>
+                        <th className="py-2 pr-3">Item</th>
+                        <th className="py-2 px-2 text-right">Budget</th>
+                        <th className="py-2 px-2 text-right">Actual</th>
+                        <th className="py-2 px-2 text-right">Variance</th>
+                        <th className="py-2 pl-2 text-right">% used</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-200">
+                      {budgetComparison.rows.map((row) => (
+                        <tr key={row.key} className={row.overspent ? 'bg-red-50/70' : ''}>
+                          <td className="py-2 pr-3">
+                            <span className="font-semibold text-stone-800">{row.itemDescription}</span>
+                            <span className="block text-[10px] text-stone-500">{row.category}{row.unit ? ` · ${row.unit}` : ''}</span>
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums">{formatMWK(row.budgetAmount)}</td>
+                          <td className="py-2 px-2 text-right tabular-nums">{formatMWK(row.actualAmount)}</td>
+                          <td className={`py-2 px-2 text-right tabular-nums font-semibold ${row.overspent ? 'text-red-700' : 'text-stone-700'}`}>{formatMWK(row.variance)}</td>
+                          <td className="py-2 pl-2 text-right tabular-nums">{row.percentageUsed === null ? 'No budget' : `${row.percentageUsed.toFixed(1)}%`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
 
             {filteredExpenses.length === 0 ? (
               <div className="text-center py-8 bg-stone-50 rounded-lg border border-dashed border-stone-300">

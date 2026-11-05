@@ -54,6 +54,9 @@ jobs:
       - name: Test finance reporting period calculations
         run: npm run test:finance-overview
 
+      - name: Test Child House budget versus actual calculations
+        run: npm run test:child-house-budget
+
       - name: Test petty cash ledger calculations
         run: npm run test:petty-cash
 

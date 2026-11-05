@@ -531,6 +531,12 @@ export interface HouseholdExpense {
   unit?: string;
   unitCost: number; // MWK
   totalCost: number; // MWK
+  /** Missing on legacy records, which are treated as actual expenditure. */
+  recordType?: 'budget' | 'actual';
+  /** Reporting month in YYYY-MM format; legacy actuals derive it from date. */
+  month?: string;
+  /** Budget recurrence/occurrence frequency from the source workbook. */
+  frequency?: string;
   supplier?: string;
   supplierContactPerson?: string;
   supplierPhone?: string;
