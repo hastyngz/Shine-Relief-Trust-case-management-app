@@ -79,11 +79,17 @@ test('staff can register a child and correct attendance for the same date', asyn
   await attendance.selectOption('Present');
   await attendance.selectOption('Late');
 
-  const localRecord = await expect.poll(() => page.evaluate(({ uid, studentName }) => {
+  await expect.poll(async () => page.evaluate(({ uid, studentName }) => {
+    const key = 'shine_relief_trust_prod_v1::uid:' + encodeURIComponent(uid);
+    const db = JSON.parse(window.localStorage.getItem(key) || '{}');
+    const record = (db.earlyYearsRecords || []).find((item: any) => item.studentName === studentName);
+    return record?.attendanceEntries?.length || 0;
+  }, { uid, studentName })).toBe(1);
+  const localRecord = await page.evaluate(({ uid, studentName }) => {
     const key = 'shine_relief_trust_prod_v1::uid:' + encodeURIComponent(uid);
     const db = JSON.parse(window.localStorage.getItem(key) || '{}');
     return (db.earlyYearsRecords || []).find((record: any) => record.studentName === studentName);
-  }, { uid, studentName })).toMatchObject({ studentName });
+  }, { uid, studentName });
   expect(localRecord.attendanceEntries).toHaveLength(1);
   expect(localRecord.attendanceEntries[0].date).toBe(attendanceDate);
   expect(localRecord.attendanceEntries[0].status).toBe('Late');
