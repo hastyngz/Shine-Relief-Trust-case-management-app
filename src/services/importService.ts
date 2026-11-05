@@ -16,7 +16,6 @@ import {
   AttachmentTargetType,
   AttachmentCategory,
   BudgetItem,
-  HouseholdExpense,
   ProcurementList,
   ProjectProjection,
   StaffUser,

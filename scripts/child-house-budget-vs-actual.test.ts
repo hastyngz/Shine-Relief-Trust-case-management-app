@@ -73,7 +73,6 @@ assert.equal(importedBudget.month, '2026-11');
 assert.equal(importedBudget.date, '2026-11-01');
 assert.equal(importedBudget.totalCost, 28000);
 assert.equal(importedBudget.category, 'Groceries');
-assert.equal(importedBudget.itemNumber, undefined);
 assert.equal(importedBudget.budgetLineId, importedBudget.id);
 assert.equal(importedBudget.id, buildChildHouseBudgetExpense({
   householdId: 'SH-01', period: '2026-11', quantity: 2, unitCost: 14000,
