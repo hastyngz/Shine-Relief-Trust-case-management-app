@@ -62,7 +62,8 @@ assert.match(ufa?.notes || '', /price per pack\/lot/);
 const tissues = budgetLines.find((line) => line.itemDescription === 'Tissues');
 assert.equal(tissues?.category, 'Household supplies');
 const cookingOil = budgetLines.find((line) => line.itemDescription === 'Cooking oil');
-assert.match(cookingOil?.notes || '', /differs from/);
+assert.equal(cookingOil?.budgetAmount, 19000); // Preserve the workbook value for review; do not silently replace it with 28000.
+assert.match(cookingOil?.notes || '', /source month amount 19000 differs from recomputed quantity × unit cost 28000/);
 
 const duplicateItemNumberRows = budgetLines.filter((line) => line.itemDescription === 'Tea' || line.itemDescription === 'Coffee');
 assert.equal(duplicateItemNumberRows.length, 2);

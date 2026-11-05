@@ -542,7 +542,7 @@ function parseBudgetRows(
           programme: programme.label || 'Unassigned - programme review required',
           category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
           unit,
-          quantity, unitCost, budgetAmount: recomputedAmount, itemNumber, frequency, period: `${year}-${String(month).padStart(2, '0')}`,
+          quantity, unitCost, budgetAmount: statedAmount, itemNumber, frequency, period: `${year}-${String(month).padStart(2, '0')}`,
           periodType: 'monthly', month, notes: `${note}${amountNote}`,
         });
       });
