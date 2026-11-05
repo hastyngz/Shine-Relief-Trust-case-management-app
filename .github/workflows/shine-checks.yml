@@ -56,6 +56,8 @@ jobs:
 
       - name: Test Child House budget versus actual calculations
         run: npm run test:child-house-budget
+      - name: Child House budget import tests
+        run: npm run test:child-house-budget-import
 
       - name: Test petty cash ledger calculations
         run: npm run test:petty-cash

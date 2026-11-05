@@ -38,6 +38,7 @@ export function spreadsheetLineToPreview(
   const id = `spreadsheet_${line.sheet}_${line.row}`;
   if (line.kind === 'budget') {
     const arithmeticMismatch = /source (?:total|month amount).*differs/i.test(line.notes);
+    const duplicateItemNumber = /duplicate item number/i.test(line.notes);
     return {
       tempId: id,
       resultType: 'NEW_RECORD',
@@ -55,9 +56,11 @@ export function spreadsheetLineToPreview(
       },
       isHistorical: false,
       selected: !arithmeticMismatch,
-      warningOrConflict: arithmeticMismatch
-        ? 'The source amount differs from the quantity/frequency calculation. Review the source values before selecting this budget line.'
-        : line.programmeId ? undefined : 'Select the programme before importing this budget line.',
+      warningOrConflict: [
+        arithmeticMismatch ? 'The source amount differs from the quantity/frequency calculation. Review the source values before selecting this budget line.' : '',
+        duplicateItemNumber ? 'This item number appears more than once in the source sheet. Check and correct the row before importing.' : '',
+        !line.programmeId ? 'Select the programme before importing this budget line.' : '',
+      ].filter(Boolean).join(' ') || undefined,
       missingFields: line.programmeId ? [] : ['Programme'],
     };
   }
