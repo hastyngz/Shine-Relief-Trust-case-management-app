@@ -63,7 +63,7 @@ saveEarlyYearsAttendance(first.id, '2026-11-05', 'Absent', 'Test Staff');
 saveEarlyYearsAttendance(first.id, '2026-11-04', 'Late', 'Test Manager');
 const saved = getDatabase().earlyYearsRecords.find((item) => item.id === first.id)!;
 assert.equal(saved.attendanceEntries?.length, 2, 'one entry is retained per student per date');
-assert.equal(saved.attendanceEntries?.[0].date, '2026-11-05', 'attendance is sorted newest first');
+assert.equal(saved.attendanceEntries?.[0]?.date, '2026-11-05', 'attendance is sorted newest first');
 assert.equal(saved.attendanceEntries?.find((entry) => entry.date === '2026-11-04')?.status, 'Late',
   'same-day correction replaces the earlier status');
 assert.equal(saved.attendanceEntries?.find((entry) => entry.date === '2026-11-04')?.recordedBy, 'Test Manager');
