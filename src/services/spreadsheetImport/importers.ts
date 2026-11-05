@@ -566,7 +566,7 @@ function parseBudgetRows(
         quantity, unitCost, budgetAmount, itemNumber, frequency,
         period: sourcePeriodMonth ? `${year}-${String(sourcePeriodMonth).padStart(2, '0')}` : `Annual ${year}`,
         periodType: sourcePeriodMonth ? 'monthly' : 'annual', month: sourcePeriodMonth,
-        notes: `${note}${frequencyNote}${amountNote}`,
+        notes: `${note}${frequencyNote}${amountNote}${expenseWorkbookWarning}`,
       });
     }
   });
