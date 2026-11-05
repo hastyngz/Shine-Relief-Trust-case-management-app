@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview } from '../src/services/spreadsheetImport/importers';
+import type { ImportAuditRecord } from '../src/types';
+import { buildChildHouseBudgetExpense, planChildHouseBudgetImportUndo } from '../src/utils/householdBudget';
 
 const workbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
@@ -69,5 +71,61 @@ const duplicateItemNumberRows = budgetLines.filter((line) => line.itemDescriptio
 assert.equal(duplicateItemNumberRows.length, 2);
 assert.ok(duplicateItemNumberRows.every((line) => /duplicate item number 17/i.test(line.notes)));
 assert.notEqual(duplicateItemNumberRows[0].row, duplicateItemNumberRows[1].row);
+
+
+const importedExpense = buildChildHouseBudgetExpense({
+  householdId: 'household-synthetic',
+  period: '2026-11',
+  quantity: 1,
+  unitCost: 100,
+  budgetAmount: 100,
+  itemDescription: 'Synthetic maize',
+  category: 'Food',
+  sourceFileName: 'synthetic-budget.xlsx',
+  sheet: 'Budget',
+  row: 4,
+  createdBy: 'Synthetic Manager',
+});
+const originalAudit = {
+  id: 'AUD-SYNTHETIC-1',
+  fileName: 'synthetic-budget.xlsx',
+  fileType: 'xlsx',
+  importedAt: importedExpense.createdAt,
+  importedByUid: 'synthetic-user',
+  importedByName: 'Synthetic Manager',
+  totalExamined: 1,
+  newRecordsCount: 1,
+  profileUpdatesCount: 0,
+  historicalRecordsCount: 0,
+  unchangedCount: 0,
+  duplicatesCount: 0,
+  conflictsCount: 0,
+  errorsCount: 0,
+  status: 'completed',
+  childHouseBudgetHouseholdId: 'household-synthetic',
+  childHouseBudgetImportedExpenses: [{
+    id: importedExpense.id,
+    createdAt: importedExpense.createdAt,
+    budgetLineId: importedExpense.budgetLineId || '',
+  }],
+} as ImportAuditRecord;
+const validUndoPlan = planChildHouseBudgetImportUndo(originalAudit, [importedExpense], [originalAudit]);
+assert.equal(validUndoPlan.eligible, true);
+assert.deepEqual(validUndoPlan.expenseIds, [importedExpense.id]);
+const editedBudgetRow = { ...importedExpense, updatedAt: new Date(Date.parse(importedExpense.createdAt) + 1000).toISOString() };
+const editedUndoPlan = planChildHouseBudgetImportUndo(originalAudit, [editedBudgetRow], [originalAudit]);
+assert.equal(editedUndoPlan.eligible, false);
+assert.match(editedUndoPlan.reason || '', /changed since import/);
+const missingUndoPlan = planChildHouseBudgetImportUndo(originalAudit, [], [originalAudit]);
+assert.equal(missingUndoPlan.eligible, false);
+assert.match(missingUndoPlan.reason || '', /missing/);
+const alreadyReversedAudit = {
+  ...originalAudit,
+  id: 'AUD-SYNTHETIC-UNDO',
+  reversesImportAuditId: originalAudit.id,
+} as ImportAuditRecord;
+const repeatedUndoPlan = planChildHouseBudgetImportUndo(originalAudit, [importedExpense], [originalAudit, alreadyReversedAudit]);
+assert.equal(repeatedUndoPlan.eligible, false);
+assert.match(repeatedUndoPlan.reason || '', /already been reversed/);
 
 console.log('Child House budget import regression tests passed.');

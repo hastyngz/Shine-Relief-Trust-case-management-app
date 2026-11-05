@@ -7,6 +7,7 @@ import {
   HouseholdExpense,
   HouseholdRentPayment,
   StaffRole,
+  ImportAuditRecord,
 } from '../types';
 import { NavTab } from '../components/Navigation';
 import { GirlsList } from '../components/GirlsList';
@@ -16,6 +17,8 @@ import { GirlProfile } from '../components/GirlProfile';
 import { HouseholdProfile } from '../components/HouseholdProfile';
 import { canAccessManagementDashboard } from '../services/managementAnalytics';
 import type { QualityIssue } from '../services/qualityRules';
+import { planChildHouseBudgetImportUndo } from '../utils/householdBudget';
+import { generateFollowUpId, saveDatabase } from '../utils/storage';
 import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 import { ProgrammeId } from '../data/programmes';
 import { GirlForm } from '../components/Forms/GirlForm';
@@ -167,6 +170,64 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
     handleSaveFamilyFollowUp, handleSaveRentPayment, handleSaveExpense, handleSaveActivity,
     reloadData, notifyDataChange, showToast, openImportFilePicker,
   } = props;
+
+  const handleUndoChildHouseBudgetImport = (auditId: string) => {
+    if (!isAdmin && role !== 'Manager') {
+      showToast('Only an Administrator or Manager can undo a Child House budget import.');
+      return;
+    }
+    if (!currentUserUid) {
+      showToast('Sign in again before undoing a budget import.');
+      return;
+    }
+    const originalAudit = (db.importAudits || []).find((audit) => audit.id === auditId);
+    if (!originalAudit) {
+      showToast('The selected import history record could not be found.');
+      return;
+    }
+    const plan = planChildHouseBudgetImportUndo(originalAudit, db.expenses || [], db.importAudits || []);
+    if (!plan.eligible) {
+      showToast(plan.reason || 'This import cannot be safely undone.');
+      return;
+    }
+    if (typeof window !== 'undefined' && !window.confirm(
+      `Undo this import and remove ${plan.expenseIds.length} unchanged budget rows created by it? Actual expense records and rows from other imports will be kept.`
+    )) return;
+
+    const undoAudit: ImportAuditRecord = {
+      id: generateFollowUpId('AUD'),
+      fileName: originalAudit.fileName,
+      fileType: originalAudit.fileType,
+      importedAt: new Date().toISOString(),
+      importedByUid: currentUserUid,
+      importedByName: auditActor || 'SHINE Staff',
+      totalExamined: plan.expenseIds.length,
+      newRecordsCount: 0,
+      profileUpdatesCount: 0,
+      historicalRecordsCount: 0,
+      unchangedCount: 0,
+      duplicatesCount: 0,
+      conflictsCount: 0,
+      errorsCount: 0,
+      status: 'cancelled',
+      summary: `Reversed ${plan.expenseIds.length} Child House budget rows from import ${originalAudit.id}.`,
+      reversesImportAuditId: originalAudit.id,
+      childHouseBudgetHouseholdId: originalAudit.childHouseBudgetHouseholdId,
+      childHouseBudgetReversedExpenseCount: plan.expenseIds.length,
+    };
+    const removeIds = new Set(plan.expenseIds);
+    const nextDb: AppDatabase = {
+      ...db,
+      expenses: (db.expenses || []).filter((expense) => !removeIds.has(expense.id)),
+      importAudits: [undoAudit, ...(db.importAudits || [])],
+    };
+    const saved = saveDatabase(nextDb);
+    if (!saved.ok) {
+      showToast('Undo was not saved. No budget rows were removed; free device storage and try again.');
+      return;
+    }
+    showToast(`Reversed ${plan.expenseIds.length} budget rows on this device. Changes are queued for synchronisation.`);
+  };
 
   const visibleCaseActions = filterCaseActionsForStaff(db.caseActions || [], {
     uid: currentUserUid,
@@ -487,6 +548,9 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
           rentPayments={currentHouseRent}
           expenses={currentHouseExpenses}
           activities={currentHouseActivities}
+          importAudits={db.importAudits || []}
+          canUndoBudgetImport={isAdmin || role === 'Manager'}
+          onUndoBudgetImport={handleUndoChildHouseBudgetImport}
           onBack={() => navigateTo('houses', 'houses')}
           onNavigateToGirl={handleOpenGirlProfile}
           onEditHousehold={handleStartEditHouse}

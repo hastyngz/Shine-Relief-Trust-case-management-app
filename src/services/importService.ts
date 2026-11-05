@@ -611,6 +611,8 @@ export async function commitImportBatch(
   canWriteImportAuditMetadata = false,
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
   const childHouseBudgetItems = approvedItems.filter((item) => item.selected && item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house');
+  const childHouseholdIds = new Set(childHouseBudgetItems.map((item) => String(item.extractedData.householdId || '')));
+  if (childHouseholdIds.size > 1) throw new Error('Import Child House budget rows for one household at a time.');
   for (const item of childHouseBudgetItems) {
     const data = item.extractedData;
     if (!data.householdId || !db.households.some((household) => household.id === data.householdId)) {
@@ -701,6 +703,7 @@ export async function commitImportBatch(
   let importedEmployees = 0;
   let matchedEmployees = 0;
   let importedPayrollRecords = 0;
+  const childHouseBudgetImportedExpenses: Array<{ id: string; createdAt: string; budgetLineId: string }> = [];
 
   for (const item of approvedItems) {
     if (!item.selected) continue;
@@ -1086,7 +1089,14 @@ export async function commitImportBatch(
         createdBy: auditRecord.importedByName,
       });
       const existing = updatedDb.expenses.find((record) => record.budgetLineId === expense.budgetLineId);
-      if (!existing) updatedDb.expenses.unshift(expense);
+      if (!existing) {
+        updatedDb.expenses.unshift(expense);
+        childHouseBudgetImportedExpenses.push({
+          id: expense.id,
+          createdAt: expense.createdAt,
+          budgetLineId: expense.budgetLineId || '',
+        });
+      }
       linkedRecordId = existing?.id || expense.id;
     }
     else if (item.targetEntity === 'budget') {
@@ -1547,6 +1557,10 @@ export async function commitImportBatch(
     payrollRecordsDetectedCount: auditRecord.payrollRecordsDetectedCount ?? approvedItems.filter((item) =>
       item.targetEntity === 'employee').reduce((total, item) => total + (Array.isArray(item.extractedData.salaryHistory) ? item.extractedData.salaryHistory.length : 0), 0),
     payrollRecordsImportedCount: importedPayrollRecords,
+    ...(childHouseBudgetItems.length > 0 ? {
+      childHouseBudgetHouseholdId: String(childHouseBudgetItems[0].extractedData.householdId),
+      childHouseBudgetImportedExpenses,
+    } : {}),
   };
   updatedDb.importAudits?.unshift(finalAudit);
   await persistImportAuditToFirestore(finalAudit, canReadImportSourceData, canWriteImportAuditMetadata);

@@ -1,4 +1,4 @@
-import type { ExpenseCategory, HouseholdExpense } from '../types';
+import type { ExpenseCategory, HouseholdExpense, ImportAuditRecord } from '../types';
 
 export interface HouseholdBudgetComparisonRow {
   key: string;
@@ -168,4 +168,51 @@ export function buildChildHouseBudgetExpense(input: ChildHouseBudgetImportInput)
     createdBy: input.createdBy,
     updatedBy: input.createdBy,
   };
+}
+
+
+export interface ChildHouseBudgetImportUndoPlan {
+  eligible: boolean;
+  reason?: string;
+  expenseIds: string[];
+}
+
+/**
+ * Only reverse rows created by this exact import. Any missing, edited, reclassified,
+ * or already-reversed row blocks the whole operation so a partial undo cannot hide
+ * subsequent financial changes.
+ */
+export function planChildHouseBudgetImportUndo(
+  audit: ImportAuditRecord,
+  expenses: HouseholdExpense[],
+  audits: ImportAuditRecord[],
+): ChildHouseBudgetImportUndoPlan {
+  const snapshots = audit.childHouseBudgetImportedExpenses || [];
+  if (audit.status !== 'completed' || !audit.childHouseBudgetHouseholdId || snapshots.length === 0) {
+    return { eligible: false, reason: 'This import has no newly created Child House budget rows available to undo.', expenseIds: [] };
+  }
+  if (audits.some((entry) => entry.reversesImportAuditId === audit.id)) {
+    return { eligible: false, reason: 'This import has already been reversed.', expenseIds: [] };
+  }
+  const ids = snapshots.map((snapshot) => snapshot.id);
+  if (new Set(ids).size !== ids.length) {
+    return { eligible: false, reason: 'The import audit contains duplicate record references. Ask an administrator to review it.', expenseIds: [] };
+  }
+  const byId = new Map(expenses.map((expense) => [expense.id, expense]));
+  for (const snapshot of snapshots) {
+    const record = byId.get(snapshot.id);
+    if (!record) {
+      return { eligible: false, reason: 'At least one imported budget row is missing. No rows were removed.', expenseIds: [] };
+    }
+    if (
+      record.recordType !== 'budget' ||
+      record.householdId !== audit.childHouseBudgetHouseholdId ||
+      record.createdAt !== snapshot.createdAt ||
+      record.updatedAt !== snapshot.createdAt ||
+      record.budgetLineId !== snapshot.budgetLineId
+    ) {
+      return { eligible: false, reason: 'At least one imported budget row has changed since import. No rows were removed; review the records manually.', expenseIds: [] };
+    }
+  }
+  return { eligible: true, expenseIds: ids };
 }

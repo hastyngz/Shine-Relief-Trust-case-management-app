@@ -6,6 +6,7 @@ import {
   HouseholdExpense,
   HouseholdActivity,
   PhotoAttachment,
+  ImportAuditRecord,
 } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
@@ -60,6 +61,9 @@ interface HouseholdProfileProps {
   onAddExpense: (household: Household) => void;
   onAddActivity: (household: Household) => void;
   onAskAI?: (houseId: string) => void;
+  importAudits?: ImportAuditRecord[];
+  canUndoBudgetImport?: boolean;
+  onUndoBudgetImport?: (auditId: string) => void;
 }
 
 type HouseTab = 'overview' | 'rent' | 'expenses' | 'activities' | 'photos';
@@ -83,6 +87,9 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   onAddExpense,
   onAddActivity,
   onAskAI,
+  importAudits = [],
+  canUndoBudgetImport = false,
+  onUndoBudgetImport,
 }) => {
   const { isViewOnly, isAdmin, staffProfile } = useAuth();
   const canRecordPayment = Boolean(isAdmin || staffProfile?.role === 'Manager');
@@ -141,6 +148,10 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const actualExpenses = expenses.filter((expense) => expense.recordType !== 'budget');
   const totalExpenses = actualExpenses.reduce((acc, curr) => acc + curr.totalCost, 0);
   const budgetComparison = buildHouseholdBudgetVsActual(expenses, household.id, budgetMonth);
+  const householdBudgetImports = importAudits
+    .filter((audit) => audit.childHouseBudgetHouseholdId === household.id)
+    .sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+  const reversedBudgetImportIds = new Set(importAudits.map((audit) => audit.reversesImportAuditId).filter(Boolean));
   const filteredExpenses = actualExpenses.filter((e) => {
     const categoryMatches = expenseCategoryFilter === 'All' || e.category === expenseCategoryFilter;
     const paymentMatches = expensePaymentFilter === 'All'
@@ -776,6 +787,44 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 </div>
               )}
             </section>
+
+            {householdBudgetImports.length > 0 && (
+              <section className="rounded-xl border border-stone-200 bg-white p-4 space-y-3" aria-label="Child House budget import history">
+                <div>
+                  <h4 className="text-sm font-bold text-stone-900">Budget import history</h4>
+                  <p className="text-xs text-stone-600">Imports are recorded separately. Undo removes only unchanged budget rows created by that import.</p>
+                </div>
+                <div className="space-y-2">
+                  {householdBudgetImports.map((audit) => {
+                    const reversed = reversedBudgetImportIds.has(audit.id);
+                    const rowCount = audit.childHouseBudgetImportedExpenses?.length || 0;
+                    return (
+                      <div key={audit.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-stone-200 p-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-stone-800 break-words">{audit.fileName}</p>
+                          <p className="text-[11px] text-stone-500">{new Date(audit.importedAt).toLocaleString()} · {audit.importedByName} · {rowCount} new budget rows</p>
+                        </div>
+                        {reversed ? (
+                          <span className="text-xs font-semibold text-stone-600">Reversed</span>
+                        ) : rowCount === 0 ? (
+                          <span className="text-xs text-stone-500">No new rows · duplicates skipped</span>
+                        ) : canUndoBudgetImport && onUndoBudgetImport ? (
+                          <button
+                            type="button"
+                            onClick={() => onUndoBudgetImport(audit.id)}
+                            className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                          >
+                            Undo import
+                          </button>
+                        ) : (
+                          <span className="text-xs text-stone-500">Administrator or Manager can undo</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {filteredExpenses.length === 0 ? (
               <div className="text-center py-8 bg-stone-50 rounded-lg border border-dashed border-stone-300">

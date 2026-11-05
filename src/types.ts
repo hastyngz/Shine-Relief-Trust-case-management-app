@@ -1378,6 +1378,12 @@ export interface ImportAuditRecord {
   qualityResolutions?: Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; field?: string; before?: unknown; after?: unknown }>;
   sourceDataStoredInRestrictedCollection?: boolean;
   sourceData?: Record<string, unknown>;
+  /** Child House budget rows newly created by this import; used for safe, targeted undo. */
+  childHouseBudgetHouseholdId?: string;
+  childHouseBudgetImportedExpenses?: Array<{ id: string; createdAt: string; budgetLineId: string }>;
+  /** A separate audit entry links an undo to the original import without rewriting its history. */
+  reversesImportAuditId?: string;
+  childHouseBudgetReversedExpenseCount?: number;
 }
 
 export interface RestrictedImportSourceData {
