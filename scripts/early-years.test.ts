@@ -31,6 +31,7 @@ const { getDatabase, saveDatabase, addEarlyYearsRecord, saveEarlyYearsAttendance
 
 const db = getDatabase();
 db.earlyYearsRecords = [];
+const getRecords = () => getDatabase().earlyYearsRecords ?? [];
 assert.equal(saveDatabase(db).ok, true);
 
 const child = (overrides: Partial<EarlyYearsRecord> = {}) => ({
@@ -61,31 +62,31 @@ addEarlyYearsRecord(child({ studentName: 'No DOB Child', dateOfBirth: '', guardi
 saveEarlyYearsAttendance(first.id, '2026-11-04', 'Present', 'Test Staff');
 saveEarlyYearsAttendance(first.id, '2026-11-05', 'Absent', 'Test Staff');
 saveEarlyYearsAttendance(first.id, '2026-11-04', 'Late', 'Test Manager');
-const saved = getDatabase().earlyYearsRecords.find((item) => item.id === first.id)!;
+const saved = getRecords().find((item) => item.id === first.id)!;
 assert.equal(saved.attendanceEntries?.length, 2, 'one entry is retained per student per date');
 assert.equal(saved.attendanceEntries?.[0]?.date, '2026-11-05', 'attendance is sorted newest first');
 assert.equal(saved.attendanceEntries?.find((entry) => entry.date === '2026-11-04')?.status, 'Late',
   'same-day correction replaces the earlier status');
 assert.equal(saved.attendanceEntries?.find((entry) => entry.date === '2026-11-04')?.recordedBy, 'Test Manager');
 
-const beforeUnknown = JSON.stringify(getDatabase().earlyYearsRecords);
+const beforeUnknown = JSON.stringify(getRecords());
 assert.equal(saveEarlyYearsAttendance('missing-student', '2026-11-06', 'Present', 'Test Staff'), null);
-assert.equal(JSON.stringify(getDatabase().earlyYearsRecords), beforeUnknown, 'unknown child IDs do not mutate the register');
+assert.equal(JSON.stringify(getRecords()), beforeUnknown, 'unknown child IDs do not mutate the register');
 
-const countBeforeFailure = getDatabase().earlyYearsRecords.length;
+const countBeforeFailure = getRecords().length;
 failWrites = true;
 assert.throws(() => addEarlyYearsRecord(child({ studentName: 'Unsaved Child' })));
-assert.equal(getDatabase().earlyYearsRecords.length, countBeforeFailure, 'failed registration rolls back');
+assert.equal(getRecords().length, countBeforeFailure, 'failed registration rolls back');
 
-const previousEntries = [...(getDatabase().earlyYearsRecords.find((item) => item.id === first.id)?.attendanceEntries || [])];
+const previousEntries = [...(getRecords().find((item) => item.id === first.id)?.attendanceEntries || [])];
 assert.throws(() => saveEarlyYearsAttendance(first.id, '2026-11-07', 'Present', 'Test Staff'));
-assert.deepEqual(getDatabase().earlyYearsRecords.find((item) => item.id === first.id)?.attendanceEntries, previousEntries,
+assert.deepEqual(getRecords().find((item) => item.id === first.id)?.attendanceEntries, previousEntries,
   'failed attendance save restores the previous history');
 
 assert.equal(deleteEarlyYearsRecord(second.id), false, 'delete reports failure if local persistence fails');
-assert.ok(getDatabase().earlyYearsRecords.some((item) => item.id === second.id), 'failed delete restores the record');
+assert.ok(getRecords().some((item) => item.id === second.id), 'failed delete restores the record');
 failWrites = false;
 assert.equal(deleteEarlyYearsRecord(second.id), true);
-assert.ok(!getDatabase().earlyYearsRecords.some((item) => item.id === second.id));
+assert.ok(!getRecords().some((item) => item.id === second.id));
 
 console.log('Early Years registration, duplicate detection, attendance upsert and save rollback tests passed.');
