@@ -877,3 +877,27 @@ The run's `checks` and `e2e` jobs both completed successfully with no failed ste
 - Invitation/password-reset feedback tests, staff invitation lifecycle and URL tests, inventory transaction and procurement retry/rules tests, Firestore access/security tests, TypeScript/lint, production build, and offline browser E2E all passed in the full run.
 - Still not production-ready / not verified: deployed Worker still needs the non-secret FIREBASE_INVITATION_CONTINUE_URL config and a controlled deployment; Firebase email-link provider and authorized domains must be verified; invitation delivery/claim must be accepted in an authorized staging environment. No production deployment, live emails, real account changes, or production data changes were performed. AI-provider privacy review remains outside this non-AI workstream.
 - Documentation-only update; no application code changed after the passing commit. — Mosaic (ChatGPT)
+
+### Early Years child register and daily attendance — 2026-11-05
+
+**Scope**
+- Child registration and per-day attendance only. Meals, child development tracking and caregiver records remain out of scope for this slice.
+- Existing EarlyYearsRecord already represented both programme reporting and child rows. Kept that model and added optional nested attendanceEntries, avoiding a new Firestore collection or a production schema migration.
+- Kept legacy attendanceStatus intact for compatibility with existing records and imports.
+
+**Changes**
+- Added EarlyYearsAttendanceEntry with date, status, recorder and timestamp.
+- Added duplicate protection when a child name matches and either date of birth also matches or (when DOB is missing) the guardian matches.
+- Added saveEarlyYearsAttendance, which updates the child's entry for the selected date instead of appending a duplicate; it restores the previous entries if persistence fails.
+- Reworked the Phase 5 Early Years panel to register children and record Present, Absent, Late or Excused for a selected date. It displays guardian, group, enrolment date and daily attendance counts. Attendance controls are disabled for view-only users and non-active students.
+
+**Commits**
+- 8d3a6a3dabb638b5cf22d98fc86855fd12b964b4 — add attendance type.
+- 78357ecae217e34b8668a551af0001d388a045e0 — duplicate-safe registration and attendance persistence.
+- e831e5ca0c2e1591e5f7f72e1488ec9568c92d69 — register and attendance UI.
+
+**Verification and limitations**
+- Re-fetched all three changed files from the Replit branch and confirmed the new type, storage function and panel are present.
+- The GitHub combined-status and workflow-run lookups for the UI commit returned no checks or runs. No claim is made that TypeScript, build, automated tests or browser acceptance have passed.
+- Required next checks: npm run lint, npm run build, and browser tests for new registration, duplicate rejection, date-specific attendance, updating a same-day status, and visible recovery after a failed save.
+- No production data, Firestore rules, deployment configuration or AI service code was changed.
