@@ -80,7 +80,7 @@ const budgetAnalysis = await analyzeSpreadsheetWorkbook(budgetWorkbook);
 const budgetPreview = await createSpreadsheetImportPreview(budgetWorkbook, budgetAnalysis, 'budget-monthly');
 const budgetLines = budgetPreview.lines.filter((line) => line.kind === 'budget');
 assert.equal(budgetLines.length, 3);
-assert.equal(budgetLines[0].budgetAmount, 300);
+assert.equal(budgetLines[0].budgetAmount, 400, 'preserve the amount stated in the source month column');
 assert.match(budgetLines[0].notes, /source month amount 400 differs from recomputed/);
 assert.equal(budgetLines[0].programmeId, 'early-years');
 assert.equal(budgetLines[0].unit, 'kg');
