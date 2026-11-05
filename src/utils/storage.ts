@@ -1775,6 +1775,16 @@ export function saveAISettings(item: AISettings): AISettings {
 export function addEarlyYearsRecord(item: Omit<EarlyYearsRecord, 'id' | 'createdAt'>): EarlyYearsRecord {
   const db = getDatabase();
   if (!db.earlyYearsRecords) db.earlyYearsRecords = [];
+  const normalizedName = (item.studentName || '').trim().toLocaleLowerCase();
+  const normalizedDob = (item.dateOfBirth || '').trim();
+  const normalizedGuardian = (item.guardianName || '').trim().toLocaleLowerCase();
+  const duplicate = normalizedName && db.earlyYearsRecords.some((existing) => {
+    if ((existing.studentName || '').trim().toLocaleLowerCase() !== normalizedName) return false;
+    const existingDob = (existing.dateOfBirth || '').trim();
+    if (normalizedDob && existingDob) return normalizedDob === existingDob;
+    return Boolean(normalizedGuardian && (existing.guardianName || '').trim().toLocaleLowerCase() === normalizedGuardian);
+  });
+  if (duplicate) throw new Error('A child with the same name and matching date of birth or guardian is already registered. Check the existing register before adding another record.');
   const record: EarlyYearsRecord = { ...item, id: generateFollowUpId('ECD'), createdAt: new Date().toISOString() };
   const previousEarlyYearsRecords = [...(db.earlyYearsRecords || [])];
   db.earlyYearsRecords.unshift(record);
@@ -1785,6 +1795,30 @@ export function addEarlyYearsRecord(item: Omit<EarlyYearsRecord, 'id' | 'created
     throw error;
   }
   return record;
+}
+
+export function saveEarlyYearsAttendance(
+  studentId: string,
+  date: string,
+  status: 'Present' | 'Absent' | 'Late' | 'Excused',
+  recordedBy: string,
+): EarlyYearsRecord | null {
+  const db = getDatabase();
+  const student = (db.earlyYearsRecords || []).find((item) => item.id === studentId && Boolean(item.studentName?.trim()));
+  if (!student) return null;
+  const previousEntries = [...(student.attendanceEntries || [])];
+  const entry = { date, status, recordedBy, recordedAt: new Date().toISOString() };
+  student.attendanceEntries = [
+    ...previousEntries.filter((item) => item.date !== date),
+    entry,
+  ].sort((first, second) => second.date.localeCompare(first.date));
+  try {
+    saveDatabaseOrThrow(db, 'early-years attendance');
+  } catch (error) {
+    student.attendanceEntries = previousEntries;
+    throw error;
+  }
+  return student;
 }
 
 export function deleteEarlyYearsRecord(id: string): boolean {
