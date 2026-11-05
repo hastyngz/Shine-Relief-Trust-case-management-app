@@ -18,7 +18,9 @@ import { HouseholdProfile } from '../components/HouseholdProfile';
 import { canAccessManagementDashboard } from '../services/managementAnalytics';
 import type { QualityIssue } from '../services/qualityRules';
 import { planChildHouseBudgetImportUndo } from '../utils/householdBudget';
-import { generateFollowUpId, saveDatabase } from '../utils/storage';
+import { generateFollowUpId, getDatabase, saveDatabase } from '../utils/storage';
+import { flushPendingOfflineSnapshots, isBrowserOnline, recordOfflineChanges } from '../services/offlineSync';
+import { persistImportAuditToFirestore } from '../services/firestoreSync';
 import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 import { ProgrammeId } from '../data/programmes';
 import { GirlForm } from '../components/Forms/GirlForm';
@@ -171,13 +173,17 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
     reloadData, notifyDataChange, showToast, openImportFilePicker,
   } = props;
 
-  const handleUndoChildHouseBudgetImport = (auditId: string) => {
+  const handleUndoChildHouseBudgetImport = async (auditId: string) => {
     if (!isAdmin && role !== 'Manager') {
       showToast('Only an Administrator or Manager can undo a Child House budget import.');
       return;
     }
     if (!currentUserUid) {
       showToast('Sign in again before undoing a budget import.');
+      return;
+    }
+    if (!isBrowserOnline()) {
+      showToast('Connect to the internet before undoing a budget import. The deletion must be confirmed by the server.');
       return;
     }
     const originalAudit = (db.importAudits || []).find((audit) => audit.id === auditId);
@@ -190,10 +196,63 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       showToast(plan.reason || 'This import cannot be safely undone.');
       return;
     }
-    if (typeof window !== 'undefined' && !window.confirm(
+    if (!window.confirm(
       `Undo this import and remove ${plan.expenseIds.length} unchanged budget rows created by it? Actual expense records and rows from other imports will be kept.`
     )) return;
 
+    const removeIds = new Set(plan.expenseIds);
+    const nextDb: AppDatabase = {
+      ...db,
+      expenses: (db.expenses || []).filter((expense) => !removeIds.has(expense.id)),
+    };
+    const saved = saveDatabase(nextDb);
+    if (!saved.ok) {
+      showToast('Undo was not saved. No budget rows were removed; free device storage and try again.');
+      return;
+    }
+
+    let flushResult: Awaited<ReturnType<typeof flushPendingOfflineSnapshots>>;
+    try {
+      await recordOfflineChanges(nextDb);
+      flushResult = await flushPendingOfflineSnapshots({
+        actor: {
+          uid: currentUserUid,
+          name: auditActor || 'SHINE Staff',
+          canReadImportSourceData: isAdmin || role === 'Manager',
+          canWriteImportAuditMetadata: isAdmin,
+        },
+      });
+    } catch {
+      flushResult = { flushed: false, applied: 0, conflicts: [] };
+    }
+
+    // If nothing reached Firestore, restore the rows locally and cancel the queued deletion.
+    if (!flushResult.flushed && flushResult.applied === 0 && flushResult.conflicts.length === 0) {
+      const latestDb = getDatabase();
+      const presentIds = new Set((latestDb.expenses || []).map((expense) => expense.id));
+      const restoredDb: AppDatabase = {
+        ...latestDb,
+        expenses: [
+          ...(latestDb.expenses || []),
+          ...(db.expenses || []).filter((expense) => removeIds.has(expense.id) && !presentIds.has(expense.id)),
+        ],
+      };
+      if (saveDatabase(restoredDb).ok) {
+        void recordOfflineChanges(restoredDb).catch(() => undefined);
+      }
+      showToast('The server did not confirm the undo. The budget rows were restored on this device; check the connection and try again.');
+      return;
+    }
+
+    const conflictedExpenseIds = new Set(
+      flushResult.conflicts
+        .filter((conflict) => conflict.collection === 'expenses' && removeIds.has(conflict.recordId))
+        .map((conflict) => conflict.recordId)
+    );
+    const fullyReversed = flushResult.flushed && conflictedExpenseIds.size === 0;
+    const confirmedRemovedCount = flushResult.flushed
+      ? plan.expenseIds.length - conflictedExpenseIds.size
+      : 0;
     const undoAudit: ImportAuditRecord = {
       id: generateFollowUpId('AUD'),
       fileName: originalAudit.fileName,
@@ -207,26 +266,41 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
       historicalRecordsCount: 0,
       unchangedCount: 0,
       duplicatesCount: 0,
-      conflictsCount: 0,
-      errorsCount: 0,
-      status: 'cancelled',
-      summary: `Reversed ${plan.expenseIds.length} Child House budget rows from import ${originalAudit.id}.`,
+      conflictsCount: conflictedExpenseIds.size,
+      errorsCount: fullyReversed ? 0 : plan.expenseIds.length - confirmedRemovedCount,
+      status: fullyReversed ? 'cancelled' : 'failed',
+      summary: fullyReversed
+        ? `Reversed ${confirmedRemovedCount} Child House budget rows from import ${originalAudit.id}; server deletion was confirmed.`
+        : `Undo of import ${originalAudit.id} was not fully confirmed. ${confirmedRemovedCount} of ${plan.expenseIds.length} rows were confirmed removed; review sync conflicts before proceeding.`,
       reversesImportAuditId: originalAudit.id,
       childHouseBudgetHouseholdId: originalAudit.childHouseBudgetHouseholdId,
-      childHouseBudgetReversedExpenseCount: plan.expenseIds.length,
+      childHouseBudgetReversedExpenseCount: confirmedRemovedCount,
     };
-    const removeIds = new Set(plan.expenseIds);
-    const nextDb: AppDatabase = {
-      ...db,
-      expenses: (db.expenses || []).filter((expense) => !removeIds.has(expense.id)),
-      importAudits: [undoAudit, ...(db.importAudits || [])],
+    const latestDb = getDatabase();
+    const auditDb: AppDatabase = {
+      ...latestDb,
+      importAudits: [undoAudit, ...(latestDb.importAudits || [])],
     };
-    const saved = saveDatabase(nextDb);
-    if (!saved.ok) {
-      showToast('Undo was not saved. No budget rows were removed; free device storage and try again.');
+    const auditSaved = saveDatabase(auditDb);
+    if (!auditSaved.ok) {
+      try {
+        await persistImportAuditToFirestore(undoAudit);
+        showToast('Budget deletion was confirmed, and the reversal audit was saved to the server. This device could not update its local audit history.');
+      } catch {
+        showToast('Budget deletion was confirmed, but the reversal audit could not be saved. Contact an Administrator before making another import.');
+      }
       return;
     }
-    showToast(`Reversed ${plan.expenseIds.length} budget rows on this device. Changes are queued for synchronisation.`);
+    try {
+      await recordOfflineChanges(auditDb);
+    } catch {
+      // The audit is durable locally; the normal sync process can retry it.
+    }
+    if (fullyReversed) {
+      showToast(`Reversed and server-confirmed: ${confirmedRemovedCount} budget rows. The reversal audit is saved and will synchronise.`);
+    } else {
+      showToast(`Undo was only partly confirmed: ${confirmedRemovedCount} of ${plan.expenseIds.length} rows. Review Sync Conflicts before proceeding.`);
+    }
   };
 
   const visibleCaseActions = filterCaseActionsForStaff(db.caseActions || [], {
