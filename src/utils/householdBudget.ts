@@ -137,7 +137,7 @@ export function buildChildHouseBudgetExpense(input: ChildHouseBudgetImportInput)
     : /rent/.test(categoryText) ? 'Rent'
     : /household|suppl/.test(categoryText) ? 'Household supplies'
     : 'Other';
-  const identity = [input.householdId, input.period, input.sourceFileName, input.sheet, input.row].join('|');
+  const identity = [input.householdId, input.period, input.sheet, input.row, input.itemDescription.trim().toLowerCase()].join('|');
   let hash = 2166136261;
   for (let index = 0; index < identity.length; index += 1) {
     hash = Math.imul(hash ^ identity.charCodeAt(index), 16777619);

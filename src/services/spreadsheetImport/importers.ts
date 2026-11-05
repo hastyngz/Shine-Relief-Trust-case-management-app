@@ -567,13 +567,16 @@ function parseBudgetRows(
       });
     }
   });
-  const itemNumberCounts = new Map<string, number>();
+  const itemNumberRows = new Map<string, Set<string>>();
   lines.forEach((line) => {
     if (line.kind !== 'budget' || !line.itemNumber) return;
-    itemNumberCounts.set(line.itemNumber, (itemNumberCounts.get(line.itemNumber) || 0) + 1);
+    const sourceRowKey = `${line.sheet}:${line.row}`;
+    const rowsForNumber = itemNumberRows.get(line.itemNumber) || new Set<string>();
+    rowsForNumber.add(sourceRowKey);
+    itemNumberRows.set(line.itemNumber, rowsForNumber);
   });
   lines.forEach((line) => {
-    if (line.kind !== 'budget' || !line.itemNumber || (itemNumberCounts.get(line.itemNumber) || 0) < 2) return;
+    if (line.kind !== 'budget' || !line.itemNumber || (itemNumberRows.get(line.itemNumber)?.size || 0) < 2) return;
     line.notes += `; duplicate item number ${line.itemNumber} appears more than once in this sheet; verify the source row`;
   });
   return { lines, imported: lines.filter((line) => line.kind === 'budget').length, skipped };

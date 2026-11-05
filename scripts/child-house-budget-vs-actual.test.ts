@@ -78,7 +78,7 @@ assert.equal(importedBudget.id, buildChildHouseBudgetExpense({
   householdId: 'SH-01', period: '2026-11', quantity: 2, unitCost: 14000,
   budgetAmount: 28000, itemDescription: 'Cooking oil 2L', category: 'Groceries',
   unit: 'bottle', frequency: 1, itemNumber: '17', notes: 'Source amount needs review',
-  sourceFileName: 'CHILD_HOUSE_BUDGET-NOVE-2026.xlsx', sheet: 'November', row: 17,
+  sourceFileName: 'renamed-budget-file.xlsx', sheet: 'November', row: 17,
   createdBy: 'Test User',
 }).id);
 assert.throws(() => buildChildHouseBudgetExpense({
