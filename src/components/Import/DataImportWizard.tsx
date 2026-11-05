@@ -2749,6 +2749,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
                           {(item.targetEntity === 'budget' || item.targetEntity === 'workplan') &&
                             item.extractedData.spreadsheetKind !== undefined && (
+                              <div>
                               <label className="block max-w-sm text-[11px] font-semibold text-stone-700">
                                 Programme
                                 <select
@@ -2778,6 +2779,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                                   <span className="mt-1 block font-normal text-stone-600">This budget row will be saved to the selected household’s monthly Budget vs Actual records.</span>
                                 </label>
                               )}
+                              </div>
                             )}
 
                           {item.targetEntity === 'payroll' && (
