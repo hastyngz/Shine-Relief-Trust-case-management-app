@@ -740,6 +740,8 @@ const {
   updateMeetingRecord,
   deleteMeetingRecord,
   addMarketPrice,
+  addEarlyYearsRecord,
+  saveEarlyYearsAttendance,
   deleteEarlyYearsRecord,
   addHistoricalCaseRecord,
   deleteHistoricalCaseRecord,
@@ -958,6 +960,39 @@ const earlyYearsDeleteFlush = await flushPendingOfflineSnapshots({ actor: { uid:
 assert.equal(earlyYearsDeleteFlush.conflicts.length, 1, 'stale early-years deletion is surfaced as a conflict');
 assert.equal(server.get('earlyYearsRecords', 'ECD-QUEUE-STALE').notes, 'Changed elsewhere',
   'early-years conflict handling preserves the newer server record');
+
+// Early Years registration and attendance use the same durable offline queue.
+const earlyYearsCreateBaseline = normalizeImportedDatabase({ earlyYearsRecords: [] });
+await resetCaseSyncState(earlyYearsCreateBaseline);
+const addedEarlyYears = addEarlyYearsRecord({
+  reportingPeriod: '2026-11',
+  sourceDocument: 'Offline sync test',
+  studentName: 'Synthetic Offline ECD Child',
+  dateOfBirth: '2022-03-14',
+  guardianName: 'Synthetic Guardian',
+  enrollmentDate: '2026-11-01',
+  studentStatus: 'Active',
+});
+assert.equal(server.get('earlyYearsRecords', addedEarlyYears.id), undefined,
+  'Early Years registration must be queued, not written directly around the offline queue');
+await recordOfflineChanges(getStorageDatabase());
+const earlyYearsCreateFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(earlyYearsCreateFlush.conflicts.length, 0, 'new Early Years registration flushes without conflict');
+assert.equal(server.get('earlyYearsRecords', addedEarlyYears.id).studentName, 'Synthetic Offline ECD Child',
+  'queued Early Years registration reaches Firestore');
+
+const attendanceBaseline = normalizeImportedDatabase({
+  earlyYearsRecords: [{ ...server.get('earlyYearsRecords', addedEarlyYears.id) } as any],
+});
+await resetCaseSyncState(attendanceBaseline);
+server.seed('earlyYearsRecords', addedEarlyYears.id, { ...attendanceBaseline.earlyYearsRecords![0] });
+saveEarlyYearsAttendance(addedEarlyYears.id, '2026-11-05', 'Present', 'Synthetic Staff');
+await recordOfflineChanges(getStorageDatabase());
+const earlyYearsAttendanceFlush = await flushPendingOfflineSnapshots({ actor: { uid: 'uid-a', name: 'Staff A' } });
+assert.equal(earlyYearsAttendanceFlush.conflicts.length, 0, 'Early Years attendance update flushes without conflict');
+assert.equal(server.get('earlyYearsRecords', addedEarlyYears.id).attendanceEntries[0].status, 'Present',
+  'queued attendance update reaches Firestore');
+
 
 await resetCaseSyncState(normalizeImportedDatabase({ marketPrices: [] }));
 const addedMarketPrice = addMarketPrice({ item: 'Synthetic market item', price: 125 } as any);
