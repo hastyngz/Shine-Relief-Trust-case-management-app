@@ -60,6 +60,7 @@
     "test:safeguarding-export-boundary": "tsx scripts/safeguarding-export-boundary.test.ts",
     "test:administration-overview": "tsx scripts/administration-overview.test.ts",
     "test:finance-overview": "tsx scripts/finance-overview.test.ts",
+    "test:child-house-budget": "tsx scripts/child-house-budget-vs-actual.test.ts",
     "test:petty-cash": "tsx scripts/petty-cash-ledger.test.ts && tsx scripts/petty-cash-ledger-state-migration.test.ts",
     "test:report-export": "tsx scripts/report-export.test.ts",
     "test:asset-filtering": "tsx scripts/asset-filtering.test.ts",
