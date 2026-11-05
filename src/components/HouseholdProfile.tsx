@@ -151,7 +151,9 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const householdBudgetImports = importAudits
     .filter((audit) => audit.childHouseBudgetHouseholdId === household.id && !audit.reversesImportAuditId)
     .sort((a, b) => b.importedAt.localeCompare(a.importedAt));
-  const reversedBudgetImportIds = new Set(importAudits.map((audit) => audit.reversesImportAuditId).filter(Boolean));
+  const reversalAuditByImportId = new Map(
+    importAudits.filter((audit) => audit.reversesImportAuditId).map((audit) => [audit.reversesImportAuditId as string, audit]),
+  );
   const filteredExpenses = actualExpenses.filter((e) => {
     const categoryMatches = expenseCategoryFilter === 'All' || e.category === expenseCategoryFilter;
     const paymentMatches = expensePaymentFilter === 'All'
@@ -796,8 +798,10 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 </div>
                 <div className="space-y-2">
                   {householdBudgetImports.map((audit) => {
-                    const reversed = reversedBudgetImportIds.has(audit.id);
+                    const reversalAudit = reversalAuditByImportId.get(audit.id);
                     const rowCount = audit.childHouseBudgetImportedExpenses?.length || 0;
+                    const reversed = reversalAudit?.status === 'cancelled' && reversalAudit.childHouseBudgetReversedExpenseCount === rowCount;
+                    const undoNeedsReview = Boolean(reversalAudit && !reversed);
                     return (
                       <div key={audit.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-stone-200 p-3">
                         <div className="min-w-0">
@@ -806,6 +810,8 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                         </div>
                         {reversed ? (
                           <span className="text-xs font-semibold text-stone-600">Reversed</span>
+                        ) : undoNeedsReview ? (
+                          <span className="text-xs font-semibold text-amber-700">Undo needs review · {reversalAudit?.childHouseBudgetReversedExpenseCount || 0}/{rowCount} removed</span>
                         ) : rowCount === 0 ? (
                           <span className="text-xs text-stone-500">No new rows created</span>
                         ) : canUndoBudgetImport && onUndoBudgetImport ? (
