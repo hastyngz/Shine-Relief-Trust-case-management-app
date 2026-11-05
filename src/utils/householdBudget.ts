@@ -26,7 +26,7 @@ export interface HouseholdBudgetComparison {
 
 function normalizedItemKey(expense: HouseholdExpense): string {
   return [
-    expense.itemDescription.trim().toLocaleLowerCase().replace(/\\s+/g, ' '),
+    expense.itemDescription.trim().toLocaleLowerCase().replace(/\s+/g, ' '),
     expense.category,
     (expense.unit || '').trim().toLocaleLowerCase(),
   ].join('::');
