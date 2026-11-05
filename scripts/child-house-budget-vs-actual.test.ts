@@ -32,7 +32,7 @@ assert.ok(oil);
 assert.equal(oil.budgetAmount, 28000);
 assert.equal(oil.actualAmount, 32000);
 assert.equal(oil.variance, 4000);
-assert.equal(oil.percentageUsed, 114.28571428571429);
+assert.ok(Math.abs((oil.percentageUsed ?? 0) - (32000 / 28000) * 100) < 1e-10);
 assert.equal(oil.overspent, true);
 
 const sugar = report.rows.find((row) => row.itemDescription === 'Sugar');
