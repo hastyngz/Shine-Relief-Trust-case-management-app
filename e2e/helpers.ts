@@ -4,6 +4,8 @@ export const E2E_EMAIL = 'e2e-staff@example.test';
 export const E2E_PASSWORD = 'e2e-password-123';
 export const E2E_SECOND_EMAIL = 'e2e-second-staff@example.test';
 export const E2E_SECOND_PASSWORD = 'e2e-second-password-123';
+export const E2E_VIEWER_EMAIL = 'e2e-viewer@example.test';
+export const E2E_VIEWER_PASSWORD = 'e2e-viewer-password-123';
 
 /** Signs in through the real login form and waits for the app shell to render. */
 export async function signInAs(page: Page, email: string, password: string): Promise<void> {
