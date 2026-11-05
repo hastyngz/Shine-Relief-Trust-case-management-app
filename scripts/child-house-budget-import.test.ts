@@ -74,6 +74,7 @@ const expenseNamedPreview = await createSpreadsheetImportPreview(
 const expenseNamedLine = expenseNamedPreview.lines.find((line) => line.kind === 'budget');
 assert.match(expenseNamedLine?.notes || '', /expense workbook filename but this sheet has budget-style amounts/);
 assert.match(spreadsheetLineToPreview(expenseNamedLine!).warningOrConflict || '', /Do not treat these as actual spending/);
+assert.equal(spreadsheetLineToPreview(expenseNamedLine!).selected, false, 'expense-named budget sheets require deliberate review');
 
 const duplicate18Workbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(duplicate18Workbook, XLSX.utils.aoa_to_sheet([
@@ -89,7 +90,7 @@ const duplicate18Preview = await createSpreadsheetImportPreview(
 );
 const duplicate18Rows = duplicate18Preview.lines.filter((line) => line.kind === 'budget' && line.itemNumber === '18');
 assert.equal(duplicate18Rows.length, 2);
-assert.ok(duplicate18Rows.every((line) => /duplicate item number 18/i.test(line.notes)));
+assert.ok(duplicate18Rows.every((line) => line.kind === 'budget' && /duplicate item number 18/i.test(line.notes)));
 const duplicateItemNumberRows = budgetLines.filter((line) => line.itemDescription === 'Tea' || line.itemDescription === 'Coffee');
 assert.equal(duplicateItemNumberRows.length, 2);
 assert.ok(duplicateItemNumberRows.every((line) => /duplicate item number 17/i.test(line.notes)));
