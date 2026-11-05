@@ -597,6 +597,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         },
       };
     });
+    const childHouseBudgets = selectedItems.filter((item) => item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house');
+    const unassignedChildHouseBudgets = childHouseBudgets.filter((item) =>
+      !item.extractedData.householdId || !db.households.some((household) => household.id === item.extractedData.householdId));
+    if (unassignedChildHouseBudgets.length > 0) {
+      alert(`Choose the correct household for every selected Child House budget row (${unassignedChildHouseBudgets.length} missing).`);
+      return;
+    }
+    const nonMonthlyChildHouseBudgets = childHouseBudgets.filter((item) => !/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(item.extractedData.period || '')));
+    if (nonMonthlyChildHouseBudgets.length > 0) {
+      alert('Child House Budget vs Actual needs a specific month for each budget row. Annual budget totals must remain in the annual budget register until a month is confirmed.');
+      return;
+    }
     const selectedPayroll = selectedItems.filter((item) => item.targetEntity === 'payroll');
     const selectedEmployees = selectedItems.filter((item) => item.targetEntity === 'employee');
     if ((selectedPayroll.length > 0 || selectedEmployees.length > 0) && !(isAdmin || role === 'Manager')) {
@@ -849,6 +861,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       extractedData: { ...item.extractedData, programmeId: programme.id, programme: programme.name },
       warningOrConflict: undefined,
       missingFields: (item.missingFields || []).filter((field) => field !== 'Programme'),
+    }));
+  };
+
+  const handleSpreadsheetHouseholdChange = (tempId: string, householdId: string) => {
+    setPreviewItems((current) => current.map((item) => item.tempId !== tempId ? item : {
+      ...item,
+      extractedData: { ...item.extractedData, householdId },
     }));
   };
 
@@ -2743,6 +2762,22 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                                   ))}
                                 </select>
                               </label>
+                              {item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house' && (
+                                <label className="mt-2 block max-w-sm text-[11px] font-semibold text-stone-700">
+                                  Child House household
+                                  <select
+                                    value={item.extractedData.householdId || ''}
+                                    onChange={(event) => handleSpreadsheetHouseholdChange(item.tempId, event.target.value)}
+                                    className="field mt-1 w-full"
+                                  >
+                                    <option value="">Choose household — required</option>
+                                    {db.households.map((household) => (
+                                      <option key={household.id} value={household.id}>{household.name} ({household.id})</option>
+                                    ))}
+                                  </select>
+                                  <span className="mt-1 block font-normal text-stone-600">This budget row will be saved to the selected household’s monthly Budget vs Actual records.</span>
+                                </label>
+                              )}
                             )}
 
                           {item.targetEntity === 'payroll' && (

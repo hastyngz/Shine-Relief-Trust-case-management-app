@@ -1,4 +1,4 @@
-import type { HouseholdExpense } from '../types';
+import type { ExpenseCategory, HouseholdExpense } from '../types';
 
 export interface HouseholdBudgetComparisonRow {
   key: string;
@@ -101,5 +101,71 @@ export function buildHouseholdBudgetVsActual(
     variance: actualTotal - budgetTotal,
     percentageUsed: budgetTotal > 0 ? (actualTotal / budgetTotal) * 100 : actualTotal > 0 ? null : 0,
     rows,
+  };
+}
+
+
+export interface ChildHouseBudgetImportInput {
+  householdId: string;
+  period: string;
+  quantity: number;
+  unitCost: number;
+  budgetAmount: number;
+  itemDescription: string;
+  category?: string;
+  unit?: string;
+  frequency?: number;
+  itemNumber?: string;
+  notes?: string;
+  sourceFileName: string;
+  sheet: string;
+  row: number;
+  createdBy: string;
+}
+
+/** Create a stable, duplicate-safe monthly Child House budget record. */
+export function buildChildHouseBudgetExpense(input: ChildHouseBudgetImportInput): HouseholdExpense {
+  if (!input.householdId.trim()) throw new Error('Choose a Child House household before importing its budget.');
+  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(input.period)) {
+    throw new Error('Child House budget rows must have a specific month (YYYY-MM) before they can be imported into Budget vs Actual.');
+  }
+  const categoryText = (input.category || '').toLowerCase();
+  const category: ExpenseCategory = /grocery|food|feeding/.test(categoryText) ? 'Groceries'
+    : /utilit|electric|water/.test(categoryText) ? 'Utilities'
+    : /repair|maintenance/.test(categoryText) ? 'Repairs'
+    : /cloth|social/.test(categoryText) ? 'Clothing/social support'
+    : /rent/.test(categoryText) ? 'Rent'
+    : /household|suppl/.test(categoryText) ? 'Household supplies'
+    : 'Other';
+  const identity = [input.householdId, input.period, input.sourceFileName, input.sheet, input.row].join('|');
+  let hash = 2166136261;
+  for (let index = 0; index < identity.length; index += 1) {
+    hash = Math.imul(hash ^ identity.charCodeAt(index), 16777619);
+  }
+  const stableId = `CHB-${(hash >>> 0).toString(36)}`;
+  const now = new Date().toISOString();
+  const sourceNote = `Imported from ${input.sourceFileName}, ${input.sheet} row ${input.row}${input.itemNumber ? `; item number ${input.itemNumber}` : ''}`;
+  return {
+    id: stableId,
+    householdId: input.householdId,
+    date: `${input.period}-01`,
+    month: input.period,
+    recordType: 'budget',
+    category,
+    itemDescription: input.itemDescription.trim(),
+    quantity: String(input.quantity),
+    unit: input.unit || undefined,
+    unitCost: Number(input.unitCost) || 0,
+    totalCost: Number(input.budgetAmount) || 0,
+    frequency: input.frequency === undefined ? undefined : String(input.frequency),
+    notes: [input.notes, sourceNote].filter(Boolean).join(' · '),
+    budgetLineId: stableId,
+    financialYear: input.period.slice(0, 4),
+    programme: 'Child House',
+    budgetCategory: input.category || undefined,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: input.createdBy,
+    updatedBy: input.createdBy,
   };
 }

@@ -16,6 +16,7 @@ import {
   AttachmentTargetType,
   AttachmentCategory,
   BudgetItem,
+  HouseholdExpense,
   ProcurementList,
   ProjectProjection,
   StaffUser,
@@ -44,6 +45,7 @@ import { createSpreadsheetImportPreview, SpreadsheetImportPreview } from './spre
 import { uploadPhotoAttachment } from './attachmentService';
 import { PROGRAMMES } from '../data/programmes';
 import { normalizeImportedProcurementItems } from './procurementWorkflow';
+import { buildChildHouseBudgetExpense } from '../utils/householdBudget';
 
 /**
  * Import confirmation currently has a few separate cloud writes (notably salary history
@@ -609,6 +611,16 @@ export async function commitImportBatch(
   canReadImportSourceData = false,
   canWriteImportAuditMetadata = false,
 ): Promise<{ success: boolean; createdAudit: ImportAuditRecord }> {
+  const childHouseBudgetItems = approvedItems.filter((item) => item.selected && item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house');
+  for (const item of childHouseBudgetItems) {
+    const data = item.extractedData;
+    if (!data.householdId || !db.households.some((household) => household.id === data.householdId)) {
+      throw new Error(`Choose a valid Child House household for ${item.title || item.summary} before importing.`);
+    }
+    if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(data.period || ''))) {
+      throw new Error(`The Child House budget row ${item.title || item.summary} needs a specific month (YYYY-MM). Annual totals cannot be placed into a monthly comparison.`);
+    }
+  }
   const normalizedProcurementItems = new Map<ImportPreviewItem, ReturnType<typeof normalizeImportedProcurementItems>>();
   for (const item of approvedItems) {
     if (item.selected && item.targetEntity === 'procurementList') {
@@ -670,6 +682,7 @@ export async function commitImportBatch(
     householdActivities: [...(db.householdActivities || [])],
     workplans: [...(db.workplans || [])],
     budgets: [...(db.budgets || [])],
+    expenses: [...(db.expenses || [])],
     procurementLists: [...(db.procurementLists || [])],
     projectProjections: [...(db.projectProjections || [])],
     inventoryItems: [...(db.inventoryItems || [])],
@@ -1053,6 +1066,29 @@ export async function commitImportBatch(
       if (!updatedDb.projectProjections) updatedDb.projectProjections = [];
       updatedDb.projectProjections.unshift(projection);
       linkedRecordId = projection.id;
+    }
+    else if (item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house') {
+      const data = item.extractedData;
+      const expense = buildChildHouseBudgetExpense({
+        householdId: String(data.householdId),
+        period: String(data.period),
+        quantity: Number(data.quantity) || 0,
+        unitCost: Number(data.unitCost) || 0,
+        budgetAmount: Number(data.budgetAmount) || 0,
+        itemDescription: String(data.itemDescription || item.title || item.summary),
+        category: String(data.category || ''),
+        unit: data.unit ? String(data.unit) : undefined,
+        frequency: data.frequency === undefined ? undefined : Number(data.frequency),
+        itemNumber: data.itemNumber ? String(data.itemNumber) : undefined,
+        notes: String(data.notes || item.originalSnippet || ''),
+        sourceFileName: auditRecord.fileName,
+        sheet: String(data.sheet || 'Sheet'),
+        row: Number(data.row) || 0,
+        createdBy: auditRecord.importedByName,
+      });
+      const existing = updatedDb.expenses.find((record) => record.budgetLineId === expense.budgetLineId);
+      if (!existing) updatedDb.expenses.unshift(expense);
+      linkedRecordId = existing?.id || expense.id;
     }
     else if (item.targetEntity === 'budget') {
       const data = item.extractedData;
