@@ -23,6 +23,8 @@ const E2E_EMAIL = 'e2e-staff@example.test';
 const E2E_PASSWORD = 'e2e-password-123';
 const E2E_SECOND_EMAIL = 'e2e-second-staff@example.test';
 const E2E_SECOND_PASSWORD = 'e2e-second-password-123';
+const E2E_VIEWER_EMAIL = 'e2e-viewer@example.test';
+const E2E_VIEWER_PASSWORD = 'e2e-viewer-password-123';
 
 const children: ChildProcess[] = [];
 
@@ -90,6 +92,7 @@ async function ensureAuthAccount(email: string, password: string): Promise<strin
 async function seedStaffAccount(): Promise<void> {
   const primaryUid = await ensureAuthAccount(E2E_EMAIL, E2E_PASSWORD);
   const secondUid = await ensureAuthAccount(E2E_SECOND_EMAIL, E2E_SECOND_PASSWORD);
+  const viewerUid = await ensureAuthAccount(E2E_VIEWER_EMAIL, E2E_VIEWER_PASSWORD);
 
   const now = new Date().toISOString();
   process.env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${FIRESTORE_EMULATOR_PORT}`;
@@ -98,16 +101,17 @@ async function seedStaffAccount(): Promise<void> {
   const { getFirestore } = await import('firebase-admin/firestore');
   const adminApp = getApps()[0] || initializeApp({ projectId: PROJECT_ID });
   const db = getFirestore(adminApp);
-  for (const [uid, email, fullName] of [
-    [primaryUid, E2E_EMAIL, 'E2E Test Staff'],
-    [secondUid, E2E_SECOND_EMAIL, 'E2E Second Staff'],
+  for (const [uid, email, fullName, role] of [
+    [primaryUid, E2E_EMAIL, 'E2E Test Staff', 'Staff'],
+    [secondUid, E2E_SECOND_EMAIL, 'E2E Second Staff', 'Staff'],
+    [viewerUid, E2E_VIEWER_EMAIL, 'E2E View Only', 'View Only'],
   ] as const) {
     await db.collection('staffUsers').doc(uid).set({
       id: uid,
       uid,
       email,
       fullName,
-      role: 'Staff',
+      role,
       status: 'Active',
       departmentOrTitle: 'Field Staff',
       createdAt: now,
@@ -164,6 +168,21 @@ async function seedStaffAccount(): Promise<void> {
       updatedBy: 'E2E Setup',
     });
   }
+
+  // Synthetic Early Years fixture used to verify that View Only users can read
+  // the register but cannot register children or change attendance.
+  await db.collection('earlyYearsRecords').doc('ECD-E2E-VIEWER-FIXTURE').set({
+    id: 'ECD-E2E-VIEWER-FIXTURE',
+    reportingPeriod: '2026-11',
+    sourceDocument: 'Synthetic E2E fixture',
+    studentName: 'E2E Viewer Child',
+    dateOfBirth: '2022-03-14',
+    guardianName: 'E2E Guardian',
+    enrollmentDate: '2026-11-01',
+    studentStatus: 'Active',
+    attendanceEntries: [],
+    createdAt: now,
+  });
 
   // This emulator fixture represents a fully migrated environment. The marker
   // is written with Admin SDK only after the setup has seeded no legacy audits.
