@@ -130,7 +130,7 @@ export function buildChildHouseBudgetExpense(input: ChildHouseBudgetImportInput)
     throw new Error('Child House budget rows must have a specific month (YYYY-MM) before they can be imported into Budget vs Actual.');
   }
   const categoryText = (input.category || '').toLowerCase();
-  const category: ExpenseCategory = /grocery|food|feeding/.test(categoryText) ? 'Groceries'
+  const category: ExpenseCategory = /grocer|food|feeding/.test(categoryText) ? 'Groceries'
     : /utilit|electric|water/.test(categoryText) ? 'Utilities'
     : /repair|maintenance/.test(categoryText) ? 'Repairs'
     : /cloth|social/.test(categoryText) ? 'Clothing/social support'
