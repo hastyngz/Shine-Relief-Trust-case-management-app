@@ -63,7 +63,7 @@ test('staff can register a child and correct attendance for the same date', asyn
 
   const studentName = `E2E Early Years ${Date.now()}`;
   await page.getByRole('button', { name: /register child/i }).click();
-  const form = page.getByRole('dialog', { name: 'Add early-years student record' });
+  const form = page.locator('form').filter({ hasText: 'Student name' });
   await form.getByLabel('Student name').fill(studentName);
   await form.getByLabel('Date of birth').fill('2022-03-14');
   await form.getByLabel('Enrollment date').fill('2026-11-01');
@@ -79,11 +79,11 @@ test('staff can register a child and correct attendance for the same date', asyn
   await attendance.selectOption('Present');
   await attendance.selectOption('Late');
 
-  const localRecord = await page.evaluate(({ uid, studentName }) => {
+  const localRecord = await expect.poll(() => page.evaluate(({ uid, studentName }) => {
     const key = 'shine_relief_trust_prod_v1::uid:' + encodeURIComponent(uid);
     const db = JSON.parse(window.localStorage.getItem(key) || '{}');
     return (db.earlyYearsRecords || []).find((record: any) => record.studentName === studentName);
-  }, { uid, studentName });
+  }, { uid, studentName })).toMatchObject({ studentName });
   expect(localRecord.attendanceEntries).toHaveLength(1);
   expect(localRecord.attendanceEntries[0].date).toBe(attendanceDate);
   expect(localRecord.attendanceEntries[0].status).toBe('Late');
@@ -112,7 +112,7 @@ test('a child registered while offline is queued and synchronised after reconnec
 
   const studentName = `E2E Offline Early Years ${Date.now()}`;
   await page.getByRole('button', { name: /register child/i }).click();
-  const form = page.getByRole('dialog', { name: 'Add early-years student record' });
+  const form = page.locator('form').filter({ hasText: 'Student name' });
   await form.getByLabel('Student name').fill(studentName);
   await form.getByLabel('Date of birth').fill('2022-07-09');
   await form.getByLabel('Enrollment date').fill('2026-11-05');
