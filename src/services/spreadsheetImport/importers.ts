@@ -528,6 +528,9 @@ function parseBudgetRows(
           : programmeFrom(reportingHeaderText, options.sourceName || '');
       })();
     const note = `Original label: ${originalLabel}`;
+    const expenseWorkbookWarning = /expense/i.test(options.sourceName || '') && !/actual/i.test(options.sourceName || '')
+      ? '; expense workbook filename but this sheet has budget-style amounts; confirm actual spending is separately evidenced'
+      : '';
     const unit = text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit';
     const activeMonths = monthColumns.filter(({ index }) => number(row[index]) !== undefined && number(row[index]) !== 0);
     if (activeMonths.length > 0) {
@@ -543,7 +546,7 @@ function parseBudgetRows(
           category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
           unit,
           quantity, unitCost, budgetAmount: statedAmount, itemNumber, frequency, period: `${year}-${String(month).padStart(2, '0')}`,
-          periodType: 'monthly', month, notes: `${note}${amountNote}`,
+          periodType: 'monthly', month, notes: `${note}${amountNote}${expenseWorkbookWarning}`,
         });
       });
     } else {
