@@ -149,7 +149,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const totalExpenses = actualExpenses.reduce((acc, curr) => acc + curr.totalCost, 0);
   const budgetComparison = buildHouseholdBudgetVsActual(expenses, household.id, budgetMonth);
   const householdBudgetImports = importAudits
-    .filter((audit) => audit.childHouseBudgetHouseholdId === household.id)
+    .filter((audit) => audit.childHouseBudgetHouseholdId === household.id && !audit.reversesImportAuditId)
     .sort((a, b) => b.importedAt.localeCompare(a.importedAt));
   const reversedBudgetImportIds = new Set(importAudits.map((audit) => audit.reversesImportAuditId).filter(Boolean));
   const filteredExpenses = actualExpenses.filter((e) => {
@@ -807,7 +807,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                         {reversed ? (
                           <span className="text-xs font-semibold text-stone-600">Reversed</span>
                         ) : rowCount === 0 ? (
-                          <span className="text-xs text-stone-500">No new rows · duplicates skipped</span>
+                          <span className="text-xs text-stone-500">No new rows created</span>
                         ) : canUndoBudgetImport && onUndoBudgetImport ? (
                           <button
                             type="button"
