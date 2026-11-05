@@ -19,7 +19,7 @@ import { canAccessManagementDashboard } from '../services/managementAnalytics';
 import type { QualityIssue } from '../services/qualityRules';
 import { planChildHouseBudgetImportUndo } from '../utils/householdBudget';
 import { generateFollowUpId, getDatabase, saveDatabase } from '../utils/storage';
-import { flushPendingOfflineSnapshots, isBrowserOnline, recordOfflineChanges } from '../services/offlineSync';
+import { flushPendingOfflineSnapshots, getLastSyncedSnapshot, isBrowserOnline, recordOfflineChanges } from '../services/offlineSync';
 import { persistImportAuditToFirestore } from '../services/firestoreSync';
 import { excludeSafeguardingCaseActions, filterCaseActionsForStaff } from '../services/healthRecordAccess';
 import { ProgrammeId } from '../data/programmes';
@@ -194,6 +194,17 @@ export function AppViewSwitch(props: AppViewSwitchProps) {
     const plan = planChildHouseBudgetImportUndo(originalAudit, db.expenses || [], db.importAudits || []);
     if (!plan.eligible) {
       showToast(plan.reason || 'This import cannot be safely undone.');
+      return;
+    }
+    const syncedBaseline = getLastSyncedSnapshot();
+    if (!syncedBaseline) {
+      showToast('A confirmed server sync baseline is required before undoing this import. Reconnect and let synchronisation finish first.');
+      return;
+    }
+    const serverConfirmedExpenseIds = new Set((syncedBaseline.expenses || []).map((expense) => expense.id));
+    const notYetSyncedIds = plan.expenseIds.filter((expenseId) => !serverConfirmedExpenseIds.has(expenseId));
+    if (notYetSyncedIds.length > 0) {
+      showToast(`${notYetSyncedIds.length} imported budget rows have not yet been confirmed on the server. Let the import sync finish, then retry the undo.`);
       return;
     }
     if (!window.confirm(
