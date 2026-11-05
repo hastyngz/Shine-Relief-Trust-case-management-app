@@ -1382,6 +1382,14 @@ export interface RestrictedImportSourceData {
   sourceData: Record<string, unknown>;
 }
 
+export interface EarlyYearsAttendanceEntry {
+  date: string; // YYYY-MM-DD; one attendance status per child per day
+  status: 'Present' | 'Absent' | 'Late' | 'Excused';
+  recordedBy: string;
+  recordedAt: string;
+  notes?: string;
+}
+
 export interface EarlyYearsRecord {
   id: string;
   reportingPeriod: string; // e.g. "July to September 2026"
@@ -1413,6 +1421,8 @@ export interface EarlyYearsRecord {
   studentStatus?: 'Active' | 'Completed' | 'Transferred' | 'Inactive';
   teacherName?: string;
   teacherContact?: string;
+  /** Date-specific attendance history; legacy attendanceStatus remains for backward compatibility. */
+  attendanceEntries?: EarlyYearsAttendanceEntry[];
 }
 
 export type DocxClassification =
