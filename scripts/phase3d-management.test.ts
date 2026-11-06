@@ -189,6 +189,7 @@ const supplementaryCashBook = getCashBookSupplementaryPayments({
   ],
   rentPayments: [
     { id: 'paid-rent', paymentStatus: 'Paid', datePaid: '2026-04-05', amountPaid: 80000, monthCovered: 'April 2026', receiptNumber: 'RENT-1' },
+    { id: 'outside-year-rent', paymentStatus: 'Paid', datePaid: '2027-01-05', amountPaid: 80000, monthCovered: 'January 2027', receiptNumber: 'RENT-2027' },
   ],
   procurementLists: [{
     id: 'proc-1', title: 'Office supplies',
@@ -205,8 +206,10 @@ assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'paid-expense'));
 assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'paid-rent'));
 assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'proc-1/proc-payment-1'));
 assert.ok(supplementaryCashBook.rows.filter((row) => String(row[7]).includes('Possible duplicate')).length === 2);
-assert.equal(supplementaryCashBook.exceptions.length, 1);
+assert.equal(supplementaryCashBook.exceptions.length, 2);
 assert.equal(supplementaryCashBook.exceptions[0][1], 'bad-date-expense');
+assert.equal(supplementaryCashBook.exceptions[1][1], 'outside-year-rent');
+assert.match(String(supplementaryCashBook.exceptions[1][2]), /outside 2026/);
 assert.ok(!supplementaryCashBook.rows.some((row) => row[2] === 'unpaid-expense' || row[2] === 'budget-only' || row[2] === 'payroll-cumulative'));
 const aprilSupplementary = getCashBookSupplementaryPayments({
   ...cashBookDb,
