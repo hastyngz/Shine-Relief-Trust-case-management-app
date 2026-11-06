@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import type { SalaryHistoryRecord } from '../src/types';
 import { buildManagementAnalytics, canAccessManagementDashboard, projectManagementDatabase } from '../src/services/managementAnalytics';
-import { buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows, MANAGEMENT_REPORTS } from '../src/services/managementReports';
+import { buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows, getCashBookSupplementaryPayments, MANAGEMENT_REPORTS } from '../src/services/managementReports';
 import { buildFactualReportNarrative, buildRecordedRecommendations, filterDataForReport, generateExcelWorkbook, generatePdfReport, generateWordReport, ReportConfig } from '../src/services/reportGenerators';
 import { downloadExcel } from '../src/utils/export';
 
@@ -179,6 +179,40 @@ const cashBookDb = {
 const cashBook = buildManagementReportRows('cash-book', cashBookDb, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
 assert.deepEqual(cashBook.rows.map((row) => row[0]), ['2026-01-01', '2026-02-01', '2026-03-01']);
 assert.deepEqual(cashBook.rows.map((row) => row[9]), [10000, 15000, 13800]);
+const supplementaryCashBook = getCashBookSupplementaryPayments({
+  ...cashBookDb,
+  expenses: [
+    { id: 'paid-expense', recordType: 'actual', paymentStatus: 'Paid', datePaid: '2026-04-02', totalCost: 25000, itemDescription: 'Fuel', paymentMethod: 'Bank transfer', paymentReference: 'BANK-REF-1', category: 'Transport' },
+    { id: 'unpaid-expense', recordType: 'actual', paymentStatus: 'Payment Outstanding', date: '2026-04-03', totalCost: 40000, itemDescription: 'Unpaid food' },
+    { id: 'bad-date-expense', recordType: 'actual', paymentStatus: 'Paid', totalCost: 1000, itemDescription: 'Missing date' },
+    { id: 'budget-only', recordType: 'budget', paymentStatus: 'Paid', datePaid: '2026-04-04', totalCost: 99999, itemDescription: 'Budget line' },
+  ],
+  rentPayments: [
+    { id: 'paid-rent', paymentStatus: 'Paid', datePaid: '2026-04-05', amountPaid: 80000, monthCovered: 'April 2026', receiptNumber: 'RENT-1' },
+  ],
+  procurementLists: [{
+    id: 'proc-1', title: 'Office supplies',
+    payments: [
+      { id: 'proc-payment-1', date: '2026-04-02', amountMWK: 25000, reference: 'BANK-REF-1', method: 'Bank transfer' },
+      { id: 'proc-payment-2', date: '2026-04-06', amountMWK: 12000, reference: 'PO-PAY-2' },
+    ],
+  }],
+  payrollRecords: [{ id: 'payroll-cumulative', amountPaid: 700000, paymentStatus: 'Paid', datePaid: '2026-04-01' }],
+} as any, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.equal(supplementaryCashBook.rows.length, 4);
+assert.deepEqual(supplementaryCashBook.sourceCounts, { expenses: 1, rent: 1, procurement: 2 });
+assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'paid-expense'));
+assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'paid-rent'));
+assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'proc-1/proc-payment-1'));
+assert.ok(supplementaryCashBook.rows.filter((row) => String(row[7]).includes('Possible duplicate')).length === 2);
+assert.equal(supplementaryCashBook.exceptions.length, 1);
+assert.equal(supplementaryCashBook.exceptions[0][1], 'bad-date-expense');
+assert.ok(!supplementaryCashBook.rows.some((row) => row[2] === 'unpaid-expense' || row[2] === 'budget-only' || row[2] === 'payroll-cumulative'));
+const aprilSupplementary = getCashBookSupplementaryPayments({
+  ...cashBookDb,
+  expenses: [{ id: 'may-expense', paymentStatus: 'Paid', datePaid: '2026-05-02', totalCost: 1000, itemDescription: 'May' }],
+} as any, { startDate: '2026-04-01', endDate: '2026-04-30', financialYear: '2026' });
+assert.equal(aprilSupplementary.rows.length, 0);
 const cashBookSummary = getCashBookSummary(cashBookDb, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
 assert.deepEqual(cashBookSummary, { periodStart: '2026-01-01', periodEnd: '2026-12-31', openingBalanceMWK: 10000, cashReceivedMWK: 5000, expensesMWK: 1200, cashReturnedMWK: 0, adjustmentsInMWK: 0, adjustmentsOutMWK: 0, closingBalanceMWK: 13800, omittedWithinPeriodCount: 0, outsideYearRecordCount: 1 });
 const filteredCashBookSummary = getCashBookSummary(cashBookDb, { startDate: '2026-02-01', endDate: '2026-03-31', financialYear: '2026', category: 'Operations' });
