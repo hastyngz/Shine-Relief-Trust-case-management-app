@@ -236,6 +236,15 @@ assert.match(generateManagementReportCsv(cashBook, getCashBookSummaryRows(cashBo
 const cashBookWorkbook = XLSX.read(await generateManagementReportWorkbook('cash-book', cashBook, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' }, 'Test user', undefined, [], getCashBookSummaryRows(cashBookSummary)), { type: 'array' });
 assert.equal(cashBookWorkbook.Sheets['Executive Summary']['A15']?.v, 'Opening balance (MWK)');
 assert.equal(cashBookWorkbook.Sheets['Report Data']['J3']?.v, 15000);
+const cashBookWorkbookWithSupplementary = XLSX.read(await generateManagementReportWorkbook(
+  'cash-book', cashBook, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' },
+  'Test user', undefined, [], getCashBookSummaryRows(cashBookSummary),
+  { headers: supplementaryCashBook.headers, rows: supplementaryCashBook.rows, exceptions: supplementaryCashBook.exceptions },
+), { type: 'array' });
+assert.ok(cashBookWorkbookWithSupplementary.Sheets['Other Payments']);
+assert.ok(cashBookWorkbookWithSupplementary.Sheets['Payment Exceptions']);
+assert.equal(cashBookWorkbookWithSupplementary.Sheets['Other Payments']['A3']?.v, '2026-04-02');
+
 const managementWorkbook = XLSX.read(await generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
 assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data', 'Quality Issues']);
 assert.equal(managementWorkbook.Sheets['Report Data']['J2']?.v, 20);
