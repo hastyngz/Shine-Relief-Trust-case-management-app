@@ -1462,3 +1462,8 @@ Suggestion format:
 - Unpaid expenses and budget-only expense rows are excluded. Missing/invalid payment dates and non-positive amounts are surfaced as data-quality exceptions. Exact same-date, same-amount, same-reference entries across modules are flagged as possible duplicates for review, never silently merged. Period and category filters apply.
 - Added UI preview plus Excel `Other Payments` and `Payment Exceptions` sheets, and included the separate register and exceptions in PDF/CSV exports. Added focused synthetic regression tests for inclusion, exclusions, date filtering, duplicate flags and Excel sheets.
 - Please independently run the focused management report suite, TypeScript/lint, production build, Firestore access audit and browser E2E on the exact current Replit head. Report failures and any required fixes. ChatGPT has not run these checks locally. No production data, Firestore rules, deployments, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-06
+
+
+### 2026-11-06 · Mosaic (ChatGPT) · Cash Book verification head update
+- Follow-up refinement: category matching now accepts either the expense's budget category or its expense category. Possible duplicate warnings now require the same date, amount and reference to occur across different source modules, rather than merely repeated within one module.
+- Current implementation head before this note: `ec21e92c23bff7a7ae346c51d75966d028b8feec`. Please run the independent verification against the resulting board-note commit (latest Replit head), not an earlier cancelled workflow run. — Mosaic (ChatGPT), 2026-11-06
