@@ -49,13 +49,13 @@ export const CASH_BOOK_END = '2026-12-31';
 export interface CashBookSummary {
   periodStart: string;
   periodEnd: string;
-  openingBalanceMWK: number;
+  openingBalanceMWK: number | null;
   cashReceivedMWK: number;
   expensesMWK: number;
   cashReturnedMWK: number;
   adjustmentsInMWK: number;
   adjustmentsOutMWK: number;
-  closingBalanceMWK: number;
+  closingBalanceMWK: number | null;
   omittedWithinPeriodCount: number;
   outsideYearRecordCount: number;
 }
@@ -83,40 +83,50 @@ function getAll2026CashBookTransactions(db: AppDatabase) {
 export function getCashBookSummary(db: AppDatabase, filters: ManagementFilters = {}): CashBookSummary {
   const start = clampCashBookDate(filters.startDate, CASH_BOOK_START);
   const end = clampCashBookDate(filters.endDate, CASH_BOOK_END);
+  const outsideYearRecordCount = (db.pettyCashTransactions || []).filter((entry) => entry.date < CASH_BOOK_START || entry.date > CASH_BOOK_END).length;
   if ((filters.financialYear && filters.financialYear !== '2026') || start > end) {
     return {
       periodStart: start,
       periodEnd: end,
-      openingBalanceMWK: 0,
+      openingBalanceMWK: null,
       cashReceivedMWK: 0,
       expensesMWK: 0,
       cashReturnedMWK: 0,
       adjustmentsInMWK: 0,
       adjustmentsOutMWK: 0,
-      closingBalanceMWK: 0,
+      closingBalanceMWK: null,
       omittedWithinPeriodCount: 0,
-      outsideYearRecordCount: (db.pettyCashTransactions || []).filter((entry) => entry.date < CASH_BOOK_START || entry.date > CASH_BOOK_END).length,
+      outsideYearRecordCount,
     };
   }
   const transactions = getCashBookTransactions(db, filters);
   const allTransactions = getAll2026CashBookTransactions(db);
+  const openingEntries = allTransactions.filter((entry) => entry.type === 'opening_balance');
+  // A balance is only verifiable when the ledger has exactly one opening float
+  // explicitly dated 1 January 2026. Never convert missing/late opening data to zero.
+  const openingBalanceVerified = openingEntries.length === 1 && openingEntries[0].date === CASH_BOOK_START;
   const allLedger = getPettyCashLedgerSummary(allTransactions);
   const ledger = getPettyCashLedgerSummary(transactions);
-  const priorBalance = allLedger.entries.filter((entry) => entry.date < start).at(-1)?.balanceAfterMWK || 0;
-  const periodClosingBalance = allLedger.entries.filter((entry) => entry.date <= end).at(-1)?.balanceAfterMWK;
+  const openingFloatMWK = openingBalanceVerified ? openingEntries[0].amountMWK : null;
+  const priorBalance = openingBalanceVerified
+    ? (allLedger.entries.filter((entry) => entry.date < start).at(-1)?.balanceAfterMWK ?? openingFloatMWK)
+    : null;
+  const periodClosingBalance = openingBalanceVerified
+    ? (allLedger.entries.filter((entry) => entry.date <= end).at(-1)?.balanceAfterMWK ?? priorBalance)
+    : null;
   const selectedIds = new Set(transactions.map((entry) => entry.id));
   return {
     periodStart: start,
     periodEnd: end,
-    openingBalanceMWK: start === CASH_BOOK_START ? (allTransactions.find((entry) => entry.type === 'opening_balance')?.amountMWK || 0) : priorBalance,
+    openingBalanceMWK: priorBalance,
     cashReceivedMWK: ledger.cashReceivedMWK,
     expensesMWK: ledger.expensesMWK,
     cashReturnedMWK: ledger.cashReturnedMWK,
     adjustmentsInMWK: ledger.adjustmentsInMWK,
     adjustmentsOutMWK: ledger.adjustmentsOutMWK,
-    closingBalanceMWK: periodClosingBalance ?? priorBalance,
+    closingBalanceMWK: periodClosingBalance,
     omittedWithinPeriodCount: allTransactions.filter((entry) => entry.date >= start && entry.date <= end && !selectedIds.has(entry.id)).length,
-    outsideYearRecordCount: (db.pettyCashTransactions || []).filter((entry) => entry.date < CASH_BOOK_START || entry.date > CASH_BOOK_END).length,
+    outsideYearRecordCount,
   };
 }
 
@@ -124,13 +134,13 @@ export function getCashBookSummaryRows(summary: CashBookSummary): ReportCell[][]
   return [
     ['Scope', 'Petty-cash ledger only; bank accounts are excluded and no payments are inferred.'],
     ['Selected period', `${summary.periodStart} to ${summary.periodEnd}`],
-    ['Opening balance (MWK)', summary.openingBalanceMWK],
+    ['Opening balance (MWK)', summary.openingBalanceMWK ?? 'Not verified — opening float missing or not dated 1 January 2026'],
     ['Cash received (MWK)', summary.cashReceivedMWK],
     ['Expenses paid (MWK)', summary.expensesMWK],
     ['Cash returned (MWK)', summary.cashReturnedMWK],
     ['Adjustments in (MWK)', summary.adjustmentsInMWK],
     ['Adjustments out (MWK)', summary.adjustmentsOutMWK],
-    ['Closing balance (MWK)', summary.closingBalanceMWK],
+    ['Closing balance (MWK)', summary.closingBalanceMWK ?? 'Not verified — cannot calculate without a verified opening float'],
     ['Records omitted within selected period by month/category filters', summary.omittedWithinPeriodCount],
     ['Records outside 2026 calendar year', summary.outsideYearRecordCount],
     ['Unpaid expenses / inferred payments', 'Excluded'],
@@ -357,14 +367,19 @@ export function buildManagementReportRows(
     }
     case 'cash-book': {
       const transactions = getCashBookTransactions(db, filters);
-      const fullLedger = getPettyCashLedgerSummary(getAll2026CashBookTransactions(db));
+      const allTransactions = getAll2026CashBookTransactions(db);
+      const openingEntries = allTransactions.filter((entry) => entry.type === 'opening_balance');
+      const openingBalanceVerified = openingEntries.length === 1 && openingEntries[0].date === CASH_BOOK_START;
+      const fullLedger = getPettyCashLedgerSummary(allTransactions);
       const balances = new Map(fullLedger.entries.map((entry) => [entry.id, entry.balanceAfterMWK]));
       return headersAndRows(
         ['Date', 'Entry ID', 'Source', 'Movement type', 'Description', 'Reference', 'Category', 'Inflow (MWK)', 'Outflow (MWK)', 'Balance (MWK)', 'Recorded by', 'Recorded at', 'Data quality'],
         transactions.map((entry) => {
           const inflow = ['opening_balance', 'cash_received', 'cash_returned', 'adjustment_in'].includes(entry.type) ? entry.amountMWK : 0;
           const outflow = ['expense', 'adjustment_out'].includes(entry.type) ? entry.amountMWK : 0;
-          return [entry.date, entry.id, 'pettyCashTransactions', entry.type, entry.description, entry.reference, entry.category || '', inflow, outflow, balances.get(entry.id) || 0, entry.recordedBy, entry.recordedAt, 'Recorded ledger movement'] as ReportCell[];
+          const balance = openingBalanceVerified ? (balances.get(entry.id) ?? 'Not verified') : 'Not verified';
+          const dataQuality = openingBalanceVerified ? 'Recorded ledger movement' : 'Opening float not verified; running balance omitted';
+          return [entry.date, entry.id, 'pettyCashTransactions', entry.type, entry.description, entry.reference, entry.category || '', inflow, outflow, balance, entry.recordedBy, entry.recordedAt, dataQuality] as ReportCell[];
         }),
       );
     }
