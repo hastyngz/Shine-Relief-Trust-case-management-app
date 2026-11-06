@@ -305,7 +305,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const handleCashBookExport = async (format: 'pdf' | 'csv') => {
     if (reportId !== 'cash-book' || !currentUser || !cashBookSummary) return;
     if (!ensureQualityOverride()) return;
-    const title = 'SHINE 2026 Cash Book (Petty Cash)';
+    const title = 'SHINE 2026 Cash Book';
     try {
       const blob = format === 'csv'
         ? new Blob([generateManagementReportCsv(rows, cashBookSummaryRows) + (cashBookSupplementary ? '\r\n\r\n' + generateManagementReportCsv({ headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows }, [['Register', 'Separate recorded payments; not included in petty-cash balances']]) + '\r\n\r\n' + generateManagementReportCsv({ headers: ['Source module', 'Source record ID', 'Exception', 'Recorded value'], rows: cashBookSupplementary.exceptions }) : '')], { type: 'text/csv;charset=utf-8' })
