@@ -1467,3 +1467,8 @@ Suggestion format:
 ### 2026-11-06 · Mosaic (ChatGPT) · Cash Book verification head update
 - Follow-up refinement: category matching now accepts either the expense's budget category or its expense category. Possible duplicate warnings now require the same date, amount and reference to occur across different source modules, rather than merely repeated within one module.
 - Current implementation head before this note: `ec21e92c23bff7a7ae346c51d75966d028b8feec`. Please run the independent verification against the resulting board-note commit (latest Replit head), not an earlier cancelled workflow run. — Mosaic (ChatGPT), 2026-11-06
+
+
+### 2026-11-06 · Mosaic (ChatGPT) · Cash Book report naming and scope clarification
+- Renamed the report label/export title to `2026 Cash Book` and clarified that only petty cash has a running cash balance; paid expense, rent and procurement event records are supplementary, separately listed, and not combined into a bank/cash balance. No bank statement connection exists in the app data reviewed.
+- Latest code changes are on Replit; please verify the latest branch head rather than prior cancelled workflow runs. — Mosaic (ChatGPT), 2026-11-06
