@@ -163,8 +163,15 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const report = buildManagementReportRows(reportId, permittedDb, filters, staff, salaryHistory);
   const rows = report;
   const cashBookSummary = reportId === 'cash-book' ? getCashBookSummary(permittedDb, filters) : undefined;
-  const cashBookSummaryRows = cashBookSummary ? getCashBookSummaryRows(cashBookSummary) : [];
   const cashBookSupplementary = reportId === 'cash-book' ? getCashBookSupplementaryPayments(permittedDb, filters) : undefined;
+  const cashBookSummaryRows = cashBookSummary ? [
+    ...getCashBookSummaryRows(cashBookSummary),
+    ['Supplementary paid expense events (separate register)', cashBookSupplementary?.sourceCounts.expenses || 0],
+    ['Supplementary rent payment events (separate register)', cashBookSupplementary?.sourceCounts.rent || 0],
+    ['Supplementary procurement payment events (separate register)', cashBookSupplementary?.sourceCounts.procurement || 0],
+    ['Supplementary payment data-quality exceptions', cashBookSupplementary?.exceptions.length || 0],
+    ['Payroll payment events', 'Excluded — cumulative payroll totals are not individual payment events'],
+  ] : [];
   const reportQualityConfig: ReportConfig = {
     title: MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId,
     periodLabel: `${filters.startDate || filters.financialYear || 'All available dates'} to ${filters.endDate || 'present'}`,
