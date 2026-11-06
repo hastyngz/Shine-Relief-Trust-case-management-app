@@ -1,0 +1,156 @@
+/**
+ * "Navy" app view (5th option beside Classic, iOS, Foundation and Sunrise).
+ * Dark navy page, raised navy cards, orange primary actions, blue and magenta accents.
+ * It follows the Shine Relief Trust mobile design mock-up. Everything is scoped to
+ * data-mobile-view="navy", so the other views and the colour themes are untouched.
+ * The layout is the Classic layout (top header, bottom tabs on phones); only colour changes.
+ */
+
+#app-shell[data-mobile-view="navy"] {
+	--navy-bg: #0b1530;
+	--navy-card: #131f42;
+	--navy-bar: #0f1b3a;
+	--navy-text: #f3f5fb;
+	--navy-muted: #9aa6c9;
+	--navy-line: rgb(255 255 255 / 10%);
+	--navy-orange: #ff8a3d;
+	--navy-blue: #3da9ff;
+	--navy-magenta: #e0499b;
+	background-color: var(--navy-bg);
+	color: var(--navy-text);
+}
+
+/* ---------- Header and desktop navigation ---------- */
+#app-shell[data-mobile-view="navy"] #app-header {
+	background: var(--navy-bar) !important;
+	border-bottom: 1px solid var(--navy-line) !important;
+	box-shadow: none !important;
+}
+
+#app-shell[data-mobile-view="navy"] #desktop-nav {
+	background: var(--navy-bar);
+	border-bottom: 1px solid var(--navy-line);
+}
+
+#app-shell[data-mobile-view="navy"] #desktop-nav button {
+	color: var(--navy-muted);
+}
+
+#app-shell[data-mobile-view="navy"] #desktop-nav button:hover {
+	background: var(--navy-card);
+	color: var(--navy-text);
+}
+
+#app-shell[data-mobile-view="navy"] #desktop-nav button[class~="bg-teal-800"] {
+	background: var(--navy-orange) !important;
+	color: #1a0f05 !important;
+}
+
+/* ---------- Page surfaces ---------- */
+#app-shell[data-mobile-view="navy"] main [class~="bg-white"],
+#app-shell[data-mobile-view="navy"] main [class~="bg-stone-50"],
+#app-shell[data-mobile-view="navy"] main [class~="bg-stone-100"],
+#app-shell[data-mobile-view="navy"] [role="dialog"] [class~="bg-white"] {
+	background-color: var(--navy-card) !important;
+	color: var(--navy-text);
+}
+
+#app-shell[data-mobile-view="navy"] main [class~="bg-stone-200"] {
+	background-color: rgb(255 255 255 / 12%) !important;
+}
+
+#app-shell[data-mobile-view="navy"] main :is([class~="border-stone-100"], [class~="border-stone-200"], [class~="border-stone-300"]),
+#app-shell[data-mobile-view="navy"] main :is([class~="divide-stone-100"], [class~="divide-stone-200"]) > * {
+	border-color: var(--navy-line) !important;
+}
+
+/* ---------- Text ---------- */
+#app-shell[data-mobile-view="navy"] main :is([class~="text-stone-900"], [class~="text-stone-800"], [class~="text-stone-700"], [class~="text-teal-950"], [class~="text-teal-900"]) {
+	color: var(--navy-text) !important;
+}
+
+#app-shell[data-mobile-view="navy"] main :is([class~="text-stone-600"], [class~="text-stone-500"], [class~="text-stone-400"]) {
+	color: var(--navy-muted) !important;
+}
+
+#app-shell[data-mobile-view="navy"] main :is([class~="text-teal-800"], [class~="text-teal-700"], [class~="text-teal-600"]) {
+	color: #ffb27a !important;
+}
+
+/* ---------- Primary actions and form fields ---------- */
+#app-shell[data-mobile-view="navy"] main button[class~="bg-teal-800"],
+#app-shell[data-mobile-view="navy"] main button[class~="bg-teal-700"],
+#app-shell[data-mobile-view="navy"] main button[class~="bg-teal-900"] {
+	background-color: var(--navy-orange) !important;
+	color: #1a0f05 !important;
+}
+
+#app-shell[data-mobile-view="navy"] main button[class~="bg-teal-800"] *,
+#app-shell[data-mobile-view="navy"] main button[class~="bg-teal-700"] *,
+#app-shell[data-mobile-view="navy"] main button[class~="bg-teal-900"] * {
+	color: inherit !important;
+}
+
+#app-shell[data-mobile-view="navy"] :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+	background-color: var(--navy-bg) !important;
+	color: var(--navy-text) !important;
+	border-color: rgb(255 255 255 / 18%) !important;
+}
+
+#app-shell[data-mobile-view="navy"] :is(input, textarea)::placeholder {
+	color: #6e7ba3;
+}
+
+#app-shell[data-mobile-view="navy"] :is(input, select, textarea):focus-visible,
+#app-shell[data-mobile-view="navy"] :is(button, a):focus-visible {
+	outline: 2px solid var(--navy-blue);
+	outline-offset: 2px;
+}
+
+#app-shell[data-mobile-view="navy"] select option {
+	background: var(--navy-bg);
+	color: var(--navy-text);
+}
+
+/* Tables */
+#app-shell[data-mobile-view="navy"] main :is(thead, th) {
+	background-color: rgb(255 255 255 / 6%) !important;
+}
+
+/* ---------- Bottom navigation (phones) ---------- */
+.mobile-bottom-nav--navy {
+	background: #0f1b3a;
+	border-top: 1px solid rgb(255 255 255 / 10%);
+	box-shadow: 0 -6px 18px rgb(0 0 0 / 35%);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	overflow-x: auto;
+}
+
+.mobile-bottom-nav--navy .mobile-bottom-nav-inner--navy {
+	width: max-content;
+	min-width: max-content;
+	margin-inline: auto;
+}
+
+.mobile-bottom-nav--navy .mobile-nav-button {
+	min-height: 2.75rem;
+	color: #9aa6c9;
+}
+
+.mobile-bottom-nav--navy .mobile-nav-button:hover {
+	color: #f3f5fb;
+}
+
+.mobile-bottom-nav--navy .mobile-nav-button[class~="text-teal-900"] {
+	color: #ff8a3d;
+}
+
+.mobile-bottom-nav--navy .mobile-nav-button svg[class~="text-stone-500"] {
+	color: #9aa6c9;
+}
+
+@media (max-width: 767px) {
+	#app-shell[data-mobile-view="navy"] main {
+		padding-bottom: 6rem;
+	}
+}

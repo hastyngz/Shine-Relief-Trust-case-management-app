@@ -1,6 +1,6 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Sprout } from 'lucide-react';
-import { AppDatabase, ContactCategory, ContactRecord, ProgrammeLogRecord, ProgrammeLogType, ProgrammePaymentStatus } from '../../types';
+import { AppDatabase, ContactCategory, ContactRecord, FishProductionStage, ProgrammeLogRecord, ProgrammeLogType, ProgrammePaymentStatus } from '../../types';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeDefinition, ProgrammeId } from '../../data/programmes';
 import { addProgrammeLog } from '../../utils/storage';
 import { formatMWK } from '../../utils/export';
@@ -138,6 +138,8 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
   const Icon = PROGRAMME_ICONS[programme.id];
   const logs = logsForProgramme(db, programme.id);
   const summary = summariseProgramme(db, programme.id);
+  const [expenseRequest, setExpenseRequest] = useState(0);
+  const canRecordExpense = programme.logTypes.includes('Expense') && programme.id !== 'fish-chicken';
   const isIncomeProgramme = ['fish-farming', 'chicken-farming', 'fish-chicken', 'rice-maize-mill', 'tomato-farming'].includes(programme.id);
 
   return (
@@ -181,17 +183,11 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
           <button type="button" onClick={() => props.onCreateProgrammePlan('workplan', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
             <Plus className="h-4 w-4" />New workplan
           </button>
-        </div>
-      )}
-
-      {!props.isViewOnly && (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => props.onCreateProgrammePlan('budget', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
-            <Plus className="h-4 w-4" />New budget line
-          </button>
-          <button type="button" onClick={() => props.onCreateProgrammePlan('workplan', programme.id)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
-            <Plus className="h-4 w-4" />New workplan
-          </button>
+          {canRecordExpense && (
+            <button type="button" onClick={() => setExpenseRequest((count) => count + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-xs font-bold text-teal-900 hover:bg-teal-50">
+              <Plus className="h-4 w-4" />New expense
+            </button>
+          )}
         </div>
       )}
 
@@ -210,6 +206,7 @@ function ProgrammeDetail(props: ProgrammeViewDetailProps) {
           auditActor={props.auditActor}
           isViewOnly={props.isViewOnly}
           allowAdd={programme.id !== 'fish-chicken'}
+          expenseRequest={expenseRequest}
           onRefresh={props.onRefresh}
           onProgrammeLogAdded={props.onProgrammeLogAdded}
         />
@@ -371,6 +368,7 @@ function RecordsSection({
   auditActor,
   isViewOnly,
   allowAdd,
+  expenseRequest,
   onRefresh,
   onProgrammeLogAdded,
 }: {
@@ -380,6 +378,7 @@ function RecordsSection({
   auditActor: string;
   isViewOnly: boolean;
   allowAdd: boolean;
+  expenseRequest: number;
   onRefresh: () => void;
   onProgrammeLogAdded: (record: ProgrammeLogRecord, programmeName: string) => void;
 }) {
@@ -397,6 +396,25 @@ function RecordsSection({
   const [newCounterpartyName, setNewCounterpartyName] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<ProgrammePaymentStatus>('paid');
   const [cashAmountMWK, setCashAmountMWK] = useState('');
+  const [fishStage, setFishStage] = useState<FishProductionStage>('fingerlings');
+  const [pondNo, setPondNo] = useState('');
+  const [numberStocked, setNumberStocked] = useState('');
+  const [feedGivenKg, setFeedGivenKg] = useState('');
+  const [waterChange, setWaterChange] = useState('');
+  const [averageWeightG, setAverageWeightG] = useState('');
+  const [dayExpenseMWK, setDayExpenseMWK] = useState('');
+  useEffect(() => {
+    if (expenseRequest === 0) return;
+    setEntryType('Expense');
+    setCounterpartyContactId('');
+    setNewCounterpartyName('');
+    setPaymentStatus('paid');
+    setCashAmountMWK('');
+    const form = document.getElementById('programme-record-form');
+    form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form?.querySelector<HTMLInputElement>('input[name="record-description"]')?.focus({ preventScroll: true });
+  }, [expenseRequest]);
+  const isFishProduction = programme.id === 'fish-farming' && entryType === 'Production';
   const showQuantity = ['Production', 'Sale', 'Input', 'Distribution'].includes(entryType);
   const showAmount = ['Sale', 'Expense', 'Input', 'Distribution'].includes(entryType);
   const showBeneficiaries = entryType === 'Distribution' || entryType === 'Family support';
@@ -406,8 +424,11 @@ function RecordsSection({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const optionalNumbers = [quantity, amountMWK, beneficiaries].filter((value) => value.trim() !== '');
-    if (!date || !description.trim() || optionalNumbers.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+    const fishNumbers = isFishProduction ? [numberStocked, feedGivenKg, averageWeightG, dayExpenseMWK] : [];
+    const optionalNumbers = [quantity, amountMWK, beneficiaries, ...fishNumbers].filter((value) => value.trim() !== '');
+    const fishLabel = fishStage === 'fingerlings' ? 'Fingerlings production' : 'Table-size production';
+    const finalDescription = description.trim() || (isFishProduction ? `${fishLabel}${pondNo.trim() ? ` – Pond ${pondNo.trim()}` : ''}` : '');
+    if (!date || !finalDescription || optionalNumbers.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) {
       setFormError('Enter a date and description, and use zero or a positive number for each numeric field.');
       return;
     }
@@ -454,7 +475,16 @@ function RecordsSection({
       programmeId: programme.id,
       date,
       entryType,
-      description: description.trim(),
+      description: finalDescription,
+      ...(isFishProduction ? {
+        fishStage,
+        ...(pondNo.trim() ? { pondNo: pondNo.trim() } : {}),
+        ...(numberStocked !== '' ? { numberStocked: Number(numberStocked) } : {}),
+        ...(feedGivenKg !== '' ? { feedGivenKg: Number(feedGivenKg) } : {}),
+        ...(waterChange.trim() ? { waterChange: waterChange.trim() } : {}),
+        ...(fishStage === 'fingerlings' && averageWeightG !== '' ? { averageWeightG: Number(averageWeightG) } : {}),
+        ...(fishStage === 'table-size' && dayExpenseMWK !== '' ? { dayExpenseMWK: Number(dayExpenseMWK) } : {}),
+      } : {}),
       ...(showQuantity && quantity !== '' ? { quantity: Number(quantity) } : {}),
       ...(showQuantity && unit.trim() ? { unit: unit.trim() } : {}),
       ...(showAmount && amountMWK !== '' ? { amountMWK: Number(amountMWK) } : {}),
@@ -474,6 +504,12 @@ function RecordsSection({
     setNewCounterpartyName('');
     setPaymentStatus('paid');
     setCashAmountMWK('');
+    setPondNo('');
+    setNumberStocked('');
+    setFeedGivenKg('');
+    setWaterChange('');
+    setAverageWeightG('');
+    setDayExpenseMWK('');
     setFormError('');
     onRefresh();
   };
@@ -482,7 +518,7 @@ function RecordsSection({
     <Section title="Records">
       {!allowAdd && <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700">These combined records are kept for reference. New entries should be recorded under Fish Farming or Chicken Farming.</p>}
       {!isViewOnly && allowAdd && (
-        <form onSubmit={submit} className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
+        <form id="programme-record-form" onSubmit={submit} className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
           <h3 className="flex items-center gap-2 text-sm font-bold text-stone-900"><Plus className="h-4 w-4 text-teal-800" />Add record</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1 text-xs font-semibold text-stone-700">Date
@@ -499,9 +535,38 @@ function RecordsSection({
                 {programme.logTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </label>
-            <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">Description
-              <input required value={description} onChange={(event) => setDescription(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">{programme.id === 'fish-farming' && entryType === 'Expense' ? 'Item' : isFishProduction ? 'Description (optional)' : 'Description'}
+              <input name="record-description" required={!isFishProduction} value={description} onChange={(event) => setDescription(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>
+            {isFishProduction && <>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Production stage
+                <select value={fishStage} onChange={(event) => setFishStage(event.currentTarget.value as FishProductionStage)} className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+                  <option value="fingerlings">Fingerlings production</option>
+                  <option value="table-size">Table-size production</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Pond no.
+                <input value={pondNo} onChange={(event) => setPondNo(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Number stocked
+                <input type="number" min="0" step="1" value={numberStocked} onChange={(event) => setNumberStocked(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700">Feed given (kg)
+                <input type="number" min="0" step="any" value={feedGivenKg} onChange={(event) => setFeedGivenKg(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-stone-700 sm:col-span-2">{fishStage === 'fingerlings' ? 'Water change / treatment' : 'Water change done'}
+                <input value={waterChange} onChange={(event) => setWaterChange(event.currentTarget.value)} placeholder={fishStage === 'fingerlings' ? 'e.g. Half changed, salt treatment' : 'e.g. Yes, half changed'} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              </label>
+              {fishStage === 'fingerlings' ? (
+                <label className="space-y-1 text-xs font-semibold text-stone-700">Average weight (g)
+                  <input type="number" min="0" step="any" value={averageWeightG} onChange={(event) => setAverageWeightG(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+                </label>
+              ) : (
+                <label className="space-y-1 text-xs font-semibold text-stone-700">Expense for the day (MWK)
+                  <input type="number" min="0" step="any" value={dayExpenseMWK} onChange={(event) => setDayExpenseMWK(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+                </label>
+              )}
+            </>}
             {showQuantity && <label className="space-y-1 text-xs font-semibold text-stone-700">Quantity
               <input type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.currentTarget.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </label>}
@@ -559,6 +624,13 @@ function RecordsSection({
               <time className="text-xs text-stone-500">{log.date}</time>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
+              {log.fishStage && <span className="font-semibold">{log.fishStage === 'fingerlings' ? 'Fingerlings' : 'Table-size'}</span>}
+              {log.pondNo && <span>Pond {log.pondNo}</span>}
+              {log.numberStocked !== undefined && <span>{log.numberStocked} stocked</span>}
+              {log.feedGivenKg !== undefined && <span>Feed {log.feedGivenKg} kg</span>}
+              {log.waterChange && <span>Water: {log.waterChange}</span>}
+              {log.averageWeightG !== undefined && <span>Avg weight {log.averageWeightG} g</span>}
+              {log.dayExpenseMWK !== undefined && <span>Day expense {formatMWK(log.dayExpenseMWK)}</span>}
               {log.quantity !== undefined && <span>{log.quantity}{log.unit ? ` ${log.unit}` : ''}</span>}
               {log.amountMWK !== undefined && <span>{formatMWK(log.amountMWK)}</span>}
               {log.counterpartyName && <span>{log.entryType === 'Sale' ? 'Customer' : 'Supplier'}: {log.counterpartyName}</span>}

@@ -6,15 +6,13 @@
       "indexes": "firestore.indexes.json"
     }
   ],
-  "storage": {
-    "rules": "storage.rules"
-  },
   "hosting": {
     "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "sample_reports/september_2026_missing_payroll_report.xlsx"
     ],
     "rewrites": [
       {
@@ -27,8 +25,8 @@
     "firestore": {
       "port": 8080
     },
-    "storage": {
-      "port": 9199
+    "auth": {
+      "port": 9099
     },
     "ui": {
       "enabled": false

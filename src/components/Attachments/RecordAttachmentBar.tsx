@@ -11,6 +11,7 @@ import {
   subscribeAttachmentsForTarget,
 } from '../../services/attachmentService';
 import { PhotoUploadModal } from './PhotoUploadModal';
+import { getStoredFileDownloadUrl } from '../../services/r2StorageClient';
 
 interface RecordAttachmentBarProps {
   targetType: AttachmentTargetType;
@@ -31,8 +32,19 @@ export const RecordAttachmentBar: React.FC<RecordAttachmentBarProps> = ({
   const [attachments, setAttachments] = useState<PhotoAttachment[]>([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activePreview, setActivePreview] = useState<PhotoAttachment | null>(null);
+  const [activePreviewUrl, setActivePreviewUrl] = useState('');
 
   const canUpload = canUploadAttachment(role, isViewOnly);
+
+  const openPreview = async (attachment: PhotoAttachment) => {
+    setActivePreview(attachment);
+    setActivePreviewUrl('');
+    try {
+      setActivePreviewUrl(await getStoredFileDownloadUrl(attachment.storagePath));
+    } catch (error) {
+      console.error('Could not create secure attachment preview URL:', error);
+    }
+  };
 
   useEffect(() => {
     if (!targetId) return;
@@ -57,7 +69,7 @@ export const RecordAttachmentBar: React.FC<RecordAttachmentBarProps> = ({
                 <button
                   key={att.id}
                   type="button"
-                  onClick={() => setActivePreview(att)}
+                  onClick={() => void openPreview(att)}
                   className="w-6 h-6 rounded-md overflow-hidden border border-white shadow-2xs hover:scale-110 transition-transform"
                   title={att.caption || att.fileName}
                 >
@@ -117,7 +129,7 @@ export const RecordAttachmentBar: React.FC<RecordAttachmentBarProps> = ({
           >
             <div className="relative aspect-4/3 bg-stone-900">
               <img
-                src={activePreview.downloadUrl}
+                src={activePreviewUrl || activePreview.downloadUrl}
                 alt={activePreview.caption || activePreview.fileName}
                 className="w-full h-full object-contain"
               />

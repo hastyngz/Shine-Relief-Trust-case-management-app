@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Girl, Household, GirlStatus, AppDatabase } from '../types';
 import { formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { getGirlsWithActionRequired } from '../services/healthRecordAccess';
+import { EmptySun } from './ui/EmptySun';
 import {
   Users,
   Search,
@@ -31,7 +33,7 @@ export const GirlsList: React.FC<GirlsListProps> = ({
   onSelectGirl,
   onRegisterGirl,
 }) => {
-  const { isViewOnly } = useAuth();
+  const { isViewOnly, canViewHealthRecords } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHouseId, setSelectedHouseId] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatusFilter || 'All');
@@ -50,20 +52,11 @@ export const GirlsList: React.FC<GirlsListProps> = ({
     return Array.from(new Set(girls.map((g) => g.classLevel))).filter(Boolean);
   }, [girls]);
 
-  // Map of girlId to boolean indicating if they have any follow-ups requiring action
-  const girlActionMap = useMemo(() => {
-    const map = new Set<string>();
-    db.educationalFollowUps.forEach((e) => {
-      if (e.furtherActionRequired) map.add(e.girlId);
-    });
-    db.healthFollowUps.forEach((h) => {
-      if (h.furtherActionRequired) map.add(h.girlId);
-    });
-    db.familyFollowUps.forEach((f) => {
-      if (f.furtherActionRequired) map.add(f.girlId);
-    });
-    return map;
-  }, [db]);
+  // Do not let a restricted medical follow-up affect the visible action indicator.
+  const girlActionMap = useMemo(
+    () => getGirlsWithActionRequired(db, canViewHealthRecords),
+    [db, canViewHealthRecords]
+  );
 
   const filteredGirls = useMemo(() => {
     return girls.filter((girl) => {
@@ -153,7 +146,7 @@ export const GirlsList: React.FC<GirlsListProps> = ({
         {!isViewOnly && (
           <button
             onClick={onRegisterGirl}
-            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95 self-start sm:self-center"
+            className="fx-press fx-btn-main px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform min-h-11 self-start sm:self-center"
           >
             <UserPlus className="w-4 h-4 text-amber-300" />
             <span>Register New Girl</span>
@@ -291,7 +284,11 @@ export const GirlsList: React.FC<GirlsListProps> = ({
       {/* Girls Cards Grid */}
       {filteredGirls.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-stone-200 p-6">
-          <Users className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          {girls.length === 0 ? (
+            <div className="flex justify-center mb-2"><EmptySun /></div>
+          ) : (
+            <Users className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          )}
           <h3 className="text-base font-bold text-stone-800">
             {girls.length === 0 ? 'No SHINE Girls Registered Yet' : 'No Girls Found'}
           </h3>
@@ -318,15 +315,16 @@ export const GirlsList: React.FC<GirlsListProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredGirls.map((girl) => {
+          {filteredGirls.map((girl, index) => {
             const hasActionRequired = girlActionMap.has(girl.id);
             const houseName = houseMap.get(girl.householdId) || 'Unassigned';
 
             return (
               <div
                 key={girl.id}
+                style={{ "--i": index } as React.CSSProperties}
                 onClick={() => onSelectGirl(girl.id)}
-                className={`p-4 rounded-xl border bg-white hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group ${
+                className={`fx-rise fx-press fx-card p-4 rounded-xl border bg-white cursor-pointer transition-transform flex flex-col justify-between group ${
                   hasActionRequired
                     ? 'border-amber-300 hover:border-amber-400'
                     : 'border-stone-200 hover:border-teal-700'

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Mic, Pause, Play, RotateCcw, Trash2, Upload, Volume2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE_URL } from '../../services/apiBase';
 
 interface AudioDataInputProps {
   label?: string;
@@ -99,7 +100,7 @@ export const AudioDataInput: React.FC<AudioDataInputProps> = ({
       const bytes = new Uint8Array(await audio.arrayBuffer());
       let binary = '';
       bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-      const response = await fetch('/api/ai/transcribe', {
+      const response = await fetch(`${API_BASE_URL}/api/ai/transcribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ audioBase64: btoa(binary), mimeType: audio.type || 'audio/webm' }),

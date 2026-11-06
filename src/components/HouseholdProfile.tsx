@@ -6,6 +6,7 @@ import {
   HouseholdExpense,
   HouseholdActivity,
   PhotoAttachment,
+  ImportAuditRecord,
 } from '../types';
 import { formatMWK, formatDate } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +34,7 @@ import { PhotoGallery } from './Attachments/PhotoGallery';
 import { PhotoUploadModal } from './Attachments/PhotoUploadModal';
 import { RecordAttachmentBar } from './Attachments/RecordAttachmentBar';
 import { subscribeAllHouseholdAttachments } from '../services/attachmentService';
+import { buildHouseholdBudgetVsActual } from '../utils/householdBudget';
 
 interface HouseholdProfileProps {
   household: Household;
@@ -59,6 +61,9 @@ interface HouseholdProfileProps {
   onAddExpense: (household: Household) => void;
   onAddActivity: (household: Household) => void;
   onAskAI?: (houseId: string) => void;
+  importAudits?: ImportAuditRecord[];
+  canUndoBudgetImport?: boolean;
+  onUndoBudgetImport?: (auditId: string) => void;
 }
 
 type HouseTab = 'overview' | 'rent' | 'expenses' | 'activities' | 'photos';
@@ -82,9 +87,17 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   onAddExpense,
   onAddActivity,
   onAskAI,
+  importAudits = [],
+  canUndoBudgetImport = false,
+  onUndoBudgetImport,
 }) => {
-  const { isViewOnly } = useAuth();
+  const { isViewOnly, isAdmin, staffProfile } = useAuth();
+  const canRecordPayment = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [activeTab, setActiveTab] = useState<HouseTab>('overview');
+  const [budgetMonth, setBudgetMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('All');
   const [expensePaymentFilter, setExpensePaymentFilter] = useState<string>('All');
   const [payingExpenseId, setPayingExpenseId] = useState<string | null>(null);
@@ -103,10 +116,14 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
     supplierEmail: string;
     supplierAddress: string;
     invoiceReference: string;
+    updatedAt?: string;
   } | null>(null);
   const [expenseEditError, setExpenseEditError] = useState('');
   const [householdAttachments, setHouseholdAttachments] = useState<PhotoAttachment[]>([]);
   const [isHousePhotoModalOpen, setIsHousePhotoModalOpen] = useState(false);
+  const housePhotoUrl = householdAttachments.find((attachment) =>
+    attachment.targetType === 'household' && attachment.targetId === household.id && attachment.category === 'Profile Photo'
+  )?.downloadUrl || household.photoUrl;
 
   // Subscribe to all attachments linked to this household or its activities/expenses/rent
   useEffect(() => {
@@ -128,8 +145,16 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const unpaidCount = rentPayments.filter((r) => r.paymentStatus === 'Not paid').length;
 
   // Expenses analytics
-  const totalExpenses = expenses.reduce((acc, curr) => acc + curr.totalCost, 0);
-  const filteredExpenses = expenses.filter((e) => {
+  const actualExpenses = expenses.filter((expense) => expense.recordType !== 'budget');
+  const totalExpenses = actualExpenses.reduce((acc, curr) => acc + curr.totalCost, 0);
+  const budgetComparison = buildHouseholdBudgetVsActual(expenses, household.id, budgetMonth);
+  const householdBudgetImports = importAudits
+    .filter((audit) => audit.childHouseBudgetHouseholdId === household.id && !audit.reversesImportAuditId)
+    .sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+  const reversalAuditByImportId = new Map(
+    importAudits.filter((audit) => audit.reversesImportAuditId).map((audit) => [audit.reversesImportAuditId as string, audit]),
+  );
+  const filteredExpenses = actualExpenses.filter((e) => {
     const categoryMatches = expenseCategoryFilter === 'All' || e.category === expenseCategoryFilter;
     const paymentMatches = expensePaymentFilter === 'All'
       || (e.paymentStatus || 'Paid') === expensePaymentFilter;
@@ -140,7 +165,11 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
   const outstandingActivities = activities.filter((a) => a.furtherActionRequired);
 
   const saveExpenseEdit = (expense: HouseholdExpense) => {
-    if (!editingExpense || !onUpdateExpense) return;
+    if (isViewOnly || !editingExpense || !onUpdateExpense) return;
+    if (editingExpense.updatedAt && editingExpense.updatedAt !== expense.updatedAt) {
+      setExpenseEditError('This expense changed elsewhere. Close and reopen it before saving.');
+      return;
+    }
     const totalCost = Number(editingExpense.totalCost);
     const unitCost = Number(editingExpense.unitCost);
     const amountDue = Number(editingExpense.amountDue);
@@ -158,7 +187,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
       quantity: editingExpense.quantity.trim(),
       unitCost,
       totalCost,
-      ...(expense.paymentStatus === 'Payment Outstanding' ? { amountDue: amountDue || totalCost } : {}),
+      ...(expense.paymentStatus === 'Payment Outstanding' && canRecordPayment ? { amountDue: amountDue || totalCost } : {}),
       supplier: editingExpense.supplier.trim(),
       supplierContactPerson: editingExpense.supplierContactPerson.trim(),
       supplierPhone: editingExpense.supplierPhone.trim(),
@@ -255,9 +284,9 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-4">
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-400 text-teal-950 flex items-center justify-center font-black text-xl sm:text-2xl shadow-md shrink-0 overflow-hidden group border-2 border-white/20">
-                {household.photoUrl ? (
+                {housePhotoUrl ? (
                   <img
-                    src={household.photoUrl}
+                    src={housePhotoUrl}
                     alt={household.name}
                     className="w-full h-full object-cover"
                   />
@@ -542,13 +571,15 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => onAddRentPayment(household)}
-                className="self-start sm:self-center px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Record Rent Payment</span>
-              </button>
+              {!isViewOnly && (
+                <button
+                  onClick={() => onAddRentPayment(household)}
+                  className="self-start sm:self-center px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Record Rent Payment</span>
+                </button>
+              )}
             </div>
 
             {rentPayments.length === 0 ? (
@@ -618,7 +649,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                             )}
                             {r.notes || '—'}
                           </td>
-                          {onDeleteRentPayment && (
+                          {!isViewOnly && onDeleteRentPayment && (
                             <td className="px-2 py-2.5 text-right">
                               <button
                                 onClick={() => onDeleteRentPayment(r.id)}
@@ -679,15 +710,127 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                   <option value="Payment Outstanding">Payment Outstanding</option>
                 </select>
 
-                <button
-                  onClick={() => onAddExpense(household)}
-                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Record Expense</span>
-                </button>
+                {!isViewOnly && (
+                  <button
+                    onClick={() => onAddExpense(household)}
+                    className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Record Expense</span>
+                  </button>
+                )}
               </div>
             </div>
+
+
+            <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-3" aria-label="Child House budget versus actual">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-bold text-stone-900">Monthly Budget vs Actual</h4>
+                  <p className="text-xs text-stone-600">Budget entries are compared with recorded spending for this household.</p>
+                </div>
+                <label className="text-xs font-semibold text-stone-700">
+                  Reporting month
+                  <input
+                    aria-label="Budget comparison month"
+                    type="month"
+                    value={budgetMonth}
+                    onChange={(event) => setBudgetMonth(event.target.value)}
+                    className="ml-2 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs"
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-[10px] uppercase font-semibold text-stone-500">Budget</p>
+                  <p className="text-sm font-bold text-stone-900">{formatMWK(budgetComparison.budgetTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-[10px] uppercase font-semibold text-stone-500">Actual spending</p>
+                  <p className="text-sm font-bold text-stone-900">{formatMWK(budgetComparison.actualTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-[10px] uppercase font-semibold text-stone-500">Variance · actual less budget</p>
+                  <p className={`text-sm font-bold ${budgetComparison.variance > 0 ? 'text-red-700' : 'text-emerald-800'}`}>
+                    {formatMWK(budgetComparison.variance)}
+                    {budgetComparison.percentageUsed !== null && <span className="ml-1 text-[10px] font-medium">({budgetComparison.percentageUsed.toFixed(1)}% used)</span>}
+                  </p>
+                </div>
+              </div>
+              {budgetComparison.rows.length === 0 ? (
+                <p className="text-xs text-stone-500">No budget or actual entries are recorded for this month yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="text-[10px] uppercase text-stone-600 border-b border-stone-200">
+                      <tr>
+                        <th className="py-2 pr-3">Item</th>
+                        <th className="py-2 px-2 text-right">Budget</th>
+                        <th className="py-2 px-2 text-right">Actual</th>
+                        <th className="py-2 px-2 text-right">Variance</th>
+                        <th className="py-2 pl-2 text-right">% used</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-200">
+                      {budgetComparison.rows.map((row) => (
+                        <tr key={row.key} className={row.overspent ? 'bg-red-50/70' : ''}>
+                          <td className="py-2 pr-3">
+                            <span className="font-semibold text-stone-800">{row.itemDescription}</span>
+                            <span className="block text-[10px] text-stone-500">{row.category}{row.unit ? ` · ${row.unit}` : ''}</span>
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums">{formatMWK(row.budgetAmount)}</td>
+                          <td className="py-2 px-2 text-right tabular-nums">{formatMWK(row.actualAmount)}</td>
+                          <td className={`py-2 px-2 text-right tabular-nums font-semibold ${row.overspent ? 'text-red-700' : 'text-stone-700'}`}>{formatMWK(row.variance)}</td>
+                          <td className="py-2 pl-2 text-right tabular-nums">{row.percentageUsed === null ? 'No budget' : `${row.percentageUsed.toFixed(1)}%`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {householdBudgetImports.length > 0 && (
+              <section className="rounded-xl border border-stone-200 bg-white p-4 space-y-3" aria-label="Child House budget import history">
+                <div>
+                  <h4 className="text-sm font-bold text-stone-900">Budget import history</h4>
+                  <p className="text-xs text-stone-600">Imports are recorded separately. Undo removes only unchanged budget rows created by that import.</p>
+                </div>
+                <div className="space-y-2">
+                  {householdBudgetImports.map((audit) => {
+                    const reversalAudit = reversalAuditByImportId.get(audit.id);
+                    const rowCount = audit.childHouseBudgetImportedExpenses?.length || 0;
+                    const reversed = reversalAudit?.status === 'cancelled' && reversalAudit.childHouseBudgetReversedExpenseCount === rowCount;
+                    const undoNeedsReview = Boolean(reversalAudit && !reversed);
+                    return (
+                      <div key={audit.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-stone-200 p-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-stone-800 break-words">{audit.fileName}</p>
+                          <p className="text-[11px] text-stone-500">{new Date(audit.importedAt).toLocaleString()} · {audit.importedByName} · {rowCount} new budget rows</p>
+                        </div>
+                        {reversed ? (
+                          <span className="text-xs font-semibold text-stone-600">Reversed</span>
+                        ) : undoNeedsReview ? (
+                          <span className="text-xs font-semibold text-amber-700">Undo needs review · {reversalAudit?.childHouseBudgetReversedExpenseCount || 0}/{rowCount} removed</span>
+                        ) : rowCount === 0 ? (
+                          <span className="text-xs text-stone-500">No new rows created</span>
+                        ) : canUndoBudgetImport && onUndoBudgetImport ? (
+                          <button
+                            type="button"
+                            onClick={() => onUndoBudgetImport(audit.id)}
+                            className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                          >
+                            Undo import
+                          </button>
+                        ) : (
+                          <span className="text-xs text-stone-500">Administrator or Manager can undo</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {filteredExpenses.length === 0 ? (
               <div className="text-center py-8 bg-stone-50 rounded-lg border border-dashed border-stone-300">
@@ -744,7 +887,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           {(exp.paymentStatus || 'Paid') === 'Payment Outstanding' ? (
                             <div>
                               <span className="font-bold text-amber-800">Outstanding · {formatMWK(exp.amountDue ?? exp.totalCost)}</span>
-                              {!isViewOnly && onMarkExpensePaid && (
+                              {canRecordPayment && onMarkExpensePaid && (
                                 payingExpenseId === exp.id ? (
                                   <div className="mt-2 min-w-48 space-y-2 rounded border border-stone-200 bg-white p-2">
                                     <label className="block text-[10px] font-semibold text-stone-700">Date paid
@@ -799,6 +942,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                                   supplierEmail: exp.supplierEmail || '',
                                   supplierAddress: exp.supplierAddress || '',
                                   invoiceReference: exp.invoiceReference || '',
+                                  updatedAt: exp.updatedAt,
                                 });
                               }}>Edit</button>
                             )}
@@ -814,7 +958,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           </div>
                         </td>
                       </tr>
-                      {editingExpense?.id === exp.id && (
+                      {!isViewOnly && editingExpense?.id === exp.id && (
                         <tr>
                           <td colSpan={9} className="bg-stone-50 p-3">
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -827,7 +971,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                               <label className="text-[10px] font-semibold text-stone-700">Total cost (MWK)
                                 <input type="number" min="1" step="1" value={editingExpense.totalCost} onChange={(event) => setEditingExpense({ ...editingExpense, totalCost: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
                               </label>
-                              {exp.paymentStatus === 'Payment Outstanding' && (
+                              {exp.paymentStatus === 'Payment Outstanding' && canRecordPayment && (
                                 <label className="text-[10px] font-semibold text-stone-700">Amount due (MWK)
                                   <input type="number" min="1" step="1" value={editingExpense.amountDue} onChange={(event) => setEditingExpense({ ...editingExpense, amountDue: event.target.value })} className="mt-1 w-full rounded border border-stone-300 p-2 text-xs" />
                                 </label>
@@ -881,13 +1025,15 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => onAddActivity(household)}
-                className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-center"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Record Group Activity</span>
-              </button>
+              {!isViewOnly && (
+                <button
+                  onClick={() => onAddActivity(household)}
+                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-center"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Record Group Activity</span>
+                </button>
+              )}
             </div>
 
             {activities.length === 0 ? (
@@ -987,7 +1133,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
                           {act.recordedBy && <span>Staff: {act.recordedBy}</span>}
                         </div>
 
-                        {onDeleteActivity && (
+                        {!isViewOnly && onDeleteActivity && (
                           <button
                             onClick={() => onDeleteActivity(act.id)}
                             className="text-stone-400 hover:text-red-700 p-1 rounded hover:bg-red-50"
@@ -1022,7 +1168,7 @@ export const HouseholdProfile: React.FC<HouseholdProfileProps> = ({
               targetId={household.id}
               targetTitle={household.name}
               title={`Photos & Documentation for ${household.name}`}
-              subtitle="Household physical condition, maintenance repairs, communal activities, grocery receipts, and utility bills stored in Firebase Storage"
+              subtitle="Household physical condition, maintenance repairs, communal activities, grocery receipts, and utility bills stored in Cloudflare R2"
               defaultCategory="Household Condition"
             />
           </div>

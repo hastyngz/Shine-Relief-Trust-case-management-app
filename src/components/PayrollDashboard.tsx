@@ -1,15 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowDownUp, BadgeDollarSign, BriefcaseBusiness, CalendarRange, Filter, Pencil, Plus, Trash2, UserCheck } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDownUp, BadgeDollarSign, BriefcaseBusiness, CalendarRange, FileText, Filter, Pencil, Plus, Trash2, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { AppDatabase, CaseAction, PayrollRecord, PayrollPaymentStatus, SalaryHistoryRecord } from '../types';
-import { addCaseAction, addPayrollRecord, deletePayrollRecord, updateCaseAction, updatePayrollRecord } from '../utils/storage';
+
+import { AppDatabase, CaseAction, EmployeeRecord, PayrollRecord, PayrollPaymentStatus, SalaryHistoryRecord } from '../types';
+import { addCaseAction, addPayrollRecord, deletePayrollRecord, updateCaseAction, updateEmployeeRecord, updatePayrollRecord } from '../utils/storage';
 import { getEmployeeSalaryHistoryForStaff } from '../services/firestoreSync';
 import { notifyPayrollProcessors } from '../services/messagingService';
-import { buildMonthlyPayrollSummary, formatPayrollPeriod, monthlyPayrollTaskId, payrollTaskDescription, payrollTaskStatus, shouldCreateMonthlyPayrollTask } from '../services/payrollService';
+import { buildMonthlyPayrollSummary, employeeRecordFromPayrollRecord, filterPayrollDataForViewer, formatPayrollPeriod, getPayrollSubmissionValidationError, monthlyPayrollTaskId, payrollTaskDescription, payrollTaskStatus, shouldCreateMonthlyPayrollTask } from '../services/payrollService';
+import { EmployeeContractPanel } from './EmployeeContractPanel';
 
 interface PayrollDashboardProps {
   db: AppDatabase;
   onRefresh: () => void;
+  onNavigateToContracts: () => void;
 }
 
 const MONTHS = [
@@ -17,17 +20,20 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefresh }) => {
+export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefresh, onNavigateToContracts }) => {
   const { isAdmin, role, currentUser, staffProfile, allStaff } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod);
   const [showOutstandingOnly, setShowOutstandingOnly] = useState(false);
   const [paymentEmployee, setPaymentEmployee] = useState<ReturnType<typeof buildMonthlyPayrollSummary>['employees'][number] | null>(null);
+  const [selectedEmployeeRecord, setSelectedEmployeeRecord] = useState<EmployeeRecord | null>(null);
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryRecord[]>([]);
   const [salaryHistoryError, setSalaryHistoryError] = useState('');
   const [payrollTaskError, setPayrollTaskError] = useState('');
   const [paymentError, setPaymentError] = useState('');
+  const [savingPayroll, setSavingPayroll] = useState(false);
+  const payrollSaveLock = useRef(false);
   const [financialYear, setFinancialYear] = useState<string>('ALL');
   const [monthFilter, setMonthFilter] = useState<string>('ALL');
   const [employeeFilter, setEmployeeFilter] = useState<string>('ALL');
@@ -37,16 +43,37 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
 
   const canViewPayroll = isAdmin || role === 'Manager' || role === 'Staff';
   const canProcessPayroll = isAdmin || role === 'Manager';
+  const payrollViewerData = useMemo(() => filterPayrollDataForViewer(
+    db.employees || [], db.payrollRecords || [], currentUser?.uid || '', canProcessPayroll,
+  ), [db.employees, db.payrollRecords, currentUser?.uid, canProcessPayroll]);
+  const payrollEmployees = payrollViewerData.employees;
 
-  const records: PayrollRecord[] = db.payrollRecords || [];
-  const employeeIds = useMemo(() => Array.from(new Set([
-    ...(db.employees || []).map((employee) => employee.id),
-    ...allStaff.filter((person) => person.status === 'Active').map((person) => person.id),
-  ])).sort(), [db.employees, allStaff]);
+  const openEmployeeProfile = (employeeId: string) => {
+    if (!canProcessPayroll) return;
+    const employeeRecord = (db.employees || []).find((employee) => employee.id === employeeId);
+    if (employeeRecord) {
+      setSelectedEmployeeRecord(employeeRecord);
+      return;
+    }
+    const historicalRecord = records
+      .filter((record) => record.employeeId === employeeId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    if (historicalRecord) setSelectedEmployeeRecord(employeeRecordFromPayrollRecord(historicalRecord));
+  };
+
+  const employeeHasContract = (employeeId: string) => Boolean(
+    (db.employees || []).find((employee) => employee.id === employeeId)?.contractStartDate
+  );
+
+  const records: PayrollRecord[] = payrollViewerData.records;
+  const employeeIds = useMemo(() => Array.from(new Set(payrollEmployees.map((employee) => employee.id))).sort(), [payrollEmployees]);
 
   useEffect(() => {
     let cancelled = false;
-    if (employeeIds.length === 0) {
+    // Salary history is manager/admin-only in firestore.rules. Staff can view
+    // their own payroll records, but must not issue a collection query for the
+    // restricted salary-history records.
+    if (!canProcessPayroll || employeeIds.length === 0) {
       setSalaryHistory([]);
       setSalaryHistoryError('');
       return;
@@ -63,11 +90,19 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
         setSalaryHistoryError('Salary history could not be refreshed. Current payroll will use stored employee salaries where available.');
       });
     return () => { cancelled = true; };
-  }, [employeeIds.join('|')]);
+  }, [canProcessPayroll, employeeIds.join('|')]);
 
   const monthlySummary = useMemo(() => buildMonthlyPayrollSummary(
-    selectedPeriod, db.employees || [], allStaff, salaryHistory, records,
-  ), [selectedPeriod, db.employees, allStaff, salaryHistory, records]);
+    selectedPeriod, payrollEmployees, salaryHistory, records,
+  ), [selectedPeriod, payrollEmployees, salaryHistory, records]);
+
+  useEffect(() => {
+    if (canProcessPayroll) return;
+    setSelectedEmployeeRecord(null);
+    setPaymentEmployee(null);
+    setEditingPayroll(null);
+    setShowPayrollModal(false);
+  }, [canProcessPayroll]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
@@ -75,8 +110,8 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
   }, []);
 
   const currentMonthSummary = useMemo(() => buildMonthlyPayrollSummary(
-    currentPeriod, db.employees || [], allStaff, salaryHistory, records,
-  ), [currentPeriod, db.employees, allStaff, salaryHistory, records]);
+    currentPeriod, payrollEmployees, salaryHistory, records,
+  ), [currentPeriod, payrollEmployees, salaryHistory, records]);
 
   useEffect(() => {
     if (!canProcessPayroll || !shouldCreateMonthlyPayrollTask(now)) return;
@@ -143,15 +178,15 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
 
   const handleSavePayroll = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canProcessPayroll) return;
+    if (!canProcessPayroll || payrollSaveLock.current) return;
     setPaymentError('');
     const fd = new FormData(event.currentTarget);
     const employeeName = paymentEmployee?.employeeName || String(fd.get('employeeName') || '').trim();
     const employeeId = paymentEmployee?.employeeId || String(fd.get('employeeId') || '').trim() || employeeName || 'staff-unknown';
     const departmentOrProgramme = paymentEmployee?.department || String(fd.get('departmentOrProgramme') || '').trim();
     const payPeriod = paymentEmployee ? selectedPeriod : String(fd.get('payPeriod') || '').trim();
-    const periodMatch = payPeriod.match(/^(\d{4})-(\d{2})$/);
-    const payPeriodStartDate = paymentEmployee && periodMatch ? `${payPeriod}-01` : String(fd.get('payPeriodStartDate') || '').trim();
+    const periodMatch = payPeriod.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+    const payPeriodStartDate = paymentEmployee && periodMatch ? payPeriod + '-01' : String(fd.get('payPeriodStartDate') || '').trim();
     const payPeriodEndDate = paymentEmployee && periodMatch
       ? new Date(Date.UTC(Number(periodMatch[1]), Number(periodMatch[2]), 0)).toISOString().slice(0, 10)
       : String(fd.get('payPeriodEndDate') || '').trim();
@@ -174,17 +209,29 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
     const datePaid = String(fd.get('datePaid') || '').trim();
     const notes = String(fd.get('notes') || '').trim();
 
-    if (!employeeName || !payPeriod || !payPeriodStartDate || !payPeriodEndDate) {
-      setPaymentError('Employee and payroll period are required.');
-      return;
-    }
-    if (paymentEmployee && (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || !datePaid)) {
-      setPaymentError('Enter a positive payment amount and confirm the payment date.');
+    const validationError = getPayrollSubmissionValidationError({
+      employeeName,
+      employeeId,
+      payPeriod,
+      payPeriodStartDate,
+      payPeriodEndDate,
+      applicableSalary,
+      allowancesMWK,
+      deductionsMWK,
+      expectedAmount,
+      paymentAmount,
+      datePaid,
+      isPayment: Boolean(paymentEmployee),
+      outstandingAmount: paymentEmployee?.outstandingAmount,
+    });
+    if (validationError) {
+      setPaymentError(validationError);
       return;
     }
 
     const payload = {
       employeeId,
+      staffUid: paymentEmployee?.staffUid ?? editingPayroll?.staffUid ?? (db.employees || []).find((employee) => employee.id === employeeId)?.staffUid ?? null,
       employeeName,
       departmentOrProgramme: departmentOrProgramme || 'General programme',
       payPeriod,
@@ -211,22 +258,32 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
       updatedByUid: currentUser?.uid || 'system',
     };
 
-    if (editingPayroll && paymentEmployee) {
-      updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
-    } else if (editingPayroll) {
-      updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
-    } else {
-      addPayrollRecord({
-        ...payload,
-        id: paymentEmployee ? `PAY-${encodeURIComponent(employeeId)}-${payPeriod}` : undefined,
-      }, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+    payrollSaveLock.current = true;
+    setSavingPayroll(true);
+    try {
+      if (editingPayroll) {
+        const updated = updatePayrollRecord(editingPayroll.id, payload, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+        if (!updated) throw new Error('The payroll record could not be found. Refresh payroll and try again.');
+      } else {
+        const created = addPayrollRecord({
+          ...payload,
+          id: paymentEmployee ? 'PAY-' + encodeURIComponent(employeeId) + '-' + payPeriod : undefined,
+        }, staffProfile?.fullName || 'SHINE Staff', currentUser?.uid || 'system');
+        if (paymentEmployee && created.amountPaid !== amountPaid) {
+          throw new Error('A payroll record for this employee and period already exists with a different balance. Refresh before recording another payment.');
+        }
+      }
+      setShowPayrollModal(false);
+      setEditingPayroll(null);
+      setPaymentEmployee(null);
+      setPaymentError('');
+      onRefresh();
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Payroll could not be saved. Check device storage and try again.');
+    } finally {
+      payrollSaveLock.current = false;
+      setSavingPayroll(false);
     }
-
-    setShowPayrollModal(false);
-    setEditingPayroll(null);
-    setPaymentEmployee(null);
-    setPaymentError('');
-    onRefresh();
   };
 
   if (!canViewPayroll) {
@@ -253,6 +310,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
             <p className="text-xs text-stone-500">Track expected payroll, actual payments, and outstanding payroll by employee.</p>
           </div>
           <div className="flex items-center gap-2">
+            {canProcessPayroll && <button type="button" onClick={onNavigateToContracts} className="inline-flex items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-700 hover:bg-stone-50"><FileText className="h-4 w-4" />Contracts</button>}
             {canProcessPayroll && <button
               type="button"
               onClick={() => {
@@ -319,7 +377,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
             <tbody>
               {monthlySummary.employees.filter((employee) => !showOutstandingOnly || employee.status !== 'Paid').map((employee) => (
                 <tr key={employee.employeeId} className="border-t border-stone-100">
-                  <td className="px-3 py-2"><strong>{employee.employeeName}</strong><div className="text-xs text-stone-500">{employee.positionTitle || employee.department || 'Employee'}</div></td>
+                  <td className="px-3 py-2"><div className="flex flex-col items-start gap-1"><button type="button" disabled={!canProcessPayroll} onClick={() => openEmployeeProfile(employee.employeeId)} className="text-left font-bold text-teal-800 underline decoration-dotted underline-offset-2 hover:text-teal-950 disabled:cursor-default disabled:text-stone-900 disabled:no-underline" title={canProcessPayroll ? 'Open employee profile and contract' : 'Contract access is restricted to payroll managers'}>{employee.employeeName}</button><div className="text-xs text-stone-500">{employee.positionTitle || employee.department || 'Employee'}</div>{canProcessPayroll && <span className="text-[10px] text-teal-700">{employeeHasContract(employee.employeeId) ? 'View contract' : 'Add contract'}</span>}</div></td>
                   <td className="px-3 py-2">MWK {employee.applicableSalary.toLocaleString()}</td>
                   <td className="px-3 py-2">MWK {employee.paidAmount.toLocaleString()}</td>
                   <td className="px-3 py-2">MWK {employee.outstandingAmount.toLocaleString()}</td>
@@ -346,7 +404,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
             </tbody>
           </table>
         </div>
-        {(db.employees || []).filter((employee) => employee.employmentStatus === 'Completed').length > 0 && (
+        {payrollEmployees.filter((employee) => employee.employmentStatus === 'Completed').length > 0 && (
           <p className="text-xs text-amber-900">{(db.employees || []).filter((employee) => employee.employmentStatus === 'Completed').length} former employee(s) remain available in historical payroll.</p>
         )}
       </section>
@@ -427,7 +485,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                 filteredRecords.map((record) => (
                   <tr key={record.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-stone-900">{record.employeeName}</div>
+                      <button type="button" disabled={!canProcessPayroll} onClick={() => openEmployeeProfile(record.employeeId)} className="text-left font-semibold text-teal-800 underline decoration-dotted underline-offset-2 hover:text-teal-950 disabled:cursor-default disabled:text-stone-900 disabled:no-underline" title={canProcessPayroll ? 'Open employee profile and contract' : 'Contract access is restricted to payroll managers'}>{record.employeeName}</button>
                       <div className="text-xs text-stone-500">{record.departmentOrProgramme || 'General'}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -461,19 +519,26 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Delete payroll record for ${record.employeeName}?`)) {
-                                deletePayrollRecord(record.id);
-                                onRefresh();
-                              }
-                            }}
-                            className="p-1.5 rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200"
-                            aria-label={`Delete payroll for ${record.employeeName}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isAdmin) return;
+                                if (confirm(`Delete payroll record for ${record.employeeName}?`)) {
+                                  const deleted = deletePayrollRecord(record.id);
+                                  if (!deleted) {
+                                    window.alert('Payroll record was not deleted because the device could not save the change. Check available storage and retry.');
+                                    return;
+                                  }
+                                  onRefresh();
+                                }
+                              }}
+                              className="p-1.5 rounded-md bg-rose-100 text-rose-700 hover:bg-rose-200"
+                              aria-label={`Delete payroll for ${record.employeeName}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -485,7 +550,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
         </div>
       </div>
 
-      {showPayrollModal && (
+      {showPayrollModal && canProcessPayroll && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-stone-200">
             <h3 className="text-lg font-bold text-stone-900 mb-4">
@@ -536,7 +601,7 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">{paymentEmployee ? 'Amount paid now' : 'Amount paid'}</label>
-                  <input name="amountPaid" type="number" step="any" min="0" defaultValue={paymentEmployee ? Math.max((paymentEmployee.payment?.expectedAmount || paymentEmployee.applicableSalary) - paymentEmployee.paidAmount, 0) : editingPayroll?.amountPaid || 0} className="w-full text-xs border border-stone-300 rounded-lg p-2" />
+                  <input name="amountPaid" type="number" step="any" min="0" max={paymentEmployee?.outstandingAmount} defaultValue={paymentEmployee ? Math.max((paymentEmployee.payment?.expectedAmount || paymentEmployee.applicableSalary) - paymentEmployee.paidAmount, 0) : editingPayroll?.amountPaid || 0} className="w-full text-xs border border-stone-300 rounded-lg p-2" />
                 </div>
               </div>
 
@@ -591,11 +656,34 @@ export const PayrollDashboard: React.FC<PayrollDashboardProps> = ({ db, onRefres
               {paymentError && <p role="alert" className="text-xs font-semibold text-rose-800">{paymentError}</p>}
               <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
                 <button type="button" onClick={() => { setShowPayrollModal(false); setEditingPayroll(null); setPaymentEmployee(null); setPaymentError(''); }} className="px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900">{editingPayroll ? 'Save changes' : 'Add record'}</button>
+                <button type="submit" disabled={savingPayroll} className="px-4 py-1.5 text-xs font-bold bg-teal-800 text-white rounded-lg hover:bg-teal-900 disabled:opacity-50">{savingPayroll ? 'Saving…' : editingPayroll ? 'Save changes' : 'Add record'}</button>
               </div>
             </form>
           </div>
         </div>
+      )}
+      {selectedEmployeeRecord && canProcessPayroll && currentUser && (
+        <EmployeeContractPanel
+          key={selectedEmployeeRecord.id}
+          employee={selectedEmployeeRecord}
+          actorUid={currentUser.uid}
+          actorName={staffProfile?.fullName || currentUser.displayName || 'SHINE Staff'}
+          canEdit={canProcessPayroll && (db.employees || []).some((employee) => employee.id === selectedEmployeeRecord.id)}
+          contractDetailsAvailable={(db.employees || []).some((employee) => employee.id === selectedEmployeeRecord.id)}
+          allStaff={allStaff}
+          onUpdate={async (employeeId, updates) => {
+            const updated = await updateEmployeeRecord(
+              employeeId,
+              updates,
+              staffProfile?.fullName || currentUser.displayName || 'SHINE Staff',
+              currentUser.uid,
+            );
+            if (!updated) throw new Error('Employee record could not be found.');
+            setSelectedEmployeeRecord(updated);
+            onRefresh();
+          }}
+          onClose={() => setSelectedEmployeeRecord(null)}
+        />
       )}
     </div>
   );

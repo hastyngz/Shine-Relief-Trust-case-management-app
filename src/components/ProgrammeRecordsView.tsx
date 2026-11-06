@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { AppDatabase, AttendanceStatus, GirlLeaveStatus, LeaveType } from '../types';
-import { addAttendanceRecord, addGirlLeaveRecord, updateAttendanceRecord, updateGirlLeaveRecord } from '../utils/storage';
+import { addAttendanceRecord, addGirlLeaveRecord, getDatabase, updateAttendanceRecord, updateGirlLeaveRecord } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
+import { isValidInventoryDate } from '../utils/inventory';
 import { CalendarCheck2, Plane, Plus, RotateCcw } from 'lucide-react';
 
 interface ProgrammeRecordsViewProps {
@@ -31,6 +32,9 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
   const [approvedBy, setApprovedBy] = useState('');
   const [leaveNotes, setLeaveNotes] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const pendingActivityId = useRef<string | null>(null);
 
   const activities = db.householdActivities || [];
   const attendanceRecords = db.attendanceRecords || [];
@@ -58,72 +62,111 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
 
   const saveAttendance = (event: React.FormEvent) => {
     event.preventDefault();
+    if (saveLock.current) return;
     setError('');
-    if (!activityName.trim() || !activityDate || selectedGirlIds.length === 0) {
-      setError('Activity, date, and at least one participant are required.');
+    if (!activityName.trim() || !isValidInventoryDate(activityDate) || selectedGirlIds.length === 0) {
+      setError('Enter an activity, a real calendar date, and at least one participant.');
       return;
     }
-    const missingStatus = selectedGirlIds.some((girlId) => !attendance[girlId]);
-    if (missingStatus) {
+    if (selectedGirlIds.some((girlId) => !attendance[girlId])) {
       setError('Choose an attendance status for each selected girl.');
       return;
     }
-    const activityId = selectedActivityId || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    selectedGirlIds.forEach((girlId) => {
-      const data = {
-        activityId,
-        activityName: activityName.trim(),
-        activityType,
-        location: location.trim() || undefined,
-        date: activityDate,
-        girlId,
-        status: attendance[girlId] as AttendanceStatus,
-        notes: attendanceNotes.trim() || undefined,
-        recordedBy: auditActor,
-      };
-      const existing = attendanceRecords.find((record) => record.activityId === activityId && record.girlId === girlId);
-      if (existing) updateAttendanceRecord(existing.id, data, auditActor);
-      else addAttendanceRecord(data, auditActor);
-    });
-    setSelectedActivityId('');
-    setActivityName('');
-    setActivityType('Training');
-    setLocation('');
-    setSelectedGirlIds([]);
-    setAttendance({});
-    setAttendanceNotes('');
-    onRefresh();
+    saveLock.current = true;
+    setSaving(true);
+    const activityId = selectedActivityId || pendingActivityId.current || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    if (!selectedActivityId) pendingActivityId.current = activityId;
+    let savedCount = 0;
+    try {
+      for (const girlId of selectedGirlIds) {
+        const data = {
+          activityId, activityName: activityName.trim(), activityType,
+          location: location.trim() || undefined, date: activityDate, girlId,
+          status: attendance[girlId] as AttendanceStatus,
+          notes: attendanceNotes.trim() || undefined, recordedBy: auditActor,
+        };
+        // Re-read local state after each save so a retry updates completed rows.
+        const currentRecords = getDatabase().attendanceRecords || [];
+        const existing = currentRecords.find((record) => record.activityId === activityId && record.girlId === girlId);
+        if (existing) updateAttendanceRecord(existing.id, data, auditActor);
+        else addAttendanceRecord(data, auditActor);
+        savedCount += 1;
+      }
+      setSelectedActivityId('');
+      pendingActivityId.current = null;
+      setActivityName('');
+      setActivityType('Training');
+      setLocation('');
+      setSelectedGirlIds([]);
+      setAttendance({});
+      setAttendanceNotes('');
+      onRefresh();
+    } catch {
+      setError(savedCount > 0
+        ? `Saved attendance for ${savedCount} participant(s), but the remaining records could not be saved. Your form has been kept; retry to finish without duplicating saved rows.`
+        : 'Attendance could not be saved on this device. Your entries have been kept; check device storage and retry.');
+      onRefresh();
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
   };
 
   const saveLeave = (event: React.FormEvent) => {
     event.preventDefault();
+    if (saveLock.current) return;
     setError('');
-    if (!leaveGirlId || !startDate || !expectedReturnDate || !leaveReason.trim() || !approvedBy.trim()) {
-      setError('Girl, start date, expected return, reason, and approver are required.');
+    if (!leaveGirlId || !isValidInventoryDate(startDate) || !isValidInventoryDate(expectedReturnDate) || !leaveReason.trim() || !approvedBy.trim()) {
+      setError('Girl, real start and expected-return dates, reason, and approver are required.');
       return;
     }
-    addGirlLeaveRecord({
-      girlId: leaveGirlId,
-      leaveType,
-      startDate,
-      expectedReturnDate,
-      reason: leaveReason.trim(),
-      approvedBy: approvedBy.trim(),
-      notes: leaveNotes.trim() || undefined,
-      status: 'Active',
-    }, auditActor);
-    setLeaveGirlId('');
-    setStartDate('');
-    setExpectedReturnDate('');
-    setLeaveReason('');
-    setApprovedBy('');
-    setLeaveNotes('');
-    onRefresh();
+    if (expectedReturnDate < startDate) {
+      setError('Expected return date cannot be earlier than the leave start date.');
+      return;
+    }
+    if ((getDatabase().girlLeaves || []).some((record) => record.girlId === leaveGirlId && record.status === 'Active')) {
+      setError('This girl already has an active leave record. Record her return before adding another leave period.');
+      return;
+    }
+    saveLock.current = true;
+    setSaving(true);
+    try {
+      addGirlLeaveRecord({
+        girlId: leaveGirlId, leaveType, startDate, expectedReturnDate,
+        reason: leaveReason.trim(), approvedBy: approvedBy.trim(),
+        notes: leaveNotes.trim() || undefined, status: 'Active',
+      }, auditActor);
+      setLeaveGirlId('');
+      setStartDate('');
+      setExpectedReturnDate('');
+      setLeaveReason('');
+      setApprovedBy('');
+      setLeaveNotes('');
+      onRefresh();
+    } catch {
+      setError('Leave could not be saved on this device. Your entries have been kept; check device storage and retry.');
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
   };
 
   const markReturned = (id: string) => {
-    updateGirlLeaveRecord(id, { status: 'Returned', actualReturnDate: new Date().toISOString().slice(0, 10) }, auditActor);
-    onRefresh();
+    if (saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    setError('');
+    try {
+      if (!updateGirlLeaveRecord(id, { status: 'Returned', actualReturnDate: new Date().toISOString().slice(0, 10) }, auditActor)) {
+        setError('The leave record could not be found. Refresh the page and try again.');
+      }
+      onRefresh();
+    } catch {
+      setError('Return could not be saved on this device. The leave record remains active; check device storage and retry.');
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
   };
   const girlName = (girlId: string) => db.girls.find((girl) => girl.id === girlId)?.fullName || girlId;
   const currentLeaves = leaveRecords.filter((record) => record.status === 'Active');
@@ -160,7 +203,7 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
               </div>;
             })}
           </div>
-          <button className="inline-flex items-center gap-1.5 bg-teal-900 text-white rounded-md px-3 py-2 text-xs font-bold"><Plus className="w-3.5 h-3.5" />Save attendance</button>
+          <button disabled={saving} className="inline-flex items-center gap-1.5 bg-teal-900 text-white rounded-md px-3 py-2 text-xs font-bold disabled:opacity-50"><Plus className="w-3.5 h-3.5" />{saving ? "Saving…" : "Save attendance"}</button>
         </form>
         <div className="divide-y divide-stone-200 border-y border-stone-200">{attendanceRecords.slice().sort((a, b) => b.date.localeCompare(a.date)).map((record) => <article key={record.id} className="py-2.5 flex flex-wrap justify-between gap-2 text-xs"><div><strong>{record.activityName}</strong> · {girlName(record.girlId)}<div className="text-stone-500">{record.date} · {record.activityType}{record.location ? ` · ${record.location}` : ''}</div>{record.notes && <div className="text-stone-600">{record.notes}</div>}</div><span className={`h-fit px-2 py-1 rounded-full font-bold ${record.status === 'Present' ? 'bg-emerald-50 text-emerald-800' : record.status === 'Absent' ? 'bg-rose-50 text-rose-800' : 'bg-amber-50 text-amber-900'}`}>{record.status}</span></article>)}{attendanceRecords.length === 0 && <p className="py-6 text-center text-xs text-stone-500">No attendance records yet.</p>}</div>
       </>}
@@ -174,10 +217,10 @@ export const ProgrammeRecordsView: React.FC<ProgrammeRecordsViewProps> = ({ db, 
           <input required value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} placeholder="Reason *" className="border rounded-md p-2 text-xs" />
           <input required value={approvedBy} onChange={(event) => setApprovedBy(event.target.value)} placeholder="Approved by *" className="border rounded-md p-2 text-xs" />
           <input value={leaveNotes} onChange={(event) => setLeaveNotes(event.target.value)} placeholder="Notes" className="border rounded-md p-2 text-xs" />
-          <button className="inline-flex items-center gap-1.5 bg-teal-900 text-white rounded-md px-3 py-2 text-xs font-bold"><Plus className="w-3.5 h-3.5" />Record leave</button>
+          <button disabled={saving} className="inline-flex items-center gap-1.5 bg-teal-900 text-white rounded-md px-3 py-2 text-xs font-bold disabled:opacity-50"><Plus className="w-3.5 h-3.5" />{saving ? "Saving…" : "Record leave"}</button>
         </form>
         <div className="space-y-4">
-          <div><h3 className="text-xs font-bold text-stone-700 mb-2">Currently away ({currentLeaves.length})</h3><div className="divide-y border-y border-stone-200">{currentLeaves.map((record) => <article key={record.id} className="py-3 flex flex-wrap justify-between gap-2 text-xs"><div><strong>{girlName(record.girlId)} · {record.leaveType}</strong><div className="text-stone-500">{record.startDate} – expected {record.expectedReturnDate}</div><div>{record.reason}</div></div><button onClick={() => markReturned(record.id)} className="inline-flex items-center gap-1.5 h-fit px-2.5 py-1.5 rounded-md bg-emerald-50 text-emerald-900 font-bold"><RotateCcw className="w-3.5 h-3.5" />Record return</button></article>)}</div></div>
+          <div><h3 className="text-xs font-bold text-stone-700 mb-2">Currently away ({currentLeaves.length})</h3><div className="divide-y border-y border-stone-200">{currentLeaves.map((record) => <article key={record.id} className="py-3 flex flex-wrap justify-between gap-2 text-xs"><div><strong>{girlName(record.girlId)} · {record.leaveType}</strong><div className="text-stone-500">{record.startDate} – expected {record.expectedReturnDate}</div><div>{record.reason}</div></div><button disabled={saving} onClick={() => markReturned(record.id)} className="inline-flex items-center gap-1.5 h-fit px-2.5 py-1.5 rounded-md bg-emerald-50 text-emerald-900 font-bold disabled:opacity-50"><RotateCcw className="w-3.5 h-3.5" />Record return</button></article>)}</div></div>
           <div><h3 className="text-xs font-bold text-stone-700 mb-2">Leave history</h3><div className="divide-y border-y border-stone-200">{leaveRecords.slice().sort((a, b) => b.startDate.localeCompare(a.startDate)).map((record) => <article key={record.id} className="py-2.5 text-xs"><strong>{girlName(record.girlId)} · {record.leaveType}</strong><span className="ml-2 text-stone-500">{record.status}</span><div className="text-stone-600">{record.startDate} – {record.actualReturnDate || record.expectedReturnDate}{record.actualReturnDate ? ` · returned ${record.actualReturnDate}` : ''}</div><div>{record.reason}</div></article>)}{leaveRecords.length === 0 && <p className="py-5 text-center text-xs text-stone-500">No leave records yet.</p>}</div></div>
         </div>
       </>}

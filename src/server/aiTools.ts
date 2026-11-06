@@ -41,7 +41,7 @@ export const AI_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
   {
     name: 'getGirlProfile',
-    description: 'Retrieve case profile for an individual girl by her unique girl ID or case ID (e.g. "SG-001"). If a name matches more than one girl, the result lists the candidates instead of guessing.',
+    description: 'Retrieve case profile, support goals, and recorded outcomes for an individual girl by her unique girl ID or case ID (e.g. "SG-001"). If a name matches more than one girl, the result lists the candidates instead of guessing.',
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -429,6 +429,21 @@ export async function executeAITool(
       const house = girl.householdId
         ? db.households.find((h) => h.id === girl.householdId)
         : null;
+      const goals = (db.caseGoals || []).filter((goal) => goal.girlId === girl.id).map((goal) => {
+        accessedRecordIds.add(goal.id);
+        return {
+          id: goal.id,
+          title: goal.title,
+          baseline: goal.baseline,
+          targetOutcome: goal.targetOutcome,
+          measureOfSuccess: goal.measureOfSuccess,
+          targetDate: goal.targetDate,
+          status: goal.status,
+          progressNotes: goal.progressNotes,
+          outcome: goal.outcome,
+          outcomeRecordedAt: goal.outcomeRecordedAt,
+        };
+      });
 
       return {
         id: girl.id,
@@ -448,6 +463,7 @@ export async function executeAITool(
           situationNotes: girl.guardianInfo?.situationNotes || '',
         },
         notes: girl.notes || 'None recorded',
+        caseGoals: goals,
       };
     }
 

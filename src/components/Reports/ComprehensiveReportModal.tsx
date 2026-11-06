@@ -13,6 +13,7 @@ import { qualityMessage } from '../../services/qualityMessages';
 import { QualityCheckPanel } from '../QualityCheckPanel';
 import type { QualityIssueResolution } from '../QualityCheckPanel';
 import { useAuth } from '../../contexts/AuthContext';
+import { isAttachmentAllowedInGeneralReport } from '../../services/healthRecordAccess';
 import { archiveGeneratedReport, getArchivedReport, getAuthorizedReportImage, getReportAttachmentMetadata } from '../../services/attachmentService';
 import { appendReportExport, appendReportHistory, getReportHistory } from '../../services/firestoreSync';
 import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat, type FixedReportSection } from '../../services/qualityFixedReport';
@@ -140,6 +141,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
   }, [currentUser?.uid, isAdmin, role]);
 
   const scopedAttachments = attachments.filter((attachment) => {
+    if (!isAttachmentAllowedInGeneralReport(attachment, canViewHealthRecords)) return false;
     if (startDate && attachment.date < startDate) return false;
     if (endDate && attachment.date > endDate) return false;
     if (reportFilters.category && attachment.category !== reportFilters.category) return false;
@@ -192,7 +194,9 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
     ...db,
     attachments,
     healthFollowUps: canViewHealthRecords ? db.healthFollowUps : [],
-    caseActions: (db.caseActions || []).filter((action) => canViewSafeguarding || action.sourceType !== 'safeguarding'),
+    caseActions: (db.caseActions || []).filter((action) =>
+      action.sourceType !== 'safeguarding' && (canViewHealthRecords || action.sourceType !== 'healthFollowUp')
+    ),
     caseReviews: !canViewCaseReviews ? [] : canViewHealthRecords
       ? db.caseReviews || []
       : (db.caseReviews || []).map(({ health: _health, ...review }) => review),
@@ -381,7 +385,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'Word document securely archived and downloaded.' : 'Word document downloaded; secure archiving was unavailable.');
       } else if (format === 'xlsx') {
-        const bytes = generateExcelWorkbook(reportDb, config);
+        const bytes = await generateExcelWorkbook(reportDb, config);
         const blob = new Blob([bytes as any], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         });
@@ -390,7 +394,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
         triggerFileDownload(blob, fileName);
         setDownloadSuccess(archived ? 'Excel workbook securely archived and downloaded.' : 'Excel workbook downloaded; secure archiving was unavailable.');
       } else {
-        const blob = generatePdfReport(reportDb, { ...config, photoImageData: imageData });
+        const blob = await generatePdfReport(reportDb, { ...config, photoImageData: imageData });
         const archived = await persistReportHistory('pdf', fileName, chosenPhotos.length, blob);
         await persistReportExportAudit('pdf', fileName, blob);
         triggerFileDownload(blob, fileName);
@@ -902,7 +906,7 @@ export const ComprehensiveReportModal: React.FC<ComprehensiveReportModalProps> =
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-stone-900">Authorized report photos</h4>
-                  <p className="text-[11px] text-stone-500">Only selected JPEG and PNG images with recorded consent are loaded through Firebase Storage access rules. Add a descriptive caption for accessible alt text.</p>
+                  <p className="text-[11px] text-stone-500">Only selected JPEG and PNG images with recorded consent are loaded through authenticated private storage. Add a descriptive caption for accessible alt text.</p>
                 </div>
                 <label className="text-[11px] font-semibold text-stone-600">Maximum photos
                   <input type="number" min={0} max={50} value={maxPhotos} onChange={(event) => setMaxPhotos(Math.max(0, Math.min(50, Number(event.target.value) || 0)))} className="field mt-1 block w-24" />

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import * as XLSX from 'xlsx';
 import {
   AppDatabase,
   ImportPreviewItem,
@@ -18,6 +17,8 @@ import { ContactCandidate, ConfirmedContactCandidate, listContacts, matchContact
 import { ACTIVITY_CATEGORY_OPTIONS, DueDatePeriodChoice, getDueDateRange, serializeDueDatePeriod } from '../../services/ingestionRules';
 import { DocumentStructureNode, ReportMetadata } from '../../services/docxParserService';
 import { SpreadsheetAnalysis, SpreadsheetKind } from '../../services/spreadsheetImport/detector';
+import { SpreadsheetAIMappingProposal } from '../../services/spreadsheetImport/aiMapping';
+import { requestSpreadsheetAIMapping } from '../../services/spreadsheetImport/aiMappingClient';
 import {
   createSpreadsheetImportPreview,
   ImportedSpreadsheetLine,
@@ -66,6 +67,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import {
+  spreadsheetLineToPreview,
+  PhotoPreview,
+  CLASSIFICATION_OPTIONS,
+} from './importWizardHelpers';
 
 interface DataImportWizardProps {
   db: AppDatabase;
@@ -94,221 +100,6 @@ interface ContactReviewItem {
   confirmed: boolean;
 }
 
-function spreadsheetLineToPreview(
-  line: ImportedSpreadsheetLine,
-  existingWorkplans: AppDatabase['workplans'] = [],
-): ImportPreviewItem {
-  const id = `spreadsheet_${line.sheet}_${line.row}`;
-  if (line.kind === 'budget') {
-    return {
-      tempId: id,
-      resultType: 'NEW_RECORD',
-      targetEntity: 'budget',
-      classification: 'BUDGET_FINANCIAL',
-      classificationLabel: 'Budget line',
-      isDateUnknown: false,
-      title: line.itemDescription,
-      summary: `${line.period} · ${line.quantity} ${line.unit} × MWK ${line.unitCost.toLocaleString()} = MWK ${line.budgetAmount.toLocaleString()}`,
-      originalSnippet: `${line.sheet}!row ${line.row} · ${line.notes}`,
-      extractedData: {
-        ...line,
-        spreadsheetKind: 'budget-monthly',
-        financialYear: line.period.match(/20\d{2}/)?.[0],
-      },
-      isHistorical: false,
-      selected: true,
-      warningOrConflict: line.programmeId ? undefined : 'Select the programme before importing this budget line.',
-      missingFields: line.programmeId ? [] : ['Programme'],
-    };
-  }
-  if (line.kind === 'workplan') {
-    const comparablePeriod = line.period.match(/^\d{4}-\d{2}$/)?.[0];
-    const existingMatch = existingWorkplans.find((candidate) =>
-      candidate.programmeId === line.programmeId &&
-      candidate.activity.trim().toLowerCase() === line.activity.trim().toLowerCase() &&
-      (
-        candidate.period === line.period ||
-        (comparablePeriod && (
-          candidate.period.includes(comparablePeriod) ||
-          candidate.startDate?.startsWith(comparablePeriod) ||
-          candidate.endDate?.startsWith(comparablePeriod)
-        ))
-      )
-    );
-    const differences = existingMatch ? [
-      ...(existingMatch.targetCount !== line.targetCount
-        ? [{ field: 'targetCount', currentVal: existingMatch.targetCount, importedVal: line.targetCount }]
-        : []),
-      ...((existingMatch.completedCount || 0) !== (line.completedCount || 0)
-        ? [{ field: 'completedCount', currentVal: existingMatch.completedCount || 0, importedVal: line.completedCount || 0 }]
-        : []),
-      ...((existingMatch.budget || 0) !== (line.budget || 0)
-        ? [{ field: 'budget', currentVal: existingMatch.budget || 0, importedVal: line.budget || 0 }]
-        : []),
-      ...(existingMatch.description !== line.description
-        ? [{ field: 'description', currentVal: existingMatch.description, importedVal: line.description }]
-        : []),
-    ] : undefined;
-    return {
-      tempId: id,
-      resultType: existingMatch ? 'CONFLICT' : 'NEW_RECORD',
-      targetEntity: 'workplan',
-      classification: 'WORKPLAN_PRIORITY',
-      classificationLabel: 'Workplan activity',
-      isDateUnknown: false,
-      title: line.activity,
-      summary: `${line.period} · target ${line.targetCount} ${line.unit}${line.completedCount === undefined ? '' : ` · progress ${line.completedCount}`}${existingMatch ? ` · possible existing item ${existingMatch.id}` : ''}`,
-      originalSnippet: `${line.sheet}!row ${line.row} · ${line.domain}${line.costLevel === 'group' ? ' · grouped Cost belongs to Main Activity' : ''}`,
-      extractedData: {
-        ...line,
-        spreadsheetKind: 'workplan-matrix',
-        workplanDomain: `${line.domain}${line.mainActivity ? ` / ${line.mainActivity}` : ''}`,
-      },
-      matchedId: existingMatch?.id,
-      currentData: existingMatch ? {
-        period: existingMatch.period,
-        targetCount: existingMatch.targetCount,
-        completedCount: existingMatch.completedCount,
-        budget: existingMatch.budget,
-        description: existingMatch.description,
-      } : undefined,
-      differences,
-      isHistorical: false,
-      selected: !existingMatch,
-      warningOrConflict: !line.programmeId
-        ? 'Programme is unclear; select a programme in the imported workplan before confirming.'
-        : existingMatch
-          ? 'Possible duplicate/version: compare the row-level values, then accept this version or reject it.'
-          : undefined,
-      missingFields: [
-        ...(!line.programmeId ? ['Programme'] : []),
-        ...(line.targetCount <= 0 ? ['Numeric monthly target'] : []),
-        ...(!line.indicator ? ['Indicator'] : []),
-      ],
-    };
-  }
-  if (line.kind === 'procurement') {
-    const unclearCount = line.items.filter((item) => item.priceStatus === 'unclear').length;
-    const missingCount = line.items.filter((item) => item.priceStatus === 'missing').length;
-    return {
-      tempId: id,
-      resultType: 'NEW_RECORD',
-      targetEntity: 'procurementList',
-      classification: 'BUDGET_FINANCIAL',
-      classificationLabel: 'Procurement list',
-      isDateUnknown: true,
-      title: line.title,
-      summary: `${line.items.length} items · ${missingCount} missing prices · ${unclearCount} unclear prices`,
-      originalSnippet: JSON.stringify(line.items),
-      extractedData: { ...line, spreadsheetKind: 'item-list' },
-      isHistorical: false,
-      selected: true,
-    };
-  }
-  if (line.kind === 'projection') {
-    const unpricedCount = line.costLines.filter((cost) => cost.status === 'unpriced').length;
-    return {
-      tempId: id,
-      resultType: 'NEW_RECORD',
-      targetEntity: 'projectProjection',
-      classification: 'BUDGET_FINANCIAL',
-      classificationLabel: 'Income-project projection',
-      isDateUnknown: false,
-      title: `${line.programmeId} · ${line.period}`,
-      summary: `Revenue MWK ${line.revenueMWK.toLocaleString()} · ${unpricedCount} unpriced lines`,
-      originalSnippet: JSON.stringify(line.costLines),
-      extractedData: { ...line, spreadsheetKind: 'profit-loss' },
-      isHistorical: false,
-      selected: true,
-    };
-  }
-  if (line.kind === 'employee') {
-    return spreadsheetEmployeeLineToPreview(line);
-  }
-  if (line.kind === 'payroll') {
-    return {
-      tempId: id,
-      resultType: line.status === 'matched' ? 'NEW_RECORD' : 'POSSIBLE_DUPLICATE_PERSON',
-      targetEntity: 'payroll',
-      classification: 'STAFF_PAYROLL_RECORD',
-      classificationLabel: line.specialType ? `${line.specialType} payment · review required` : 'Payroll payment',
-      matchedId: line.employeeId,
-      matchedName: line.employeeName,
-      isDateUnknown: false,
-      title: line.employeeName,
-      summary: `${line.payPeriod} · ${line.department || 'Department not supplied'} · MWK ${line.amount.toLocaleString()}`,
-      originalSnippet: `${line.sheet}!row ${line.row}${line.notes ? ` · ${line.notes}` : ''}`,
-      extractedData: { ...line, spreadsheetKind: 'payroll-grid' },
-      isHistorical: false,
-      selected: line.status === 'matched' && !line.specialType,
-      warningOrConflict: line.status === 'matched'
-        ? (line.specialType ? 'Separate flagged record requires payroll review.' : undefined)
-        : 'Select the correct existing staff member; no staff account will be created.',
-      missingFields: line.status === 'matched' && !line.specialType ? [] : ['Existing staff match', 'Payroll review'],
-    };
-  }
-  return {
-    tempId: id,
-    resultType: 'NO_CHANGE',
-    targetEntity: 'general',
-    classification: 'UNCLASSIFIED_REVIEW',
-    classificationLabel: 'Unmapped spreadsheet row',
-    isDateUnknown: true,
-    title: `${line.sheet} row ${line.row}`,
-    summary: line.reason,
-    originalSnippet: JSON.stringify(line.values),
-    extractedData: { sourceSheet: line.sheet, sourceRow: line.row, sourceValues: line.values },
-    isHistorical: false,
-    selected: false,
-    warningOrConflict: 'Not imported; retained in sourceData on the audit record.',
-  };
-}
-
-const PhotoPreview: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
-  const [failed, setFailed] = useState(false);
-
-  if (failed) {
-    return (
-      <div
-        role="img"
-        aria-label={`${alt}. Preview unavailable`}
-        className="w-full max-w-[400px] aspect-[4/3] flex items-center justify-center bg-stone-100 text-stone-500 text-xs border border-stone-200 rounded-lg"
-      >
-        Preview unavailable
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={src}
-      alt={alt}
-      onError={() => {
-        console.warn('Embedded DOCX photo preview failed to load.', alt);
-        setFailed(true);
-      }}
-      className="w-full max-w-[400px] aspect-[4/3] object-cover rounded-lg border border-indigo-200 shadow-2xs shrink-0"
-    />
-  );
-};
-
-const CLASSIFICATION_OPTIONS: Array<{ value: DocxClassification; label: string }> = [
-  { value: 'INDIVIDUAL_GIRL_HISTORICAL', label: 'A. Individual Girl Historical Record' },
-  { value: 'HOUSEHOLD_RECORD', label: 'B. Household Record' },
-  { value: 'EDUCATIONAL_FOLLOW_UP', label: 'C. Educational Follow-up' },
-  { value: 'HEALTH_MEDICAL_FOLLOW_UP', label: 'D. Health / Medical Follow-up' },
-  { value: 'FAMILY_GUARDIAN_FOLLOW_UP', label: 'E. Family / Guardian Follow-up' },
-  { value: 'GROUP_ACTIVITY', label: 'F. Group Activity' },
-  { value: 'PROGRAMME_ACTIVITY', label: 'G. Programme Activity' },
-  { value: 'EARLY_YEARS_RECORD', label: 'H. Early Years Programme Record' },
-  { value: 'AGRICULTURE_PRACTICAL_SKILLS', label: 'I. Agriculture / Practical Skills' },
-  { value: 'WORKPLAN_PRIORITY', label: 'J. Workplan / Priority' },
-  { value: 'BUDGET_FINANCIAL', label: 'K. Budget / Financial Information' },
-  { value: 'GENERAL_REPORT_INFO', label: 'L. General Report Information' },
-  { value: 'PHOTO_HIGHLIGHT', label: 'M. Pictorial Highlight (Photo)' },
-  { value: 'UNCLASSIFIED_REVIEW', label: 'N. Unclassified / Requires Review' },
-  { value: 'STAFF_PAYROLL_RECORD', label: 'O. Staff Payroll / Salary Record' },
-];
 
 export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   db,
@@ -357,6 +148,17 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [spreadsheetAnalysis, setSpreadsheetAnalysis] = useState<SpreadsheetAnalysis | null>(null);
   const [spreadsheetKindOverride, setSpreadsheetKindOverride] = useState<SpreadsheetKind | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetImportPreview | null>(null);
+  const [aiMappingRequested, setAiMappingRequested] = useState(false);
+  const [aiMappingBusy, setAiMappingBusy] = useState(false);
+  const [aiMappingAutoAttempted, setAiMappingAutoAttempted] = useState(false);
+  const [spreadsheetAIConsent, setSpreadsheetAIConsent] = useState(false);
+  const [aiMappingError, setAiMappingError] = useState('');
+  const [aiMappingResult, setAiMappingResult] = useState<{
+    proposal: SpreadsheetAIMappingProposal;
+    provider: string;
+    model?: string;
+  } | null>(null);
+  const [aiMappingApplied, setAiMappingApplied] = useState(false);
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
   const [qualityDataSource, setQualityDataSource] = useState('');
   const [qualityCollectionMethod, setQualityCollectionMethod] = useState('');
@@ -456,6 +258,17 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     if (removals.length) setAutomaticDuplicateRemovals((current) => [...current, ...removals]);
   }, [previewItems]);
 
+  useEffect(() => {
+    if (!spreadsheetAIConsent || !selectedFile || !spreadsheetAnalysis || !spreadsheetPreview ||
+      aiMappingAutoAttempted || aiMappingRequested || !(isAdmin || role === 'Manager')) return;
+    const rulesAreUnsure = spreadsheetAnalysis.detectedKind === 'unknown' || (
+      spreadsheetPreview.lines.length > 0 && spreadsheetPreview.lines.every((line) => line.kind === 'unmapped')
+    );
+    if (!rulesAreUnsure) return;
+    setAiMappingAutoAttempted(true);
+    void handleRequestSpreadsheetAIMapping();
+  }, [spreadsheetAIConsent, selectedFile, spreadsheetAnalysis, spreadsheetPreview, aiMappingAutoAttempted, aiMappingRequested, isAdmin, role]);
+
   const prepareContactReview = async (candidates: ContactCandidate[]) => {
     const existingContacts = await listContacts().catch(() => db.contacts || []);
     setContactReview(candidates.map((candidate) => {
@@ -480,6 +293,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     }
     setSelectedFile(file);
     setDocumentStructure([]);
+    setAiMappingRequested(false);
+    setAiMappingBusy(false);
+    setAiMappingAutoAttempted(false);
+    setSpreadsheetAIConsent(false);
+    setAiMappingError('');
+    setAiMappingResult(null);
+    setAiMappingApplied(false);
     automaticChangeKeys.current.clear();
     automaticDuplicateKeys.current.clear();
     setAutomaticChanges([]);
@@ -777,6 +597,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         },
       };
     });
+    const childHouseBudgets = selectedItems.filter((item) => item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house');
+    const unassignedChildHouseBudgets = childHouseBudgets.filter((item) =>
+      !item.extractedData.householdId || !db.households.some((household) => household.id === item.extractedData.householdId));
+    if (unassignedChildHouseBudgets.length > 0) {
+      alert(`Choose the correct household for every selected Child House budget row (${unassignedChildHouseBudgets.length} missing).`);
+      return;
+    }
+    const nonMonthlyChildHouseBudgets = childHouseBudgets.filter((item) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(item.extractedData.period || '')));
+    if (nonMonthlyChildHouseBudgets.length > 0) {
+      alert('Child House Budget vs Actual needs a specific month for each budget row. Annual budget totals must remain in the annual budget register until a month is confirmed.');
+      return;
+    }
     const selectedPayroll = selectedItems.filter((item) => item.targetEntity === 'payroll');
     const selectedEmployees = selectedItems.filter((item) => item.targetEntity === 'employee');
     if ((selectedPayroll.length > 0 || selectedEmployees.length > 0) && !(isAdmin || role === 'Manager')) {
@@ -906,14 +738,27 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
         })),
       ],
       blockerOverrideReason: importBlockers.length ? blockerOverrideReason.trim() : undefined,
-      sourceData: spreadsheetPreview?.sourceData,
+      sourceData: spreadsheetPreview
+        ? {
+          ...spreadsheetPreview.sourceData,
+          ...(aiMappingRequested ? {
+            aiMapping: {
+              requested: true,
+              applied: aiMappingApplied,
+              provider: aiMappingResult?.provider,
+              model: aiMappingResult?.model,
+            },
+          } : {}),
+        }
+        : undefined,
       status: 'completed',
       summary: `Batch imported ${selectedItems.length} records and ${approvedContacts.length} contacts from ${selectedFile.name} (Reporting period: ${reportMetadata?.reportingPeriod || 'Not provided'})`,
     };
 
     try {
       const result = await commitImportBatch(selectedItems, auditData, db, (current, total) =>
-        setImportProgress({ current, total }), approvedContacts, confirmedDueDatePeriods);
+        setImportProgress({ current, total }), approvedContacts, confirmedDueDatePeriods,
+        isAdmin || role === 'Manager', isAdmin);
 
       setCompletedAudit(result.createdAudit);
       setStep('completed');
@@ -927,7 +772,9 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
   const handleSpreadsheetKindChange = async (kind: SpreadsheetKind) => {
     setSpreadsheetKindOverride(kind);
+    setAiMappingApplied(false);
     if (!selectedFile || !spreadsheetAnalysis) return;
+    const XLSX = await import('xlsx');
     const workbook = XLSX.read(await selectedFile.arrayBuffer(), {
       type: 'array',
       cellFormula: true,
@@ -938,11 +785,72 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       setParseError('Payroll spreadsheet imports are restricted to Administrators and Managers.');
       return;
     }
-    const parsed = createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, allStaff, db.employees || [], selectedFile.name);
+    const parsed = await createSpreadsheetImportPreview(workbook, spreadsheetAnalysis, kind, db.employees || [], selectedFile.name);
     setSpreadsheetPreview(parsed);
     setPreviewItems(parsed.lines.map((line) =>
       spreadsheetLineToPreview(line, db.workplans || [])
     ));
+  };
+
+  const handleRequestSpreadsheetAIMapping = async () => {
+    if (!selectedFile || !spreadsheetAnalysis || aiMappingRequested || aiMappingBusy) return;
+    if (!spreadsheetAIConsent) {
+      setAiMappingError('Choose the sanitized OpenRouter mapping option before requesting a suggestion.');
+      return;
+    }
+    if (!(isAdmin || role === 'Manager')) {
+      setAiMappingError('AI spreadsheet mapping is available to Administrators and Managers only.');
+      return;
+    }
+    setAiMappingRequested(true);
+    setAiMappingBusy(true);
+    setAiMappingError('');
+    setAiMappingApplied(false);
+    try {
+      const result = await requestSpreadsheetAIMapping(selectedFile, true);
+      setAiMappingResult(result);
+      setAiMappingRequested(true);
+    } catch (error) {
+      setAiMappingError(error instanceof Error ? error.message : 'AI could not suggest a mapping.');
+    } finally {
+      setAiMappingBusy(false);
+    }
+  };
+
+  const handleApplySpreadsheetAIMapping = async () => {
+    if (!selectedFile || !spreadsheetAnalysis || !aiMappingResult) return;
+    const { proposal } = aiMappingResult;
+    if (proposal.kind === 'payroll-grid' && !(isAdmin || role === 'Manager')) {
+      setAiMappingError('Payroll spreadsheet imports are restricted to Administrators and Managers.');
+      return;
+    }
+    setIsParsing(true);
+    setAiMappingError('');
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await selectedFile.arrayBuffer(), {
+        type: 'array',
+        cellFormula: true,
+        cellNF: true,
+        cellText: true,
+      });
+      const parsed = await createSpreadsheetImportPreview(
+        workbook,
+        spreadsheetAnalysis,
+        proposal.kind,
+        db.employees || [],
+        selectedFile.name,
+        proposal,
+      );
+      setSpreadsheetKindOverride(proposal.kind);
+      setSpreadsheetPreview(parsed);
+      setPreviewItems(parsed.lines.map((line) => spreadsheetLineToPreview(line, db.workplans || [])));
+      setAiMappingApplied(true);
+    } catch (error) {
+      setAiMappingError(error instanceof Error ? error.message : 'The suggested mapping could not be applied.');
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   const handleSpreadsheetProgrammeChange = (tempId: string, programmeId: string) => {
@@ -953,6 +861,13 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
       extractedData: { ...item.extractedData, programmeId: programme.id, programme: programme.name },
       warningOrConflict: undefined,
       missingFields: (item.missingFields || []).filter((field) => field !== 'Programme'),
+    }));
+  };
+
+  const handleSpreadsheetHouseholdChange = (tempId: string, householdId: string) => {
+    setPreviewItems((current) => current.map((item) => item.tempId !== tempId ? item : {
+      ...item,
+      extractedData: { ...item.extractedData, householdId },
     }));
   };
 
@@ -1021,6 +936,20 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   ).length;
   const countEarlyYears = previewItems.filter((i) => i.classification === 'EARLY_YEARS_RECORD').length;
   const countWorkplans = previewItems.filter((i) => i.classification === 'WORKPLAN_PRIORITY').length;
+  const countBudgets = previewItems.filter((i) => i.classification === 'BUDGET_FINANCIAL').length;
+  const countPeople = previewItems.filter((i) =>
+    i.classification === 'PEOPLE_DIRECTORY_RECORD' || i.classification === 'CONTACT_DIRECTORY_RECORD'
+    || i.targetEntity === 'person' || i.targetEntity === 'contact').length;
+  const countHouseholds = previewItems.filter((i) =>
+    i.classification === 'HOUSEHOLD_RECORD' || i.targetEntity === 'household').length;
+  const countEducationalFollowUps = previewItems.filter((i) =>
+    i.classification === 'EDUCATIONAL_FOLLOW_UP' || i.targetEntity === 'educationalFollowUp').length;
+  const countHealthFollowUps = previewItems.filter((i) =>
+    i.classification === 'HEALTH_MEDICAL_FOLLOW_UP' || i.targetEntity === 'healthFollowUp').length;
+  const countFamilyFollowUps = previewItems.filter((i) =>
+    i.classification === 'FAMILY_GUARDIAN_FOLLOW_UP' || i.targetEntity === 'familyFollowUp').length;
+  const countGeneral = previewItems.filter((i) =>
+    i.classification === 'GENERAL_REPORT_INFO' || i.targetEntity === 'general').length;
   const countAgriculture = previewItems.filter(
     (i) => i.classification === 'AGRICULTURE_PRACTICAL_SKILLS'
   ).length;
@@ -1029,7 +958,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
     (i) => i.targetEntity !== 'employee' && (i.classification === 'UNCLASSIFIED_REVIEW' || !i.classification)
   ).length;
   const countContacts = contactReview.length;
-  const countEmployees = previewItems.filter((item) => item.targetEntity === 'employee').length;
+  const countEmployees = previewItems.filter((item) => item.targetEntity === 'employee' || item.targetEntity === 'payroll').length;
 
   const selectedCount = previewItems.filter((i) => i.selected).length + contactReview.filter((item) => item.confirmed && (item.status !== 'possible' || item.contactId)).length;
 
@@ -1164,11 +1093,18 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
   // Tab Filtering
   const filteredItems = previewItems.filter((item) => {
     // Category Tab
-    if (activeTab === 'EMPLOYEES' && item.targetEntity !== 'employee') return false;
+    if (activeTab === 'EMPLOYEES' && item.targetEntity !== 'employee' && item.targetEntity !== 'payroll') return false;
     if (activeTab === 'HISTORICAL' && item.classification !== 'INDIVIDUAL_GIRL_HISTORICAL' && item.resultType !== 'HISTORICAL_RECORD') return false;
     if (activeTab === 'ACTIVITIES' && item.classification !== 'GROUP_ACTIVITY' && item.classification !== 'PROGRAMME_ACTIVITY') return false;
     if (activeTab === 'EARLY_YEARS' && item.classification !== 'EARLY_YEARS_RECORD') return false;
     if (activeTab === 'WORKPLANS' && item.classification !== 'WORKPLAN_PRIORITY') return false;
+    if (activeTab === 'BUDGETS' && item.classification !== 'BUDGET_FINANCIAL') return false;
+    if (activeTab === 'PEOPLE' && item.classification !== 'PEOPLE_DIRECTORY_RECORD' && item.classification !== 'CONTACT_DIRECTORY_RECORD' && item.targetEntity !== 'person' && item.targetEntity !== 'contact') return false;
+    if (activeTab === 'HOUSEHOLDS' && item.classification !== 'HOUSEHOLD_RECORD' && item.targetEntity !== 'household') return false;
+    if (activeTab === 'EDUCATION' && item.classification !== 'EDUCATIONAL_FOLLOW_UP' && item.targetEntity !== 'educationalFollowUp') return false;
+    if (activeTab === 'HEALTH' && item.classification !== 'HEALTH_MEDICAL_FOLLOW_UP' && item.targetEntity !== 'healthFollowUp') return false;
+    if (activeTab === 'FAMILY' && item.classification !== 'FAMILY_GUARDIAN_FOLLOW_UP' && item.targetEntity !== 'familyFollowUp') return false;
+    if (activeTab === 'GENERAL' && item.classification !== 'GENERAL_REPORT_INFO' && item.targetEntity !== 'general') return false;
     if (activeTab === 'AGRICULTURE' && item.classification !== 'AGRICULTURE_PRACTICAL_SKILLS') return false;
     if (activeTab === 'PHOTOS' && item.classification !== 'PHOTO_HIGHLIGHT') return false;
     if (activeTab === 'UNCLASSIFIED' && item.classification !== 'UNCLASSIFIED_REVIEW') return false;
@@ -1920,6 +1856,107 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                   );
                 })}
               </div>
+              <section className="mt-4 rounded-lg border border-violet-200 bg-violet-50 p-3" aria-label="AI spreadsheet mapping">
+                <h4 className="text-sm font-bold text-violet-950">AI mapping assistance (optional)</h4>
+                <p className="mt-1 text-xs text-violet-950">
+                  AI can suggest a spreadsheet type and column mapping when headings or layouts differ from the usual templates.
+                  It cannot import data or change records. The suggestion is untrusted and must be reviewed.
+                </p>
+                <p className="mt-2 text-xs text-violet-950">
+                  OpenRouter receives only allowlisted column headers and two generated example rows that label values as synthetic text, number, date, or blank.
+                  Actual cell values, workbook filenames, and worksheet names are not sent. Headers with unsupported text are replaced with generic column labels,
+                  which may reduce mapping accuracy. OpenRouter and its configured model providers receive this sanitized structure; the mapping is advisory and still requires your review.
+                </p>
+                {isAdmin || role === 'Manager' ? (
+                  <>
+                    <p className="mt-3 text-xs font-semibold text-violet-950">
+                      Mapping is available to Administrators and Managers. If enabled, it runs once when the rule-based parser is unsure; you still approve any suggestion before it changes the review preview.
+                    </p>
+                    <label className="mt-3 flex items-start gap-2 text-xs text-violet-950">
+                      <input
+                        type="checkbox"
+                        checked={spreadsheetAIConsent}
+                        onChange={(event) => {
+                          setSpreadsheetAIConsent(event.target.checked);
+                          setAiMappingError('');
+                        }}
+                        className="mt-0.5 h-4 w-4"
+                        style={{ accentColor: 'var(--theme-primary)' }}
+                      />
+                      <span>
+                        Allow OpenRouter to receive only allowlisted column headers and generated synthetic examples for this workbook.
+                        No actual cell values, filename, or worksheet names are sent.
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      className="mt-3 min-h-11 rounded-lg bg-violet-800 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!spreadsheetAIConsent || aiMappingRequested || aiMappingBusy || !selectedFile || !spreadsheetAnalysis}
+                      onClick={() => void handleRequestSpreadsheetAIMapping()}
+                    >
+                      {aiMappingBusy ? 'Requesting suggestion…' : aiMappingRequested ? 'AI mapping requested' : aiMappingError ? 'Try AI mapping again' : 'Suggest mapping with AI'}
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-3 text-xs font-semibold text-violet-950">AI mapping is restricted to Administrators and Managers.</p>
+                )}
+                {aiMappingError && <p role="alert" className="mt-2 text-xs font-semibold text-red-800">{aiMappingError}</p>}
+                {aiMappingResult && (
+                  <div className="mt-3 rounded-md border border-violet-200 bg-white p-3">
+                    <p className="text-xs font-semibold text-stone-900">Suggested type: {aiMappingResult.proposal.kind}</p>
+                    <p className="mt-1 text-xs text-stone-700">{aiMappingResult.proposal.summary}</p>
+                    <p className="mt-1 text-[11px] text-stone-600">
+                      Provider: {aiMappingResult.provider}{aiMappingResult.model ? ` · Model: ${aiMappingResult.model}` : ''} · Model confidence estimate: {Math.round(aiMappingResult.proposal.confidence * 100)}% (not a verified probability)
+                    </p>
+                    {aiMappingResult.proposal.programmeId && (
+                      <p className="mt-1 text-xs text-stone-700">
+                        Suggested programme: {PROGRAMMES.find((programme) => programme.id === aiMappingResult.proposal.programmeId)?.name || aiMappingResult.proposal.programmeId}
+                      </p>
+                    )}
+                    {aiMappingResult.proposal.periodMonth && (
+                      <p className="mt-1 text-xs text-stone-700">
+                        Suggested budget month: {new Date(2000, aiMappingResult.proposal.periodMonth - 1, 1).toLocaleString('en', { month: 'long' })}
+                      </p>
+                    )}
+                    <div className="mt-2 space-y-2">
+                      {aiMappingResult.proposal.sheets.map((sheet) => (
+                        <div key={sheet.name} className="rounded border border-stone-200 p-2">
+                          <p className="text-xs font-semibold">{sheet.name} · header row {sheet.headerRow + 1}</p>
+                          {sheet.columns.length > 0 ? (
+                            <ul className="mt-1 grid gap-1 text-[11px] text-stone-700 sm:grid-cols-2">
+                              {sheet.columns.map((column) => (
+                                <li key={`${sheet.name}:${column.sourceColumn}:${column.field}`}>
+                                  Column {column.sourceColumn + 1} → {column.field.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}
+                                  {column.explanation ? ` · ${column.explanation}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : <p className="mt-1 text-[11px] text-amber-800">No column mappings were suggested for this sheet.</p>}
+                          {sheet.warnings.length > 0 && (
+                            <ul className="mt-1 list-disc pl-4 text-[11px] text-amber-800">
+                              {sheet.warnings.map((warning, index) => <li key={`${sheet.name}:warning:${index}`}>{warning}</li>)}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {aiMappingResult.proposal.warnings.length > 0 && (
+                      <ul className="mt-2 list-disc pl-4 text-xs text-amber-800">
+                        {aiMappingResult.proposal.warnings.map((warning, index) => <li key={`warning:${index}`}>{warning}</li>)}
+                      </ul>
+                    )}
+                    <button
+                      type="button"
+                      className="mt-3 rounded-lg border border-violet-700 px-3 py-2 text-xs font-semibold text-violet-900 disabled:opacity-60"
+                      disabled={isParsing || aiMappingApplied}
+                      onClick={() => void handleApplySpreadsheetAIMapping()}
+                    >
+                      {aiMappingApplied ? 'Suggestion applied to the review preview' : 'Apply suggestion to review preview'}
+                    </button>
+                    <p className="mt-1 text-[11px] text-stone-600">Applying creates a local preview only. Inspect every row and warning, then use the normal import confirmation if it is correct.</p>
+                  </div>
+                )}
+              </section>
               {spreadsheetPreview && previewItems.some((item) => item.selected && ['activity', 'workplan'].includes(item.targetEntity)) && (
                 <div className="mt-3 space-y-2">
                   {spreadsheetPreview.sheetStats.map((sheet) => (
@@ -2136,7 +2173,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
           )}
 
           {/* Category Filter Cards with Real Calculated Counts */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 gap-2">
             <button
               onClick={() => setActiveTab('ALL')}
               className={`p-2.5 rounded-xl border text-left transition-all ${
@@ -2198,6 +2235,78 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             </button>
 
             <button
+              onClick={() => setActiveTab('BUDGETS')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'BUDGETS'
+                  ? 'border-amber-600 bg-amber-50 shadow-xs'
+                  : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-amber-800 uppercase">Budgets</p>
+              <p className="text-base font-black text-amber-950 mt-0.5">{countBudgets}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('PEOPLE')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'PEOPLE' ? 'border-teal-600 bg-teal-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-teal-700 uppercase">People / Contacts</p>
+              <p className="text-base font-black text-teal-900 mt-0.5">{countPeople}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('HOUSEHOLDS')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'HOUSEHOLDS' ? 'border-orange-600 bg-orange-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-orange-700 uppercase">Households</p>
+              <p className="text-base font-black text-orange-900 mt-0.5">{countHouseholds}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('EDUCATION')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'EDUCATION' ? 'border-sky-600 bg-sky-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-sky-700 uppercase">Education follow-ups</p>
+              <p className="text-base font-black text-sky-900 mt-0.5">{countEducationalFollowUps}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('HEALTH')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'HEALTH' ? 'border-rose-600 bg-rose-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-rose-700 uppercase">Health follow-ups</p>
+              <p className="text-base font-black text-rose-900 mt-0.5">{countHealthFollowUps}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('FAMILY')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'FAMILY' ? 'border-pink-600 bg-pink-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-pink-700 uppercase">Family follow-ups</p>
+              <p className="text-base font-black text-pink-900 mt-0.5">{countFamilyFollowUps}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('GENERAL')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'GENERAL' ? 'border-stone-600 bg-stone-100 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-stone-700 uppercase">General information</p>
+              <p className="text-base font-black text-stone-950 mt-0.5">{countGeneral}</p>
+            </button>
+
+            <button
               onClick={() => setActiveTab('AGRICULTURE')}
               className={`p-2.5 rounded-xl border text-left transition-all ${
                 activeTab === 'AGRICULTURE'
@@ -2231,6 +2340,16 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
             >
               <p className="text-[10px] font-semibold text-cyan-800 uppercase">Employees / Payroll</p>
               <p className="text-base font-black text-cyan-950 mt-0.5">{countEmployees}</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('UNCLASSIFIED')}
+              className={`p-2.5 rounded-xl border text-left transition-all ${
+                activeTab === 'UNCLASSIFIED' ? 'border-red-600 bg-red-50 shadow-xs' : 'border-stone-200 bg-white hover:bg-stone-50'
+              }`}
+            >
+              <p className="text-[10px] font-semibold text-red-700 uppercase">Needs review</p>
+              <p className="text-base font-black text-red-900 mt-0.5">{countUnclassified}</p>
             </button>
 
             <div className="p-2.5 rounded-xl border border-teal-200 bg-teal-50 text-left">
@@ -2630,6 +2749,7 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
                           {(item.targetEntity === 'budget' || item.targetEntity === 'workplan') &&
                             item.extractedData.spreadsheetKind !== undefined && (
+                              <div>
                               <label className="block max-w-sm text-[11px] font-semibold text-stone-700">
                                 Programme
                                 <select
@@ -2643,6 +2763,23 @@ export const DataImportWizard: React.FC<DataImportWizardProps> = ({
                                   ))}
                                 </select>
                               </label>
+                              {item.targetEntity === 'budget' && item.extractedData.programmeId === 'child-house' && (
+                                <label className="mt-2 block max-w-sm text-[11px] font-semibold text-stone-700">
+                                  Child House household
+                                  <select
+                                    value={item.extractedData.householdId || ''}
+                                    onChange={(event) => handleSpreadsheetHouseholdChange(item.tempId, event.target.value)}
+                                    className="field mt-1 w-full"
+                                  >
+                                    <option value="">Choose household — required</option>
+                                    {db.households.map((household) => (
+                                      <option key={household.id} value={household.id}>{household.name} ({household.id})</option>
+                                    ))}
+                                  </select>
+                                  <span className="mt-1 block font-normal text-stone-600">This budget row will be saved to the selected household’s monthly Budget vs Actual records.</span>
+                                </label>
+                              )}
+                              </div>
                             )}
 
                           {item.targetEntity === 'payroll' && (

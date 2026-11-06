@@ -45,14 +45,18 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
   const [saving, setSaving] = useState(false);
 
   const actor = { uid: currentUser?.uid || 'unknown', name: staffProfile?.fullName || currentUser?.displayName || 'Staff member' };
-  const refreshContacts = async () => {
+  const refreshContacts = async (): Promise<ContactRecord[]> => {
     setLoading(true);
     try {
-      setContacts(await listContacts());
+      const loadedContacts = await listContacts();
+      setContacts(loadedContacts);
       setError('');
+      return loadedContacts;
     } catch (loadError) {
-      setContacts(db.contacts || []);
+      const fallbackContacts = db.contacts || [];
+      setContacts(fallbackContacts);
       setError('Could not load the live contacts directory. Showing locally available contacts.');
+      return fallbackContacts;
     } finally {
       setLoading(false);
     }
@@ -125,16 +129,12 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
         notes: draft.notes.trim(),
         programmes: splitValues(draft.programmes),
       };
-      if (selected) {
-        await updateContact(selected.id, changes, actor);
-      } else {
-        await createContact({ ...changes, aliases: [changes.name] }, actor);
-      }
-      await refreshContacts();
+      const savedContact = selected ? await updateContact(selected.id, changes, actor) : await createContact({ ...changes, aliases: [changes.name] }, actor);
+      setContacts((current) => [...current.filter((contact) => contact.id !== savedContact.id), savedContact].sort((x, y) => x.name.localeCompare(y.name)));
       setEditing(false);
-      if (selected) setSelected((await listContacts()).find((contact) => contact.id === selected.id) || null);
+      if (selected) setSelected(savedContact);
     } catch (saveError) {
-      setError('Contact could not be saved. Check your staff access and try again.');
+      setError(saveError instanceof Error ? saveError.message : 'Contact could not be saved. Check your staff access and try again.');
     } finally {
       setSaving(false);
     }
@@ -145,11 +145,11 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
     setSaving(true);
     try {
       await mergeContacts(selected.id, mergeTarget, actor);
-      await refreshContacts();
-      setSelected((await listContacts()).find((contact) => contact.id === selected.id) || null);
+      const refreshedContacts = await refreshContacts();
+      setSelected(refreshedContacts.find((contact) => contact.id === selected.id) || null);
       setMergeTarget('');
-    } catch {
-      setError('Contacts could not be merged. Both records must still exist.');
+    } catch (mergeError) {
+      setError(mergeError instanceof Error ? mergeError.message : 'Contacts could not be merged. Both records must still exist.');
     } finally {
       setSaving(false);
     }
@@ -157,9 +157,17 @@ export const ContactsView: React.FC<ContactsViewProps> = ({ db }) => {
 
   const doArchive = async () => {
     if (!selected || !canEdit || !window.confirm(`Archive ${selected.name}? This keeps the contact history.`)) return;
-    await archiveContact(selected.id, actor);
-    setSelected(null);
-    await refreshContacts();
+    setSaving(true);
+    try {
+      const archived = await archiveContact(selected.id, actor);
+      setContacts((current) => current.map((contact) => contact.id === archived.id ? archived : contact));
+      setSelected(null);
+      setError('');
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : 'Contact could not be archived. Try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateDraft = (field: keyof ContactDraft, value: string) => setDraft((current) => ({ ...current, [field]: value }));

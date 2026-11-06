@@ -1,0 +1,43 @@
+/**
+ * SHINE AI Assistant viewport sizing.
+ *
+ * The view lives inside the shared app shell (header/navigation take their own
+ * space), so reserve the same shell allowance as the existing layout while
+ * using dynamic viewport units on mobile browsers. This fixes the address-bar
+ * viewport mismatch without changing the established phone layout.
+ */
+#shine-ai-assistant-container:not(:has(> [aria-label="Back: show header and menu"])) {
+  height: calc(100dvh - 140px);
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  #shine-ai-assistant-container:not(:has(> [aria-label="Back: show header and menu"])) {
+    height: calc(100dvh - 120px);
+  }
+}
+
+/* Long AI output and source labels must wrap inside the chat rather than widen
+   the whole screen on narrow phones. */
+#shine-ai-assistant-container,
+#shine-ai-assistant-container * {
+  min-width: 0;
+}
+
+#shine-ai-assistant-container :is(p, span, button, code) {
+  overflow-wrap: anywhere;
+}
+
+@supports not (height: 100dvh) {
+  #shine-ai-assistant-container:not(:has(> [aria-label="Back: show header and menu"])) {
+    height: calc(100vh - 140px);
+  }
+  @media (min-width: 768px) {
+    #shine-ai-assistant-container:not(:has(> [aria-label="Back: show header and menu"])) {
+      height: calc(100vh - 120px);
+    }
+  }
+}

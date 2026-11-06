@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, FileType } from 'lucide-react';
 import type { AppDatabase, ReportHistoryRecord, SalaryHistoryRecord, StaffUser } from '../../types';
-import { MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportWorkbook } from '../../services/managementReports';
+import { CASH_BOOK_END, CASH_BOOK_START, MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows, getCashBookSupplementaryPayments } from '../../services/managementReports';
 import { ManagementFilters, canAccessManagementDashboard, projectManagementDatabase } from '../../services/managementAnalytics';
+import { isAttachmentAllowedInGeneralReport } from '../../services/healthRecordAccess';
 import { appendEmployeeAuditLog, appendReportExport, appendReportHistory, getEmployeeSalaryHistoryForStaff } from '../../services/firestoreSync';
 import { archiveGeneratedReport } from '../../services/attachmentService';
 import { ReportConfig, generateWordReport, reviewReportQuality } from '../../services/reportGenerators';
@@ -13,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { QualityIssue } from '../../services/qualityRules';
 import { qualityMessage } from '../../services/qualityMessages';
 import { createFixedReport, createReportExportRecord, fixedReportFileName, nextReportExportVersion, sha256Blob, type FixedReportFormat } from '../../services/qualityFixedReport';
+import { ProcurementOperationsReport } from './ProcurementOperationsReport';
 
 interface ManagementReportsPanelProps {
   db: AppDatabase;
@@ -53,15 +55,21 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const [blockerOverrideReason, setBlockerOverrideReason] = useState('');
   const [qualityResolutions, setQualityResolutions] = useState<Array<{ issueId: string; status: 'resolved' | 'overridden' | 'pending-approval'; note: string; by: string; at: string; before?: unknown; after?: unknown }>>([]);
   const [fixedReportVersion, setFixedReportVersion] = useState(0);
+  const [showProcurementReport, setShowProcurementReport] = useState(false);
+
+  // Keep the dependency tied to staff identity, not the roster array reference.
+  // Unrelated roster refreshes should not repeat this sensitive Firestore read.
+  const salaryHistoryStaffKey = JSON.stringify(staff.map((person) => person.uid || person.id).filter(Boolean).sort());
 
   useEffect(() => {
-    if (!canAccessManagementDashboard(isAdmin, role)) return;
+    if (showProcurementReport || !canAccessManagementDashboard(isAdmin, role)) return;
     let mounted = true;
-    getEmployeeSalaryHistoryForStaff(staff.map((person) => person.uid || person.id))
+    const staffIds = JSON.parse(salaryHistoryStaffKey) as string[];
+    getEmployeeSalaryHistoryForStaff(staffIds)
       .then((records) => { if (mounted) setSalaryHistory(records); })
       .catch(() => { if (mounted) setSalaryLoadFailed(true); });
     return () => { mounted = false; };
-  }, [isAdmin, role, staff]);
+  }, [isAdmin, role, salaryHistoryStaffKey, showProcurementReport]);
 
   useEffect(() => {
     if (reportId !== 'quarterly-management') return;
@@ -111,12 +119,20 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     } else if (nextReport === 'annual-management') {
       setStartDate('');
       setEndDate('');
+    } else if (nextReport === 'cash-book') {
+      setStartDate(CASH_BOOK_START);
+      setEndDate(CASH_BOOK_END);
+      setFinancialYear('2026');
+      setMonth('ALL');
+      setProgramme('ALL');
+      setHouseholdId('ALL');
+      setStaffId('ALL');
     }
   };
   const filters: ManagementFilters = {
     startDate: startDate || undefined,
     endDate: endDate || undefined,
-    financialYear: financialYear === 'ALL' ? undefined : financialYear,
+    financialYear: reportId === 'cash-book' ? '2026' : (financialYear === 'ALL' ? undefined : financialYear),
     month: month === 'ALL' ? undefined : Number(month),
     programme: programme === 'ALL' ? undefined : programme,
     householdId: householdId === 'ALL' ? undefined : householdId,
@@ -131,6 +147,9 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   if (!canAccessManagementDashboard(isAdmin, role)) {
     return <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">Management reports are restricted to Administrators and Managers.</div>;
   }
+  if (showProcurementReport) {
+    return <ProcurementOperationsReport db={db} onBack={() => setShowProcurementReport(false)} />;
+  }
   if (reportId === 'health' && !canViewHealthRecords) {
     return <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">Health reports are restricted for your account.</div>;
   }
@@ -143,6 +162,16 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
 
   const report = buildManagementReportRows(reportId, permittedDb, filters, staff, salaryHistory);
   const rows = report;
+  const cashBookSummary = reportId === 'cash-book' ? getCashBookSummary(permittedDb, filters) : undefined;
+  const cashBookSupplementary = reportId === 'cash-book' ? getCashBookSupplementaryPayments(permittedDb, filters) : undefined;
+  const cashBookSummaryRows = cashBookSummary ? [
+    ...getCashBookSummaryRows(cashBookSummary),
+    ['Supplementary paid expense events (separate register)', cashBookSupplementary?.sourceCounts.expenses || 0],
+    ['Supplementary rent payment events (separate register)', cashBookSupplementary?.sourceCounts.rent || 0],
+    ['Supplementary procurement payment events (separate register)', cashBookSupplementary?.sourceCounts.procurement || 0],
+    ['Supplementary payment data-quality exceptions', cashBookSupplementary?.exceptions.length || 0],
+    ['Payroll payment events', 'Excluded — cumulative payroll totals are not individual payment events'],
+  ] : [];
   const reportQualityConfig: ReportConfig = {
     title: MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId,
     periodLabel: `${filters.startDate || filters.financialYear || 'All available dates'} to ${filters.endDate || 'present'}`,
@@ -248,16 +277,12 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       photoCount: 0,
       tableCount: 1,
       status: 'Generated',
-      qualityIssues: auditedQualityIssues,
-      qualityScores: reportQualityScores,
-      qualityResolutions,
-      blockerOverrideReason: reportQualityIssues.some((issue) => issue.severity === 'blocker') ? blockerOverrideReason.trim() : undefined,
     };
     await appendReportHistory(record);
     return !!storagePath;
   };
 
-  const recordReportExport = async (format: 'docx' | 'xlsx' | 'csv', fileName: string, title: string, blob: Blob) => {
+  const recordReportExport = async (format: 'docx' | 'xlsx' | 'pdf' | 'csv', fileName: string, title: string, blob: Blob) => {
     if (!currentUser) throw new Error('Sign in is required to record this report download.');
     await appendReportExport(await createReportExportRecord(blob, {
       reportType: reportId,
@@ -277,29 +302,40 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     }));
   };
 
-  const handleCsvExport = async () => {
+  const handleCashBookExport = async (format: 'pdf' | 'csv') => {
+    if (reportId !== 'cash-book' || !currentUser || !cashBookSummary) return;
     if (!ensureQualityOverride()) return;
+    const title = 'SHINE 2026 Cash Book';
     try {
-      const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.csv`;
-      const csvRows = [rows.headers, ...rows.rows, [''], ['Quality Issues'], ['Severity / score', 'Rule', 'Location', 'Finding', 'Suggested action'], ...qualityAnnexRows];
-      const csvContent = '\uFEFF' + csvRows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-      const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
-      await recordReportExport('csv', fileName, title, blob);
+      const blob = format === 'csv'
+        ? new Blob([generateManagementReportCsv(rows, cashBookSummaryRows) + (cashBookSupplementary ? '\r\n\r\n' + generateManagementReportCsv({ headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows }, [['Register', 'Separate recorded payments; not included in petty-cash balances']]) + '\r\n\r\n' + generateManagementReportCsv({ headers: ['Source module', 'Source record ID', 'Exception', 'Recorded value'], rows: cashBookSupplementary.exceptions }) : '')], { type: 'text/csv;charset=utf-8' })
+        : await createFixedReport({
+          title,
+          sections: [
+            { title: 'Cash Book scope and summary', text: 'The petty-cash ledger is the only section with a cash balance. Paid expenses, rent and procurement payment events appear in a separate supplementary register. Bank statements are not connected or independently verified; unpaid and inferred payments are excluded.', table: { headers: ['Measure', 'Value'], rows: cashBookSummaryRows } },
+            { title: 'Recorded movements', text: 'Only recorded petty-cash ledger movements with their source references are included.', table: { headers: rows.headers, rows: rows.rows } },
+            ...(cashBookSupplementary ? [{ title: 'Separate supplementary payment register', text: 'Paid expenses, rent payments and individual procurement payment events are listed separately. They are not added to petty-cash balances or consolidated into a grand total. These entries are not independently verified against bank statements. Payroll is excluded because the app stores cumulative paid amounts rather than individual payment events.', table: { headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows } }, { title: 'Supplementary payment data-quality exceptions', text: 'Records marked Paid or Partially paid but missing/invalid dates, dates outside 2026, or non-positive amounts are listed here for correction; they are not included as payment rows.', table: { headers: ['Source module', 'Source record ID', 'Exception', 'Recorded value'], rows: cashBookSupplementary.exceptions } }] : []),
+          ],
+          changes: [],
+          openProblems: auditedQualityIssues.filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden').map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
+          format: 'pdf',
+          draft: false,
+        });
+      const fileName = `SHINE_2026_cash-book_${new Date().toISOString().slice(0, 10)}.${format}`;
+      await recordReportExport(format, fileName, title, blob);
       saveBlob(blob, fileName);
-      const archived = await recordReportHistory('csv', fileName, title, blob);
-      if (currentUser) appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format: 'csv', filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
-      setMessage(`${rows.rows.length} record(s) exported${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
+      const archived = await recordReportHistory(format, fileName, title, blob);
+      appendEmployeeAuditLog({ employeeId: 'management-report', action: 'report_export', actorUid: currentUser.uid, actorName: staffProfile?.fullName || currentUser.email || 'Management user', reportId, format, filters, changedAt: new Date().toISOString() }).catch((error) => console.warn('Management report export audit failed:', error));
+      setMessage(`Cash Book ${format.toUpperCase()} exported${archived ? ' and securely archived' : '; secure archiving was unavailable'}.`);
     } catch (error) {
-      console.error('Management CSV export failed:', error);
-      setMessage(error instanceof Error ? error.message : 'The spreadsheet could not be downloaded.');
+      setMessage(error instanceof Error ? error.message : `The Cash Book ${format.toUpperCase()} could not be generated.`);
     }
   };
 
   const handleExcelExport = async () => {
     if (!ensureQualityOverride()) return;
     try {
-      const bytes = generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows);
+      const bytes = await generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows, cashBookSummaryRows, cashBookSupplementary ? { headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows, exceptions: cashBookSupplementary.exceptions } : undefined);
       const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
@@ -329,6 +365,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     const followUpNotes = `Recorded follow-up indicators: ${openActions} open case actions and ${educationFollowUps} outstanding education follow-ups. No additional narrative claims are generated.`;
     const householdGirlIds = new Set((permittedDb.girls || []).filter((girl) => !filters.householdId || girl.householdId === filters.householdId).map((girl) => girl.id));
     const attachments = (permittedDb.attachments || []).filter((attachment) => {
+      if (!isAttachmentAllowedInGeneralReport(attachment, canViewHealthRecords)) return false;
       if ((filters.startDate && attachment.date < filters.startDate) || (filters.endDate && attachment.date > filters.endDate)) return false;
       if (filters.category && attachment.category !== filters.category) return false;
       if (filters.programme) {
@@ -401,6 +438,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       <div>
         <h3 className="text-base font-black text-stone-900">Management reports</h3>
         <p className="text-xs text-stone-500">Exports contain filtered records and figures already stored in SHINE. No values are estimated or generated from mock data.</p>
+        <button type="button" onClick={() => setShowProcurementReport(true)} className="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-900">Open Internal Procurement Operations Report</button>
       </div>
       <QualityCheckPanel
         issues={auditedQualityIssues}
@@ -447,12 +485,12 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         <label className="text-[11px] text-stone-600">Report<select className="field mt-1 w-full" value={reportId} onChange={(event) => selectManagementReport(event.target.value)}>
           {MANAGEMENT_REPORTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select></label>
-        <label className="text-[11px] text-stone-600">From<input className="field mt-1 w-full" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-        <label className="text-[11px] text-stone-600">To<input className="field mt-1 w-full" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
+        <label className="text-[11px] text-stone-600">From<input className="field mt-1 w-full" type="date" min={reportId === 'cash-book' ? CASH_BOOK_START : undefined} max={reportId === 'cash-book' ? CASH_BOOK_END : undefined} value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+        <label className="text-[11px] text-stone-600">To<input className="field mt-1 w-full" type="date" min={reportId === 'cash-book' ? CASH_BOOK_START : undefined} max={reportId === 'cash-book' ? CASH_BOOK_END : undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
         {!['monthly-management', 'quarterly-management'].includes(reportId) && <label className="text-[11px] text-stone-600">Financial year<select className="field mt-1 w-full" value={financialYear} onChange={(event) => setFinancialYear(event.target.value)}><option value="ALL">All years</option>{years.map((year) => <option key={year}>{year}</option>)}</select></label>}
         {reportId !== 'quarterly-management' && <label className="text-[11px] text-stone-600">Month<select className="field mt-1 w-full" value={month} onChange={(event) => setMonth(event.target.value)}><option value="ALL">All months</option>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{new Date(2026, index, 1).toLocaleString('en', { month: 'long' })}</option>)}</select></label>}
-        <label className="text-[11px] text-stone-600">Programme<select className="field mt-1 w-full" value={programme} onChange={(event) => setProgramme(event.target.value)}><option value="ALL">All programmes</option>{programmes.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label className="text-[11px] text-stone-600">Household<select className="field mt-1 w-full" value={householdId} onChange={(event) => setHouseholdId(event.target.value)}><option value="ALL">All households</option>{(db.households || []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        {reportId !== 'cash-book' && <label className="text-[11px] text-stone-600">Programme<select className="field mt-1 w-full" value={programme} onChange={(event) => setProgramme(event.target.value)}><option value="ALL">All programmes</option>{programmes.map((item) => <option key={item}>{item}</option>)}</select></label>}
+        {reportId !== 'cash-book' && <label className="text-[11px] text-stone-600">Household<select className="field mt-1 w-full" value={householdId} onChange={(event) => setHouseholdId(event.target.value)}><option value="ALL">All households</option>{(db.households || []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         {['case-management', 'girl-history', 'education', 'attendance', 'case-reviews'].includes(reportId) && <label className="text-[11px] text-stone-600">School<select className="field mt-1 w-full" value={school} onChange={(event) => setSchool(event.target.value)}><option value="ALL">All schools</option>{Array.from(new Set((db.girls || []).map((girl) => girl.school).filter(Boolean))).sort().map((item) => <option key={item}>{item}</option>)}</select></label>}
         {['case-management', 'girl-history', 'education', 'attendance'].includes(reportId) && <label className="text-[11px] text-stone-600">Class / form<select className="field mt-1 w-full" value={classLevel} onChange={(event) => setClassLevel(event.target.value)}><option value="ALL">All classes</option>{Array.from(new Set((db.girls || []).map((girl) => girl.classLevel).filter(Boolean))).sort().map((item) => <option key={item}>{item}</option>)}</select></label>}
         <label className="text-[11px] text-stone-600">Category<select className="field mt-1 w-full" value={category} onChange={(event) => setCategory(event.target.value)}><option value="ALL">All categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -460,21 +498,36 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
       {reportId === 'quarterly-management' && <div className="grid max-w-md grid-cols-2 gap-2"><label className="text-[11px] text-stone-600">Quarter<select className="field mt-1 w-full" value={quarter} onChange={(event) => setQuarter(Number(event.target.value))}>{[1, 2, 3, 4].map((value) => <option key={value} value={value}>Q{value} · {['January–March', 'April–June', 'July–September', 'October–December'][value - 1]}</option>)}</select></label><label className="text-[11px] text-stone-600">Year<input className="field mt-1 w-full" type="number" min="2000" max="2100" value={quarterYear} onChange={(event) => setQuarterYear(Number(event.target.value))} /></label></div>}
       {reportId === 'monthly-management' && <label className="block max-w-xs text-[11px] text-stone-600">Calendar year<input className="field mt-1 w-full" type="number" min="2000" max="2100" value={monthlyYear} onChange={(event) => setMonthlyYear(Number(event.target.value))} /></label>}
       {reportId === 'annual-management' && <p className="text-[11px] text-stone-500">Use From and To to enter your configured financial-year boundaries; the calendar year is not substituted.</p>}
+      {reportId === 'cash-book' && <p className="text-[11px] text-stone-500">This report is fixed to 1 January–31 December 2026 and uses only recorded petty-cash movements. Bank accounts, unpaid expenses and inferred payments are excluded.</p>}
       {['payroll', 'salary-history', 'staff-workload', 'gratuity', 'contract-expiry', 'outstanding-actions', 'workplan-progress', 'programme-activity'].includes(reportId) ? <label className="block max-w-sm text-[11px] text-stone-600">Staff member<select className="field mt-1 w-full" value={staffId} onChange={(event) => setStaffId(event.target.value)}><option value="ALL">All staff</option>{staff.map((person) => <option key={person.uid || person.id} value={person.uid || person.id}>{person.fullName}</option>)}</select></label> : null}
       {['outstanding-actions', 'workplan-progress', 'programme-activity', 'staff-workload'].includes(reportId) && <div className="grid grid-cols-2 gap-2 max-w-md"><label className="text-[11px] text-stone-600">Status<select className="field mt-1 w-full" value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option>{['Open', 'In Progress', 'Overdue', 'Planned', 'Completed', 'Delayed', 'Cancelled', 'Upcoming', 'Scheduled'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-[11px] text-stone-600">Priority<select className="field mt-1 w-full" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="ALL">All priorities</option>{['Low', 'Medium', 'High', 'Urgent'].map((item) => <option key={item}>{item}</option>)}</select></label></div>}
       {salaryLoadFailed && reportId === 'gratuity' && <p className="text-xs text-amber-800">Salary history is unavailable, so gratuity liability cannot be calculated.</p>}
       {programme !== 'ALL' && <p className="text-[11px] text-amber-800">Programme filtering uses stored programme attribution only. Records without a programme are not assigned one.</p>}
       <div className="flex flex-wrap gap-2">
-        <button onClick={handleCsvExport} disabled={reportId === 'gratuity' && !salaryHistory} className="inline-flex items-center gap-2 rounded-md bg-teal-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Download className="h-4 w-4" />Export CSV</button>
         <button onClick={handleExcelExport} disabled={reportId === 'gratuity' && !salaryHistory} className="inline-flex items-center gap-2 rounded-md border border-emerald-700 bg-white px-3 py-2 text-xs font-bold text-emerald-900 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" />Export Excel workbook</button>
         <button onClick={handleWordSummary} className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-800"><FileText className="h-4 w-4" />Export Word report</button>
+        {reportId === 'cash-book' && <><button type="button" onClick={() => void handleCashBookExport('pdf')} className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-800"><FileType className="h-4 w-4" />Export PDF</button><button type="button" onClick={() => void handleCashBookExport('csv')} className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-xs font-bold text-stone-800"><Download className="h-4 w-4" />Export CSV</button></>}
       </div>
       {message && <p role="status" className="text-xs text-teal-800">{message}</p>}
       <div id="management-report-table" tabIndex={-1} className="overflow-x-auto rounded-lg border border-stone-200">
         <table className="min-w-full text-left text-xs"><thead className="bg-stone-50"><tr>{rows.headers.map((header) => <th key={header} className="whitespace-nowrap px-3 py-2 font-bold text-stone-600">{header}</th>)}</tr></thead><tbody className="divide-y divide-stone-100">{rows.rows.slice(0, 20).map((row, index) => <tr key={`${reportId}-${index}`}>{row.map((cell, cellIndex) => <td key={cellIndex} className="whitespace-nowrap px-3 py-2 text-stone-700">{cell}</td>)}</tr>)}</tbody></table>
         {rows.rows.length === 0 && <p className="p-4 text-center text-xs text-stone-500">No records match these filters.</p>}
-        {rows.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 of {rows.rows.length} rows. CSV includes every matching row.</p>}
+        {rows.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 of {rows.rows.length} rows. Excel includes every matching row.</p>}
       </div>
+      {reportId === 'cash-book' && cashBookSupplementary && <div className="mt-5 space-y-3">
+        <div>
+          <h3 className="text-sm font-bold">Other recorded payments — separate register</h3>
+          <p className="mt-1 text-xs text-stone-500">Paid expenses, rent payments and individual procurement payment events are shown separately from petty cash. They are not added to petty-cash balances or consolidated into one total, and are not independently verified against bank statements. Payroll is excluded because its paid amount is cumulative rather than an individual payment-event record.</p>
+          <p className="mt-1 text-xs text-stone-600">Included: {cashBookSupplementary.sourceCounts.expenses} expense payment(s), {cashBookSupplementary.sourceCounts.rent} rent payment(s), {cashBookSupplementary.sourceCounts.procurement} procurement payment(s).</p>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-stone-200">
+          <table className="min-w-full text-left text-xs"><thead className="bg-stone-50"><tr>{cashBookSupplementary.headers.map((header) => <th key={header} className="whitespace-nowrap px-3 py-2 font-bold text-stone-600">{header}</th>)}</tr></thead><tbody className="divide-y divide-stone-100">{cashBookSupplementary.rows.slice(0, 20).map((row, index) => <tr key={String(row[2]) + index}>{row.map((cell, cellIndex) => <td key={cellIndex} className="whitespace-nowrap px-3 py-2 text-stone-700">{cell}</td>)}</tr>)}</tbody></table>
+          {cashBookSupplementary.rows.length === 0 && <p className="p-3 text-xs text-stone-500">No eligible 2026 supplementary payment events match this period.</p>}
+          {cashBookSupplementary.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 rows; exports include all matching payments.</p>}
+        </div>
+        {cashBookSupplementary.exceptions.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><strong>{cashBookSupplementary.exceptions.length} payment record(s) need data correction.</strong> They are excluded until a valid 2026 payment date and positive amount are recorded.</div>}
+        {cashBookSupplementary.rows.some((row) => String(row[7]).includes('Possible duplicate')) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Possible duplicate payments share an exact date, amount and reference across modules. They remain separately traceable and are not consolidated; investigate before treating them as separate payments.</p>}
+      </div>}
     </section>
   );
 };

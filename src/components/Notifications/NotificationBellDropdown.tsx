@@ -84,7 +84,13 @@ export const NotificationBellDropdown: React.FC<NotificationBellDropdownProps> =
 
   const handleNotificationClick = async (notif: StaffNotification) => {
     if (!notif.isRead) {
-      await markNotificationRead(notif.id);
+      // A read-status write can fail while offline or when Firestore is
+      // temporarily unavailable. It must not prevent opening the notification.
+      try {
+        await markNotificationRead(notif.id);
+      } catch (error) {
+        console.warn('Could not mark notification as read before opening it:', error);
+      }
     }
     if (notif.relatedRecordType && notif.relatedRecordId) {
       onOpenChange(false);
