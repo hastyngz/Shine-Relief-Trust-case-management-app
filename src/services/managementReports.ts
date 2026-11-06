@@ -104,7 +104,7 @@ export function getCashBookSupplementaryPayments(
   const sourceCounts = { expenses: 0, rent: 0, procurement: 0 };
   const inSelectedPeriod = (date: string) => date >= start && date <= end &&
     (!filters.month || Number(date.slice(5, 7)) === filters.month);
-  const validDate = (date: string | undefined) => !!date && /^2026-\d{2}-\d{2}$/.test(date) &&
+  const validDate = (date: string | undefined) => !!date && /^\d{4}-\d{2}-\d{2}$/.test(date) &&
     !Number.isNaN(Date.parse(date)) && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
   const candidates: Array<{ date: string; source: string; id: string; description: string; amount: number; method: string; reference: string; category: string }> = [];
 
