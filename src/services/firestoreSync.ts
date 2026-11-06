@@ -329,13 +329,13 @@ export async function appendManagementProcurementReportHistory(
   await setDoc(ref, history);
 }
 
-export async function appendReportExport(record: ReportExportRecord): Promise<boolean> {
+export async function appendReportExport(record: ReportExportRecord): Promise<void> {
   const key = 'shine-report-exports';
   const current = JSON.parse(localStorage.getItem(key) || '[]') as ReportExportRecord[];
   localStorage.setItem(key, JSON.stringify([...current.filter((entry) => entry.id !== record.id), record].slice(-500)));
   try {
     await setDoc(doc(firestore, COLLECTIONS.REPORT_EXPORTS, record.id), sanitizeForFirestore(record));
-    return true;
+    return;
   } catch (error) {
     console.error('Report export audit sync failed; the audit remains saved on this device:', error);
     updateSyncStatus('error');
