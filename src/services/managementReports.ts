@@ -112,7 +112,8 @@ export function getCashBookSupplementaryPayments(
     if (expense.recordType === 'budget' || expense.paymentStatus !== 'Paid') continue;
     const date = expense.datePaid;
     const amount = expense.totalCost;
-    if (!validDate(date)) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid 2026 payment date', date || 'Missing']); continue; }
+    if (!validDate(date)) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid payment date', date || 'Missing']); continue; }
+    if (date!.slice(0, 4) !== '2026') { exceptions.push(['expenses', expense.id, 'Payment date outside 2026 calendar year — excluded', date!]); continue; }
     if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid positive amount', String(amount)]); continue; }
     if (!inSelectedPeriod(date!) || (filters.category && filters.category !== expense.budgetCategory && filters.category !== expense.category)) continue;
     candidates.push({ date: date!, source: 'Expenses', id: expense.id, description: expense.itemDescription, amount, method: expense.paymentMethod || 'Not recorded', reference: expense.paymentReference || expense.invoiceReference || '', category: expense.budgetCategory || expense.category });
@@ -123,7 +124,8 @@ export function getCashBookSupplementaryPayments(
     if (!['Paid', 'Partially paid'].includes(rent.paymentStatus)) continue;
     const date = rent.datePaid;
     const amount = rent.amountPaid;
-    if (!validDate(date)) { exceptions.push(['rentPayments', rent.id, 'Paid/part-paid rent record has no valid 2026 payment date', date || 'Missing']); continue; }
+    if (!validDate(date)) { exceptions.push(['rentPayments', rent.id, 'Paid/part-paid rent record has no valid payment date', date || 'Missing']); continue; }
+    if (date!.slice(0, 4) !== '2026') { exceptions.push(['rentPayments', rent.id, 'Payment date outside 2026 calendar year — excluded', date!]); continue; }
     if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['rentPayments', rent.id, 'Paid/part-paid rent record has no valid positive amount', String(amount)]); continue; }
     if (!inSelectedPeriod(date!) || (filters.category && filters.category !== 'Rent')) continue;
     candidates.push({ date: date!, source: 'Rent payments', id: rent.id, description: `Rent — ${rent.monthCovered}`, amount, method: 'Not recorded', reference: rent.receiptNumber || '', category: 'Rent' });
@@ -134,7 +136,8 @@ export function getCashBookSupplementaryPayments(
     for (const payment of list.payments || []) {
       const date = payment.date;
       const amount = payment.amountMWK;
-      if (!validDate(date)) { exceptions.push(['procurementLists.payments', `${list.id}/${payment.id}`, 'Procurement payment has no valid 2026 payment date', date || 'Missing']); continue; }
+      if (!validDate(date)) { exceptions.push(['procurementLists.payments', `${list.id}/${payment.id}`, 'Procurement payment has no valid payment date', date || 'Missing']); continue; }
+      if (date!.slice(0, 4) !== '2026') { exceptions.push(['procurementLists.payments', `${list.id}/${payment.id}`, 'Payment date outside 2026 calendar year — excluded', date!]); continue; }
       if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['procurementLists.payments', `${list.id}/${payment.id}`, 'Procurement payment has no valid positive amount', String(amount)]); continue; }
       if (!inSelectedPeriod(date!) || (filters.category && filters.category !== 'Procurement')) continue;
       candidates.push({ date: date!, source: 'Procurement payments', id: `${list.id}/${payment.id}`, description: list.title, amount, method: payment.method || 'Not recorded', reference: payment.reference || '', category: 'Procurement' });
