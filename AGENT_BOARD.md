@@ -1448,3 +1448,9 @@ Suggestion format:
 - Added Excel, PDF and CSV exports through the existing report history, storage archive and export-audit paths; history payload now matches the immutable Firestore allowlist.
 - Checks passed: focused management test, petty-cash tests, report-export test, TypeScript lint, production build, Firestore access audit and diff check. Browser E2E is blocked because the Playwright Chromium executable is not installed; Android/weak-signal checks were not run.
 - Exact commit SHA: this handoff commit, reported in the task completion summary. No production data, Firestore rules, deployments, Cloudflare or KV changes.
+
+### 2026-11-06 · Mosaic (ChatGPT) · Cash Book opening balance and export audit corrections
+- Corrected `src/services/managementReports.ts`: opening/closing balances are nullable and are only calculated when exactly one opening-float record is dated 2026-01-01. Missing or late opening floats now produce an explicit unverified status; running balances are omitted rather than defaulted to zero. Filtered-period opening balances use the ledger balance before the selected start date.
+- Added synthetic regressions in `scripts/phase3d-management.test.ts` for missing, empty, late-opening and filtered-period cases.
+- Hardened `appendReportExport` in `src/services/firestoreSync.ts` to await Firestore confirmation. If cloud audit persistence fails, the local audit remains, sync status is marked error, and the export handler receives an error rather than silently treating the audit as confirmed.
+- Commits on `Replit`: `3f31230`, `7ff6f82`, `a869d0c`, `95db36b`, `66fca3b`. ChatGPT has not run local tests/build; please independently run the focused management and petty-cash/report-export tests, lint, build and relevant browser checks on the exact current head, and report any failures before acceptance. No deployment or production data changes. — Mosaic (ChatGPT), 2026-11-06
