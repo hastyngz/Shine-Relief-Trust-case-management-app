@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, FileSpreadsheet, FileText, FileType } from 'lucide-react';
 import type { AppDatabase, ReportHistoryRecord, SalaryHistoryRecord, StaffUser } from '../../types';
-import { CASH_BOOK_END, CASH_BOOK_START, MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows } from '../../services/managementReports';
+import { CASH_BOOK_END, CASH_BOOK_START, MANAGEMENT_REPORTS, ManagementReportId, buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows, getCashBookSupplementaryPayments } from '../../services/managementReports';
 import { ManagementFilters, canAccessManagementDashboard, projectManagementDatabase } from '../../services/managementAnalytics';
 import { isAttachmentAllowedInGeneralReport } from '../../services/healthRecordAccess';
 import { appendEmployeeAuditLog, appendReportExport, appendReportHistory, getEmployeeSalaryHistoryForStaff } from '../../services/firestoreSync';
@@ -164,6 +164,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const rows = report;
   const cashBookSummary = reportId === 'cash-book' ? getCashBookSummary(permittedDb, filters) : undefined;
   const cashBookSummaryRows = cashBookSummary ? getCashBookSummaryRows(cashBookSummary) : [];
+  const cashBookSupplementary = reportId === 'cash-book' ? getCashBookSupplementaryPayments(permittedDb, filters) : undefined;
   const reportQualityConfig: ReportConfig = {
     title: MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId,
     periodLabel: `${filters.startDate || filters.financialYear || 'All available dates'} to ${filters.endDate || 'present'}`,
@@ -300,12 +301,13 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
     const title = 'SHINE 2026 Cash Book (Petty Cash)';
     try {
       const blob = format === 'csv'
-        ? new Blob([generateManagementReportCsv(rows, cashBookSummaryRows)], { type: 'text/csv;charset=utf-8' })
+        ? new Blob([generateManagementReportCsv(rows, cashBookSummaryRows) + (cashBookSupplementary ? '\\r\\n\\r\\n' + generateManagementReportCsv({ headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows }, [['Register', 'Separate recorded payments; not included in petty-cash balances']]) + '\\r\\n\\r\\nPayment exceptions\\r\\nSource module,Source record ID,Exception,Recorded value\\r\\n' + cashBookSupplementary.exceptions.map((row) => row.map((cell) => `\\"${String(cell).replace(/\\"/g, '\\"\\"')}\\"`).join(',')).join('\\r\\n') : '')], { type: 'text/csv;charset=utf-8' })
         : await createFixedReport({
           title,
           sections: [
             { title: 'Cash Book scope and summary', text: 'Petty-cash ledger only. Bank accounts are excluded. Unpaid expenses and inferred payments are excluded.', table: { headers: ['Measure', 'Value'], rows: cashBookSummaryRows } },
             { title: 'Recorded movements', text: 'Only recorded petty-cash ledger movements with their source references are included.', table: { headers: rows.headers, rows: rows.rows } },
+            ...(cashBookSupplementary ? [{ title: 'Separate supplementary payment register', text: 'Paid expenses, rent payments and individual procurement payment events are listed separately. They are not added to petty-cash balances or consolidated into a grand total. These entries are not independently verified against bank statements. Payroll is excluded because the app stores cumulative paid amounts rather than individual payment events.', table: { headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows } }, { title: 'Supplementary payment data-quality exceptions', text: 'Records marked Paid or Partially paid but missing a valid 2026 payment date or positive amount are listed here for correction; they are not included as payment rows.', table: { headers: ['Source module', 'Source record ID', 'Exception', 'Recorded value'], rows: cashBookSupplementary.exceptions } }] : []),
           ],
           changes: [],
           openProblems: auditedQualityIssues.filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden').map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
@@ -326,7 +328,7 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
   const handleExcelExport = async () => {
     if (!ensureQualityOverride()) return;
     try {
-      const bytes = await generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows, cashBookSummaryRows);
+      const bytes = await generateManagementReportWorkbook(reportId, rows, filters, staffProfile?.fullName || currentUser?.email || 'Management user', new Date().toISOString(), qualityAnnexRows, cashBookSummaryRows, cashBookSupplementary ? { headers: cashBookSupplementary.headers, rows: cashBookSupplementary.rows, exceptions: cashBookSupplementary.exceptions } : undefined);
       const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const fileName = `SHINE_${reportId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const title = MANAGEMENT_REPORTS.find((item) => item.id === reportId)?.label || reportId;
@@ -505,6 +507,20 @@ export const ManagementReportsPanel: React.FC<ManagementReportsPanelProps> = ({ 
         {rows.rows.length === 0 && <p className="p-4 text-center text-xs text-stone-500">No records match these filters.</p>}
         {rows.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 of {rows.rows.length} rows. Excel includes every matching row.</p>}
       </div>
+      {reportId === 'cash-book' && cashBookSupplementary && <div className="mt-5 space-y-3">
+        <div>
+          <h3 className="text-sm font-bold">Other recorded payments — separate register</h3>
+          <p className="mt-1 text-xs text-stone-500">Paid expenses, rent payments and individual procurement payment events are shown separately from petty cash. They are not added to petty-cash balances or consolidated into one total, and are not independently verified against bank statements. Payroll is excluded because its paid amount is cumulative rather than an individual payment-event record.</p>
+          <p className="mt-1 text-xs text-stone-600">Included: {cashBookSupplementary.sourceCounts.expenses} expense payment(s), {cashBookSupplementary.sourceCounts.rent} rent payment(s), {cashBookSupplementary.sourceCounts.procurement} procurement payment(s).</p>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-stone-200">
+          <table className="min-w-full text-left text-xs"><thead className="bg-stone-50"><tr>{cashBookSupplementary.headers.map((header) => <th key={header} className="whitespace-nowrap px-3 py-2 font-bold text-stone-600">{header}</th>)}</tr></thead><tbody className="divide-y divide-stone-100">{cashBookSupplementary.rows.slice(0, 20).map((row, index) => <tr key={String(row[2]) + index}>{row.map((cell, cellIndex) => <td key={cellIndex} className="whitespace-nowrap px-3 py-2 text-stone-700">{cell}</td>)}</tr>)}</tbody></table>
+          {cashBookSupplementary.rows.length === 0 && <p className="p-3 text-xs text-stone-500">No eligible 2026 supplementary payment events match this period.</p>}
+          {cashBookSupplementary.rows.length > 20 && <p className="border-t border-stone-200 p-2 text-[11px] text-stone-500">Showing first 20 rows; exports include all matching payments.</p>}
+        </div>
+        {cashBookSupplementary.exceptions.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><strong>{cashBookSupplementary.exceptions.length} payment record(s) need data correction.</strong> They are excluded until a valid payment date and positive amount are recorded.</div>}
+        {cashBookSupplementary.rows.some((row) => String(row[7]).includes('Possible duplicate')) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Possible duplicate payments share an exact date, amount and reference across modules. They remain separately traceable and are not consolidated; investigate before treating them as separate payments.</p>}
+      </div>}
     </section>
   );
 };
