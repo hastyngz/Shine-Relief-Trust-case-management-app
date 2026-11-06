@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import type { SalaryHistoryRecord } from '../src/types';
 import { buildManagementAnalytics, canAccessManagementDashboard, projectManagementDatabase } from '../src/services/managementAnalytics';
-import { buildManagementReportRows, generateManagementReportWorkbook, MANAGEMENT_REPORTS } from '../src/services/managementReports';
+import { buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows, MANAGEMENT_REPORTS } from '../src/services/managementReports';
 import { buildFactualReportNarrative, buildRecordedRecommendations, filterDataForReport, generateExcelWorkbook, generatePdfReport, generateWordReport, ReportConfig } from '../src/services/reportGenerators';
 import { downloadExcel } from '../src/utils/export';
 
@@ -45,7 +45,7 @@ assert.equal(canAccessManagementDashboard(true, 'Administrator'), true);
 assert.equal(canAccessManagementDashboard(false, 'Manager'), true);
 assert.equal(canAccessManagementDashboard(false, 'Staff'), false);
 assert.equal(canAccessManagementDashboard(false, 'View Only'), false);
-assert.equal(MANAGEMENT_REPORTS.length, 31);
+assert.equal(MANAGEMENT_REPORTS.length, 32);
 
 const analytics = buildManagementAnalytics({
   ...db,
@@ -167,6 +167,27 @@ const categoryExpenseReport = buildManagementReportRows('expenditure-category', 
   ],
 } as any, {});
 assert.deepEqual(categoryExpenseReport.rows, [['Food', 2, 150], ['Repairs', 1, 25]]);
+const cashBookDb = {
+  ...db,
+  pettyCashTransactions: [
+    { id: 'opening-2026', date: '2026-01-01', type: 'opening_balance', amountMWK: 10000, description: 'Synthetic opening float', reference: 'OPEN-2026', recordedAt: '2026-01-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2026-01-01T08:00:00Z' },
+    { id: 'receipt-2026', date: '2026-02-01', type: 'cash_received', amountMWK: 5000, description: 'Synthetic cash receipt', reference: 'RECEIPT-1', category: 'Float', recordedAt: '2026-02-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2026-02-01T08:00:00Z' },
+    { id: 'expense-2026', date: '2026-03-01', type: 'expense', amountMWK: 1200, description: 'Synthetic expense, with comma', reference: 'VOUCHER-1', category: 'Operations', recordedAt: '2026-03-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2026-03-01T08:00:00Z' },
+    { id: 'outside-2026', date: '2027-01-01', type: 'cash_received', amountMWK: 9000, description: 'Outside period', reference: 'OUTSIDE', recordedAt: '2027-01-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2027-01-01T08:00:00Z' },
+  ],
+} as any;
+const cashBook = buildManagementReportRows('cash-book', cashBookDb, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.deepEqual(cashBook.rows.map((row) => row[0]), ['2026-01-01', '2026-02-01', '2026-03-01']);
+assert.deepEqual(cashBook.rows.map((row) => row[9]), [10000, 15000, 13800]);
+const cashBookSummary = getCashBookSummary(cashBookDb, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.deepEqual(cashBookSummary, { periodStart: '2026-01-01', periodEnd: '2026-12-31', openingBalanceMWK: 10000, cashReceivedMWK: 5000, expensesMWK: 1200, cashReturnedMWK: 0, adjustmentsInMWK: 0, adjustmentsOutMWK: 0, closingBalanceMWK: 13800, omittedWithinPeriodCount: 0, outsideYearRecordCount: 1 });
+const filteredCashBookSummary = getCashBookSummary(cashBookDb, { startDate: '2026-02-01', endDate: '2026-03-31', financialYear: '2026', category: 'Operations' });
+assert.deepEqual(filteredCashBookSummary, { periodStart: '2026-02-01', periodEnd: '2026-03-31', openingBalanceMWK: 10000, cashReceivedMWK: 0, expensesMWK: 1200, cashReturnedMWK: 0, adjustmentsInMWK: 0, adjustmentsOutMWK: 0, closingBalanceMWK: 13800, omittedWithinPeriodCount: 1, outsideYearRecordCount: 1 });
+assert.equal(getCashBookSummary(cashBookDb, { financialYear: '2027' }).closingBalanceMWK, 0);
+assert.match(generateManagementReportCsv(cashBook, getCashBookSummaryRows(cashBookSummary)), /"Synthetic expense, with comma"/);
+const cashBookWorkbook = XLSX.read(await generateManagementReportWorkbook('cash-book', cashBook, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' }, 'Test user', undefined, [], getCashBookSummaryRows(cashBookSummary)), { type: 'array' });
+assert.equal(cashBookWorkbook.Sheets['Executive Summary']['A15']?.v, 'Opening balance (MWK)');
+assert.equal(cashBookWorkbook.Sheets['Report Data']['J3']?.v, 15000);
 const managementWorkbook = XLSX.read(await generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
 assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data', 'Quality Issues']);
 assert.equal(managementWorkbook.Sheets['Report Data']['J2']?.v, 20);

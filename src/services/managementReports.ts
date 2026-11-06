@@ -3,6 +3,7 @@ import { calculateBudgetVariance } from './financialCalculations';
 import { buildManagementAnalytics, ManagementFilters, matchesManagementProgramme } from './managementAnalytics';
 import { calculateGratuity } from './gratuityService';
 import { calculateBudgetForecast, calculateFeedingCostInsight, calculateMarketPriceInsight } from './intelligenceService';
+import { getPettyCashLedgerSummary } from './pettyCashLedger';
 
 export const MANAGEMENT_REPORTS = [
   { id: 'management-summary', label: 'Management Summary' },
@@ -36,10 +37,115 @@ export const MANAGEMENT_REPORTS = [
   { id: 'feeding-program', label: 'Feeding Programme Report' },
   { id: 'market-prices', label: 'Market Price Intelligence Report' },
   { id: 'budget-forecast', label: 'Budget Forecast Report' },
+  { id: 'cash-book', label: '2026 Cash Book (Petty Cash)' },
 ] as const;
 
 export type ManagementReportId = (typeof MANAGEMENT_REPORTS)[number]['id'];
 export type ReportCell = string | number;
+
+export const CASH_BOOK_START = '2026-01-01';
+export const CASH_BOOK_END = '2026-12-31';
+
+export interface CashBookSummary {
+  periodStart: string;
+  periodEnd: string;
+  openingBalanceMWK: number;
+  cashReceivedMWK: number;
+  expensesMWK: number;
+  cashReturnedMWK: number;
+  adjustmentsInMWK: number;
+  adjustmentsOutMWK: number;
+  closingBalanceMWK: number;
+  omittedWithinPeriodCount: number;
+  outsideYearRecordCount: number;
+}
+
+function clampCashBookDate(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return value < CASH_BOOK_START ? CASH_BOOK_START : value > CASH_BOOK_END ? CASH_BOOK_END : value;
+}
+
+function getCashBookTransactions(db: AppDatabase, filters: ManagementFilters) {
+  const start = clampCashBookDate(filters.startDate, CASH_BOOK_START);
+  const end = clampCashBookDate(filters.endDate, CASH_BOOK_END);
+  if (start > end || (filters.financialYear && filters.financialYear !== '2026')) return [];
+  return (db.pettyCashTransactions || [])
+    .filter((entry) => entry.date >= start && entry.date <= end && (!filters.month || Number(entry.date.slice(5, 7)) === filters.month) && (!filters.category || entry.category === filters.category))
+    .sort((left, right) => left.date.localeCompare(right.date) || left.recordedAt.localeCompare(right.recordedAt) || left.id.localeCompare(right.id));
+}
+
+function getAll2026CashBookTransactions(db: AppDatabase) {
+  return (db.pettyCashTransactions || [])
+    .filter((entry) => entry.date >= CASH_BOOK_START && entry.date <= CASH_BOOK_END)
+    .sort((left, right) => left.date.localeCompare(right.date) || left.recordedAt.localeCompare(right.recordedAt) || left.id.localeCompare(right.id));
+}
+
+export function getCashBookSummary(db: AppDatabase, filters: ManagementFilters = {}): CashBookSummary {
+  const start = clampCashBookDate(filters.startDate, CASH_BOOK_START);
+  const end = clampCashBookDate(filters.endDate, CASH_BOOK_END);
+  if ((filters.financialYear && filters.financialYear !== '2026') || start > end) {
+    return {
+      periodStart: start,
+      periodEnd: end,
+      openingBalanceMWK: 0,
+      cashReceivedMWK: 0,
+      expensesMWK: 0,
+      cashReturnedMWK: 0,
+      adjustmentsInMWK: 0,
+      adjustmentsOutMWK: 0,
+      closingBalanceMWK: 0,
+      omittedWithinPeriodCount: 0,
+      outsideYearRecordCount: (db.pettyCashTransactions || []).filter((entry) => entry.date < CASH_BOOK_START || entry.date > CASH_BOOK_END).length,
+    };
+  }
+  const transactions = getCashBookTransactions(db, filters);
+  const allTransactions = getAll2026CashBookTransactions(db);
+  const allLedger = getPettyCashLedgerSummary(allTransactions);
+  const ledger = getPettyCashLedgerSummary(transactions);
+  const priorBalance = allLedger.entries.filter((entry) => entry.date < start).at(-1)?.balanceAfterMWK || 0;
+  const periodClosingBalance = allLedger.entries.filter((entry) => entry.date <= end).at(-1)?.balanceAfterMWK;
+  const selectedIds = new Set(transactions.map((entry) => entry.id));
+  return {
+    periodStart: start,
+    periodEnd: end,
+    openingBalanceMWK: start === CASH_BOOK_START ? (allTransactions.find((entry) => entry.type === 'opening_balance')?.amountMWK || 0) : priorBalance,
+    cashReceivedMWK: ledger.cashReceivedMWK,
+    expensesMWK: ledger.expensesMWK,
+    cashReturnedMWK: ledger.cashReturnedMWK,
+    adjustmentsInMWK: ledger.adjustmentsInMWK,
+    adjustmentsOutMWK: ledger.adjustmentsOutMWK,
+    closingBalanceMWK: periodClosingBalance ?? priorBalance,
+    omittedWithinPeriodCount: allTransactions.filter((entry) => entry.date >= start && entry.date <= end && !selectedIds.has(entry.id)).length,
+    outsideYearRecordCount: (db.pettyCashTransactions || []).filter((entry) => entry.date < CASH_BOOK_START || entry.date > CASH_BOOK_END).length,
+  };
+}
+
+export function getCashBookSummaryRows(summary: CashBookSummary): ReportCell[][] {
+  return [
+    ['Scope', 'Petty-cash ledger only; bank accounts are excluded and no payments are inferred.'],
+    ['Selected period', `${summary.periodStart} to ${summary.periodEnd}`],
+    ['Opening balance (MWK)', summary.openingBalanceMWK],
+    ['Cash received (MWK)', summary.cashReceivedMWK],
+    ['Expenses paid (MWK)', summary.expensesMWK],
+    ['Cash returned (MWK)', summary.cashReturnedMWK],
+    ['Adjustments in (MWK)', summary.adjustmentsInMWK],
+    ['Adjustments out (MWK)', summary.adjustmentsOutMWK],
+    ['Closing balance (MWK)', summary.closingBalanceMWK],
+    ['Records omitted within selected period by month/category filters', summary.omittedWithinPeriodCount],
+    ['Records outside 2026 calendar year', summary.outsideYearRecordCount],
+    ['Unpaid expenses / inferred payments', 'Excluded'],
+  ];
+}
+
+function csvCell(value: ReportCell): string {
+  const text = String(value ?? '');
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function generateManagementReportCsv(report: { headers: string[]; rows: ReportCell[][] }, summaryRows: ReportCell[][] = []): string {
+  const summary = summaryRows.map((row) => ['Summary', ...row]);
+  return `\uFEFF${[...summary, report.headers, ...report.rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+}
 
 const inRange = (date: string | undefined, filters: ManagementFilters) => !!date &&
   (!filters.startDate || date >= filters.startDate) && (!filters.endDate || date <= filters.endDate);
@@ -249,6 +355,19 @@ export function buildManagementReportRows(
       const forecast = calculateBudgetForecast(db.budgets || [], 1 + ((db.forecastSettings?.[0]?.inflationPercent || 0) / 100));
       return headersAndRows(['Measure', 'Value', 'Status'], [['Approved budget', forecast.approved, 'Approved'], ['Actual expenditure', forecast.actual, 'Actual'], ['Forecast expenditure', forecast.forecast, 'Forecast'], ['Remaining approved', forecast.remainingApproved, forecast.status], ['Burn rate', forecast.burnRate, 'Calculated']]);
     }
+    case 'cash-book': {
+      const transactions = getCashBookTransactions(db, filters);
+      const fullLedger = getPettyCashLedgerSummary(getAll2026CashBookTransactions(db));
+      const balances = new Map(fullLedger.entries.map((entry) => [entry.id, entry.balanceAfterMWK]));
+      return headersAndRows(
+        ['Date', 'Entry ID', 'Source', 'Movement type', 'Description', 'Reference', 'Category', 'Inflow (MWK)', 'Outflow (MWK)', 'Balance (MWK)', 'Recorded by', 'Recorded at', 'Data quality'],
+        transactions.map((entry) => {
+          const inflow = ['opening_balance', 'cash_received', 'cash_returned', 'adjustment_in'].includes(entry.type) ? entry.amountMWK : 0;
+          const outflow = ['expense', 'adjustment_out'].includes(entry.type) ? entry.amountMWK : 0;
+          return [entry.date, entry.id, 'pettyCashTransactions', entry.type, entry.description, entry.reference, entry.category || '', inflow, outflow, balances.get(entry.id) || 0, entry.recordedBy, entry.recordedAt, 'Recorded ledger movement'] as ReportCell[];
+        }),
+      );
+    }
     default:
       return headersAndRows([], []);
   }
@@ -260,7 +379,8 @@ export async function generateManagementReportWorkbook(
   filters: ManagementFilters,
   generatedBy: string,
   generatedAt = new Date().toISOString(),
-  qualityRows: Array<Array<string | number>> = []
+  qualityRows: Array<Array<string | number>> = [],
+  summaryRows: ReportCell[][] = []
 ): Promise<Uint8Array> {
   const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
@@ -278,6 +398,7 @@ export async function generateManagementReportWorkbook(
     ['Generated by', generatedBy],
     ['Generated at', generatedAt],
     ['Matching records', report.rows.length],
+    ...summaryRows,
   ]);
   summary['!cols'] = [{ wch: 25 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(workbook, summary, 'Executive Summary');
