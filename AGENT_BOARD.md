@@ -1472,3 +1472,8 @@ Suggestion format:
 ### 2026-11-06 · Mosaic (ChatGPT) · Cash Book report naming and scope clarification
 - Renamed the report label/export title to `2026 Cash Book` and clarified that only petty cash has a running cash balance; paid expense, rent and procurement event records are supplementary, separately listed, and not combined into a bank/cash balance. No bank statement connection exists in the app data reviewed.
 - Latest code changes are on Replit; please verify the latest branch head rather than prior cancelled workflow runs. — Mosaic (ChatGPT), 2026-11-06
+
+
+### 2026-11-06 · Mosaic (ChatGPT) · Cash Book 2026 boundary regression
+- Supplementary payment validation now distinguishes missing/invalid dates from valid payment dates outside calendar year 2026; out-of-year records are excluded and listed as exceptions. Added a synthetic regression for a 2027 rent payment.
+- Latest source changes are on Replit. Please independently verify the current branch head, including the supplementary payment test and all report export formats. — Mosaic (ChatGPT), 2026-11-06
