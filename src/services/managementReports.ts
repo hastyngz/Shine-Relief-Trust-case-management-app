@@ -114,7 +114,7 @@ export function getCashBookSupplementaryPayments(
     const amount = expense.totalCost;
     if (!validDate(date)) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid 2026 payment date', date || 'Missing']); continue; }
     if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid positive amount', String(amount)]); continue; }
-    if (!inSelectedPeriod(date!) || (filters.category && filters.category !== (expense.budgetCategory || expense.category))) continue;
+    if (!inSelectedPeriod(date!) || (filters.category && filters.category !== expense.budgetCategory && filters.category !== expense.category)) continue;
     candidates.push({ date: date!, source: 'Expenses', id: expense.id, description: expense.itemDescription, amount, method: expense.paymentMethod || 'Not recorded', reference: expense.paymentReference || expense.invoiceReference || '', category: expense.budgetCategory || expense.category });
     sourceCounts.expenses += 1;
   }
@@ -142,16 +142,18 @@ export function getCashBookSupplementaryPayments(
     }
   }
 
-  const duplicateKeys = new Map<string, number>();
+  const duplicateSources = new Map<string, Set<string>>();
   for (const item of candidates) {
     if (!item.reference.trim()) continue;
     const key = `${item.date}| ${item.amount}| ${item.reference.trim().toLowerCase()}`;
-    duplicateKeys.set(key, (duplicateKeys.get(key) || 0) + 1);
+    const sources = duplicateSources.get(key) || new Set<string>();
+    sources.add(item.source);
+    duplicateSources.set(key, sources);
   }
   candidates.sort((a, b) => a.date.localeCompare(b.date) || a.source.localeCompare(b.source) || a.id.localeCompare(b.id));
   for (const item of candidates) {
     const key = item.reference.trim() ? `${item.date}| ${item.amount}| ${item.reference.trim().toLowerCase()}` : '';
-    const review = key && (duplicateKeys.get(key) || 0) > 1
+    const review = key && (duplicateSources.get(key)?.size || 0) > 1
       ? 'Possible duplicate across source modules — review; not consolidated'
       : 'Recorded source payment; not independently bank-verified';
     rows.push([item.date, item.source, item.id, item.description, item.amount, item.method, item.reference || 'Not recorded', review]);
