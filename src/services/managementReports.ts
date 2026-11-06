@@ -37,7 +37,7 @@ export const MANAGEMENT_REPORTS = [
   { id: 'feeding-program', label: 'Feeding Programme Report' },
   { id: 'market-prices', label: 'Market Price Intelligence Report' },
   { id: 'budget-forecast', label: 'Budget Forecast Report' },
-  { id: 'cash-book', label: '2026 Cash Book (Petty Cash)' },
+  { id: 'cash-book', label: '2026 Cash Book' },
 ] as const;
 
 export type ManagementReportId = (typeof MANAGEMENT_REPORTS)[number]['id'];
@@ -213,7 +213,7 @@ export function getCashBookSummary(db: AppDatabase, filters: ManagementFilters =
 
 export function getCashBookSummaryRows(summary: CashBookSummary): ReportCell[][] {
   return [
-    ['Scope', 'Petty-cash ledger only; bank accounts are excluded and no payments are inferred.'],
+    ['Scope', 'Petty-cash balance shown separately; paid expenses, rent and procurement events are in a supplementary register. No bank statement is connected and no combined bank/cash balance is calculated.'],
     ['Selected period', `${summary.periodStart} to ${summary.periodEnd}`],
     ['Opening balance (MWK)', summary.openingBalanceMWK ?? 'Not verified — opening float missing or not dated 1 January 2026'],
     ['Cash received (MWK)', summary.cashReceivedMWK],
