@@ -339,7 +339,7 @@ export async function appendReportExport(record: ReportExportRecord): Promise<bo
   } catch (error) {
     console.error('Report export audit sync failed; the audit remains saved on this device:', error);
     updateSyncStatus('error');
-    return false;
+    throw new Error('The report export audit is saved on this device, but cloud confirmation failed. The report file was not downloaded. Check the connection and retry.');
   }
 }
 
