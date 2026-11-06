@@ -114,7 +114,7 @@ export function getCashBookSupplementaryPayments(
     const amount = expense.totalCost;
     if (!validDate(date)) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid 2026 payment date', date || 'Missing']); continue; }
     if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['expenses', expense.id, 'Paid expense has no valid positive amount', String(amount)]); continue; }
-    if (!inSelectedPeriod(date!)) continue;
+    if (!inSelectedPeriod(date!) || (filters.category && filters.category !== (expense.budgetCategory || expense.category))) continue;
     candidates.push({ date: date!, source: 'Expenses', id: expense.id, description: expense.itemDescription, amount, method: expense.paymentMethod || 'Not recorded', reference: expense.paymentReference || expense.invoiceReference || '', category: expense.budgetCategory || expense.category });
     sourceCounts.expenses += 1;
   }
@@ -125,7 +125,7 @@ export function getCashBookSupplementaryPayments(
     const amount = rent.amountPaid;
     if (!validDate(date)) { exceptions.push(['rentPayments', rent.id, 'Paid/part-paid rent record has no valid 2026 payment date', date || 'Missing']); continue; }
     if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['rentPayments', rent.id, 'Paid/part-paid rent record has no valid positive amount', String(amount)]); continue; }
-    if (!inSelectedPeriod(date!)) continue;
+    if (!inSelectedPeriod(date!) || (filters.category && filters.category !== 'Rent')) continue;
     candidates.push({ date: date!, source: 'Rent payments', id: rent.id, description: `Rent — ${rent.monthCovered}`, amount, method: 'Not recorded', reference: rent.receiptNumber || '', category: 'Rent' });
     sourceCounts.rent += 1;
   }
@@ -136,7 +136,7 @@ export function getCashBookSupplementaryPayments(
       const amount = payment.amountMWK;
       if (!validDate(date)) { exceptions.push(['procurementLists.payments', `${list.id}/${payment.id}`, 'Procurement payment has no valid 2026 payment date', date || 'Missing']); continue; }
       if (!Number.isFinite(amount) || amount <= 0) { exceptions.push(['procurementLists.payments', `${list.id}/${payment.id}`, 'Procurement payment has no valid positive amount', String(amount)]); continue; }
-      if (!inSelectedPeriod(date!)) continue;
+      if (!inSelectedPeriod(date!) || (filters.category && filters.category !== 'Procurement')) continue;
       candidates.push({ date: date!, source: 'Procurement payments', id: `${list.id}/${payment.id}`, description: list.title, amount, method: payment.method || 'Not recorded', reference: payment.reference || '', category: 'Procurement' });
       sourceCounts.procurement += 1;
     }
