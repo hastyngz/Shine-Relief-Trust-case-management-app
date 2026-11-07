@@ -1530,3 +1530,9 @@ Suggestion format:
 - Future locations must be addable through an extensible managed registry; the earlier audit allowlist is not the permanent location list.
 - Still open: who may create/deactivate locations, duplicate-name policy, and how to handle deactivation when stock remains. Historical balances/movements must be retained.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Design/policy documentation only; no application code, stock data, Firestore rules, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed automatic transfer posting on approval
+- Trust confirmed that approval automatically posts the transfer; there is no separate posting step or posting role.
+- The approval decision, source decrement, destination increment, paired immutable movement records and request transition to Posted must be one atomic server-side commit. A failed validation/precondition must commit none of them.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. No application code, Firestore rules, live stock, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
