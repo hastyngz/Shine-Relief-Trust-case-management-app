@@ -1569,3 +1569,10 @@ Suggestion format:
 - Trust approved controlled migration of existing stock: assign quantities only where reliable evidence supports the location; uncertain items remain exceptions for physical verification; never guess or default. Reconcile per-location totals to existing aggregates before cutover.
 - Trust also requested a create-location option within the add-new-stock workflow. Managers and Administrators can create a location inline; Staff can only select existing active locations. Inline creation must use the same server-side permissions, normalized unique-name validation and managed registry. Stock addition is a separate operation and is not successful until its own server confirmation.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · consolidated inventory implementation plan
+- Consolidated confirmed location permissions, uniqueness, deactivation, inline creation, legacy stock migration, procurement destination and approval-auto-post rules into the target design.
+- Corrected the transfer Worker contract: approval and posting are a single atomic operation (Pending → Posted); there is no separate Approved state/posting actor.
+- Added a staged implementation plan covering registry, server-owned location ledger, legacy writer containment, procurement, transfer workflow, offline/restore/import, migration rehearsal and independent verification.
+- Remaining design blockers before code: treatment of pending v1 procurement receipt intents; Trust-approved legacy stock evidence/sign-off; quantity precision/unit rules. No application code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
