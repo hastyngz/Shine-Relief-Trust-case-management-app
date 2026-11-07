@@ -182,3 +182,20 @@ Until these decisions and server/rules/offline protections are implemented and i
 - The receiving user selects the location as part of recording the receipt.
 - Server-side receipt processing must validate the location is active and atomically update the location balance, compatibility aggregate quantity, immutable movement record and procurement receipt ledger.
 - If any part fails, none of those records or balances may be committed. Offline receipt drafts may be retained locally, but the app must not present stock as received until the server confirms the atomic operation.
+
+
+### Confirmed legacy stock migration policy (2026-11-07)
+
+- Existing one-location/one-quantity inventory records must be reviewed before they are seeded into per-location balances.
+- Assign a legacy quantity to a location only when reliable source evidence supports that assignment.
+- Uncertain location or quantity records are exceptions for physical verification; do not guess, distribute, or silently default them to Shine Centre or Girls House.
+- Preserve the original aggregate and source evidence during review. Exclude unresolved items from the migration seed until formally resolved and signed off.
+- Reconcile seeded per-location totals to the existing aggregate quantity for each item before enabling the new ledger.
+
+### Confirmed create-location option during stock entry (2026-11-07)
+
+- When adding new stock and selecting its destination location, eligible active Managers and Administrators must also be able to create a new location from that stock-entry workflow, without leaving the task.
+- Staff may select existing active locations but cannot create one; this preserves the confirmed location-management permissions.
+- Inline creation must use the same managed registry, normalized unique-name validation, stable location ID and server-side authorization as the dedicated location-management screen.
+- The newly created location becomes selectable for the stock entry only after the server confirms its creation. The stock receipt/addition itself remains a separate validated stock operation and must not be treated as successful merely because location creation succeeded.
+- Apply the same active-location and atomic receipt rules to the subsequent stock addition.
