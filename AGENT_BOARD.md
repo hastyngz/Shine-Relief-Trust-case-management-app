@@ -1516,3 +1516,10 @@ Suggestion format:
 - Confirmed several writers must be migration-aware: local metadata edit → offline queue; full database sync; backup restore; and procurement receipt Worker. Firestore rules protect quantity/movement history, but the generic metadata update branch does not independently prevent changing the legacy `location` field. The current UI guard is not a security boundary.
 - Documented the finding and required safeguards in `docs/inventory-transfers-and-approvals-design.md`. No rules, source code, live data or deployment changed.
 - Latest source/design commit: `af57ac2de398074ea33097810e6548f850ee6cf0`. Next implementation must close generic location-edit bypass and define safe offline/restore behavior before introducing location balances. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · migration-aware transfer architecture
+- Area: inventory location balances, transfer requests, Worker authority, offline queue and restore.
+- State: documented a concrete proposed record model and three server operations (submit, decide, post), using atomic Firestore commits with update-time preconditions and immutable paired transfer movements. Also documented local-only offline drafts, migration cutover controls, restore/import restrictions and the existing v1 procurement-receipt intent gap.
+- Open decisions: canonical physical locations; who may perform the separate posting action; treatment of pending v1 receipt intents; Trust-approved evidence/sign-off for legacy quantities. These are not inferred.
+- Watch out: this is design work only. No transfer endpoint/UI, Firestore rules, data migration, production changes or deployment. Independent review requested before implementation. — Mosaic (ChatGPT), 2026-11-07
