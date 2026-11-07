@@ -128,7 +128,7 @@ The Worker must verify that the sum of location balances equals the item's aggre
 
 ### Decisions still required before implementation
 
-- Confirm how pending v1 procurement receipt intents are handled at cutover.
+- Trust confirms there are no legacy/pending procurement receipt intents to migrate. The cutover must still verify this assumption against the live/exported data; if any are discovered, stop and obtain review rather than guessing a destination.
 - Confirm the approved stock evidence and sign-off process used to verify legacy quantities before seeding.
 
 Until these decisions and server/rules/offline protections are implemented and independently tested, the transfer workflow remains unavailable and no migration is authorized.
@@ -205,7 +205,7 @@ Until these decisions and server/rules/offline protections are implemented and i
 The build should be delivered in gated stages on the `Replit` branch. Each stage must be independently reviewed and tested before proceeding; do not enable the new workflow against live stock until all cutover gates pass.
 
 1. **Close design and contract gaps**
-   - Settle pending v1 procurement receipt intent treatment and the Trust's legacy stock evidence/sign-off procedure.
+   - Trust confirms there are no old procurement receipt intents; verify the dataset at cutover and stop for review if any are unexpectedly found. Settle the Trust's legacy stock evidence/sign-off procedure.
    - Define the Worker request/response contracts, role checks, stable operation IDs, idempotency fingerprints and error/conflict responses.
    - Define quantity precision and allowed unit behavior for per-location balances; reject incompatible units.
 2. **Location registry and server boundary**
@@ -238,4 +238,11 @@ The build should be delivered in gated stages on the `Replit` branch. Each stage
    - Have Manus independently run the relevant test suites, lint, build, Firestore access audit and mobile/offline regression checks; resolve failures before release.
    - No production migration or deployment until separately approved.
 
-**Release blockers:** pending v1 receipt-intent policy; legacy stock evidence/sign-off; quantity precision/unit rules; completed Worker/rules/offline/restore/import implementation; successful independent verification; explicit authorization for production migration and deployment.
+**Release blockers:** legacy stock evidence/sign-off; quantity precision/unit rules; completed Worker/rules/offline/restore/import implementation; successful independent verification; explicit authorization for production migration and deployment.
+
+
+### Confirmed legacy procurement-intent status (2026-11-07)
+
+- The Trust confirms there are no old/pending procurement receipt intents requiring migration.
+- No legacy receipt should be fabricated or assigned a destination.
+- As a cutover control, verify the source data contains no such pending intents. If any are unexpectedly present, pause that portion of migration and obtain a reviewed resolution rather than assigning a default location.
