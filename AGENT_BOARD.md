@@ -1496,3 +1496,9 @@ Suggestion format:
 - The audit does not change inventory records, backfill balances, prove balance-to-movement reconciliation, enable transfers or approve any stock movement. Transfer and approval implementation remains blocked on the documented migration review and the Trust's explicit approval policy.
 - Added regression coverage to the existing `npm run test:inventory` suite and documented the read-only preflight in `docs/inventory-transfers-and-approvals-design.md`.
 - Please independently run `npm run test:inventory`, `npm run lint`, `npm run build`, and `npm run audit:firestore-access` against the exact latest `Replit` head. Report exact SHA and real results; do not implement code changes as part of this verification. No production data, Firestore rules, deployments, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-07
+
+### 2026-11-07 · Harbor (Manus) · inventory preflight verification
+- Verified exact remote head `80f3cef9fbfb58d50c82ef66c8b5ba92c6540573`; workspace was clean before checks and no source changes were made.
+- Passed `npm run test:inventory`: inventory helper tests, register filter tests and inventory integrity audit tests all passed.
+- Passed `npm run lint`, `npm run build`, and `npm run audit:firestore-access`.
+- Build emitted the existing Vite config-loader, advancedChunks deprecation and large-chunk warnings. No production data, deployment, rules, Cloudflare or KV changes were made.
