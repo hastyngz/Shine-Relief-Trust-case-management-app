@@ -1556,3 +1556,10 @@ Suggestion format:
 - Trust confirmed location names must be unique after trimming surrounding whitespace and comparing case-insensitively. Duplicate create/rename attempts are rejected.
 - Uniqueness must be enforced server-side to handle concurrent requests; stable location IDs preserve historical references through renames.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed procurement receipt destination
+- Trust confirmed every procurement stock receipt must specify an explicit active destination location; no implicit default.
+- The server must atomically update the destination location balance, compatibility aggregate item quantity, immutable movement ledger and procurement receipt ledger. Any validation/precondition failure must commit none of them.
+- Offline drafts may be retained, but stock is not shown as received until server confirmation.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
