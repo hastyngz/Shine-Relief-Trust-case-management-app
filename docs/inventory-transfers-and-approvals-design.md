@@ -130,7 +130,6 @@ The Worker must verify that the sum of location balances equals the item's aggre
 ### Decisions still required before implementation
 
 - Confirm who may create/deactivate locations. The Trust has confirmed the initial locations are **Shine Centre** and **Girls House**; the system must support adding further locations later through a managed location registry rather than a hard-coded list.
-- Confirm who may execute the separate posting action after a Manager/Administrator approves a request. No role is inferred here.
 - Confirm how pending v1 procurement receipt intents are handled at cutover.
 - Confirm the approved stock evidence and sign-off process used to verify legacy quantities before seeding.
 
@@ -143,3 +142,11 @@ Until these decisions and server/rules/offline protections are implemented and i
 - The location registry must be extensible: authorized users must be able to add further named physical locations without a code change or redeployment.
 - Do not treat the earlier integrity-audit allowlist as the permanent location registry. It was a provisional audit vocabulary only.
 - Location creation/deactivation permissions, duplicate-name handling and the behavior when a location with a non-zero balance is deactivated remain to be specified. Deactivation must not delete historical balances or movements.
+
+
+### Confirmed approval-and-posting behavior (2026-11-07)
+
+- An eligible Manager or Administrator's approval automatically posts the transfer as part of the same server-side atomic transaction.
+- There is no separate posting permission or manual posting stage.
+- The atomic commit must include the request decision/status transition, source balance decrement, destination balance increment and both immutable movement records. If any validation or precondition fails, none of these writes may commit.
+- Requester self-approval remains prohibited, including when the requester is a Manager or Administrator.
