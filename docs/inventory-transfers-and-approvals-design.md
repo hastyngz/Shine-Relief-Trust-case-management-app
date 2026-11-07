@@ -1,10 +1,20 @@
 # Inventory transfers and approvals — design prerequisite
 
-Status: design only; no transfer implementation is claimed.
+Status: transfer implementation remains design-only. The read-only location migration preflight audit is now implemented in the existing inventory snapshot audit; no backfill, transfer or approval workflow is claimed.
 
 ## Why the model must change
 
 `InventoryItem` currently has one `location` and one aggregate `quantityOnHand`. The authenticated Worker commits that aggregate balance and an immutable `inventoryMovements` record together. A partial transfer cannot be represented accurately by changing the location label, and a separate issue plus receipt could lose or duplicate stock if one write fails.
+
+## Read-only migration preflight audit delivered
+
+The existing `npm run audit:inventory-snapshot -- <app-database-export.json>` command now also reports a location-migration preflight summary:
+- Items with missing or unrecognized locations and missing or unrecognized units.
+- Count of items eligible for a future single-location seed, requiring a recognized location, recognized unit and finite non-negative quantity.
+- Quantity totals grouped by recognized location **and unit**; unlike units are never combined.
+- Aggregate-only output: no item IDs, stock codes, staff names or other personal data are emitted, and the source snapshot is never modified.
+
+This is only a read-only summary. It does not prove that current quantities reconcile to movement history, does not backfill location balances, and does not authorize transfers. Review an approved local database export and resolve all exceptions before considering migration.
 
 ## Required invariants
 
