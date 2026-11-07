@@ -81,3 +81,57 @@ The approval-role decision is now settled. Transfers are still not ready to enab
 - Confirm the trusted Worker command contract and Firestore rules boundary before any client UI is enabled. Do not loosen rules as a fallback.
 - Add idempotent migration and reconciliation tests before backfill; migration must be a dry-run first and must not infer missing locations or rewrite ambiguous balances.
 - No transfer UI, production migration, rules deployment or live stock changes are authorized by this policy confirmation alone.
+
+
+## Migration-aware target architecture (reviewed 2026-11-07)
+
+This section records a proposed implementation boundary, not deployed infrastructure or an approved migration.
+
+### Authoritative records
+
+- Keep `inventoryItems/{itemId}` as the item catalogue and compatibility aggregate. Its `quantityOnHand` remains the sum of all location balances; a transfer must not change this aggregate.
+- Add a canonical `inventoryLocations/{locationId}` registry. Use stable IDs and an explicit active/inactive state; do not use free-text location names as document IDs or infer that two differently spelled labels are the same place.
+- Add `inventoryLocationBalances/{balanceId}` records keyed by a deterministic, collision-safe item/location identity. Each record carries item ID, location ID, unit, non-negative quantity and migration/version metadata. The server is the only writer after cutover.
+- Keep `inventoryMovements/{movementId}` as the immutable movement ledger. A transfer produces a linked outbound and inbound entry with the same transfer ID and quantity, but distinct source/destination location IDs.
+- Add `inventoryTransferRequests/{requestId}` as the request and decision record. It carries an immutable request fingerprint, item, source, destination, quantity, unit, requester UID/time, status and (after decision) reviewer UID/time/reason. Status transitions are server-controlled.
+
+Do not make the client authoritative for location balances, transfer status, reviewer identity, or movement history. Avoid growing the embedded `InventoryItem.movements` array for every future transfer: the separate movement collection is the durable ledger; any embedded history retained for compatibility must be bounded and treated as a display cache, not authority.
+
+### Trusted Worker operations
+
+The existing Worker movement handler already uses Firestore's atomic `documents:commit` endpoint with update-time preconditions and create-only movement writes. Procurement receipt posting adds a third preconditioned write to the same atomic commit. This is a useful pattern to extend, but it is not itself a transfer implementation.
+
+Proposed operations, each authenticated from the current Firebase ID token and checked against the active staff record:
+
+1. **Submit request:** accept only a valid item, two distinct active locations, positive finite quantity and matching unit; record the authenticated requester and create a Pending request. A repeated request ID with the same fingerprint returns the original result; changed content under the same ID is rejected. This operation changes no stock.
+2. **Decide request:** only an active Manager or Administrator may approve/reject; reject if the actor UID equals the requester UID. Use a precondition on the request's current update time and allow only Pending → Approved or Pending → Rejected. Record decision actor, time and reason server-side. This operation changes no stock.
+3. **Post approved request:** require the request still be Approved and its fingerprint unchanged. In one atomic Firestore commit, precondition both source and destination balance versions, decrement source, increment destination, create both immutable movement entries, and transition the request to Posted. Reject insufficient source stock, stale balances, inactive locations, unit mismatch, or an already-posted request. The posting actor's permitted role must be explicitly settled before coding; the confirmed approval policy does not yet define who may perform this separate posting action.
+
+The Worker must verify that the sum of location balances equals the item's aggregate before and after a transfer (the aggregate is unchanged). A conflict retry must re-read the request and both balances; it must never replay a partial debit or credit. Firestore batch atomicity plus update-time preconditions is required; separate client writes or sequential debit/credit calls are not acceptable.
+
+### Offline, restore and import boundaries
+
+- An offline device may save an explicitly labelled local draft/outbox request. It must not create a server Pending request, approve/reject, post stock, or show a stock change until the Worker confirms it.
+- On reconnect, submit the saved request using its stable operation ID and fingerprint. Keep it pending locally on timeout/unknown outcome; query/retry the same ID rather than generating a new one.
+- Do not add transfer requests, decisions, location balances or transfer movements to the generic whole-record offline queue. The queue may sync ordinary item descriptive metadata only; it must not replay quantity, location, movement, or transfer-owned fields.
+- Before migration, backup restore retains the current legacy behavior subject to existing safeguards. After migration cutover, restore must not overwrite server-authoritative location balances, movements, requests or decisions from an older backup. A schema/version and migration-state gate must block incompatible restores and provide a deliberate, audited recovery path.
+- Imports and admin scripts must use the same validated server operation or a separately authorized migration tool. They must not write location balances or transfer state directly.
+- Existing procurement receipt intents are version 1 and do not include a destination location. Before cutover, decide how any saved/incomplete receipt intents are resolved. After cutover, receipt posting must require an explicit active destination location and include it in the stable intent/fingerprint; it must atomically update the destination balance, aggregate item quantity, movement ledger and procurement receipt ledger. Do not silently default old receipts to a guessed location.
+
+### Migration and cutover controls
+
+1. Export an approved database snapshot and run the existing read-only preflight. Review aggregate exceptions with the Trust; do not print identifying records in the audit output.
+2. Reconcile each candidate item's current aggregate quantity against its movement history and supporting stock evidence. The current audit cannot prove this reconciliation. Any unresolved or ambiguous item is excluded from automatic seeding and held for manual resolution.
+3. Freeze or version-gate all inventory writers for the short cutover window. The migration must detect concurrent item edits using update-time preconditions and abort rather than overwrite newer data.
+4. Seed exactly one balance only for reviewed items with a confirmed canonical location, unit and verified quantity. Store a per-item migration marker and source snapshot fingerprint so reruns are idempotent and changed inputs are rejected.
+5. Recompute location totals by unit and verify each item's balance sum equals its legacy aggregate. Produce aggregate-only reconciliation evidence for review.
+6. Enable server-owned writes and the new receipt destination contract only after rules, Worker, offline queue, restore, import and regression tests are deployed together. Keep rollback as a controlled, audited migration operation; never restore old client snapshots over new ledger state.
+
+### Decisions still required before implementation
+
+- Confirm the canonical list of physical storage locations and who may create/deactivate a location.
+- Confirm who may execute the separate posting action after a Manager/Administrator approves a request. No role is inferred here.
+- Confirm how pending v1 procurement receipt intents are handled at cutover.
+- Confirm the approved stock evidence and sign-off process used to verify legacy quantities before seeding.
+
+Until these decisions and server/rules/offline protections are implemented and independently tested, the transfer workflow remains unavailable and no migration is authorized.
