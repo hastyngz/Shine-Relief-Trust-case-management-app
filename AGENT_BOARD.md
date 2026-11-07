@@ -1576,3 +1576,9 @@ Suggestion format:
 - Corrected the transfer Worker contract: approval and posting are a single atomic operation (Pending → Posted); there is no separate Approved state/posting actor.
 - Added a staged implementation plan covering registry, server-owned location ledger, legacy writer containment, procurement, transfer workflow, offline/restore/import, migration rehearsal and independent verification.
 - Remaining design blockers before code: treatment of pending v1 procurement receipt intents; Trust-approved legacy stock evidence/sign-off; quantity precision/unit rules. No application code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed no legacy procurement receipts
+- Trust confirms there are no old/pending procurement receipt intents. No legacy receipt migration or destination assignment is required.
+- At cutover, verify the source data contains none; if any are unexpectedly found, pause and review rather than defaulting a location.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, stock data, Firestore rules, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
