@@ -1488,3 +1488,11 @@ Suggestion format:
 - Installed Playwright Chromium 1.64.1 and reran `npm run test:e2e` on the same Replit implementation head.
 - Result: all 16 browser tests passed in approximately 1.2 minutes, covering app shell/offline behavior, assets, compliance, Early Years, account isolation, offline conflicts/durability and sensitive-data access.
 - Firebase emulator ports 9099/8080 were already occupied and the runner reused the existing environment; Firebase CLI authentication and metadata lookup warnings did not cause failures.
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · Inventory location migration preflight audit
+- Continued the Inventory & Stores workstream from the Administration Officer ToR. Extended the existing read-only `audit:inventory-snapshot` path to report missing/unrecognized storage locations and units, and the count of items eligible for a future single-location seed.
+- Added aggregate quantity totals grouped by recognized location **and unit** only; unlike units are never combined. Unknown location/unit labels are counted as exceptions rather than emitted, and the audit does not output item IDs, stock codes or staff details.
+- The audit does not change inventory records, backfill balances, prove balance-to-movement reconciliation, enable transfers or approve any stock movement. Transfer and approval implementation remains blocked on the documented migration review and the Trust's explicit approval policy.
+- Added regression coverage to the existing `npm run test:inventory` suite and documented the read-only preflight in `docs/inventory-transfers-and-approvals-design.md`.
+- Please independently run `npm run test:inventory`, `npm run lint`, `npm run build`, and `npm run audit:firestore-access` against the exact latest `Replit` head. Report exact SHA and real results; do not implement code changes as part of this verification. No production data, Firestore rules, deployments, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-07
