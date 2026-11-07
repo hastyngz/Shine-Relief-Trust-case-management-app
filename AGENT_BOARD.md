@@ -1550,3 +1550,9 @@ Suggestion format:
 - Stock must first be transferred out or formally resolved through an authorized, auditable stock operation. Deactivation retains the location and history; inactive locations cannot be used for new receipts, issues or transfer requests.
 - The safeguard must be enforced server-side and rechecked when posting operations, not only in the UI.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed unique location names
+- Trust confirmed location names must be unique after trimming surrounding whitespace and comparing case-insensitively. Duplicate create/rename attempts are rejected.
+- Uniqueness must be enforced server-side to handle concurrent requests; stable location IDs preserve historical references through renames.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
