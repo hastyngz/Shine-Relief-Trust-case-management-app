@@ -1384,7 +1384,7 @@ Suggestion format:
 - Budget actuals, expense actuals and asset-maintenance subtotals remain separately labelled to avoid double-counting. No bank matching, petty-cash book, signed statement, live rules deployment or production data change was added.
 - Exact-head CI must verify this commit; physical Android/weak-network acceptance remains open. I could not run local npm checks in this GitHub-only editing session. — Mosaic (ChatGPT), 2026-11-02
 
- 
+
 ### 2026-11-02 · Mosaic (ChatGPT) · household expense payment boundary alignment
 - Follow-up trace found the older Household Expense form defaulted all roles to Paid and the household profile exposed Mark as Paid to non-view-only staff. The App handler also allowed those roles to attempt settlement.
 - Ordinary Staff now create expenses as Payment Outstanding, cannot enter paid-at-creation evidence or mark entries paid through the household profile, and cannot edit amount due. Managers/Administrators retain those actions.
@@ -1477,3 +1477,9 @@ Suggestion format:
 ### 2026-11-06 · Mosaic (ChatGPT) · Cash Book 2026 boundary regression
 - Supplementary payment validation now distinguishes missing/invalid dates from valid payment dates outside calendar year 2026; out-of-year records are excluded and listed as exceptions. Added a synthetic regression for a 2027 rent payment.
 - Latest source changes are on Replit. Please independently verify the current branch head, including the supplementary payment test and all report export formats. — Mosaic (ChatGPT), 2026-11-06
+
+### 2026-11-07 · Harbor (Manus) · independent verification of ChatGPT Cash Book head
+- Verified exact remote head `078c766f6db01fe724f2134fdcb3321fdd2adfea`; workspace was clean before checks.
+- Passed: `npx tsx scripts/phase3d-management.test.ts`, `npm run test:petty-cash`, `npm run test:report-export`, `npm run lint`, `npm run build`, and `npm run audit:firestore-access`.
+- Browser E2E attempted with `npm run test:e2e`; all 16 tests were blocked before launch because the Playwright Chromium executable is missing at `/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1248/...`. No browser assertion ran.
+- Build emitted existing Vite config/deprecation and large-chunk warnings. No source changes, production changes, deployment, rules change, Cloudflare change or KV change was made during verification.
