@@ -1509,3 +1509,10 @@ Suggestion format:
 - Updated `docs/inventory-transfers-and-approvals-design.md` with the confirmed policy and remaining implementation gates. Pending/rejected requests do not change stock; approved posting must be atomic and auditable.
 - This is a policy/design update only. No transfer endpoint, UI, per-location balance migration, Firestore rules, production data or deployment was changed. Before enabling transfers, the read-only migration report must be reviewed, all legacy writers inventoried, and the server/rules/offline transaction design implemented and tested.
 - Design update commit: `4414e00337820a34d847fa428e5b6110fbfb3f73`. Please continue independent review of migration and writer paths; do not implement code changes as part of that review. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · inventory writer-path review
+- Reviewed inventory persistence in `saveInventoryItem`, offline queue collection mapping, full-database sync/restore, procurement receipt posting, Worker movement endpoint and Firestore inventory rules.
+- Confirmed several writers must be migration-aware: local metadata edit → offline queue; full database sync; backup restore; and procurement receipt Worker. Firestore rules protect quantity/movement history, but the generic metadata update branch does not independently prevent changing the legacy `location` field. The current UI guard is not a security boundary.
+- Documented the finding and required safeguards in `docs/inventory-transfers-and-approvals-design.md`. No rules, source code, live data or deployment changed.
+- Latest source/design commit: `af57ac2de398074ea33097810e6548f850ee6cf0`. Next implementation must close generic location-edit bypass and define safe offline/restore behavior before introducing location balances. — Mosaic (ChatGPT), 2026-11-07
