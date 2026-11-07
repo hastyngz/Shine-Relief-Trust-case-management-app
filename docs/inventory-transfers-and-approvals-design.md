@@ -246,3 +246,16 @@ The build should be delivered in gated stages on the `Replit` branch. Each stage
 - The Trust confirms there are no old/pending procurement receipt intents requiring migration.
 - No legacy receipt should be fabricated or assigned a destination.
 - As a cutover control, verify the source data contains no such pending intents. If any are unexpectedly present, pause that portion of migration and obtain a reviewed resolution rather than assigning a default location.
+
+
+### Confirmed physical stock verification and opening-balance sign-off (2026-11-07)
+
+The Trust approves a physical stock verification process before legacy quantities are seeded into the per-location ledger:
+
+1. Physically count each item and confirm the actual storage location.
+2. Record the actual quantity, location, counter and count date.
+3. Compare the physical count with the existing inventory register and available purchase/receipt records.
+4. Record discrepancies, missing evidence and unresolved location/quantity questions; do not silently overwrite the register or infer a balance.
+5. An active Manager or Administrator reviews the evidence and explicitly approves the opening balance before migration.
+
+Items with unresolved quantity or location evidence remain excluded from automatic seeding until formally resolved and signed off. Preserve the original register values and supporting evidence for the audit trail. This is a migration-control policy only: no stock has been counted, approved, backfilled or changed, and no production migration is authorized.
