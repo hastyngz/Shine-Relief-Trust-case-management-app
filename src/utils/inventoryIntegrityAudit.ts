@@ -9,8 +9,22 @@ const MOVEMENT_TYPES = new Set([
   'Transfer Out',
 ]);
 
+const KNOWN_INVENTORY_LOCATIONS = ['Main Office', 'Shine House', 'Shine Village', 'Early Years Centre', 'Farm', 'Other'] as const;
+
+export interface InventoryLocationUnitTotal {
+  location: typeof KNOWN_INVENTORY_LOCATIONS[number];
+  unit: string;
+  itemCount: number;
+  quantityTotal: number;
+}
+
 export interface InventoryIntegrityAuditSummary {
   totalItems: number;
+  missingLocationItems: number;
+  unrecognizedLocationItems: number;
+  missingUnitItems: number;
+  eligibleLocationSeedItems: number;
+  locationUnitTotals: InventoryLocationUnitTotal[];
   malformedItemRecords: number;
   invalidBalanceItems: number;
   invalidMinimumStockLevelItems: number;
@@ -52,6 +66,11 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
   const items = root.inventoryItems as unknown[];
   const summary: InventoryIntegrityAuditSummary = {
     totalItems: items.length,
+    missingLocationItems: 0,
+    unrecognizedLocationItems: 0,
+    missingUnitItems: 0,
+    eligibleLocationSeedItems: 0,
+    locationUnitTotals: [],
     malformedItemRecords: 0,
     invalidBalanceItems: 0,
     invalidMinimumStockLevelItems: 0,
@@ -70,6 +89,8 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
   };
   const stockCodeCounts = new Map<string, number>();
   const movementIdCounts = new Map<string, number>();
+  const knownLocationByKey = new Map(KNOWN_INVENTORY_LOCATIONS.map((location) => [location.toLocaleLowerCase('en-US'), location]));
+  const locationUnitTotals = new Map<string, InventoryLocationUnitTotal>();
 
   for (const candidate of items) {
     const item = asRecord(candidate);
@@ -78,8 +99,25 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
       continue;
     }
 
-    if (typeof item.quantityOnHand !== 'number' || !Number.isFinite(item.quantityOnHand) || item.quantityOnHand < 0) {
-      summary.invalidBalanceItems += 1;
+    const validQuantity = typeof item.quantityOnHand === 'number' && Number.isFinite(item.quantityOnHand) && item.quantityOnHand >= 0;
+    if (!validQuantity) summary.invalidBalanceItems += 1;
+
+    const rawLocation = hasText(item.location) ? item.location.trim() : '';
+    if (!rawLocation) summary.missingLocationItems += 1;
+    const location = rawLocation ? knownLocationByKey.get(rawLocation.toLocaleLowerCase('en-US')) : undefined;
+    if (rawLocation && !location) summary.unrecognizedLocationItems += 1;
+    const unit = hasText(item.unit) ? item.unit.trim() : '';
+    if (!unit) summary.missingUnitItems += 1;
+    if (location && unit && validQuantity) {
+      summary.eligibleLocationSeedItems += 1;
+      const key = `${location.toLocaleLowerCase('en-US')}\\u0000${unit.toLocaleLowerCase('en-US')}`;
+      const existing = locationUnitTotals.get(key);
+      if (existing) {
+        existing.itemCount += 1;
+        existing.quantityTotal += item.quantityOnHand as number;
+      } else {
+        locationUnitTotals.set(key, { location, unit, itemCount: 1, quantityTotal: item.quantityOnHand as number });
+      }
     }
     if (typeof item.minimumStockLevel !== 'number' || !Number.isFinite(item.minimumStockLevel) || item.minimumStockLevel < 0) {
       summary.invalidMinimumStockLevelItems += 1;
@@ -147,7 +185,9 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     }
   }
 
+  summary.locationUnitTotals = [...locationUnitTotals.values()].sort((a, b) =>
+    a.location.localeCompare(b.location) || a.unit.localeCompare(b.unit));
   summary.hasFindings = Object.entries(summary)
-    .some(([key, value]) => key !== 'totalItems' && key !== 'hasFindings' && typeof value === 'number' && value > 0);
+    .some(([key, value]) => key !== 'totalItems' && key !== 'hasFindings' && key !== 'locationUnitTotals' && typeof value === 'number' && value > 0);
   return summary;
 }
