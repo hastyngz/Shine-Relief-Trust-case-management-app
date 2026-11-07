@@ -1523,3 +1523,10 @@ Suggestion format:
 - State: documented a concrete proposed record model and three server operations (submit, decide, post), using atomic Firestore commits with update-time preconditions and immutable paired transfer movements. Also documented local-only offline drafts, migration cutover controls, restore/import restrictions and the existing v1 procurement-receipt intent gap.
 - Open decisions: canonical physical locations; who may perform the separate posting action; treatment of pending v1 receipt intents; Trust-approved evidence/sign-off for legacy quantities. These are not inferred.
 - Watch out: this is design work only. No transfer endpoint/UI, Firestore rules, data migration, production changes or deployment. Independent review requested before implementation. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed initial inventory locations
+- Trust confirmed the initial physical stock locations are **Shine Centre** and **Girls House**.
+- Future locations must be addable through an extensible managed registry; the earlier audit allowlist is not the permanent location list.
+- Still open: who may create/deactivate locations, duplicate-name policy, and how to handle deactivation when stock remains. Historical balances/movements must be retained.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Design/policy documentation only; no application code, stock data, Firestore rules, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
