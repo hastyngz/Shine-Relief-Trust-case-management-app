@@ -1582,3 +1582,9 @@ Suggestion format:
 - Trust confirms there are no old/pending procurement receipt intents. No legacy receipt migration or destination assignment is required.
 - At cutover, verify the source data contains none; if any are unexpectedly found, pause and review rather than defaulting a location.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, stock data, Firestore rules, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · approved physical stock verification process
+- Trust approved physical counts before legacy opening balances are seeded: record actual quantity, location, counter and date; compare with the register and available purchase/receipt evidence; document discrepancies.
+- An active Manager/Administrator must review and approve each opening balance. Unresolved quantity/location records stay out of automatic migration until resolved and signed off.
+- Recorded the process in `docs/inventory-transfers-and-approvals-design.md` (design commit `1b4594305f7bfbfbcef45f1b73b0edc3b92c6c6e`). No stock count, app code, live data, migration, rules or deployment changed. — Mosaic (ChatGPT), 2026-11-07
