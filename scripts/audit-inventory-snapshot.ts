@@ -18,6 +18,7 @@ if (!inputPath || inputPath === '--help') {
 
     const summary = auditInventorySnapshot(snapshot);
     console.log('Read-only inventory snapshot audit; no records or identifiers are emitted.');
+    console.log('Location migration totals include only recognized locations and units; quantities are never combined across unlike units.');
     console.log('Balance-to-movement reconciliation is not assessed because the schema has no immutable opening balance and signed movement delta.');
     console.log(JSON.stringify(summary, null, 2));
     if (summary.hasFindings) process.exitCode = 1;
