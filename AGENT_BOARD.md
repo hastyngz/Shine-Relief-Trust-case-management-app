@@ -1563,3 +1563,9 @@ Suggestion format:
 - The server must atomically update the destination location balance, compatibility aggregate item quantity, immutable movement ledger and procurement receipt ledger. Any validation/precondition failure must commit none of them.
 - Offline drafts may be retained, but stock is not shown as received until server confirmation.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed legacy stock review and inline location creation
+- Trust approved controlled migration of existing stock: assign quantities only where reliable evidence supports the location; uncertain items remain exceptions for physical verification; never guess or default. Reconcile per-location totals to existing aggregates before cutover.
+- Trust also requested a create-location option within the add-new-stock workflow. Managers and Administrators can create a location inline; Staff can only select existing active locations. Inline creation must use the same server-side permissions, normalized unique-name validation and managed registry. Stock addition is a separate operation and is not successful until its own server confirmation.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
