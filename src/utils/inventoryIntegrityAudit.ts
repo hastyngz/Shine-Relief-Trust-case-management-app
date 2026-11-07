@@ -110,7 +110,7 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     if (!unit) summary.missingUnitItems += 1;
     if (location && unit && validQuantity) {
       summary.eligibleLocationSeedItems += 1;
-      const key = `${location.toLocaleLowerCase('en-US')}\\u0000${unit.toLocaleLowerCase('en-US')}`;
+      const key = `${location.toLocaleLowerCase('en-US')}\u0000${unit.toLocaleLowerCase('en-US')}`;
       const existing = locationUnitTotals.get(key);
       if (existing) {
         existing.itemCount += 1;
@@ -188,6 +188,6 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
   summary.locationUnitTotals = [...locationUnitTotals.values()].sort((a, b) =>
     a.location.localeCompare(b.location) || a.unit.localeCompare(b.unit));
   summary.hasFindings = Object.entries(summary)
-    .some(([key, value]) => key !== 'totalItems' && key !== 'hasFindings' && key !== 'locationUnitTotals' && typeof value === 'number' && value > 0);
+    .some(([key, value]) => key !== 'totalItems' && key !== 'hasFindings' && key !== 'locationUnitTotals' && key !== 'eligibleLocationSeedItems' && typeof value === 'number' && value > 0);
   return summary;
 }
