@@ -129,9 +129,17 @@ The Worker must verify that the sum of location balances equals the item's aggre
 
 ### Decisions still required before implementation
 
-- Confirm the canonical list of physical storage locations and who may create/deactivate a location.
+- Confirm who may create/deactivate locations. The Trust has confirmed the initial locations are **Shine Centre** and **Girls House**; the system must support adding further locations later through a managed location registry rather than a hard-coded list.
 - Confirm who may execute the separate posting action after a Manager/Administrator approves a request. No role is inferred here.
 - Confirm how pending v1 procurement receipt intents are handled at cutover.
 - Confirm the approved stock evidence and sign-off process used to verify legacy quantities before seeding.
 
 Until these decisions and server/rules/offline protections are implemented and independently tested, the transfer workflow remains unavailable and no migration is authorized.
+
+
+### Confirmed location requirements (2026-11-07)
+
+- Initial active locations: **Shine Centre** and **Girls House**.
+- The location registry must be extensible: authorized users must be able to add further named physical locations without a code change or redeployment.
+- Do not treat the earlier integrity-audit allowlist as the permanent location registry. It was a provisional audit vocabulary only.
+- Location creation/deactivation permissions, duplicate-name handling and the behavior when a location with a non-zero balance is deactivated remain to be specified. Deactivation must not delete historical balances or movements.
