@@ -31,7 +31,7 @@ assert.deepEqual(auditInventorySnapshot(cleanSnapshot), {
   unrecognizedLocationItems: 0,
   missingUnitItems: 0,
   unrecognizedUnitItems: 0,
-  eligibleLocationSeedItems: 2,
+  locationSeedCandidates: 2,
   locationUnitTotals: [
     { location: 'Main Office', unit: 'bags', itemCount: 1, quantityTotal: 10 },
     { location: 'Shine House', unit: 'pieces', itemCount: 1, quantityTotal: 0 },
@@ -97,7 +97,7 @@ assert.equal(findings.missingLocationItems, 2);
 assert.equal(findings.unrecognizedLocationItems, 1);
 assert.equal(findings.missingUnitItems, 2);
 assert.equal(findings.unrecognizedUnitItems, 1);
-assert.equal(findings.eligibleLocationSeedItems, 0);
+assert.equal(findings.locationSeedCandidates, 0);
 assert.deepEqual(findings.locationUnitTotals, []);
 assert.equal(findings.malformedItemRecords, 1);
 assert.equal(findings.invalidBalanceItems, 2);
