@@ -10,6 +10,7 @@ const MOVEMENT_TYPES = new Set([
 ]);
 
 const KNOWN_INVENTORY_LOCATIONS = ['Main Office', 'Shine House', 'Shine Village', 'Early Years Centre', 'Farm', 'Other'] as const;
+const KNOWN_INVENTORY_UNITS = ['bags', 'pieces', 'bottles', 'boxes', 'packs', 'kg', 'litres', 'trays', 'units'] as const;
 
 export interface InventoryLocationUnitTotal {
   location: typeof KNOWN_INVENTORY_LOCATIONS[number];
@@ -23,6 +24,7 @@ export interface InventoryIntegrityAuditSummary {
   missingLocationItems: number;
   unrecognizedLocationItems: number;
   missingUnitItems: number;
+  unrecognizedUnitItems: number;
   eligibleLocationSeedItems: number;
   locationUnitTotals: InventoryLocationUnitTotal[];
   malformedItemRecords: number;
@@ -69,6 +71,7 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     missingLocationItems: 0,
     unrecognizedLocationItems: 0,
     missingUnitItems: 0,
+    unrecognizedUnitItems: 0,
     eligibleLocationSeedItems: 0,
     locationUnitTotals: [],
     malformedItemRecords: 0,
@@ -90,6 +93,7 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
   const stockCodeCounts = new Map<string, number>();
   const movementIdCounts = new Map<string, number>();
   const knownLocationByKey = new Map(KNOWN_INVENTORY_LOCATIONS.map((location) => [location.toLocaleLowerCase('en-US'), location]));
+  const knownUnitByKey = new Map(KNOWN_INVENTORY_UNITS.map((unit) => [unit.toLocaleLowerCase('en-US'), unit]));
   const locationUnitTotals = new Map<string, InventoryLocationUnitTotal>();
 
   for (const candidate of items) {
@@ -106,8 +110,10 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     if (!rawLocation) summary.missingLocationItems += 1;
     const location = rawLocation ? knownLocationByKey.get(rawLocation.toLocaleLowerCase('en-US')) : undefined;
     if (rawLocation && !location) summary.unrecognizedLocationItems += 1;
-    const unit = hasText(item.unit) ? item.unit.trim() : '';
-    if (!unit) summary.missingUnitItems += 1;
+    const rawUnit = hasText(item.unit) ? item.unit.trim() : '';
+    if (!rawUnit) summary.missingUnitItems += 1;
+    const unit = rawUnit ? knownUnitByKey.get(rawUnit.toLocaleLowerCase('en-US')) : undefined;
+    if (rawUnit && !unit) summary.unrecognizedUnitItems += 1;
     if (location && unit && validQuantity) {
       summary.eligibleLocationSeedItems += 1;
       const key = `${location.toLocaleLowerCase('en-US')}\u0000${unit.toLocaleLowerCase('en-US')}`;
