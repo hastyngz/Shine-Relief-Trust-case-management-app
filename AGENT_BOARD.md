@@ -1543,3 +1543,10 @@ Suggestion format:
 - Initial locations remain Shine Centre and Girls House; additional locations are managed through an extensible registry, not a hard-coded list.
 - Deactivation must preserve historical balances/movements; the non-zero-balance deactivation safeguard remains to be finalized.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed location deactivation safeguard
+- Trust confirmed a location cannot be deactivated while any item has a non-zero stock balance there.
+- Stock must first be transferred out or formally resolved through an authorized, auditable stock operation. Deactivation retains the location and history; inactive locations cannot be used for new receipts, issues or transfer requests.
+- The safeguard must be enforced server-side and rechecked when posting operations, not only in the UI.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
