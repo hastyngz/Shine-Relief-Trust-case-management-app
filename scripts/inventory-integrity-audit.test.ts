@@ -30,6 +30,7 @@ assert.deepEqual(auditInventorySnapshot(cleanSnapshot), {
   missingLocationItems: 0,
   unrecognizedLocationItems: 0,
   missingUnitItems: 0,
+  unrecognizedUnitItems: 0,
   eligibleLocationSeedItems: 2,
   locationUnitTotals: [
     { location: 'Main Office', unit: 'bags', itemCount: 1, quantityTotal: 10 },
@@ -85,7 +86,7 @@ const findings = auditInventorySnapshot({
       quantityOnHand: 0,
       minimumStockLevel: 0,
       location: 'Remote Shed',
-      unit: 'boxes',
+      unit: 'cartons',
       movements: [{ ...cleanMovement, id: 'mov_duplicate', type: 'Unknown movement' }, { ...cleanMovement, id: 'mov_invalid_date', date: '2026-02-31' }],
     },
     null,
@@ -95,6 +96,7 @@ assert.equal(findings.totalItems, 4);
 assert.equal(findings.missingLocationItems, 2);
 assert.equal(findings.unrecognizedLocationItems, 1);
 assert.equal(findings.missingUnitItems, 2);
+assert.equal(findings.unrecognizedUnitItems, 1);
 assert.equal(findings.eligibleLocationSeedItems, 0);
 assert.deepEqual(findings.locationUnitTotals, []);
 assert.equal(findings.malformedItemRecords, 1);
