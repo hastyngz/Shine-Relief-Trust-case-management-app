@@ -54,6 +54,24 @@ Cover partial/full transfer, invalid quantities, insufficient stock, concurrent 
 
 Until this model and its tests exist, do not present transfers or approvals as working features.
 
+## Writer-path review findings (2026-11-07)
+
+A first source review confirms that inventory records have more than one persistence route:
+
+- Normal item metadata edits call `saveInventoryItem`, persist locally, then flow through the shared offline change queue.
+- The offline queue maps `inventoryItems` to the Firestore `inventoryItems` collection and sends changed records through the normal change-entry writer.
+- Full database synchronization includes inventory records in its batched Firestore writes.
+- Backup restore normalizes and restores the `inventoryItems` array through that full-database path; restore is blocked when offline changes are pending or queue state cannot be verified.
+- Procurement receipts use the authenticated Worker movement endpoint and a stable per-line operation ID; they must continue to post atomically with the procurement receipt ledger.
+- Existing Firestore rules protect quantity, embedded movements and `lastMovementId` from ordinary client edits, but the general metadata-update branch does not itself prohibit a direct client change to the legacy `location` field. The UI currently keeps the location unchanged while editing an existing item, but that UI guard is not a security boundary for imports, restore or other callers.
+
+Consequences for the transfer migration:
+
+1. The future location-balance and transfer fields must be excluded from generic client metadata updates, not merely hidden or disabled in the UI.
+2. Backup/restore and offline replay need an explicit migration-aware policy so an old snapshot cannot overwrite newer per-location balances or transfer history.
+3. Procurement receipt posting must seed/add stock at an explicit destination location after the new location ledger is authoritative; it cannot silently use an old single-location aggregate.
+4. Legacy location edits must be rejected server-side once the migration path is introduced. No direct Firestore rules change is made in this review.
+
 ## Remaining implementation gates
 
 The approval-role decision is now settled. Transfers are still not ready to enable because the location-ledger migration and write-path safety work remain outstanding:
