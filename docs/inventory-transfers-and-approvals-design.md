@@ -104,8 +104,7 @@ The existing Worker movement handler already uses Firestore's atomic `documents:
 Proposed operations, each authenticated from the current Firebase ID token and checked against the active staff record:
 
 1. **Submit request:** accept only a valid item, two distinct active locations, positive finite quantity and matching unit; record the authenticated requester and create a Pending request. A repeated request ID with the same fingerprint returns the original result; changed content under the same ID is rejected. This operation changes no stock.
-2. **Decide request:** only an active Manager or Administrator may approve/reject; reject if the actor UID equals the requester UID. Use a precondition on the request's current update time and allow only Pending → Approved or Pending → Rejected. Record decision actor, time and reason server-side. This operation changes no stock.
-3. **Post approved request:** require the request still be Approved and its fingerprint unchanged. In one atomic Firestore commit, precondition both source and destination balance versions, decrement source, increment destination, create both immutable movement entries, and transition the request to Posted. Reject insufficient source stock, stale balances, inactive locations, unit mismatch, or an already-posted request. The posting actor's permitted role must be explicitly settled before coding; the confirmed approval policy does not yet define who may perform this separate posting action.
+2. **Approve-and-post or reject:** only an active Manager or Administrator may decide; reject self-approval when the actor UID equals the requester UID. For approval, use one atomic Firestore commit that preconditions the Pending request and both source/destination balance versions, decrements source, increments destination, creates both immutable movement entries, records reviewer UID/time and transitions the request directly from Pending to Posted. There is no intermediate Approved state and no separate posting action. For rejection, atomically transition Pending → Rejected with reviewer UID/time/reason and no stock writes. Reject insufficient source stock, stale balances, inactive locations, unit mismatch, duplicate posting or changed request fingerprint.
 
 The Worker must verify that the sum of location balances equals the item's aggregate before and after a transfer (the aggregate is unchanged). A conflict retry must re-read the request and both balances; it must never replay a partial debit or credit. Firestore batch atomicity plus update-time preconditions is required; separate client writes or sequential debit/credit calls are not acceptable.
 
@@ -129,7 +128,6 @@ The Worker must verify that the sum of location balances equals the item's aggre
 
 ### Decisions still required before implementation
 
-- Confirm who may create/deactivate locations. The Trust has confirmed the initial locations are **Shine Centre** and **Girls House**; the system must support adding further locations later through a managed location registry rather than a hard-coded list.
 - Confirm how pending v1 procurement receipt intents are handled at cutover.
 - Confirm the approved stock evidence and sign-off process used to verify legacy quantities before seeding.
 
@@ -139,9 +137,10 @@ Until these decisions and server/rules/offline protections are implemented and i
 ### Confirmed location requirements (2026-11-07)
 
 - Initial active locations: **Shine Centre** and **Girls House**.
-- The location registry must be extensible: authorized users must be able to add further named physical locations without a code change or redeployment.
-- Do not treat the earlier integrity-audit allowlist as the permanent location registry. It was a provisional audit vocabulary only.
-- Location creation/deactivation permissions, duplicate-name handling and the behavior when a location with a non-zero balance is deactivated remain to be specified. Deactivation must not delete historical balances or movements.
+- The location registry is extensible. Only active Managers and Administrators may create/deactivate locations, including inline creation from the add-stock workflow. Staff may select existing active locations.
+- Names are unique after trimming surrounding whitespace and case-folding; enforce uniqueness server-side. Stable IDs preserve historical references through renames.
+- A location with any non-zero balance cannot be deactivated. Deactivation preserves history and blocks new receipts, issues and transfers involving that location.
+- The earlier inventory-audit allowlist is not the permanent location registry.
 
 
 ### Confirmed approval-and-posting behavior (2026-11-07)
@@ -199,3 +198,44 @@ Until these decisions and server/rules/offline protections are implemented and i
 - Inline creation must use the same managed registry, normalized unique-name validation, stable location ID and server-side authorization as the dedicated location-management screen.
 - The newly created location becomes selectable for the stock entry only after the server confirms its creation. The stock receipt/addition itself remains a separate validated stock operation and must not be treated as successful merely because location creation succeeded.
 - Apply the same active-location and atomic receipt rules to the subsequent stock addition.
+
+
+## Implementation plan (proposed; no code changes authorized by this plan alone)
+
+The build should be delivered in gated stages on the `Replit` branch. Each stage must be independently reviewed and tested before proceeding; do not enable the new workflow against live stock until all cutover gates pass.
+
+1. **Close design and contract gaps**
+   - Settle pending v1 procurement receipt intent treatment and the Trust's legacy stock evidence/sign-off procedure.
+   - Define the Worker request/response contracts, role checks, stable operation IDs, idempotency fingerprints and error/conflict responses.
+   - Define quantity precision and allowed unit behavior for per-location balances; reject incompatible units.
+2. **Location registry and server boundary**
+   - Implement the registry with seeded initial locations (Shine Centre, Girls House), stable IDs, normalized unique names, active state, and Manager/Administrator-only create/deactivate.
+   - Add inline location creation to stock receipt UI, using the same server operation and authorization.
+   - Enforce non-zero balance deactivation prohibition and active-location validation server-side.
+3. **Per-location stock ledger and legacy writer containment**
+   - Add per-item/location balances and immutable movement records.
+   - Route all stock-changing operations (manual receipt, issue, return, damage, adjustment, procurement receipt and transfer) through trusted Worker commands.
+   - Close direct Firestore and generic metadata/offline-sync paths that could alter location, quantity, movement or transfer-owned fields.
+   - Keep the item-level aggregate equal to the sum of location balances; never permit a client to write either value as authoritative.
+4. **Procurement receipt integration**
+   - Require explicit active destination location on every new receipt.
+   - Atomically write location balance, item aggregate, immutable movement and procurement receipt ledger.
+   - Preserve stable retry behavior; stock is not shown as received before server acknowledgment.
+5. **Transfer request workflow**
+   - Staff/Managers/Admins submit requests; only a different active Manager/Admin can approve or reject.
+   - Approval atomically posts both location effects and paired immutable movements, and sets Posted. Rejection records an auditable decision with no stock change.
+   - Provide status, reason, actor and timestamp visibility without allowing client edits to authoritative fields.
+6. **Offline, backup, restore and import compatibility**
+   - Queue local-only drafts/commands with stable IDs; no optimistic authoritative balance changes.
+   - Prevent generic offline replay, old backups, imports or administrative scripts from overwriting server-owned balances and history.
+   - Add explicit schema/migration-state gates and supervised recovery procedures.
+7. **Read-only migration rehearsal and cutover**
+   - Run preflight against an approved export; reconcile each candidate against movement evidence and physical counts.
+   - Dry-run seed only verified quantities with deterministic IDs and source fingerprints; unresolved records remain excluded.
+   - Freeze/version-gate writers, seed idempotently, reconcile aggregate totals by item and unit, and obtain Trust sign-off before enabling new writes.
+8. **Verification and release**
+   - Add unit, Worker integration, Firestore rules emulator, concurrency/idempotency, offline replay, backup/restore, procurement and transfer E2E tests.
+   - Have Manus independently run the relevant test suites, lint, build, Firestore access audit and mobile/offline regression checks; resolve failures before release.
+   - No production migration or deployment until separately approved.
+
+**Release blockers:** pending v1 receipt-intent policy; legacy stock evidence/sign-off; quantity precision/unit rules; completed Worker/rules/offline/restore/import implementation; successful independent verification; explicit authorization for production migration and deployment.
