@@ -10,7 +10,7 @@ Status: transfer implementation remains design-only. The read-only location migr
 
 The existing `npm run audit:inventory-snapshot -- <app-database-export.json>` command now also reports a location-migration preflight summary:
 - Items with missing or unrecognized locations and missing or unrecognized units.
-- Count of items eligible for a future single-location seed, requiring a recognized location, recognized unit and finite non-negative quantity.
+- Count of items preliminary candidates for a future single-location seed, requiring a recognized location, recognized unit and finite non-negative quantity.
 - Quantity totals grouped by recognized location **and unit**; unlike units are never combined.
 - Aggregate-only output: no item IDs, stock codes, staff names or other personal data are emitted, and the source snapshot is never modified.
 
