@@ -14,8 +14,8 @@ const cleanMovement = {
 };
 const cleanSnapshot = {
   inventoryItems: [
-    { id: 'synthetic-item-1', stockCode: 'ST-001', quantityOnHand: 10, minimumStockLevel: 2, unitCostMWK: 1500, movements: [cleanMovement] },
-    { id: 'synthetic-item-2', stockCode: 'ST-002', quantityOnHand: 0, minimumStockLevel: 0, movements: [{
+    { id: 'synthetic-item-1', stockCode: 'ST-001', quantityOnHand: 10, minimumStockLevel: 2, unitCostMWK: 1500, location: 'Main Office', unit: 'bags', movements: [cleanMovement] },
+    { id: 'synthetic-item-2', stockCode: 'ST-002', quantityOnHand: 0, minimumStockLevel: 0, location: 'Shine House', unit: 'pieces', movements: [{
       ...cleanMovement,
       id: 'mov_synthetic_2',
       type: 'Adjustment',
@@ -27,6 +27,14 @@ const cleanSnapshot = {
 const cleanSnapshotBefore = JSON.stringify(cleanSnapshot);
 assert.deepEqual(auditInventorySnapshot(cleanSnapshot), {
   totalItems: 2,
+  missingLocationItems: 0,
+  unrecognizedLocationItems: 0,
+  missingUnitItems: 0,
+  eligibleLocationSeedItems: 2,
+  locationUnitTotals: [
+    { location: 'Main Office', unit: 'bags', itemCount: 1, quantityTotal: 10 },
+    { location: 'Shine House', unit: 'pieces', itemCount: 1, quantityTotal: 0 },
+  ],
   malformedItemRecords: 0,
   invalidBalanceItems: 0,
   invalidMinimumStockLevelItems: 0,
@@ -76,12 +84,19 @@ const findings = auditInventorySnapshot({
       stockCode: 'ST-003',
       quantityOnHand: 0,
       minimumStockLevel: 0,
+      location: 'Remote Shed',
+      unit: 'boxes',
       movements: [{ ...cleanMovement, id: 'mov_duplicate', type: 'Unknown movement' }, { ...cleanMovement, id: 'mov_invalid_date', date: '2026-02-31' }],
     },
     null,
   ],
 });
 assert.equal(findings.totalItems, 4);
+assert.equal(findings.missingLocationItems, 2);
+assert.equal(findings.unrecognizedLocationItems, 1);
+assert.equal(findings.missingUnitItems, 2);
+assert.equal(findings.eligibleLocationSeedItems, 0);
+assert.deepEqual(findings.locationUnitTotals, []);
 assert.equal(findings.malformedItemRecords, 1);
 assert.equal(findings.invalidBalanceItems, 2);
 assert.equal(findings.invalidMinimumStockLevelItems, 2);
@@ -98,6 +113,7 @@ assert.equal(findings.extraDuplicateMovementEntries, 1);
 assert.equal(findings.hasFindings, true);
 assert.equal(JSON.stringify(findings).includes('synthetic-item'), false, 'summary must not emit item identifiers');
 assert.equal(JSON.stringify(findings).includes('Synthetic Staff'), false, 'summary must not emit user data');
+assert.equal(JSON.stringify(findings).includes('synthetic-item'), false, 'location summary must not emit item identifiers');
 
 assert.throws(() => auditInventorySnapshot(null), /Snapshot must be a database export/);
 assert.throws(() => auditInventorySnapshot({}), /inventoryItems array/);
