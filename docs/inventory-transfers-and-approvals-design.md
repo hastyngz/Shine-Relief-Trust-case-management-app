@@ -150,3 +150,11 @@ Until these decisions and server/rules/offline protections are implemented and i
 - There is no separate posting permission or manual posting stage.
 - The atomic commit must include the request decision/status transition, source balance decrement, destination balance increment and both immutable movement records. If any validation or precondition fails, none of these writes may commit.
 - Requester self-approval remains prohibited, including when the requester is a Manager or Administrator.
+
+
+### Confirmed location-management permissions (2026-11-07)
+
+- Only active Managers and Administrators may create or deactivate locations.
+- Staff may select existing active locations when submitting transfer requests; they cannot create or deactivate locations.
+- Location names must be managed through the registry, not a hard-coded allowlist.
+- Deactivation must preserve historical balances and movements. The unresolved safety rule remains: a location with non-zero stock must not be deactivated until its stock is transferred or otherwise formally resolved.
