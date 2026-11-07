@@ -25,7 +25,7 @@ export interface InventoryIntegrityAuditSummary {
   unrecognizedLocationItems: number;
   missingUnitItems: number;
   unrecognizedUnitItems: number;
-  eligibleLocationSeedItems: number;
+  locationSeedCandidates: number;
   locationUnitTotals: InventoryLocationUnitTotal[];
   malformedItemRecords: number;
   invalidBalanceItems: number;
@@ -72,7 +72,7 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     unrecognizedLocationItems: 0,
     missingUnitItems: 0,
     unrecognizedUnitItems: 0,
-    eligibleLocationSeedItems: 0,
+    locationSeedCandidates: 0,
     locationUnitTotals: [],
     malformedItemRecords: 0,
     invalidBalanceItems: 0,
@@ -115,7 +115,7 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
     const unit = rawUnit ? knownUnitByKey.get(rawUnit.toLocaleLowerCase('en-US')) : undefined;
     if (rawUnit && !unit) summary.unrecognizedUnitItems += 1;
     if (location && unit && validQuantity) {
-      summary.eligibleLocationSeedItems += 1;
+      summary.locationSeedCandidates += 1;
       const key = `${location.toLocaleLowerCase('en-US')}\u0000${unit.toLocaleLowerCase('en-US')}`;
       const existing = locationUnitTotals.get(key);
       if (existing) {
@@ -194,6 +194,6 @@ export function auditInventorySnapshot(snapshot: unknown): InventoryIntegrityAud
   summary.locationUnitTotals = [...locationUnitTotals.values()].sort((a, b) =>
     a.location.localeCompare(b.location) || a.unit.localeCompare(b.unit));
   summary.hasFindings = Object.entries(summary)
-    .some(([key, value]) => key !== 'totalItems' && key !== 'hasFindings' && key !== 'locationUnitTotals' && key !== 'eligibleLocationSeedItems' && typeof value === 'number' && value > 0);
+    .some(([key, value]) => key !== 'totalItems' && key !== 'hasFindings' && key !== 'locationUnitTotals' && key !== 'locationSeedCandidates' && typeof value === 'number' && value > 0);
   return summary;
 }
