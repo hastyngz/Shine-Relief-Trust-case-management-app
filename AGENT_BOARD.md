@@ -1536,3 +1536,10 @@ Suggestion format:
 - Trust confirmed that approval automatically posts the transfer; there is no separate posting step or posting role.
 - The approval decision, source decrement, destination increment, paired immutable movement records and request transition to Posted must be one atomic server-side commit. A failed validation/precondition must commit none of them.
 - Updated `docs/inventory-transfers-and-approvals-design.md`. No application code, Firestore rules, live stock, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed stock location permissions
+- Trust confirmed only active Managers and Administrators may create or deactivate stock locations. Staff may select existing active locations for transfer requests.
+- Initial locations remain Shine Centre and Girls House; additional locations are managed through an extensible registry, not a hard-coded list.
+- Deactivation must preserve historical balances/movements; the non-zero-balance deactivation safeguard remains to be finalized.
+- Updated `docs/inventory-transfers-and-approvals-design.md`. Documentation only; no app code, Firestore rules, stock data, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-07
