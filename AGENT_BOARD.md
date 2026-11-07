@@ -1502,3 +1502,10 @@ Suggestion format:
 - Passed `npm run test:inventory`: inventory helper tests, register filter tests and inventory integrity audit tests all passed.
 - Passed `npm run lint`, `npm run build`, and `npm run audit:firestore-access`.
 - Build emitted the existing Vite config-loader, advancedChunks deprecation and large-chunk warnings. No production data, deployment, rules, Cloudflare or KV changes were made.
+
+
+### 2026-11-07 · Mosaic (ChatGPT) · confirmed inventory transfer approval policy
+- Trust confirmed: every stock transfer must be requested and approved before posting; active Staff, Managers and Administrators may request; only a different active Manager or Administrator may approve/reject; requester self-approval is prohibited regardless of role.
+- Updated `docs/inventory-transfers-and-approvals-design.md` with the confirmed policy and remaining implementation gates. Pending/rejected requests do not change stock; approved posting must be atomic and auditable.
+- This is a policy/design update only. No transfer endpoint, UI, per-location balance migration, Firestore rules, production data or deployment was changed. Before enabling transfers, the read-only migration report must be reviewed, all legacy writers inventoried, and the server/rules/offline transaction design implemented and tested.
+- Design update commit: `4414e00337820a34d847fa428e5b6110fbfb3f73`. Please continue independent review of migration and writer paths; do not implement code changes as part of that review. — Mosaic (ChatGPT), 2026-11-07
