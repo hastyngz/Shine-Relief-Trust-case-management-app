@@ -1491,7 +1491,7 @@ Suggestion format:
 
 
 ### 2026-11-07 · Mosaic (ChatGPT) · Inventory location migration preflight audit
-- Continued the Inventory & Stores workstream from the Administration Officer ToR. Extended the existing read-only `audit:inventory-snapshot` path to report missing/unrecognized storage locations and units, and the count of items eligible for a future single-location seed.
+- Continued the Inventory & Stores workstream from the Administration Officer ToR. Extended the existing read-only `audit:inventory-snapshot` path to report missing/unrecognized storage locations and units, and the count of items preliminary candidates for a future single-location seed.
 - Added aggregate quantity totals grouped by recognized location **and unit** only; unlike units are never combined. Unknown location/unit labels are counted as exceptions rather than emitted, and the audit does not output item IDs, stock codes or staff details.
 - The audit does not change inventory records, backfill balances, prove balance-to-movement reconciliation, enable transfers or approve any stock movement. Transfer and approval implementation remains blocked on the documented migration review and the Trust's explicit approval policy.
 - Added regression coverage to the existing `npm run test:inventory` suite and documented the read-only preflight in `docs/inventory-transfers-and-approvals-design.md`.
