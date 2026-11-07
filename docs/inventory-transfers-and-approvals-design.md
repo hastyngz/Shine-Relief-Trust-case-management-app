@@ -174,3 +174,11 @@ Until these decisions and server/rules/offline protections are implemented and i
 - Location names must be unique after trimming leading/trailing whitespace and comparing case-insensitively.
 - Thus `Shine Centre`, `shine centre` and `Shine Centre ` are treated as the same name and a duplicate create/rename is rejected.
 - Enforce uniqueness server-side as well as in the interface to prevent concurrent duplicate creation. Preserve a stable location ID so renaming does not break historical movement references.
+
+
+### Confirmed procurement receipt destination (2026-11-07)
+
+- Every procurement stock receipt must identify an explicit active destination location; there is no implicit default location.
+- The receiving user selects the location as part of recording the receipt.
+- Server-side receipt processing must validate the location is active and atomically update the location balance, compatibility aggregate quantity, immutable movement record and procurement receipt ledger.
+- If any part fails, none of those records or balances may be committed. Offline receipt drafts may be retained locally, but the app must not present stock as received until the server confirms the atomic operation.
