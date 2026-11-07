@@ -157,4 +157,13 @@ Until these decisions and server/rules/offline protections are implemented and i
 - Only active Managers and Administrators may create or deactivate locations.
 - Staff may select existing active locations when submitting transfer requests; they cannot create or deactivate locations.
 - Location names must be managed through the registry, not a hard-coded allowlist.
-- Deactivation must preserve historical balances and movements. The unresolved safety rule remains: a location with non-zero stock must not be deactivated until its stock is transferred or otherwise formally resolved.
+- Deactivation must preserve historical balances and movements. A location with any non-zero stock balance must not be deactivated. Stock must first be transferred out or formally resolved through an authorized, auditable stock operation. Deactivation preserves the location record and all historical balances/movements; it only prevents new stock receipts, issues and transfer requests to/from that inactive location.
+
+
+### Confirmed non-zero-stock deactivation safeguard (2026-11-07)
+
+- A location cannot be deactivated while any item has a non-zero balance there.
+- Stock must first be transferred out or formally resolved through an authorized, auditable stock operation; no silent write-off or deletion is implied.
+- Deactivation retains the location registry record and all historical balances and movements.
+- An inactive location cannot be selected for new receipts, issues or transfer requests (including as source or destination). Historical records remain readable for audit.
+- The server must enforce the safeguard at the point of deactivation and re-check active status when posting stock operations; a UI-only check is insufficient.
