@@ -167,3 +167,10 @@ Until these decisions and server/rules/offline protections are implemented and i
 - Deactivation retains the location registry record and all historical balances and movements.
 - An inactive location cannot be selected for new receipts, issues or transfer requests (including as source or destination). Historical records remain readable for audit.
 - The server must enforce the safeguard at the point of deactivation and re-check active status when posting stock operations; a UI-only check is insufficient.
+
+
+### Confirmed location-name uniqueness (2026-11-07)
+
+- Location names must be unique after trimming leading/trailing whitespace and comparing case-insensitively.
+- Thus `Shine Centre`, `shine centre` and `Shine Centre ` are treated as the same name and a duplicate create/rename is rejected.
+- Enforce uniqueness server-side as well as in the interface to prevent concurrent duplicate creation. Preserve a stable location ID so renaming does not break historical movement references.
