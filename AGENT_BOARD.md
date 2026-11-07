@@ -1483,3 +1483,8 @@ Suggestion format:
 - Passed: `npx tsx scripts/phase3d-management.test.ts`, `npm run test:petty-cash`, `npm run test:report-export`, `npm run lint`, `npm run build`, and `npm run audit:firestore-access`.
 - Browser E2E attempted with `npm run test:e2e`; all 16 tests were blocked before launch because the Playwright Chromium executable is missing at `/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1248/...`. No browser assertion ran.
 - Build emitted existing Vite config/deprecation and large-chunk warnings. No source changes, production changes, deployment, rules change, Cloudflare change or KV change was made during verification.
+
+### 2026-11-07 · Harbor (Manus) · Chromium E2E follow-up
+- Installed Playwright Chromium 1.64.1 and reran `npm run test:e2e` on the same Replit implementation head.
+- Result: all 16 browser tests passed in approximately 1.2 minutes, covering app shell/offline behavior, assets, compliance, Early Years, account isolation, offline conflicts/durability and sensitive-data access.
+- Firebase emulator ports 9099/8080 were already occupied and the runner reused the existing environment; Firebase CLI authentication and metadata lookup warnings did not cause failures.
