@@ -1702,3 +1702,28 @@ Suggestion format:
   12. `npm run test:e2e`
 - If a test fails, fix the underlying defect; do not weaken Firestore rules, skip tests or change production configuration. Resolve emulator port conflicts safely and rerun. Also inspect the complete diff against `AGENTS.md`, specifically verify Worker write atomicity, `getAfter` rule coupling, procurement destination locking, offline FIFO/idempotency, no generic queue writes for balances, no location inference, and no unrelated changes.
 - Report exact tested SHA, every command and result, any browser/manual scenarios not possible, whether workspace was clean before/after, and confirm no production data/deployment/rules/Cloudflare/KV changes. — Mosaic (ChatGPT), 2026-11-08
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · updated managed inventory balance verification handoff
+- **This entry supersedes the earlier per-location balance handoff.** Exact code/documentation SHA for Manus verification: `2b3c217715b93f6ad073d40f695d59f34f922601` on `Replit`.
+- Additional safety refinements since the earlier handoff:
+  - Existing balances must match the item aggregate, registered unit, canonical location and the item's prior `lastMovementId`; a missing/invalid prior movement reference is rejected.
+  - The first managed balance can be created only by a positive `Received` movement from a zero aggregate with no prior movement history. A stocktake/adjustment cannot create an opening balance.
+  - Every procurement receipt (full or partial) requires an explicit active managed destination. Legacy items without a verified managed location are blocked. Firestore rules enforce this too, not just the UI/Worker.
+  - A pre-destination receipt/delivery retry intent is preserved and fails closed; it is never silently replaced. A legacy movement retry with no location ID is not reported as complete for an item that is now managed.
+  - Added regression tests for first-balance adjustment rejection, balance/last-movement mismatch, old procurement intents and legacy pre-ledger movement retry protection.
+- Please run against the exact SHA above:
+  1. `node --check workers/r2-storage/index.mjs`
+  2. `npm run test:inventory-movement-worker`
+  3. `npm run test:inventory-rules`
+  4. `npm run test:inventory`
+  5. `npm run test:inventory-pending-retry`
+  6. `npm run test:procurement`
+  7. `npm run test:offline`
+  8. `npm run test:offline-queue`
+  9. `npm run audit:firestore-access`
+  10. `npm run lint`
+  11. `npm run build`
+  12. `npm run test:e2e`
+- Inspect the complete diff against `AGENTS.md`. Specifically verify: the Worker writes item + balance + movement (+ procurement ledger) in one commit with update-time/existence preconditions; Firestore `getAfter` rules couple all documents; only a first positive receipt can create a balance; non-zero/mismatched balances fail closed; procurement destination is explicit and retry-stable; old retry intents are not silently rewritten; canonical location survives offline FIFO replay; no balance docs enter the generic offline queue; legacy labels/quantities are not inferred or migrated.
+- If a test fails, fix the underlying issue without weakening rules or skipping checks. Resolve emulator port conflicts safely. Report exact tested SHA, every command/result, any UI/manual checks not possible, workspace cleanliness before/after, and confirm no production data, deployment, rules deployment, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-08
