@@ -183,9 +183,7 @@ function normalizeInventoryLocationName(value) {
 }
 
 function inventoryLocationDocumentId(normalizedName) {
-  const bytes = new TextEncoder().encode(normalizedName);
-  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
-  return `loc_${btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')}`;
+  return `loc_${normalizedName}`;
 }
 
 async function listInventoryLocations(idToken) {
@@ -233,7 +231,7 @@ async function handleInventoryLocations(request, staff, idToken) {
     updatedAt: now, updatedBy: staff.fullName, updatedByUid: staff.uid,
   };
   const fields = Object.fromEntries(Object.entries(location).map(([key, value]) => [key, encodeFirestoreValue(value)]));
-  const path = `projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocations/${id}`;
+  const path = `projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocations/${encodeURIComponent(id)}`;
   try {
     await firestoreCommit([{
       update: { name: path, fields },
