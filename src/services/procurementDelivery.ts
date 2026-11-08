@@ -1,7 +1,7 @@
 import type { InventoryItem, ProcurementList } from '../types';
 import { getProcurementOutstandingQuantity, validateProcurementDelivery } from './procurementLifecycle';
 
-export interface ProcurementDeliveryChoice { itemIndex: number; inventoryItemId: string | null }
+export interface ProcurementDeliveryChoice { itemIndex: number; inventoryItemId: string | null; locationId: string | null }
 export interface ProcurementDeliveryIntent {
   version: 1; uid: string; procurementListId: string; deliveryId: string; date: string; reference: string;
   quantities: number[]; choices: ProcurementDeliveryChoice[];
@@ -24,7 +24,8 @@ export function readProcurementDeliveryIntent(storage: ProcurementDeliveryStorag
     if (value.version !== 1 || value.uid !== uid || value.procurementListId !== listId || !validId(value.deliveryId) ||
       typeof value.date !== 'string' || typeof value.reference !== 'string' || !Array.isArray(value.quantities) || !Array.isArray(value.choices) ||
       value.quantities.some((n) => !Number.isFinite(n) || n < 0) ||
-      value.choices.some((c) => !Number.isInteger(c.itemIndex) || c.itemIndex < 0 || (c.inventoryItemId !== null && typeof c.inventoryItemId !== 'string'))) return null;
+      value.choices.some((c) => !Number.isInteger(c.itemIndex) || c.itemIndex < 0 ||
+        (c.inventoryItemId === null ? c.locationId !== null : typeof c.inventoryItemId !== 'string' || typeof c.locationId !== 'string' || !/^loc_[^/]{1,84}$/.test(c.locationId)))) return null;
     return value;
   } catch { return null; }
 }
@@ -67,10 +68,11 @@ export async function postProcurementDeliveryMovements(args: {
   for (let i = 0; i < args.list.items.length; i++) {
     const quantity = args.quantities[i];
     const choice = args.choices[i];
-    if (quantity > 0 && choice.inventoryItemId !== null) {
+    if (choice.inventoryItemId !== null) {
       const stock = inventoryById.get(choice.inventoryItemId);
       if (!stock) throw new Error(`The selected inventory item for line ${i + 1} is no longer available.`);
       if (stock.unit !== args.list.items[i].unit) throw new Error(`Unit mismatch on line ${i + 1}; convert the quantity explicitly before posting.`);
+      if (!stock.locationId || choice.locationId !== stock.locationId) throw new Error(`Choose the verified active destination for delivery line ${i + 1}. Legacy stock items must complete physical location verification before receiving managed procurement stock.`);
     }
   }
   if (intent) {
@@ -91,7 +93,7 @@ export async function postProcurementDeliveryMovements(args: {
     const id = `prcd_${intent.deliveryId.slice('delivery_'.length)}_${index}`;
     let result: ProcurementDeliveryPosterResult;
     try {
-      result = await args.postMovement({ id, itemId: choice.inventoryItemId, type: 'Received', quantity, date: intent.date,
+      result = await args.postMovement({ id, itemId: choice.inventoryItemId, locationId: choice.locationId, type: 'Received', quantity, date: intent.date,
         reason: `Partial procurement delivery: ${args.list.title}`.slice(0, 1000),
         reference: `Delivery ${intent.deliveryId} · ${intent.reference} · procurement ${args.list.id} · line ${index + 1}`.slice(0, 250),
         sourceType: 'procurementReceipt', sourceId: args.list.id, sourceLineIndex: index, sourceDeliveryId: intent.deliveryId });
