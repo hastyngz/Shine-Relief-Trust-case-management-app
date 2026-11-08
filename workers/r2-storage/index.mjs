@@ -303,6 +303,9 @@ async function handleInventoryMovement(request, staff, idToken) {
     if (!itemDocument) throw new ApiError('The inventory item was not found in the synced register. Sync and refresh before retrying.', 404);
     const item = decodeFirestoreFields(itemDocument.fields);
     const isManagedItem = typeof item.locationId === 'string' && item.locationId.length > 0;
+    if (payload.sourceType === 'procurementReceipt' && !isManagedItem) {
+      throw new ApiError('Procurement stock receipts require a verified managed destination. Complete physical stock verification and location approval for this item first.', 409);
+    }
     let managedLocation;
     let managedBalanceDocument;
     let managedBalance;
