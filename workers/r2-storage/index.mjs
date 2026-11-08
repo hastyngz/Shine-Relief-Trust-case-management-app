@@ -273,6 +273,9 @@ async function handleInventoryMovement(request, staff, idToken) {
     const existingItemDocument = await firestoreGet(itemPath, idToken);
     if (!existingItemDocument) throw new ApiError('The inventory item for this prior movement is no longer available.', 404);
     const existingItem = decodeFirestoreFields(existingItemDocument.fields);
+    if (existing.sourceType === 'procurementReceipt' && existing.locationId === undefined) {
+      throw new ApiError('This prior procurement receipt has no verified managed destination and cannot be confirmed as complete. Request a stock reconciliation.', 409);
+    }
     if (existing.locationId === undefined) {
       if (typeof existingItem.locationId === 'string' && existingItem.locationId.length > 0) {
         throw new ApiError('This movement was recorded before the managed location balance was created. Do not treat it as a completed retry; request a stock reconciliation.', 409);
