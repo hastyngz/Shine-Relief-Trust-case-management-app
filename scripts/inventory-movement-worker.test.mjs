@@ -389,6 +389,19 @@ try {
     assert.equal(response.status, 409);
     assert.match((await response.json()).error, /prior procurement receipt ledger is missing/);
     assert.equal(mock.writes.length, 0);
+
+    const withLedger = setup({
+      item, locationDocument: location, balanceDocument: balance, existingMovement,
+      procurementList: {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 12, unit: 'packs' }],
+        receivedQuantitiesByLine: { line_0: 3 },
+      },
+    });
+    const accepted = await send(payload);
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).duplicate, true);
+    assert.equal(withLedger.writes.length, 0);
   }
 
   // A pre-ledger movement retry must not be reported as complete for a managed item.
