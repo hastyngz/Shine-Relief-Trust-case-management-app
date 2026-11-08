@@ -203,7 +203,7 @@ try {
 
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, lastMovementId: 'seed-movement' };
     const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, procurementList: {
       id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
@@ -222,7 +222,7 @@ try {
 
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, lastMovementId: 'seed-movement' };
     const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, procurementList: {
       id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
@@ -336,7 +336,7 @@ try {
       sourceDeliveryId: undefined, locationId: undefined,
     });
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, lastMovementId: 'seed-movement' };
     const existingMovement = {
       id: payload.id, inventoryItemId: payload.itemId, recordedByUid: 'staff-synthetic',
       requestFingerprint: fingerprint, date: payload.date, quantity: payload.quantity,
