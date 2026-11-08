@@ -97,6 +97,26 @@ service cloud.firestore {
       );
     }
 
+    // Inventory transactions touch several documents in one atomic batch. Use
+    // compact, equivalent role predicates here to avoid repeating the broader
+    // application RBAC expression for every document in that batch.
+    function isInventoryActiveStaff() {
+      return isSignedIn() && isPrimaryEmailVerified() && (
+        isHastings() ||
+        getStaffDoc(request.auth.uid).data.get('status', '') == 'Active'
+      );
+    }
+
+    function isInventoryWriter() {
+      return isSignedIn() && isPrimaryEmailVerified() && (
+        isHastings() ||
+        (
+          getStaffDoc(request.auth.uid).data.get('status', '') == 'Active' &&
+          getStaffDoc(request.auth.uid).data.get('role', '') in ['Administrator', 'Manager', 'Staff']
+        )
+      );
+    }
+
     function isInventoryQuantityPrecisionValid(unit, quantity) {
       let normalizedUnit = unit.lower();
       return quantity is number && quantity >= 0 && (
@@ -184,7 +204,7 @@ service cloud.firestore {
       let locationPath = /databases/$(database)/documents/inventoryLocations/$(locationId);
       let itemAfter = getAfter(itemPath).data;
       let movement = getAfter(movementPath).data;
-      return isStaffActive() &&
+      return isInventoryActiveStaff() &&
         itemId is string && locationId is string && movementId is string &&
         balanceId == 'bal_' + string(itemId.size()) + '_' + itemId + '_' + locationId &&
         existsAfter(itemPath) && existsAfter(movementPath) && exists(locationPath) &&
@@ -347,7 +367,7 @@ service cloud.firestore {
       let itemId = request.resource.data.inventoryItemId;
       let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
       let itemAfter = getAfter(itemPath).data;
-      return isManagerOrStaff() &&
+      return isInventoryWriter() &&
         request.resource.data.id == movementId &&
         request.resource.data.recordedByUid == request.auth.uid &&
         request.resource.data.previousQuantity is number &&
@@ -1037,14 +1057,14 @@ service cloud.firestore {
     }
 
     match /procurementLists/{id} {
-      allow read: if isStaffActive();
-      allow create: if isManagerOrStaff() &&
+      allow read: if isInventoryActiveStaff();
+      allow create: if isInventoryWriter() &&
         request.resource.data.status == 'draft' &&
         !request.resource.data.keys().hasAny([
           'approvedAt', 'approvedBy', 'purchaseOrderReference', 'orderedAt', 'orderedBy',
           'receivedAt', 'receivedBy', 'financeHandedOverAt', 'financeHandedOverBy', 'financeReference'
         ]);
-      allow update: if isManagerOrStaff() &&
+      allow update: if isInventoryWriter() &&
         (resource.data.status == 'draft' || isManagerOrAdmin() ||
           (request.resource.data.status == resource.data.status &&
            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy', 'updatedAt', 'updatedBy'])) ||
@@ -1090,15 +1110,15 @@ service cloud.firestore {
     }
 
     match /inventoryLocationBalances/{balanceId} {
-      allow read: if isStaffActive();
+      allow read: if isInventoryActiveStaff();
       allow create: if isValidInventoryLocationBalanceCreate(balanceId);
       allow update: if isValidInventoryLocationBalanceUpdate(balanceId);
       allow delete: if false;
     }
 
     match /inventoryItems/{id} {
-      allow read: if isStaffActive();
-      allow create: if isManagerOrStaff() &&
+      allow read: if isInventoryActiveStaff();
+      allow create: if isInventoryWriter() &&
         request.resource.data.quantityOnHand == 0 &&
         request.resource.data.locationId is string &&
         exists(/databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId)) &&
@@ -1107,7 +1127,7 @@ service cloud.firestore {
         isInventoryQuantityPrecisionValid(request.resource.data.unit, request.resource.data.minimumStockLevel) &&
         request.resource.data.movements is list &&
         request.resource.data.movements.size() == 0;
-      allow update: if isManagerOrStaff() &&
+      allow update: if isInventoryWriter() &&
         // Until the location ledger and transfer workflow are live, the legacy
         // single-location field is immutable at the database boundary.
         request.resource.data.location == resource.data.location &&
@@ -1125,7 +1145,7 @@ service cloud.firestore {
     }
 
     match /inventoryMovements/{movementId} {
-      allow read: if isStaffActive();
+      allow read: if isInventoryActiveStaff();
       allow create: if isValidInventoryMovementCreate(movementId);
       allow update, delete: if false;
     }
