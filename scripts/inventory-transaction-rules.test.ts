@@ -124,6 +124,7 @@ async function main() {
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
     await assertSucceeds(applyMovement('staff'));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { unit: 'kg' }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { minimumStockLevel: 1.5 }));
 
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
@@ -132,7 +133,7 @@ async function main() {
 
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
-        ...itemFixture(), unit: 'kg',
+        ...itemFixture(), unit: 'kg', minimumStockLevel: 0.25,
       });
     });
     await assertSucceeds(applyMovement('staff', {
