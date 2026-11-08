@@ -6,6 +6,7 @@ const INTENT_PREFIX = 'shine.procurement-receipt.v1';
 export interface ProcurementReceiptLineChoice {
   itemIndex: number;
   inventoryItemId: string | null;
+  locationId: string | null;
 }
 
 export interface ProcurementReceiptIntent {
@@ -16,6 +17,7 @@ export interface ProcurementReceiptIntent {
   lines: Array<{
     itemIndex: number;
     inventoryItemId: string | null;
+    locationId: string | null;
     quantity: number;
     unit: string;
     reference: string;
@@ -74,7 +76,9 @@ export function readProcurementReceiptIntent(
     const value = JSON.parse(raw) as ProcurementReceiptIntent;
     if (value.version !== 1 || value.uid !== uid || value.procurementListId !== procurementListId || !isValidCalendarDate(value.date) || !Array.isArray(value.lines)) return null;
     if (!value.lines.every((line) => Number.isInteger(line.itemIndex) && line.itemIndex >= 0 &&
-        (line.inventoryItemId === null || (typeof line.inventoryItemId === 'string' && line.inventoryItemId.length > 0)) &&
+        (line.inventoryItemId === null
+          ? line.locationId === null
+          : typeof line.inventoryItemId === 'string' && line.inventoryItemId.length > 0 && typeof line.locationId === 'string' && /^loc_[^/]{1,84}$/.test(line.locationId)) &&
         Number.isFinite(line.quantity) && line.quantity > 0 && typeof line.unit === 'string' && line.unit.length > 0 &&
         typeof line.reference === 'string' && line.reference.length > 0 && line.reference.length <= 250 &&
         typeof line.reason === 'string' && line.reason.length > 0 && line.reason.length <= 1000)) return null;
@@ -118,11 +122,12 @@ function makeIntent(
     if (!Number.isFinite(line.quantity) || line.quantity <= 0 || !line.unit.trim()) throw new Error(`Procurement line ${itemIndex + 1} has an invalid quantity or unit.`);
     const reference = `Procurement ${list.id} · line ${itemIndex + 1}${list.purchaseOrderReference ? ` · PO ${list.purchaseOrderReference}` : ''}`.slice(0, 250);
     const reason = `Procurement receipt: ${list.title}`.slice(0, 1000);
-    if (choice.inventoryItemId === null) return { itemIndex, inventoryItemId: null, quantity: line.quantity, unit: line.unit.trim(), reference, reason };
+    if (choice.inventoryItemId === null) return { itemIndex, inventoryItemId: null, locationId: null, quantity: line.quantity, unit: line.unit.trim(), reference, reason };
     const inventoryItem = inventoryById.get(choice.inventoryItemId);
     if (!inventoryItem) throw new Error(`The selected inventory item for procurement line ${itemIndex + 1} is no longer available. Refresh and choose again.`);
     if (inventoryItem.unit !== line.unit) throw new Error(`Unit mismatch on procurement line ${itemIndex + 1}; convert the quantity explicitly before posting.`);
-    return { itemIndex, inventoryItemId: inventoryItem.id, quantity: line.quantity, unit: line.unit.trim(), reference, reason };
+    if (!inventoryItem.locationId || choice.locationId !== inventoryItem.locationId) throw new Error(`Choose the verified active destination for procurement line ${itemIndex + 1}. Legacy stock items must complete physical location verification before receiving managed procurement stock.`);
+    return { itemIndex, inventoryItemId: inventoryItem.id, locationId: choice.locationId, quantity: line.quantity, unit: line.unit.trim(), reference, reason };
   });
   return { version: 1, uid, procurementListId: list.id, date, lines };
 }
@@ -132,7 +137,7 @@ function sameIntent(a: ProcurementReceiptIntent, b: ProcurementReceiptIntent): b
     a.lines.length === b.lines.length && a.lines.every((line, index) => {
       const other = b.lines[index];
       return line.itemIndex === other.itemIndex && line.inventoryItemId === other.inventoryItemId &&
-        line.quantity === other.quantity && line.unit === other.unit;
+        line.locationId === other.locationId && line.quantity === other.quantity && line.unit === other.unit;
     });
 }
 
@@ -176,6 +181,7 @@ export async function postProcurementReceiptMovements(args: {
       result = await args.postMovement({
         id,
         itemId: line.inventoryItemId,
+        locationId: line.locationId,
         type: 'Received',
         quantity: line.quantity,
         date: intent.date,
