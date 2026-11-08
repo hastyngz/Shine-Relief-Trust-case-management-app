@@ -360,6 +360,8 @@ async function handleInventoryMovement(request, staff, idToken) {
         }
       } else if (previousQuantity !== 0 || (Array.isArray(item.movements) && item.movements.length > 0) || item.lastMovementId) {
         throw new ApiError('This managed item has stock but no verified location balance. Complete physical stock verification and Manager/Administrator opening-balance approval first.', 409);
+      } else if (payload.type !== 'Received') {
+        throw new ApiError('The first managed stock balance must come from a recorded receipt. Opening stock must use the separate physical verification and Manager/Administrator approval process.', 409);
       }
     }
     if (procurementLine && procurementLine.unit !== item.unit) {
