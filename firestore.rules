@@ -203,6 +203,8 @@ service cloud.firestore {
         get(itemPath).data.quantityOnHand == 0 &&
         !get(itemPath).data.keys().hasAny(['lastMovementId']) &&
         get(itemPath).data.get('movements', []).size() == 0 &&
+        getAfter(movementPath).data.type == 'Received' &&
+        getAfter(movementPath).data.quantity > 0 &&
         getAfter(movementPath).data.previousQuantity == 0;
     }
 
