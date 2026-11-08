@@ -132,7 +132,7 @@ async function applyManagedMovement(uid: string, options: {
 }
 
 async function applyProcurementMovement(uid: string, options: {
-  id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string; managed?: boolean;
+  id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string; managed?: boolean; includeBalance?: boolean;
 } = {}) {
   const id = options.id || 'mov-proc-synthetic';
   const previous = 10;
@@ -169,7 +169,7 @@ async function applyProcurementMovement(uid: string, options: {
     updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
   });
   batch.set(movementRef, movement);
-  if (managed) {
+  if (managed && options.includeBalance !== false) {
     batch.update(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), {
       quantity: next, updatedAt: movement.createdAt, updatedByUid: uid, lastMovementId: id,
     });
@@ -307,6 +307,7 @@ async function main() {
       await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
     });
     await assertFails(applyProcurementMovement('staff', { id: 'legacy-proc-no-destination', managed: false }));
+    await assertFails(applyProcurementMovement('staff', { id: 'managed-proc-without-balance', includeBalance: false }));
     await assertSucceeds(applyProcurementMovement('staff'));
 
     await env.withSecurityRulesDisabled(async (context) => {
