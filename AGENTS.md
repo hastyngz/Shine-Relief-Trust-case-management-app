@@ -209,8 +209,11 @@ How to brief one (it starts with no context):
   results, and anything it could not verify.
 
 Limits:
-- A sub-agent's report is a claim, not evidence. Re-run lint and the relevant tests
-  yourself before saying anything passed.
+- A sub-agent's report is a claim, not evidence. For this repository, Manus is the
+  designated test runner when the coding agent has no repository execution runtime.
+  Accept a pass only when the exact command output is recorded in `AGENT_BOARD.md` and
+  matches the code SHA being reviewed. If the coding agent has a repo runtime, it should
+  independently rerun lint and relevant tests before saying anything passed.
 - Sub-agents send handoff notes and suggestions back to the main agent, which writes
   the ones worth keeping to `AGENT_BOARD.md`.
 - Give sub-agents no secrets and no real beneficiary or staff records.
@@ -220,6 +223,19 @@ Limits:
   hard rules) are never delegated.
 - If your tool cannot launch sub-agents, do the same steps yourself, in the same
   order, and say so in your summary.
+
+## Standing Manus test handoff
+
+- ChatGPT owns implementation, code review, commits and the final verification handoff;
+  Manus runs the repository test commands. Do not ask the owner to repeat this arrangement.
+- After every meaningful code commit, append a dated entry to `AGENT_BOARD.md` with the
+  exact code SHA, the focused and regression commands Manus must run, any manual checks
+  that need attention, and explicit no-production-change boundaries.
+- When the owner says Manus has responded or the run is done, read the latest
+  `AGENT_BOARD.md` entry directly. Check that the tested SHA matches the intended code
+  commit, review every command result and any workspace/emulator caveat, then fix and
+  re-handoff any real failures. Never claim tests passed from a summary without exact
+  command results for the matching SHA.
 
 ## Keeping this file useful
 - State each rule once. Link to a skill or doc instead of repeating it.
