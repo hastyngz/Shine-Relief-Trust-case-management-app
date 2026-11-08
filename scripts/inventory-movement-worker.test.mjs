@@ -323,7 +323,7 @@ try {
     assert.equal(mock.writes[0].length, 3, 'item, location balance and movement must be atomic');
     const balanceWrite = mock.writes[0].find((write) => write.update.name.includes('/inventoryLocationBalances/'));
     assert.ok(balanceWrite);
-    const balance = decode(balanceWrite.update.fields);
+    const balance = decode({ mapValue: { fields: balanceWrite.update.fields } });
     assert.equal(balance.inventoryItemId, 'item-synthetic');
     assert.equal(balance.locationId, location.id);
     assert.equal(balance.unit, 'packs');
