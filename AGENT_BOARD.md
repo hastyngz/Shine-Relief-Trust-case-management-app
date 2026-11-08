@@ -1727,3 +1727,30 @@ Suggestion format:
   12. `npm run test:e2e`
 - Inspect the complete diff against `AGENTS.md`. Specifically verify: the Worker writes item + balance + movement (+ procurement ledger) in one commit with update-time/existence preconditions; Firestore `getAfter` rules couple all documents; only a first positive receipt can create a balance; non-zero/mismatched balances fail closed; procurement destination is explicit and retry-stable; old retry intents are not silently rewritten; canonical location survives offline FIFO replay; no balance docs enter the generic offline queue; legacy labels/quantities are not inferred or migrated.
 - If a test fails, fix the underlying issue without weakening rules or skipping checks. Resolve emulator port conflicts safely. Report exact tested SHA, every command/result, any UI/manual checks not possible, workspace cleanliness before/after, and confirm no production data, deployment, rules deployment, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-08
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · final code SHA and Manus test request
+- **Supersedes earlier SHA references for this implementation.** Current implementation SHA: `199735f5fc494d3b455589b4d614ebe5f810343c` on branch `Replit`. Run the checks below against this exact commit.
+- Final safety state includes:
+  - Atomic Worker writes for item aggregate + location balance + immutable movement; procurement adds the receipt ledger to that same commit.
+  - Managed balances are checked against aggregate, unit, active location and prior `lastMovementId`; update preconditions protect both item and balance.
+  - First balance creation is restricted to a positive `Received` movement from zero stock with no movement history. Stocktake/Adjustment cannot seed an opening balance.
+  - Every procurement receipt requires an explicit active managed destination. Legacy inventory items without verified location assignment are rejected by both Worker and Firestore rules.
+  - Pre-destination receipt/delivery retry intents and pre-ledger movement retries fail closed rather than being silently rewritten or falsely marked complete.
+  - Canonical `locationId` is retained in regular movements, stocktakes, confirmed local movement history and offline retry payloads. Balance documents never enter the generic offline queue.
+- The standing Manus workflow is now recorded in `AGENTS.md`: ChatGPT owns coding/review/commits; Manus runs tests; every meaningful implementation gets an exact-SHA handoff in this board; the owner should not need to repeat the instruction.
+- Manus: run and report exact output for:
+  1. `node --check workers/r2-storage/index.mjs`
+  2. `npm run test:inventory-movement-worker`
+  3. `npm run test:inventory-rules`
+  4. `npm run test:inventory`
+  5. `npm run test:inventory-pending-retry`
+  6. `npm run test:procurement`
+  7. `npm run test:offline`
+  8. `npm run test:offline-queue`
+  9. `npm run audit:firestore-access`
+  10. `npm run lint`
+  11. `npm run build`
+  12. `npm run test:e2e`
+- Review the complete diff and test additions against `AGENTS.md`, especially Worker atomicity and CAS preconditions, Firestore `getAfter` coupling, first-receipt-only balance creation, legacy procurement rejection, stable offline retry fingerprints, and no location inference/backfill. Resolve emulator port conflicts safely; do not weaken rules or skip tests.
+- Report exact tested SHA, all command results, browser/manual checks not possible, workspace cleanliness before/after, and confirm no production data, stock balance, migration, deployment, Firestore rules deployment, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-08
