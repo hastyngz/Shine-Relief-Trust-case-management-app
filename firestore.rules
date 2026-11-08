@@ -961,7 +961,7 @@ service cloud.firestore {
         request.resource.data.name is string &&
         request.resource.data.name.size() > 0 &&
         request.resource.data.name.size() <= 80 &&
-        request.resource.data.name.matches('^[^/\\\\\\u0000-\\\\\\u001f\\\\\\u007f]+
+        request.resource.data.name.matches('^[^/]+$') &&
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() &&
         request.resource.data.quantityOnHand == 0 &&
