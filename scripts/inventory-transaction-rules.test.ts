@@ -64,6 +64,73 @@ async function applyMovement(uid: string, options: { id?: string; type?: 'Receiv
   await batch.commit();
 }
 
+async function seedManagedInventory(quantity = 0) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'inventoryLocations/loc_shine centre'), {
+      id: 'loc_shine centre', name: 'Shine Centre', normalizedName: 'shine centre', isActive: true,
+    });
+    await setDoc(doc(db, 'inventoryItems/item-synthetic'), {
+      ...itemFixture(), location: 'Shine Centre', locationId: 'loc_shine centre',
+      quantityOnHand: quantity, movements: [],
+    });
+    if (quantity > 0) {
+      await setDoc(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), {
+        id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic',
+        locationId: 'loc_shine centre', unit: 'packs', quantity,
+        createdAt: '2026-10-26T10:00:00.000Z', createdByUid: 'manager',
+        updatedAt: '2026-10-26T10:00:00.000Z', updatedByUid: 'manager',
+        lastMovementId: 'opening-synthetic',
+      });
+    }
+  });
+}
+
+async function applyManagedMovement(uid: string, options: {
+  id?: string; type?: 'Received' | 'Issued' | 'Adjustment'; quantity?: number; previous?: number; next?: number;
+  locationId?: string; includeMovement?: boolean; includeBalance?: boolean; balanceQuantity?: number;
+} = {}) {
+  const id = options.id || 'mov-managed-synthetic';
+  const type = options.type || 'Received';
+  const previous = options.previous ?? 0;
+  const quantity = options.quantity ?? 3;
+  const next = options.next ?? (type === 'Received' ? previous + quantity : type === 'Issued' ? previous - quantity : 7);
+  const locationId = options.locationId || 'loc_shine centre';
+  const db = env.authenticatedContext(uid).firestore();
+  const itemRef = doc(db, 'inventoryItems/item-synthetic');
+  const movementRef = doc(db, `inventoryMovements/${id}`);
+  const balanceId = 'bal_14_item-synthetic_loc_shine centre';
+  const balanceRef = doc(db, `inventoryLocationBalances/${balanceId}`);
+  const movement = {
+    id, inventoryItemId: 'item-synthetic', unit: 'packs', type, quantity, date: '2026-10-26',
+    location: 'Shine Centre', locationId, reason: 'Synthetic managed rules fixture',
+    recordedBy: `Synthetic ${uid}`, recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z',
+    previousQuantity: previous, newQuantity: next,
+  };
+  const embedded = {
+    id, inventoryItemId: 'item-synthetic', unit: 'packs', type, quantity, date: movement.date,
+    location: movement.location, locationId, reason: movement.reason, recordedBy: movement.recordedBy,
+    recordedByUid: uid, createdAt: movement.createdAt, previousQuantity: previous, newQuantity: next,
+  };
+  const batch = writeBatch(db);
+  batch.update(itemRef, {
+    quantityOnHand: next, movements: [embedded], lastMovementId: id,
+    updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
+  });
+  if (options.includeMovement !== false) batch.set(movementRef, movement);
+  if (options.includeBalance !== false) {
+    const balance = {
+      id: balanceId, inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre',
+      unit: 'packs', quantity: options.balanceQuantity ?? next,
+      ...(previous === 0 ? { createdAt: movement.createdAt, createdByUid: uid } : {}),
+      updatedAt: movement.createdAt, updatedByUid: uid, lastMovementId: id,
+    };
+    if (previous === 0) batch.set(balanceRef, balance);
+    else batch.update(balanceRef, balance);
+  }
+  await batch.commit();
+}
+
 async function applyProcurementMovement(uid: string, options: { id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string } = {}) {
   const id = options.id || 'mov-proc-synthetic';
   const previous = 10;
@@ -140,6 +207,40 @@ async function main() {
     }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-new-managed-location'), {
       locationId: 'loc_other store',
+    }));
+
+    // A managed stock movement is authorized only as one item + movement + balance batch.
+    await seedManagedInventory(0);
+    await assertSucceeds(applyManagedMovement('staff', { id: 'managed-first-receipt', quantity: 3 }));
+    await assertFails(setDoc(doc(staffDb, 'inventoryLocationBalances/direct-write'), {
+      id: 'direct-write', inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre',
+      unit: 'packs', quantity: 3, createdAt: '2026-10-26T10:01:00.000Z',
+      createdByUid: 'staff', updatedAt: '2026-10-26T10:01:00.000Z',
+      updatedByUid: 'staff', lastMovementId: 'managed-first-receipt',
+    }));
+    await assertFails(applyManagedMovement('staff', { id: 'managed-no-movement', previous: 3, quantity: 1, includeMovement: false }));
+    await assertFails(applyManagedMovement('viewer', { id: 'managed-viewer', previous: 3, quantity: 1 }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), { quantity: 99 }));
+    await assertFails((async () => {
+      const db = env.authenticatedContext('manager').firestore();
+      await import('firebase/firestore').then(({ deleteDoc }) => deleteDoc(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre')));
+    })());
+
+    await seedManagedInventory(10);
+    await assertSucceeds(applyManagedMovement('staff', {
+      id: 'managed-existing-issue', type: 'Issued', previous: 10, quantity: 2, next: 8,
+    }));
+    await seedManagedInventory(10);
+    await assertSucceeds(applyManagedMovement('staff', {
+      id: 'managed-existing-stocktake', type: 'Adjustment', previous: 10, quantity: 3, next: 7,
+    }));
+    await seedManagedInventory(10);
+    await assertFails(applyManagedMovement('staff', {
+      id: 'managed-balance-mismatch', previous: 10, quantity: 2, next: 12, balanceQuantity: 11,
+    }));
+    await seedManagedInventory(0);
+    await assertFails(applyManagedMovement('staff', {
+      id: 'managed-wrong-location', locationId: 'loc_other store', quantity: 3,
     }));
 
     await assertSucceeds(getDocs(collection(staffDb, 'inventoryItems')));
