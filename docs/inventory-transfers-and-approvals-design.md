@@ -1,6 +1,6 @@
 # Inventory transfers and approvals — design prerequisite
 
-Status: transfer implementation remains design-only. The read-only location migration preflight audit is now implemented in the existing inventory snapshot audit; no backfill, transfer or approval workflow is claimed.
+Status: the first server-owned per-location balance slice is implemented for newly managed items; transfer implementation remains design-only. The read-only location migration preflight audit is also implemented. No legacy backfill, transfer or production migration is claimed.
 
 ## Why the model must change
 
@@ -311,6 +311,22 @@ The first application slice is now on the `Replit` branch:
 - Existing inventory records are not relabelled or assigned location IDs. Historical labels remain intact pending the approved physical count and Manager/Administrator opening-balance sign-off.
 - The location list is cached locally after a successful server read so a device that has loaded the registry can continue selecting those locations for offline item drafts. Firestore remains authoritative when the queued item syncs.
 
-**Deliberate limitation:** location rename/deactivation, per-location balances, movement routing, transfers and opening-balance seeding are not enabled in this slice. Location updates/deletes and client writes to `inventoryLocationBalances` are denied by Firestore rules. Deactivation must remain unavailable until the zero-balance check can be made atomic with every stock writer. The initial approved locations, Shine Centre and Girls House, must be created by a Manager/Administrator through the location manager; they are not silently seeded by a read request.
+**Deliberate limitation (registry slice):** location rename/deactivation, transfers and opening-balance seeding remain unavailable. Location updates/deletes and client writes to `inventoryLocationBalances` are denied by Firestore rules. Deactivation must remain unavailable until the zero-balance check can be made atomic with every stock writer. The initial approved locations, Shine Centre and Girls House, must be created by a Manager/Administrator through the location manager; they are not silently seeded by a read request.
 
 This is a registry and new-item assignment foundation, not a completed transfer or stock migration workflow. Do not deploy the new Firestore rules until the app release and migration prerequisites have been reviewed together.
+
+
+## Managed per-location balance slice (2026-11-08)
+
+The first balance-writing slice is now implemented on the `Replit` branch for items that have a canonical `locationId`:
+
+- Each managed item has one deterministic `inventoryLocationBalances` document. The authenticated Worker validates that the location exists, is active and matches the item's immutable location ID and display label.
+- Receive, Issue and Stocktake transactions atomically write the compatibility aggregate on `inventoryItems`, the server-owned location balance, the immutable `inventoryMovements` document and, for procurement receipts, the procurement receipt ledger.
+- Movement records retain the historical human-readable `location` and add canonical `locationId`. Managed movement payloads and offline retries preserve that same ID.
+- Firestore `getAfter` rules permit balance creation/update only as part of the matching authenticated item + movement transaction. Direct client balance writes and deletes remain denied.
+- A missing first balance is created at zero only when the item's aggregate is zero and it has no movement history. A managed item with a non-zero aggregate but no balance is rejected and sent to physical verification; the Worker never seeds the balance from that aggregate.
+- Full and partial procurement receipt flows ask staff to confirm the physical destination, persist it with the stable retry intent, and reject legacy inventory items that have not completed location verification.
+
+The approved legacy opening-balance procedure remains mandatory: physically count each item at its actual location, record counter and date, compare the count with the register and purchase/receipt evidence, document discrepancies and unresolved questions, then obtain Manager/Administrator approval before creating any opening balance.
+
+**Not delivered:** transfers, multiple simultaneous locations per item, opening-balance migration, legacy backfill, restore/import cutover controls, location rename/deactivation, production data changes, Firestore rules deployment or Worker deployment. This is not the full inventory-location programme. Manus verification is still required for the implementation commit.
