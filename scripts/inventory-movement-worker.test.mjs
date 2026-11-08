@@ -254,6 +254,16 @@ try {
   }
 
   {
+    const mock = setup({ procurementList: {
+      id: 'proc-synthetic', status: 'purchased', items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    } });
+    const response = await send(procurementPayload());
+    assert.equal(response.status, 409, 'legacy stock cannot receive procurement stock without a verified managed destination');
+    assert.match((await response.json()).error, /verified managed destination/);
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
     const mock = setup();
     const response = await send(procurementPayload({ type: 'Issued' }));
     assert.equal(response.status, 400, 'procurement provenance is restricted to receipt movements');
