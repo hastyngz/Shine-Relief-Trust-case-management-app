@@ -201,6 +201,7 @@ service cloud.firestore {
         request.resource.data.createdAt == getAfter(movementPath).data.createdAt &&
         request.resource.data.updatedAt == getAfter(movementPath).data.createdAt &&
         get(itemPath).data.quantityOnHand == 0 &&
+        !get(itemPath).data.keys().hasAny(['lastMovementId']) &&
         get(itemPath).data.get('movements', []).size() == 0 &&
         getAfter(movementPath).data.previousQuantity == 0;
     }
