@@ -57,7 +57,7 @@ const procurementPayload = (overrides = {}) => requestPayload({
   sourceLineIndex: 0,
   ...overrides,
 });
-function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement, procurementList } = {}) {
+function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement, procurementList, locationDocument, locationDocuments = [] } = {}) {
   let itemReads = 0;
   let commits = 0;
   const writes = [];
@@ -68,6 +68,21 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
     }
     if (url.includes('/documents/staffUsers/staff-synthetic')) {
       return new Response(JSON.stringify({ fields: asFields({ email: 'staff@example.invalid', status: 'Active', role, fullName: 'Synthetic Staff' }) }), { status: 200 });
+    }
+    if (url.includes('/documents/inventoryLocations?')) {
+      return new Response(JSON.stringify({
+        documents: locationDocuments.map((location) => ({
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocations/${location.id}`,
+          fields: asFields(location),
+        })),
+      }), { status: 200 });
+    }
+    if (url.includes('/documents/inventoryLocations/')) {
+      if (locationDocument) return new Response(JSON.stringify({
+        name: `projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocations/${locationDocument.id}`,
+        fields: asFields(locationDocument),
+      }), { status: 200 });
+      return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
     if (url.includes('/documents/inventoryMovements/')) {
       if (existingMovement) return new Response(JSON.stringify({ fields: asFields(existingMovement) }), { status: 200 });
@@ -93,6 +108,18 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
   };
   return { writes, getCounts: () => ({ itemReads, commits }) };
 }
+async function sendLocation(name, method = 'POST', envOverrides = env) {
+  return worker.fetch(new Request('https://worker.example.invalid/api/inventory/locations', {
+    method,
+    headers: {
+      Authorization: 'Bearer synthetic-id-token',
+      Origin: 'https://shine-relief-trust-cms.web.app',
+      'Content-Type': 'application/json',
+    },
+    ...(method === 'POST' ? { body: JSON.stringify({ name }) } : {}),
+  }), envOverrides);
+}
+
 async function send(payload, envOverrides = env) {
   return worker.fetch(new Request('https://worker.example.invalid/api/inventory/movement', {
     method: 'POST',
@@ -323,6 +350,61 @@ try {
     assert.equal(response.status, 400, 'unrecognised units must be reviewed rather than guessed');
     assert.match((await response.json()).error, /unit is not recognised/);
     assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ role: 'Manager' });
+    const response = await sendLocation('Shine Centre');
+    const body = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(body.location.id, 'loc_shine centre');
+    assert.equal(body.location.normalizedName, 'shine centre');
+    assert.equal(body.location.isActive, true);
+    assert.equal(mock.writes.length, 1);
+    assert.deepEqual(mock.writes[0][0].currentDocument, { exists: false });
+    assert.equal(decode(mock.writes[0][0].update.fields.createdByUid), 'staff-synthetic');
+  }
+
+  {
+    const existing = { id: 'loc_shine centre', name: 'Shine Centre', normalizedName: 'shine centre', isActive: true };
+    const mock = setup({ role: 'Administrator', locationDocument: existing });
+    const response = await sendLocation('  shine centre  ');
+    assert.equal(response.status, 409, 'trimmed case-insensitive duplicate names must be rejected');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ role: 'Staff' });
+    const response = await sendLocation('New Store');
+    assert.equal(response.status, 403, 'Staff must not create managed locations');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ role: 'Manager' });
+    const response = await sendLocation('Invalid/Location');
+    assert.equal(response.status, 400);
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ role: 'Manager', commitStatuses: [409] });
+    const response = await sendLocation('Girls House');
+    assert.equal(response.status, 409, 'concurrent duplicate creation must fail on the create-only precondition');
+    assert.equal(mock.writes.length, 1);
+    assert.deepEqual(mock.writes[0][0].currentDocument, { exists: false });
+  }
+
+  {
+    const mock = setup({ role: 'Staff', locationDocuments: [
+      { id: 'loc_shine centre', name: 'Shine Centre', normalizedName: 'shine centre', isActive: true },
+    ] });
+    const response = await sendLocation(undefined, 'GET');
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.locations.length, 1);
+    assert.equal(body.locations[0].name, 'Shine Centre');
+    assert.equal(mock.writes.length, 0, 'listing locations must be read-only');
   }
 
   console.log('Inventory movement Worker transaction tests passed.');
