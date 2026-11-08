@@ -123,6 +123,9 @@ async function main() {
     }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
     await assertSucceeds(applyMovement('staff'));
+    // The UI already locks this field; Firestore must also reject direct edits
+    // from imports, restore paths, or a modified client until transfers exist.
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { location: 'Girls House' }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { unit: 'kg' }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { minimumStockLevel: 1.5 }));
 
