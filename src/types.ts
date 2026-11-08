@@ -1534,6 +1534,8 @@ export interface InventoryMovement {
   id: string; type: InventoryMovementType; quantity: number; date: string; location: string;
   destination?: string; reference?: string; reason: string; recordedBy: string; recordedByUid?: string; createdAt: string;
   inventoryItemId?: string;
+  /** Canonical managed store for server-validated location balances. */
+  locationId?: string;
   sourceType?: 'procurementReceipt';
   sourceId?: string;
   sourceLineIndex?: number;
