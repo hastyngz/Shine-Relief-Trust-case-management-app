@@ -1588,3 +1588,10 @@ Suggestion format:
 - Trust approved physical counts before legacy opening balances are seeded: record actual quantity, location, counter and date; compare with the register and available purchase/receipt evidence; document discrepancies.
 - An active Manager/Administrator must review and approve each opening balance. Unresolved quantity/location records stay out of automatic migration until resolved and signed off.
 - Recorded the process in `docs/inventory-transfers-and-approvals-design.md` (design commit `1b4594305f7bfbfbcef45f1b73b0edc3b92c6c6e`). No stock count, app code, live data, migration, rules or deployment changed. — Mosaic (ChatGPT), 2026-11-07
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · approved inventory quantity precision
+- Area: inventory unit and quantity validation for the location-ledger migration.
+- State: Trust approved whole numbers for countable units and up to two decimals for kilograms/litres; all movements must use the item's registered unit, with no silent conversions. Recorded in `docs/inventory-transfers-and-approvals-design.md`.
+- Next: begin the location-registry/server-boundary implementation review on `Replit`; preserve physical-count sign-off and all migration/production gates.
+- Watch out: this approval is a design decision only. No stock records, app code, rules, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-08
