@@ -115,7 +115,33 @@ async function main() {
   try {
     await seed();
 
+    const managerDb = env.authenticatedContext('manager').firestore();
     const staffDb = env.authenticatedContext('staff').firestore();
+    const managedLocation = {
+      id: 'loc_shine centre', name: 'Shine Centre', normalizedName: 'shine centre', isActive: true,
+      createdAt: '2026-10-26T10:00:00.000Z', createdBy: 'Synthetic manager', createdByUid: 'manager',
+      updatedAt: '2026-10-26T10:00:00.000Z', updatedBy: 'Synthetic manager', updatedByUid: 'manager',
+    };
+    await assertSucceeds(setDoc(doc(managerDb, 'inventoryLocations/loc_shine centre'), managedLocation));
+    await assertFails(setDoc(doc(staffDb, 'inventoryLocations/loc_other store'), {
+      ...managedLocation, id: 'loc_other store', name: 'Other Store', normalizedName: 'other store',
+      createdByUid: 'staff', updatedByUid: 'staff',
+    }));
+    await assertFails(setDoc(doc(managerDb, 'inventoryLocations/loc_duplicate'), {
+      ...managedLocation, id: 'loc_duplicate', name: 'SHINE CENTRE', normalizedName: 'shine centre',
+    }));
+    await assertFails(updateDoc(doc(managerDb, 'inventoryLocations/loc_shine centre'), { isActive: false }));
+    await assertSucceeds(setDoc(doc(staffDb, 'inventoryItems/item-new-managed-location'), {
+      ...itemFixture(), id: 'item-new-managed-location', location: 'Shine Centre',
+      locationId: 'loc_shine centre', quantityOnHand: 0, movements: [],
+    }));
+    await assertFails(setDoc(doc(staffDb, 'inventoryItems/item-without-managed-location'), {
+      ...itemFixture(), id: 'item-without-managed-location', quantityOnHand: 0, movements: [],
+    }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-new-managed-location'), {
+      locationId: 'loc_other store',
+    }));
+
     await assertSucceeds(getDocs(collection(staffDb, 'inventoryItems')));
     await assertFails(setDoc(doc(staffDb, 'inventoryItems/item-with-unverified-opening-balance'), {
       ...itemFixture(), id: 'item-with-unverified-opening-balance', quantityOnHand: 5,
