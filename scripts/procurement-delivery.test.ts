@@ -13,11 +13,11 @@ const list: ProcurementList = {
   items: [{ description: 'Exercise books', quantity: 12, unit: 'packs', priceStatus: 'quoted' }, { description: 'Soap', quantity: 5, unit: 'bars', priceStatus: 'quoted' }],
   totalMWK: 9000, status: 'purchased', createdAt: '2026-10-01', updatedAt: '2026-10-01', createdBy: 'synthetic', updatedBy: 'synthetic',
 };
-const inventory: InventoryItem[] = [{ id: 'stock-books', stockCode: 'SYN-1', name: 'Books', category: 'Stationery', unit: 'packs', quantityOnHand: 0, minimumStockLevel: 0, location: 'Synthetic', movements: [], createdAt: '2026-10-01', updatedAt: '2026-10-01', createdBy: 'synthetic', updatedBy: 'synthetic' }];
-const choices = [{ itemIndex: 0, inventoryItemId: 'stock-books' }, { itemIndex: 1, inventoryItemId: null }];
+const inventory: InventoryItem[] = [{ id: 'stock-books', stockCode: 'SYN-1', name: 'Books', category: 'Stationery', unit: 'packs', quantityOnHand: 0, minimumStockLevel: 0, location: 'Synthetic', locationId: 'loc_shine centre', movements: [], createdAt: '2026-10-01', updatedAt: '2026-10-01', createdBy: 'synthetic', updatedBy: 'synthetic' }];
+const choices = [{ itemIndex: 0, inventoryItemId: 'stock-books', locationId: 'loc_shine centre' }, { itemIndex: 1, inventoryItemId: null, locationId: null }];
 const id = 'delivery_12345678';
 function poster(payload: Record<string, unknown>, duplicate = false) {
-  return { ok: true as const, duplicate, movement: { id: payload.id, inventoryItemId: payload.itemId, quantity: payload.quantity, sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex } };
+  return { ok: true as const, duplicate, movement: { id: payload.id, inventoryItemId: payload.itemId, quantity: payload.quantity, sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex, locationId: payload.locationId } };
 }
 async function main() {
   const storage = new MemoryStorage();
@@ -31,6 +31,7 @@ async function main() {
   const pending = readProcurementDeliveryIntent(storage, 'synthetic-staff', list.id);
   assert.equal(pending?.deliveryId, id, 'retry identity must survive a failed network request');
   assert.equal(calls[0].quantity, 4);
+  assert.equal(calls[0].locationId, 'loc_shine centre', 'partial delivery retry carries the selected destination');
   const retry = await postProcurementDeliveryMovements({
     uid: 'synthetic-staff', list, deliveryId: id, date: '2026-10-29', reference: 'DN-SYNTHETIC',
     quantities: [4, 0], choices, inventoryItems: inventory, storage,
@@ -51,6 +52,11 @@ async function main() {
     quantities: [4, 1], choices, inventoryItems: inventory, storage: new MemoryStorage(),
     postMovement: async () => { throw new Error('untracked partial line must be rejected before posting'); },
   }), /must link each received line to an inventory item/);
+  await assert.rejects(postProcurementDeliveryMovements({
+    uid: 'synthetic-staff', list, deliveryId: 'delivery_87654319', date: '2026-10-29', reference: 'DN-LEGACY',
+    quantities: [4, 0], choices, inventoryItems: [{ ...inventory[0], locationId: undefined }], storage: new MemoryStorage(),
+    postMovement: async () => { throw new Error('legacy inventory must not be posted'); },
+  }), /physical location verification/);
   await assert.rejects(postProcurementDeliveryMovements({
     uid: 'synthetic-staff', list, deliveryId: 'delivery_87654321', date: '2026-10-29', reference: 'DN-CHANGED',
     quantities: [2, 0], choices, inventoryItems: inventory, storage,
