@@ -185,7 +185,7 @@ function normalizeInventoryLocationName(value) {
 function inventoryLocationDocumentId(normalizedName) {
   const bytes = new TextEncoder().encode(normalizedName);
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
-  return `loc_${btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '')}`;
+  return `loc_${btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')}`;
 }
 
 async function listInventoryLocations(idToken) {
@@ -219,7 +219,7 @@ async function handleInventoryLocations(request, staff, idToken) {
   const payload = await request.json().catch(() => null);
   if (!payload || typeof payload.name !== 'string') throw new ApiError('Enter a location name.');
   const name = payload.name.normalize('NFKC').trim();
-  if (!name || name.length > 80 || /[\\u0000-\\u001f\\u007f]/.test(name)) {
+  if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
     throw new ApiError('Location names must contain 1–80 printable characters.', 400);
   }
   const normalizedName = normalizeInventoryLocationName(name);
