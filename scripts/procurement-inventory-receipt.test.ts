@@ -199,6 +199,20 @@ async function main() {
   {
     const storage = new MemoryStorage();
     storage.values.set('shine.procurement-receipt.v1:staff-a:PRC-1234567', JSON.stringify({
+      version: 1, uid: 'staff-a', procurementListId: 'PRC-1234567', date: '2026-10-27',
+      lines: [{ itemIndex: 0, inventoryItemId: 'stock-books', quantity: 12, unit: 'packs', reference: 'Old receipt intent', reason: 'Synthetic old retry' }],
+    }));
+    let calls = 0;
+    await assert.rejects(postProcurementReceiptMovements({
+      uid: 'staff-a', list: baseList(), choices, inventoryItems: inventoryItems(), storage,
+      postMovement: async (payload) => { calls += 1; return okResult(payload); },
+    }), /Saved receipt retry details are invalid/);
+    assert.equal(calls, 0, 'a pre-destination receipt intent must be paused, never silently replaced');
+  }
+
+  {
+    const storage = new MemoryStorage();
+    storage.values.set('shine.procurement-receipt.v1:staff-a:PRC-1234567', JSON.stringify({
       version: 1, uid: 'staff-a', procurementListId: 'PRC-1234567', date: '2026-02-30',
       lines: [{ itemIndex: 0, inventoryItemId: 'stock-books', quantity: 12, unit: 'packs', reference: 'Synthetic reference', reason: 'Synthetic reason' }],
     }));
