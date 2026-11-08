@@ -354,7 +354,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       if (managedBalance) {
         if (managedBalance.id !== managedBalanceId || managedBalance.inventoryItemId !== payload.itemId ||
             managedBalance.locationId !== item.locationId || managedBalance.unit !== item.unit ||
-            managedBalance.quantity !== previousQuantity ||
+            managedBalance.quantity !== previousQuantity || managedBalance.lastMovementId !== item.lastMovementId ||
             getInventoryQuantityPrecisionError(managedBalance.quantity, item.unit)) {
           throw new ApiError('The location balance does not match the inventory register. Stop and request a stock reconciliation before moving stock.', 409);
         }
