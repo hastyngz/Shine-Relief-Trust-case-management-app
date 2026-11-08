@@ -1619,3 +1619,10 @@ Suggestion format:
 - Added a Firestore rule requiring the legacy `location` value to remain unchanged on every inventory-item update, plus a rules-emulator regression test for a direct relabel attempt.
 - Updated the transfer design with the temporary immutability guard and a race-safe location-deactivation protocol: every stock writer and deactivation must share a location-document version precondition.
 - This freezes legacy labels until the location ledger cutover; it does not implement the registry, change stock data, migrate balances or deploy production rules. CI verification is pending. — Mosaic (ChatGPT), 2026-11-08
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · permanent Manus verification workflow
+- Owner's standing instruction: the primary agent focuses on coding; Manus runs the requested tests/checks. Do not ask the owner to repeat this instruction.
+- Updated `AGENTS.md` with a permanent Manus test-runner handoff rule. For each implementation slice, leave Manus the exact `Replit` SHA, relevant test scripts, lint/build/security checks, manual checks and prerequisites.
+- Manus must report exact SHA, commands and real results; the coding agent reviews that evidence before marking work verified. Never claim tests were personally run by the coding agent or fabricate results.
+- Next work remains implementation-first on Inventory & Stores location registry and location-ledger foundations; preserve existing migration, physical-count and production gates. — Mosaic (ChatGPT), 2026-11-08
