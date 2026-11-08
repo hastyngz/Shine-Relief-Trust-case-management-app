@@ -375,6 +375,17 @@ try {
     assert.deepEqual(balanceWrite.currentDocument, { exists: false });
   }
 
+  // An adjustment cannot create the first managed balance; use a receipt or approved opening-balance process.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 0, movements: [] };
+    const mock = setup({ item: managedItem, locationDocument: location });
+    const response = await send(requestPayload({ type: 'Adjustment', countedQuantity: 5, locationId: location.id }));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /first managed stock balance must come from a recorded receipt/);
+    assert.equal(mock.writes.length, 0);
+  }
+
   // An existing managed balance must match the aggregate before an issue is posted.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
