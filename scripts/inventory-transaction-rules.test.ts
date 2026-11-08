@@ -223,6 +223,7 @@ async function main() {
 
     // A managed stock movement is authorized only as one item + movement + balance batch.
     await seedManagedInventory(0);
+    await assertFails(applyManagedMovement('staff', { id: 'managed-first-adjustment', type: 'Adjustment', quantity: 3, next: 7 }));
     await assertSucceeds(applyManagedMovement('staff', { id: 'managed-first-receipt', quantity: 3 }));
     await assertFails(setDoc(doc(staffDb, 'inventoryLocationBalances/direct-write'), {
       id: 'direct-write', inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre',
