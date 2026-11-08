@@ -189,8 +189,7 @@ function inventoryLocationDocumentId(normalizedName) {
 }
 
 function inventoryLocationBalanceDocumentId(itemId, locationId) {
-  const hex = (value) => Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `bal_${hex(itemId)}_${hex(locationId)}`;
+  return `bal_${itemId.length}_${itemId}_${locationId}`;
 }
 
 async function listInventoryLocations(idToken) {
