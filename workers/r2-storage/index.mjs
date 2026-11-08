@@ -217,7 +217,7 @@ async function handleInventoryLocations(request, staff, idToken) {
   const payload = await request.json().catch(() => null);
   if (!payload || typeof payload.name !== 'string') throw new ApiError('Enter a location name.');
   const name = payload.name.trim();
-  if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
+  if (!name || name.length > 80 || name.includes('/') || /[\u0000-\u001f\u007f]/.test(name)) {
     throw new ApiError('Location names must contain 1–80 printable characters.', 400);
   }
   const normalizedName = normalizeInventoryLocationName(name);
