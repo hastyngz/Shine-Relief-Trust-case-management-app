@@ -196,7 +196,7 @@ export async function postProcurementReceiptMovements(args: {
       throw new Error(`Receipt posting stopped after ${movementIds.length} linked movement(s). Retry this same receipt; stable operation IDs prevent duplicate stock additions. ${detail}`);
     }
     const movement = result?.movement || {};
-    if (!result?.ok || movement.id !== id || movement.inventoryItemId !== line.inventoryItemId || movement.quantity !== line.quantity || movement.sourceType !== 'procurementReceipt' || movement.sourceId !== intent.procurementListId || movement.sourceLineIndex !== line.itemIndex) {
+    if (!result?.ok || movement.id !== id || movement.inventoryItemId !== line.inventoryItemId || movement.quantity !== line.quantity || movement.sourceType !== 'procurementReceipt' || movement.sourceId !== intent.procurementListId || movement.sourceLineIndex !== line.itemIndex || movement.locationId !== line.locationId) {
       throw new Error(`The server response for procurement line ${line.itemIndex + 1} did not match the requested receipt. Keep this receipt pending and contact an Administrator.`);
     }
     if (result.duplicate) duplicateCount += 1;
