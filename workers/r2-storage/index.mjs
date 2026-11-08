@@ -267,6 +267,17 @@ async function handleInventoryMovement(request, staff, idToken) {
     if (existing.recordedByUid !== staff.uid || existing.inventoryItemId !== payload.itemId || existing.requestFingerprint !== fingerprint) {
       throw new ApiError('This movement ID has already been used for a different request.', 409);
     }
+    if (existing.locationId !== payload.locationId && (existing.locationId !== undefined || payload.locationId !== undefined)) {
+      throw new ApiError('This movement retry does not match its original managed destination. Stop and request a stock reconciliation.', 409);
+    }
+    if (existing.locationId === undefined) {
+      const existingItemDocument = await firestoreGet(itemPath, idToken);
+      if (!existingItemDocument) throw new ApiError('The inventory item for this prior movement is no longer available.', 404);
+      const existingItem = decodeFirestoreFields(existingItemDocument.fields);
+      if (typeof existingItem.locationId === 'string' && existingItem.locationId.length > 0) {
+        throw new ApiError('This movement was recorded before the managed location balance was created. Do not treat it as a completed retry; request a stock reconciliation.', 409);
+      }
+    }
     return json({ ok: true, duplicate: true, movement: existing }, 200);
   }
 
