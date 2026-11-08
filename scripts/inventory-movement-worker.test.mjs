@@ -326,6 +326,29 @@ try {
   }
 
 
+  // A pre-ledger movement retry must not be reported as complete for a managed item.
+  {
+    const payload = requestPayload();
+    const fingerprint = JSON.stringify({
+      id: payload.id, itemId: payload.itemId, type: payload.type, quantity: payload.quantity,
+      countedQuantity: undefined, date: payload.date, destination: undefined, reference: undefined,
+      reason: payload.reason, sourceType: undefined, sourceId: undefined, sourceLineIndex: undefined,
+      sourceDeliveryId: undefined, locationId: undefined,
+    });
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
+    const existingMovement = {
+      id: payload.id, inventoryItemId: payload.itemId, recordedByUid: 'staff-synthetic',
+      requestFingerprint: fingerprint, date: payload.date, quantity: payload.quantity,
+    };
+    const mock = setup({ item: managedItem, locationDocument: location, existingMovement });
+    const response = await send(payload);
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /before the managed location balance/);
+    assert.equal(mock.writes.length, 0);
+  }
+
+
   // Managed items must update the aggregate, canonical location balance and
   // immutable movement in one server-side commit.
   {
