@@ -97,6 +97,16 @@ service cloud.firestore {
       );
     }
 
+    function isInventoryQuantityPrecisionValid(unit, quantity) {
+      let normalizedUnit = unit.lower();
+      return quantity is number && quantity >= 0 && (
+        (normalizedUnit in ['kg', 'kilogram', 'kilograms', 'litre', 'litres', 'liter', 'liters', 'l'] &&
+          quantity * 100 - int(quantity * 100) < 0.000001) ||
+        (normalizedUnit in ['bag', 'bags', 'piece', 'pieces', 'bottle', 'bottles', 'box', 'boxes', 'pack', 'packs', 'tray', 'trays', 'unit', 'units'] &&
+          quantity == int(quantity))
+      );
+    }
+
     function inventoryMovementMatchesItem(itemId, movementId) {
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
       let movement = getAfter(movementPath).data;
@@ -114,6 +124,9 @@ service cloud.firestore {
         embedded.createdAt == movement.createdAt &&
         movement.quantity is number &&
         movement.quantity >= 0 &&
+        isInventoryQuantityPrecisionValid(resource.data.unit, movement.previousQuantity) &&
+        isInventoryQuantityPrecisionValid(resource.data.unit, movement.newQuantity) &&
+        isInventoryQuantityPrecisionValid(resource.data.unit, movement.quantity) &&
         (
           (movement.type == 'Received' &&
             movement.quantity > 0 &&
@@ -228,6 +241,9 @@ service cloud.firestore {
         request.resource.data.quantity >= 0 &&
         (!request.resource.data.keys().hasAny(['sourceType']) || isValidProcurementReceiptSource(itemId)) &&
         exists(itemPath) &&
+        isInventoryQuantityPrecisionValid(get(itemPath).data.unit, request.resource.data.previousQuantity) &&
+        isInventoryQuantityPrecisionValid(get(itemPath).data.unit, request.resource.data.newQuantity) &&
+        isInventoryQuantityPrecisionValid(get(itemPath).data.unit, request.resource.data.quantity) &&
         existsAfter(itemPath) &&
         itemAfter.lastMovementId == movementId &&
         itemAfter.quantityOnHand == request.resource.data.newQuantity &&
@@ -942,6 +958,8 @@ service cloud.firestore {
         request.resource.data.movements is list &&
         request.resource.data.movements.size() == 0;
       allow update: if isManagerOrStaff() &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['unit']) ||
+          (resource.data.quantityOnHand == 0 && resource.data.get('movements', []).size() == 0)) &&
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'quantityOnHand', 'movements', 'lastMovementId'
