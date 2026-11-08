@@ -178,6 +178,76 @@ function validateInventoryMovementPayload(payload) {
   };
 }
 
+function normalizeInventoryLocationName(value) {
+  return value.normalize('NFKC').trim().toLocaleLowerCase('en');
+}
+
+function inventoryLocationDocumentId(normalizedName) {
+  const bytes = new TextEncoder().encode(normalizedName);
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+  return `loc_${btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '')}`;
+}
+
+async function listInventoryLocations(idToken) {
+  const locations = [];
+  let pageToken;
+  do {
+    const query = new URLSearchParams({ pageSize: '1000' });
+    if (pageToken) query.set('pageToken', pageToken);
+    const url = `https://firestore.googleapis.com/v1/projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocations?${query}`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
+    if (!response.ok) throw new ApiError('Could not load the managed inventory locations.', response.status === 401 ? 401 : 403);
+    const payload = await response.json();
+    for (const document of payload.documents || []) {
+      const fields = decodeFirestoreFields(document.fields);
+      locations.push({ ...fields, id: document.name.split('/').pop() });
+    }
+    pageToken = payload.nextPageToken;
+  } while (pageToken && locations.length < 5000);
+  return locations.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+async function handleInventoryLocations(request, staff, idToken) {
+  if (request.method === 'GET') {
+    const locations = await listInventoryLocations(idToken);
+    return json({ ok: true, locations }, 200);
+  }
+  if (request.method !== 'POST') throw new ApiError('This inventory location action is not supported.', 405);
+  if (!['Administrator', 'Manager'].includes(staff.role)) {
+    throw new ApiError('Only active Managers and Administrators may create inventory locations.', 403);
+  }
+  const payload = await request.json().catch(() => null);
+  if (!payload || typeof payload.name !== 'string') throw new ApiError('Enter a location name.');
+  const name = payload.name.normalize('NFKC').trim();
+  if (!name || name.length > 80 || /[\\u0000-\\u001f\\u007f]/.test(name)) {
+    throw new ApiError('Location names must contain 1–80 printable characters.', 400);
+  }
+  const normalizedName = normalizeInventoryLocationName(name);
+  const id = inventoryLocationDocumentId(normalizedName);
+  const existing = await firestoreGet(`inventoryLocations/${encodeURIComponent(id)}`, idToken);
+  if (existing) throw new ApiError('A location with this name already exists. Names are compared without case and surrounding spaces.', 409);
+  const now = new Date().toISOString();
+  const location = {
+    id, name, normalizedName, isActive: true,
+    createdAt: now, createdBy: staff.fullName, createdByUid: staff.uid,
+    updatedAt: now, updatedBy: staff.fullName, updatedByUid: staff.uid,
+  };
+  const fields = Object.fromEntries(Object.entries(location).map(([key, value]) => [key, encodeFirestoreValue(value)]));
+  const path = `projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocations/${id}`;
+  try {
+    await firestoreCommit([{
+      update: { name: path, fields },
+      currentDocument: { exists: false },
+    }], idToken);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      throw new ApiError('A location with this name already exists. Names are compared without case and surrounding spaces.', 409);
+    }
+    throw error;
+  }
+  return json({ ok: true, location }, 201);
+}
+
 async function handleInventoryMovement(request, staff, idToken) {
   if (!['Administrator', 'Manager', 'Staff'].includes(staff.role)) throw new ApiError('Your SHINE role cannot record stock movements.', 403);
   const payload = validateInventoryMovementPayload(await request.json().catch(() => null));
@@ -493,7 +563,7 @@ async function handleRequest(request, env) {
 
   if (url.pathname.startsWith('/api/ai/')) return handleAIRequest(request, env, staff);
 
-  if (url.pathname === '/api/inventory/movement' && request.method === 'POST') {
+  if (url.pathname === '/api/inventory/locations' && ['GET', 'POST'].includes(request.method)) {\n    return handleInventoryLocations(request, staff, idToken);\n  }\n\n  if (url.pathname === '/api/inventory/movement' && request.method === 'POST') {
     return handleInventoryMovement(request, staff, idToken);
   }
 
