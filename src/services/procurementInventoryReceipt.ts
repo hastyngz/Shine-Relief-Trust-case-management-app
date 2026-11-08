@@ -78,7 +78,7 @@ export function readProcurementReceiptIntent(
     if (!value.lines.every((line) => Number.isInteger(line.itemIndex) && line.itemIndex >= 0 &&
         (line.inventoryItemId === null
           ? line.locationId === null
-          : typeof line.inventoryItemId === 'string' && line.inventoryItemId.length > 0 && typeof line.locationId === 'string' && /^loc_[^/]{1,84}$/.test(line.locationId)) &&
+          : typeof line.inventoryItemId === 'string' && line.inventoryItemId.length > 0 && typeof line.locationId === 'string' && /^loc_[^\u0000-\u001f\u007f/]{1,84}$/.test(line.locationId)) &&
         Number.isFinite(line.quantity) && line.quantity > 0 && typeof line.unit === 'string' && line.unit.length > 0 &&
         typeof line.reference === 'string' && line.reference.length > 0 && line.reference.length <= 250 &&
         typeof line.reason === 'string' && line.reason.length > 0 && line.reason.length <= 1000)) return null;
