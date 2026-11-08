@@ -2,6 +2,7 @@ import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
 import type { InventoryItem, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
+import { getInventoryQuantityPrecisionError } from '../utils/inventory';
 import { postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
@@ -143,6 +144,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const cost = newItem.unitCost.trim() ? Number(newItem.unitCost) : undefined;
     if (!newItem.name.trim() || !newItem.stockCode.trim() || !newItem.unit.trim() || !newItem.location.trim()) {
       setError('Enter an item name, stock code, unit and storage location.');
+      return;
+    }
+    const minimumPrecisionError = getInventoryQuantityPrecisionError(minimum, newItem.unit);
+    if (minimumPrecisionError) {
+      setError(`Minimum stock level: ${minimumPrecisionError}`);
       return;
     }
     if ((!editingTarget && (!Number.isFinite(opening) || opening < 0 || opening !== 0)) || !Number.isFinite(minimum) || minimum < 0 || (cost !== undefined && (!Number.isFinite(cost) || cost < 0))) {
@@ -296,6 +302,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       setError('Enter a quantity greater than zero.');
       return;
     }
+    const movementPrecisionError = getInventoryQuantityPrecisionError(quantity, movementTarget.unit);
+    if (movementPrecisionError) {
+      setError(movementPrecisionError);
+      return;
+    }
     if (!isValidInventoryDate(movement.date)) {
       setError('Enter a valid movement date in YYYY-MM-DD format.');
       return;
@@ -394,6 +405,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const counted = Number(stocktake.countedQuantity);
     if (!Number.isFinite(counted) || counted < 0) {
       setError('The counted quantity must be zero or greater.');
+      return;
+    }
+    const stocktakePrecisionError = getInventoryQuantityPrecisionError(counted, stocktakeTarget.unit);
+    if (stocktakePrecisionError) {
+      setError(stocktakePrecisionError);
       return;
     }
     if (!isValidInventoryDate(stocktake.date)) {
@@ -671,9 +687,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <label className="text-sm font-semibold text-stone-700">Unique stock code *<input required value={newItem.stockCode} onChange={(e) => setNewItem({ ...newItem, stockCode: e.target.value })} placeholder="e.g. FOOD-001" className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <p className="text-xs text-amber-800 sm:col-span-2">Stock-code checks use this device’s current register. If other devices may have been offline, sync and refresh before registering a code that might already exist.</p>
           <label className="text-sm font-semibold text-stone-700">Category<select value={newItem.category} onChange={(e) => setNewItem({ ...newItem, category: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{categories.map((v) => <option key={v}>{v}</option>)}</select></label>
-          <label className="text-sm font-semibold text-stone-700">Unit of measure *<select value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{units.map((v) => <option key={v}>{v}</option>)}</select></label>
-          {!editingTarget ? <label className="text-sm font-semibold text-stone-700" >Opening quantity (must be zero)<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
-          <label className="text-sm font-semibold text-stone-700">Minimum stock level<input type="number" min="0" step="0.01" value={newItem.minimum} onChange={(e) => setNewItem({ ...newItem, minimum: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
+          <label className="text-sm font-semibold text-stone-700">Unit of measure *<select disabled={Boolean(editingTarget && (editingTarget.quantityOnHand !== 0 || editingTarget.movements.length > 0))} value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{units.map((v) => <option key={v}>{v}</option>)}</select></label>
+          {editingTarget && (editingTarget.quantityOnHand !== 0 || editingTarget.movements.length > 0) && <p className="text-xs text-amber-800">The unit is locked because this item has stock or movement history. Do not relabel existing quantities; an approved conversion requires a separately reviewed process.</p>}{!editingTarget ? <label className="text-sm font-semibold text-stone-700" >Opening quantity (must be zero)<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
+          <label className="text-sm font-semibold text-stone-700">Minimum stock level<input type="number" min="0" step={["kg", "litres"].includes(newItem.unit) ? "0.01" : "1"} value={newItem.minimum} onChange={(e) => setNewItem({ ...newItem, minimum: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Storage location<select value={newItem.location} disabled={Boolean(editingTarget)} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal disabled:cursor-not-allowed disabled:bg-stone-100">{locations.map((v) => <option key={v}>{v}</option>)}</select>{editingTarget && <span className="mt-1 block text-xs font-normal text-amber-800">Location changes are disabled until SHINE has a traceable stock-transfer workflow. This prevents stock from appearing to move without a transfer record.</span>}</label>
           <label className="text-sm font-semibold text-stone-700">Unit cost (MWK)<input type="number" min="0" step="0.01" value={newItem.unitCost} onChange={(e) => setNewItem({ ...newItem, unitCost: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Supplier<input value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
@@ -686,7 +702,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       {movementTarget && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setMovementTarget(null); }}><section role="dialog" aria-modal="true" aria-labelledby="movement-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-start justify-between gap-3"><div><h2 id="movement-title" className="text-xl font-bold">{movement.type === 'Received' ? 'Receive stock' : 'Issue stock'}</h2><p className="mt-1 text-sm text-stone-600">{movementTarget.name} · Balance: {movementTarget.quantityOnHand} {movementTarget.unit}</p></div><button type="button" aria-label="Close movement form" disabled={Boolean(pendingMovementId)} onClick={() => setMovementTarget(null)}><X className="h-5 w-5" /></button></div>
         <form onSubmit={submitMovement} className="space-y-4"><fieldset disabled={saving} className="space-y-4">
           <label className="block text-sm font-semibold text-stone-700">Movement type<select value={movement.type} onChange={(e) => setMovement({ ...movement, type: e.target.value as 'Received' | 'Issued' })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal"><option value="Received">Received into stock</option><option value="Issued">Issued from stock</option></select></label>
-          <label className="block text-sm font-semibold text-stone-700">Quantity *<input autoFocus required type="number" min="0.01" step="0.01" value={movement.quantity} onChange={(e) => setMovement({ ...movement, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
+          <label className="block text-sm font-semibold text-stone-700">Quantity *<input autoFocus required type="number" min="0.01" step={["kg", "litres"].includes(movementTarget.unit) ? "0.01" : "1"} value={movement.quantity} onChange={(e) => setMovement({ ...movement, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="block text-sm font-semibold text-stone-700">Date *<input required type="date" value={movement.date} onChange={(e) => setMovement({ ...movement, date: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="block text-sm font-semibold text-stone-700">{movement.type === 'Received' ? 'Received from / supplier' : 'Issued to / destination'}<input value={movement.destination} onChange={(e) => setMovement({ ...movement, destination: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="block text-sm font-semibold text-stone-700">Receipt / issue reference<input value={movement.reference} onChange={(e) => setMovement({ ...movement, reference: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
@@ -696,7 +712,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       {stocktakeTarget && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setStocktakeTarget(null); }}><section role="dialog" aria-modal="true" aria-labelledby="stocktake-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-start justify-between gap-3"><div><h2 id="stocktake-title" className="text-xl font-bold">Physical stocktake</h2><p className="mt-1 text-sm text-stone-600">{stocktakeTarget.name} · System balance: {stocktakeTarget.quantityOnHand} {stocktakeTarget.unit}</p></div><button type="button" aria-label="Close stocktake form" disabled={Boolean(pendingMovementId)} onClick={() => setStocktakeTarget(null)}><X className="h-5 w-5" /></button></div>
         <form onSubmit={submitStocktake} className="space-y-4"><fieldset disabled={saving} className="space-y-4">
           <label className="block text-sm font-semibold text-stone-700">Count date *<input required type="date" value={stocktake.date} onChange={(e) => setStocktake({ ...stocktake, date: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
-          <label className="block text-sm font-semibold text-stone-700">Actual quantity counted *<input autoFocus required type="number" min="0" step="0.01" value={stocktake.countedQuantity} onChange={(e) => setStocktake({ ...stocktake, countedQuantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
+          <label className="block text-sm font-semibold text-stone-700">Actual quantity counted *<input autoFocus required type="number" min="0" step={["kg", "litres"].includes(stocktakeTarget.unit) ? "0.01" : "1"} value={stocktake.countedQuantity} onChange={(e) => setStocktake({ ...stocktake, countedQuantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           {stocktake.countedQuantity !== '' && Number.isFinite(Number(stocktake.countedQuantity)) && Number(stocktake.countedQuantity) >= 0 && <p className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700">Expected variance: {getInventoryStocktakeAdjustment(stocktakeTarget.quantityOnHand, Number(stocktake.countedQuantity)).variance > 0 ? '+' : ''}{getInventoryStocktakeAdjustment(stocktakeTarget.quantityOnHand, Number(stocktake.countedQuantity)).variance} {stocktakeTarget.unit}</p>}
           <label className="block text-sm font-semibold text-stone-700">Stocktake notes / reason *<textarea required value={stocktake.reason} onChange={(e) => setStocktake({ ...stocktake, reason: e.target.value })} rows={3} placeholder="e.g. Monthly physical count; damaged goods separated" className="mt-1 w-full rounded-xl border border-stone-300 p-3 font-normal" /></label>
           <p className="text-xs leading-5 text-stone-500">Saving records an adjustment in the movement history and sets the balance to the quantity physically counted. The previous balance and variance remain in the audit note.</p>
