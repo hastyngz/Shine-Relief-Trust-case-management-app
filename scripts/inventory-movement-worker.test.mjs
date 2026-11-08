@@ -353,6 +353,37 @@ try {
     assert.deepEqual(balanceWrite.currentDocument, { updateTime: '2026-10-26T10:00:01.000000Z' });
   }
 
+  // Managed stocktakes update the same location balance as ordinary receipts and issues.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance });
+    const response = await send(requestPayload({ type: 'Adjustment', countedQuantity: 7, locationId: location.id }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.quantityOnHand, 7);
+    const balanceWrite = mock.writes[0].find((write) => write.update.name.includes('/inventoryLocationBalances/'));
+    assert.equal(decode(balanceWrite.update.fields.quantity), 7);
+    assert.equal(decode(balanceWrite.update.fields.lastMovementId), 'mov_synthetic_123');
+  }
+
+  // A stale location balance is re-read and the complete item/balance transaction is retried.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = (read) => ({ ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: read === 1 ? 10 : 12 });
+    const balance = (read) => ({ id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: read === 1 ? 10 : 12 });
+    const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, commitStatuses: [409, 200] });
+    const response = await send(requestPayload({ locationId: location.id }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.quantityOnHand, 15);
+    assert.equal(mock.writes.length, 2);
+    const retriedBalanceWrite = mock.writes[1].find((write) => write.update.name.includes('/inventoryLocationBalances/'));
+    assert.deepEqual(retriedBalanceWrite.currentDocument, { updateTime: '2026-10-26T10:00:02.000000Z' });
+    assert.equal(decode(retriedBalanceWrite.update.fields.quantity), 15);
+  }
+
   // A managed item with unverified non-zero aggregate stock must never be seeded implicitly.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
