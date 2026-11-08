@@ -232,6 +232,10 @@ async function main() {
       updatedByUid: 'staff', lastMovementId: 'managed-first-receipt',
     }));
     await assertFails(applyManagedMovement('staff', { id: 'managed-no-movement', previous: 3, quantity: 1, includeMovement: false }));
+    await assertFails(applyManagedMovement('staff', {
+      id: 'managed-item-movement-without-balance', previous: 3, quantity: 1, next: 4, includeBalance: false,
+    }));
+
     await assertFails(applyManagedMovement('viewer', { id: 'managed-viewer', previous: 3, quantity: 1 }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), { quantity: 99 }));
     await assertFails(deleteDoc(doc(managerDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre')));
@@ -259,6 +263,9 @@ async function main() {
       movements: [{ id: 'opening-movement', type: 'Received', quantity: 5 }],
     }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
     await assertSucceeds(applyMovement('staff'));
     // The UI already locks this field; Firestore must also reject direct edits
     // from imports, restore paths, or a modified client until transfers exist.
