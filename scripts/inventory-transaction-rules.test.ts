@@ -72,7 +72,7 @@ async function seedManagedInventory(quantity = 0) {
     });
     await setDoc(doc(db, 'inventoryItems/item-synthetic'), {
       ...itemFixture(), location: 'Shine Centre', locationId: 'loc_shine centre',
-      quantityOnHand: quantity, movements: [],
+      quantityOnHand: quantity, movements: [], ...(quantity > 0 ? { lastMovementId: 'opening-synthetic' } : {}),
     });
     if (quantity > 0) {
       await setDoc(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), {
