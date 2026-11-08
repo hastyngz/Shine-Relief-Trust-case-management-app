@@ -318,7 +318,7 @@ async function handleInventoryMovement(request, staff, idToken) {
         if (procurement.id !== existing.sourceId || procurement.status !== 'purchased' ||
             !Number.isInteger(lineIndex) || lineIndex < 0 ||
             !Number.isFinite(ledgerReceived) || !Number.isFinite(legacyReceived) ||
-            Math.max(ledgerReceived, legacyReceived) < existing.quantity) {
+            ledgerReceived < legacyReceived + existing.quantity) {
           throw new ApiError('The prior procurement receipt cannot be confirmed against its receipt ledger. Request a stock reconciliation.', 409);
         }
       }
