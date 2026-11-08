@@ -322,10 +322,10 @@ The first balance-writing slice is now implemented on the `Replit` branch for it
 
 - Each managed item has one deterministic `inventoryLocationBalances` document. The authenticated Worker validates that the location exists, is active and matches the item's immutable location ID and display label.
 - Receive, Issue and Stocktake transactions atomically write the compatibility aggregate on `inventoryItems`, the server-owned location balance, the immutable `inventoryMovements` document and, for procurement receipts, the procurement receipt ledger.
-- Movement records retain the historical human-readable `location` and add canonical `locationId`. Managed movement payloads and offline retries preserve that same ID.
+- Movement records retain the historical human-readable `location` and add canonical `locationId`. Managed movement payloads and offline retries preserve that same ID; old pending managed-item movements without it fail closed rather than being upgraded by guessing.
 - Firestore `getAfter` rules permit balance creation/update only as part of the matching authenticated item + movement transaction. Direct client balance writes and deletes remain denied.
 - A missing first balance is created at zero only when the item's aggregate is zero and it has no movement history. A managed item with a non-zero aggregate but no balance is rejected and sent to physical verification; the Worker never seeds the balance from that aggregate.
-- Full and partial procurement receipt flows ask staff to confirm the physical destination, persist it with the stable retry intent, and reject legacy inventory items that have not completed location verification.
+- Every full and partial procurement receipt asks staff to confirm an active physical destination, persists it with the stable retry intent, and rejects legacy inventory items that have not completed location verification. Pre-destination pending receipt/delivery intents are preserved but fail closed for Administrator recovery; they are never silently replaced.
 
 The approved legacy opening-balance procedure remains mandatory: physically count each item at its actual location, record counter and date, compare the count with the register and purchase/receipt evidence, document discrepancies and unresolved questions, then obtain Manager/Administrator approval before creating any opening balance.
 
