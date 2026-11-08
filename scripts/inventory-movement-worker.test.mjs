@@ -360,6 +360,37 @@ try {
     assert.equal(verified.writes.length, 0);
   }
 
+  // Managed procurement duplicate retries also require the receipt ledger.
+  {
+    const payload = procurementPayload({ locationId: 'loc_shine centre' });
+    const fingerprintPayload = {
+      id: payload.id, itemId: payload.itemId, type: payload.type, quantity: payload.quantity,
+      countedQuantity: undefined, destination: undefined, reference: payload.reference,
+      reason: payload.reason, sourceType: payload.sourceType, sourceId: payload.sourceId,
+      sourceLineIndex: payload.sourceLineIndex, sourceDeliveryId: undefined, locationId: payload.locationId,
+    };
+    const fingerprint = JSON.stringify(Object.fromEntries(Object.entries(fingerprintPayload).filter(([, value]) => value !== undefined)));
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const existingMovement = {
+      id: payload.id, inventoryItemId: payload.itemId, recordedByUid: 'staff-synthetic',
+      requestFingerprint: fingerprint, sourceType: 'procurementReceipt', sourceId: 'proc-synthetic',
+      sourceLineIndex: 0, locationId: location.id, quantity: payload.quantity,
+    };
+    const item = {
+      ...baseItem(), location: location.name, locationId: location.id, quantityOnHand: 13,
+      lastMovementId: payload.id, movements: [{ id: payload.id }],
+    };
+    const balance = {
+      id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: payload.itemId,
+      locationId: location.id, unit: 'packs', quantity: 13, lastMovementId: payload.id,
+    };
+    const mock = setup({ item, locationDocument: location, balanceDocument: balance, existingMovement });
+    const response = await send(payload);
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /prior procurement receipt ledger is missing/);
+    assert.equal(mock.writes.length, 0);
+  }
+
   // A pre-ledger movement retry must not be reported as complete for a managed item.
   {
     const payload = requestPayload();
