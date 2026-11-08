@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 const projectId = 'demo-shine-inventory-transaction-rules';
 let env: RulesTestEnvironment;
@@ -221,10 +221,7 @@ async function main() {
     await assertFails(applyManagedMovement('staff', { id: 'managed-no-movement', previous: 3, quantity: 1, includeMovement: false }));
     await assertFails(applyManagedMovement('viewer', { id: 'managed-viewer', previous: 3, quantity: 1 }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), { quantity: 99 }));
-    await assertFails((async () => {
-      const db = env.authenticatedContext('manager').firestore();
-      await import('firebase/firestore').then(({ deleteDoc }) => deleteDoc(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre')));
-    })());
+    await assertFails(deleteDoc(doc(managerDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre')));
 
     await seedManagedInventory(10);
     await assertSucceeds(applyManagedMovement('staff', {
