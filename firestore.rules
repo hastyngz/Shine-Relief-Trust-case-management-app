@@ -995,7 +995,6 @@ service cloud.firestore {
         // single-location field is immutable at the database boundary.
         request.resource.data.location == resource.data.location &&
         request.resource.data.get('locationId', '') == resource.data.get('locationId', '') &&
-        request.resource.data.get('locationId', '') == resource.data.get('locationId', '') &&
         isInventoryQuantityPrecisionValid(request.resource.data.unit, request.resource.data.minimumStockLevel) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['unit']) ||
           (resource.data.quantityOnHand == 0 && resource.data.get('movements', []).size() == 0)) &&
