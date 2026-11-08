@@ -274,6 +274,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       quantity: serverMovement.quantity,
       date: serverMovement.date,
       location: serverMovement.location,
+      unit: serverMovement.unit,
       locationId: serverMovement.locationId,
       destination: serverMovement.destination,
       reference: serverMovement.reference,
