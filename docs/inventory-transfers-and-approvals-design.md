@@ -299,3 +299,18 @@ The current single-location movement Worker still reads the immutable legacy ite
 ### Deactivation concurrency requirement
 
 The non-zero-balance deactivation check must be race-safe, not just a query followed by a location update. Before implementing it, all location-balance writers must participate in a shared location-document precondition/version protocol: each stock-changing commit reads the active location document and writes a monotonic activity/version field under its update-time precondition; deactivation reads the same document, confirms no non-zero balances, and updates the location to inactive using that same precondition. If either operation wins first, the other must retry and re-evaluate. Until every receipt, issue, adjustment, transfer and procurement writer follows this protocol, location deactivation must remain unavailable rather than rely on a racy balance scan.
+
+
+## Managed location registry — first implementation slice (2026-11-08)
+
+The first application slice is now on the `Replit` branch:
+
+- Active staff can read the managed `inventoryLocations` registry through the authenticated Worker API.
+- Only active Managers and Administrators can create locations. Names are trimmed and compared case-insensitively; the normalized name forms a deterministic document ID, and the create-only Firestore precondition prevents concurrent duplicate creation.
+- New inventory items must select an active managed location. The item stores both the display label in the legacy `location` field and the canonical `locationId`. Firestore checks that the referenced location exists, is active and has the matching display name; later item edits cannot change either location field.
+- Existing inventory records are not relabelled or assigned location IDs. Historical labels remain intact pending the approved physical count and Manager/Administrator opening-balance sign-off.
+- The location list is cached locally after a successful server read so a device that has loaded the registry can continue selecting those locations for offline item drafts. Firestore remains authoritative when the queued item syncs.
+
+**Deliberate limitation:** location rename/deactivation, per-location balances, movement routing, transfers and opening-balance seeding are not enabled in this slice. Location updates/deletes and client writes to `inventoryLocationBalances` are denied by Firestore rules. Deactivation must remain unavailable until the zero-balance check can be made atomic with every stock writer. The initial approved locations, Shine Centre and Girls House, must be created by a Manager/Administrator through the location manager; they are not silently seeded by a read request.
+
+This is a registry and new-item assignment foundation, not a completed transfer or stock migration workflow. Do not deploy the new Firestore rules until the app release and migration prerequisites have been reviewed together.
