@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { InventoryItem } from '../src/types';
-import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, isValidInventoryDate, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../src/utils/inventory';
+import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, getInventoryStocktakeAdjustment, getLocalDateInputValue, isValidInventoryDate, resolveInventoryLocationForSave, summarizeInventoryExpiry, getInventoryQuantityPrecisionError } from '../src/utils/inventory';
 
 assert.equal(getLocalDateInputValue(new Date(2026, 9, 15, 12)), '2026-10-15');
 assert.equal(isValidInventoryDate('2026-10-15'), true);
@@ -9,6 +9,14 @@ assert.equal(isValidInventoryDate('2026-02-29'), false, 'non-leap February 29 sh
 assert.equal(isValidInventoryDate('2026-02-31'), false, 'impossible dates should be rejected');
 assert.equal(isValidInventoryDate('15/10/2026'), false, 'non-ISO dates should be rejected');
 assert.equal(isValidInventoryDate(''), false);
+
+assert.equal(getInventoryQuantityPrecisionError(4, 'bags'), undefined);
+assert.match(getInventoryQuantityPrecisionError(4.5, 'bags') || '', /whole numbers/);
+assert.equal(getInventoryQuantityPrecisionError(2.5, 'kg'), undefined);
+assert.equal(getInventoryQuantityPrecisionError(2.55, 'litres'), undefined);
+assert.match(getInventoryQuantityPrecisionError(2.555, 'kg') || '', /two decimal places/);
+assert.match(getInventoryQuantityPrecisionError(1, 'cartons') || '', /not recognised/);
+
 
 const generatedInventoryIds = new Set(Array.from({ length: 1000 }, () => createInventoryId('inv')));
 assert.equal(generatedInventoryIds.size, 1000, 'inventory IDs should be unique across a batch');
