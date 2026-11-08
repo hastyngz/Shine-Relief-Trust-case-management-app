@@ -202,11 +202,14 @@ try {
   }
 
   {
-    const mock = setup({ procurementList: {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, procurementList: {
       id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
       items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
     } });
-    const response = await send(procurementPayload());
+    const response = await send(procurementPayload({ locationId: location.id }));
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.movement.sourceType, 'procurementReceipt');
@@ -218,19 +221,22 @@ try {
   }
 
   {
-    const mock = setup({ procurementList: {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, procurementList: {
       id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
       items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
     } });
     const response = await send(procurementPayload({
-      id: 'prcd_12345678_0', quantity: 1, sourceDeliveryId: 'delivery_12345678',
+      id: 'prcd_12345678_0', quantity: 1, sourceDeliveryId: 'delivery_12345678', locationId: location.id,
       reference: 'Delivery delivery_12345678 · DN-SYNTHETIC · procurement proc-synthetic · line 1',
     }));
     const body = await response.json();
     assert.equal(response.status, 200, 'partial deliveries should be accepted when within the outstanding quantity');
     assert.equal(body.movement.sourceDeliveryId, 'delivery_12345678');
-    assert.equal(mock.writes[0].length, 3, 'stock balance, movement, and cumulative procurement receipt must commit atomically');
-    assert.deepEqual(decode(mock.writes[0][2].update.fields.receivedQuantitiesByLine), { line_0: 1 });
+    assert.equal(mock.writes[0].length, 4, 'item aggregate, location balance, movement and cumulative procurement receipt must commit atomically');
+    assert.deepEqual(decode(mock.writes[0][3].update.fields.receivedQuantitiesByLine), { line_0: 1 });
   }
 
   {
