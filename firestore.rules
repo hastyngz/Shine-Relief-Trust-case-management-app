@@ -959,6 +959,9 @@ service cloud.firestore {
         request.resource.data.movements is list &&
         request.resource.data.movements.size() == 0;
       allow update: if isManagerOrStaff() &&
+        // Until the location ledger and transfer workflow are live, the legacy
+        // single-location field is immutable at the database boundary.
+        request.resource.data.location == resource.data.location &&
         isInventoryQuantityPrecisionValid(request.resource.data.unit, request.resource.data.minimumStockLevel) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['unit']) ||
           (resource.data.quantityOnHand == 0 && resource.data.get('movements', []).size() == 0)) &&
