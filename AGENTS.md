@@ -22,7 +22,7 @@ requirements, follow the stricter requirement and explain the conflict.
    by a stale snapshot. Keep the per-record queue and the conflict flow.
 5. Never expose secrets, credentials, tokens, private records or signed storage URLs
    in code, logs, tests, screenshots, commits or reports.
-6. Never claim a check passed unless you ran it. Report skipped or blocked checks.
+6. Never claim a check passed without verifiable output from the person or agent that ran it. The primary coding agent may rely on Manus' exact-commit verification report; it must record the tested SHA, commands, and real results, and must not describe delegated checks as personally run.
 7. Never knowingly leave a feature half-finished or present a partial workflow as complete. Finish the user-facing flow end to end, including persistence, permissions, error/retry states, integration, and regression tests. If a genuine blocker prevents completion, leave the safest coherent state possible, make the unfinished part explicit in the UI or documentation where appropriate, record the exact blocker and next step, and report it plainly. Never fake success, leave dead controls, or hide unfinished work.
 8. The project owner uses no paid services. Do not introduce, enable, or rely on any paid service, subscription, paid API, usage-billed provider, or paid dependency without the owner's explicit approval. Prefer existing infrastructure and genuinely free allowances; verify current limits and do not assume a free tier is unlimited. Never make production functionality depend on a newly introduced paid service.
 
@@ -75,9 +75,11 @@ Load every skill that applies; a task can need several.
 | Visual polish, motion, loading/saving feedback, accessibility, themes | `shine-ui-polish` |
 | Slow screens, re-renders, bundles, images, reads, requests | `shine-performance` |
 
-## Verification
+## Verification and Manus handoff
+The primary agent is responsible for implementation and code review. **Manus is the designated test runner**: do not spend the owner's session re-running routine test suites when Manus can run them. For every meaningful code change, leave a clear handoff for Manus in `AGENT_BOARD.md` naming the exact branch/commit SHA to test, the relevant commands from the matrix below, any additional focused tests, and any manual checks or environmental prerequisites. Ask Manus to report the exact SHA, each command and its real pass/fail/block result, relevant failure output, and whether the workspace was clean. The primary agent must review that report and confirm it refers to the intended commit before calling the change verified. If Manus is unavailable or cannot run a required check, state that plainly; do not invent results or silently omit the check. The primary agent should continue coding/reviewing independent work while tests are delegated.
+
 Run `npm run lint` and the `test:*` scripts for the area changed. Run `npm run build`
-before saying a change is verified.
+before saying a change is verified; Manus runs these commands and reports the evidence unless the owner explicitly asks otherwise.
 
 | Area | Run |
 |---|---|
