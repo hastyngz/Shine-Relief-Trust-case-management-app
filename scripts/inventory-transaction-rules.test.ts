@@ -131,27 +131,34 @@ async function applyManagedMovement(uid: string, options: {
   await batch.commit();
 }
 
-async function applyProcurementMovement(uid: string, options: { id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string } = {}) {
+async function applyProcurementMovement(uid: string, options: {
+  id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string; managed?: boolean;
+} = {}) {
   const id = options.id || 'mov-proc-synthetic';
   const previous = 10;
   const quantity = options.quantity ?? 3;
   const next = previous + quantity;
+  const managed = options.managed !== false;
+  const locationId = managed ? 'loc_shine centre' : undefined;
+  if (managed) await seedManagedInventory(previous);
   const db = env.authenticatedContext(uid).firestore();
   const itemRef = doc(db, 'inventoryItems/item-synthetic');
   const movementRef = doc(db, `inventoryMovements/${id}`);
   const sourceId = options.sourceId || 'proc-synthetic';
   const sourceLineIndex = options.sourceLineIndex ?? 0;
   const movement = {
-    id, inventoryItemId: 'item-synthetic', type: 'Received', quantity, date: '2026-10-26',
-    location: 'Main Office', reference: `Procurement ${sourceId} · line ${sourceLineIndex + 1}`,
+    id, inventoryItemId: 'item-synthetic', unit: 'packs', type: 'Received', quantity, date: '2026-10-26',
+    location: managed ? 'Shine Centre' : 'Main Office', ...(locationId ? { locationId } : {}),
+    reference: `Procurement ${sourceId} · line ${sourceLineIndex + 1}`,
     reason: 'Procurement receipt: synthetic fixture', recordedBy: `Synthetic ${uid}`,
     recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z', previousQuantity: previous, newQuantity: next,
     sourceType: 'procurementReceipt', sourceId, sourceLineIndex,
     ...(options.sourceDeliveryId ? { sourceDeliveryId: options.sourceDeliveryId } : {}),
   };
   const embedded = {
-    id, inventoryItemId: 'item-synthetic', type: movement.type, quantity, date: movement.date,
-    location: movement.location, reference: movement.reference, reason: movement.reason,
+    id, inventoryItemId: 'item-synthetic', unit: movement.unit, type: movement.type, quantity, date: movement.date,
+    location: movement.location, ...(locationId ? { locationId } : {}),
+    reference: movement.reference, reason: movement.reason,
     recordedBy: movement.recordedBy, recordedByUid: uid, createdAt: movement.createdAt,
     previousQuantity: previous, newQuantity: next, sourceType: movement.sourceType, sourceId, sourceLineIndex,
     ...(options.sourceDeliveryId ? { sourceDeliveryId: options.sourceDeliveryId } : {}),
@@ -162,6 +169,11 @@ async function applyProcurementMovement(uid: string, options: { id?: string; sou
     updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
   });
   batch.set(movementRef, movement);
+  if (managed) {
+    batch.update(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), {
+      quantity: next, updatedAt: movement.createdAt, updatedByUid: uid, lastMovementId: id,
+    });
+  }
   const procurementRef = doc(db, 'procurementLists/' + sourceId);
   const receivedMap: Record<string, number> = {};
   receivedMap['line_' + sourceLineIndex] = quantity;
@@ -283,6 +295,10 @@ async function main() {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
     });
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'legacy-proc-no-destination', managed: false }));
     await assertSucceeds(applyProcurementMovement('staff'));
 
     await env.withSecurityRulesDisabled(async (context) => {
