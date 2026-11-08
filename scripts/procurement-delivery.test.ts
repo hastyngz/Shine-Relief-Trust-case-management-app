@@ -20,6 +20,23 @@ function poster(payload: Record<string, unknown>, duplicate = false) {
   return { ok: true as const, duplicate, movement: { id: payload.id, inventoryItemId: payload.itemId, quantity: payload.quantity, sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex, locationId: payload.locationId } };
 }
 async function main() {
+  {
+    const legacyStorage = new MemoryStorage();
+    legacyStorage.values.set('shine.procurement-delivery.v1:synthetic-staff:PRC-SYNTHETIC', JSON.stringify({
+      version: 1, uid: 'synthetic-staff', procurementListId: 'PRC-SYNTHETIC', deliveryId: id,
+      date: '2026-10-29', reference: 'DN-OLD', quantities: [4, 0],
+      choices: [{ itemIndex: 0, inventoryItemId: 'stock-books' }, { itemIndex: 1, inventoryItemId: null }],
+    }));
+    let legacyCalls = 0;
+    assert.equal(readProcurementDeliveryIntent(legacyStorage, 'synthetic-staff', list.id), null);
+    await assert.rejects(postProcurementDeliveryMovements({
+      uid: 'synthetic-staff', list, deliveryId: id, date: '2026-10-29', reference: 'DN-OLD',
+      quantities: [4, 0], choices, inventoryItems: inventory, storage: legacyStorage,
+      postMovement: async (payload) => { legacyCalls += 1; return poster(payload); },
+    }), /Saved delivery retry details are invalid/);
+    assert.equal(legacyCalls, 0, 'a pre-destination delivery intent must be paused, never silently replaced');
+  }
+
   const storage = new MemoryStorage();
   const calls: Record<string, unknown>[] = [];
   let interrupt = true;
