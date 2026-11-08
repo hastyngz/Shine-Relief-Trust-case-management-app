@@ -140,6 +140,7 @@ function validateInventoryMovementPayload(payload) {
   for (const key of ['destination', 'reference']) {
     if (payload[key] !== undefined && (typeof payload[key] !== 'string' || payload[key].length > 250)) throw new ApiError(`The ${key} field is too long or invalid.`);
   }
+  if (payload.locationId !== undefined && (typeof payload.locationId !== 'string' || !/^loc_[^/]{1,84}$/.test(payload.locationId) || /[\u0000-\u001f\u007f]/.test(payload.locationId))) throw new ApiError('A valid managed inventory location is required.');
   if (payload.sourceType !== undefined && payload.sourceType !== 'procurementReceipt') throw new ApiError('This stock movement source type is not supported.');
   if (payload.sourceType === undefined && (payload.sourceId !== undefined || payload.sourceLineIndex !== undefined)) {
     throw new ApiError('Procurement source fields require a supported source type.');
@@ -175,6 +176,7 @@ function validateInventoryMovementPayload(payload) {
     sourceId: payload.sourceId,
     sourceLineIndex: payload.sourceLineIndex,
     sourceDeliveryId: payload.sourceDeliveryId,
+    locationId: payload.locationId,
   };
 }
 
@@ -184,6 +186,11 @@ function normalizeInventoryLocationName(value) {
 
 function inventoryLocationDocumentId(normalizedName) {
   return `loc_${normalizedName}`;
+}
+
+function inventoryLocationBalanceDocumentId(itemId, locationId) {
+  const hex = (value) => Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `bal_${hex(itemId)}_${hex(locationId)}`;
 }
 
 async function listInventoryLocations(idToken) {
@@ -296,6 +303,30 @@ async function handleInventoryMovement(request, staff, idToken) {
     const itemDocument = await firestoreGet(itemPath, idToken);
     if (!itemDocument) throw new ApiError('The inventory item was not found in the synced register. Sync and refresh before retrying.', 404);
     const item = decodeFirestoreFields(itemDocument.fields);
+    const isManagedItem = typeof item.locationId === 'string' && item.locationId.length > 0;
+    let managedLocation;
+    let managedBalanceDocument;
+    let managedBalance;
+    let managedBalanceId;
+    if (isManagedItem) {
+      if (payload.locationId !== item.locationId) {
+        throw new ApiError('This stock movement must use the item’s registered location. Refresh the item and retry.', 409);
+      }
+      const locationDocument = await firestoreGet(`inventoryLocations/${encodeURIComponent(item.locationId)}`, idToken);
+      if (!locationDocument) throw new ApiError('The item’s managed inventory location no longer exists. Ask a Manager to review it.', 409);
+      managedLocation = decodeFirestoreFields(locationDocument.fields);
+      if (managedLocation.id !== item.locationId || managedLocation.isActive !== true || managedLocation.name !== item.location) {
+        throw new ApiError('The item’s registered inventory location is inactive or no longer matches its location record.', 409);
+      }
+      managedBalanceId = inventoryLocationBalanceDocumentId(payload.itemId, item.locationId);
+      managedBalanceDocument = await firestoreGet(`inventoryLocationBalances/${encodeURIComponent(managedBalanceId)}`, idToken);
+      managedBalance = managedBalanceDocument ? decodeFirestoreFields(managedBalanceDocument.fields) : undefined;
+      if (payload.sourceType === 'procurementReceipt' && payload.locationId !== item.locationId) {
+        throw new ApiError('Choose the item’s active destination location before receiving procurement stock.', 409);
+      }
+    } else if (payload.locationId !== undefined) {
+      throw new ApiError('This legacy stock item has no verified managed location. Do not assign one during a movement.', 409);
+    }
     const unitPrecisionError = getInventoryQuantityPrecisionError(
       payload.type === 'Adjustment' ? payload.countedQuantity : payload.quantity,
       item.unit,
@@ -305,6 +336,18 @@ async function handleInventoryMovement(request, staff, idToken) {
     if (!Number.isFinite(previousQuantity) || previousQuantity < 0 ||
         getInventoryQuantityPrecisionError(previousQuantity, item.unit)) {
       throw new ApiError('The inventory record or its recorded quantity precision is invalid. Review it before recording a movement.', 409);
+    }
+    if (isManagedItem) {
+      if (managedBalance) {
+        if (managedBalance.id !== managedBalanceId || managedBalance.inventoryItemId !== payload.itemId ||
+            managedBalance.locationId !== item.locationId || managedBalance.unit !== item.unit ||
+            managedBalance.quantity !== previousQuantity ||
+            getInventoryQuantityPrecisionError(managedBalance.quantity, item.unit)) {
+          throw new ApiError('The location balance does not match the inventory register. Stop and request a stock reconciliation before moving stock.', 409);
+        }
+      } else if (previousQuantity !== 0 || (Array.isArray(item.movements) && item.movements.length > 0) || item.lastMovementId) {
+        throw new ApiError('This managed item has stock but no verified location balance. Complete physical stock verification and Manager/Administrator opening-balance approval first.', 409);
+      }
     }
     if (procurementLine && procurementLine.unit !== item.unit) {
       throw new ApiError('The procurement and inventory units do not match. Convert the quantity explicitly before posting.', 409);
@@ -331,6 +374,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       quantity: movementQuantity,
       date: payload.date,
       location: String(item.location || ''),
+      ...(isManagedItem ? { locationId: item.locationId } : {}),
       ...(payload.destination ? { destination: payload.destination } : {}),
       ...(payload.reference ? { reference: payload.reference } : {}),
       ...(payload.sourceType ? { sourceType: payload.sourceType, sourceId: payload.sourceId, sourceLineIndex: payload.sourceLineIndex } : {}),
@@ -350,6 +394,7 @@ async function handleInventoryMovement(request, staff, idToken) {
       quantity: movement.quantity,
       date: movement.date,
       location: movement.location,
+      ...(movement.locationId ? { locationId: movement.locationId } : {}),
       ...(movement.destination ? { destination: movement.destination } : {}),
       ...(movement.reference ? { reference: movement.reference } : {}),
       ...(movement.sourceType ? { sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineIndex: movement.sourceLineIndex } : {}),
@@ -387,6 +432,28 @@ async function handleInventoryMovement(request, staff, idToken) {
         currentDocument: { exists: false },
       },
     ];
+    if (isManagedItem) {
+      const balanceNow = {
+        id: managedBalanceId,
+        inventoryItemId: payload.itemId,
+        locationId: item.locationId,
+        unit: item.unit,
+        quantity: nextQuantity,
+        ...(managedBalance ? {} : { createdAt: now, createdByUid: staff.uid }),
+        updatedAt: now,
+        updatedByUid: staff.uid,
+        lastMovementId: payload.id,
+      };
+      const balanceFields = Object.fromEntries(Object.entries(balanceNow).map(([key, value]) => [key, encodeFirestoreValue(value)]));
+      writes.push({
+        update: {
+          name: `projects/shine-relief-trust-cms/databases/(default)/documents/inventoryLocationBalances/${encodeURIComponent(managedBalanceId)}`,
+          fields: balanceFields,
+        },
+        updateMask: { fieldPaths: Object.keys(balanceFields) },
+        currentDocument: managedBalanceDocument ? { updateTime: managedBalanceDocument.updateTime } : { exists: false },
+      });
+    }
     if (payload.sourceType === 'procurementReceipt' && procurementDocumentForReceipt && procurementForReceipt) {
       const receivedQuantitiesByLine = procurementForReceipt.receivedQuantitiesByLine && typeof procurementForReceipt.receivedQuantitiesByLine === 'object'
         ? { ...procurementForReceipt.receivedQuantitiesByLine }
