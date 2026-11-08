@@ -561,7 +561,11 @@ async function handleRequest(request, env) {
 
   if (url.pathname.startsWith('/api/ai/')) return handleAIRequest(request, env, staff);
 
-  if (url.pathname === '/api/inventory/locations' && ['GET', 'POST'].includes(request.method)) {\n    return handleInventoryLocations(request, staff, idToken);\n  }\n\n  if (url.pathname === '/api/inventory/movement' && request.method === 'POST') {
+  if (url.pathname === '/api/inventory/locations' && ['GET', 'POST'].includes(request.method)) {
+    return handleInventoryLocations(request, staff, idToken);
+  }
+
+  if (url.pathname === '/api/inventory/movement' && request.method === 'POST') {
     return handleInventoryMovement(request, staff, idToken);
   }
 
