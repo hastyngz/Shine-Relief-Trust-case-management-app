@@ -115,6 +115,8 @@ service cloud.firestore {
         movement.inventoryItemId == itemId &&
         movement.id == movementId &&
         movement.recordedByUid == request.auth.uid &&
+        (!resource.data.keys().hasAny(['locationId']) ||
+          (movement.locationId == resource.data.locationId && embedded.locationId == resource.data.locationId)) &&
         movement.previousQuantity == resource.data.quantityOnHand &&
         movement.newQuantity == request.resource.data.quantityOnHand &&
         embedded.type == movement.type &&
@@ -153,6 +155,72 @@ service cloud.firestore {
         request.resource.data.movements.hasAll(resource.data.get('movements', [])) &&
         request.resource.data.movements[request.resource.data.movements.size() - 1].id == movementId &&
         inventoryMovementMatchesItem(itemId, movementId);
+    }
+
+    function inventoryBalanceMovementMatches(balanceId, itemId, locationId, movementId) {
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let locationPath = /databases/$(database)/documents/inventoryLocations/$(locationId);
+      let itemAfter = getAfter(itemPath).data;
+      let movement = getAfter(movementPath).data;
+      return isStaffActive() &&
+        itemId is string && locationId is string && movementId is string &&
+        balanceId == 'bal_' + string(itemId.size()) + '_' + itemId + '_' + locationId &&
+        existsAfter(itemPath) && existsAfter(movementPath) && exists(locationPath) &&
+        get(locationPath).data.isActive == true &&
+        itemAfter.locationId == locationId &&
+        itemAfter.lastMovementId == movementId &&
+        itemAfter.quantityOnHand == request.resource.data.quantity &&
+        itemAfter.movements is list && itemAfter.movements.size() > 0 &&
+        itemAfter.movements[itemAfter.movements.size() - 1].id == movementId &&
+        movement.id == movementId &&
+        movement.inventoryItemId == itemId &&
+        movement.locationId == locationId &&
+        movement.recordedByUid == request.auth.uid &&
+        movement.newQuantity == request.resource.data.quantity &&
+        movement.newQuantity is number &&
+        movement.previousQuantity is number &&
+        movement.quantity is number &&
+        movement.unit == request.resource.data.unit;
+    }
+
+    function isValidInventoryLocationBalanceCreate(balanceId) {
+      let itemId = request.resource.data.inventoryItemId;
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let movementId = request.resource.data.lastMovementId;
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      return inventoryBalanceMovementMatches(balanceId, itemId, request.resource.data.locationId, movementId) &&
+        request.resource.data.id == balanceId &&
+        request.resource.data.unit is string &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity >= 0 &&
+        isInventoryQuantityPrecisionValid(request.resource.data.unit, request.resource.data.quantity) &&
+        request.resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.createdAt == getAfter(movementPath).data.createdAt &&
+        request.resource.data.updatedAt == getAfter(movementPath).data.createdAt &&
+        get(itemPath).data.quantityOnHand == 0 &&
+        get(itemPath).data.get('movements', []).size() == 0 &&
+        getAfter(movementPath).data.previousQuantity == 0;
+    }
+
+    function isValidInventoryLocationBalanceUpdate(balanceId) {
+      let itemId = request.resource.data.inventoryItemId;
+      let movementId = request.resource.data.lastMovementId;
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return inventoryBalanceMovementMatches(balanceId, itemId, request.resource.data.locationId, movementId) &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.inventoryItemId == resource.data.inventoryItemId &&
+        request.resource.data.locationId == resource.data.locationId &&
+        request.resource.data.unit == resource.data.unit &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity >= 0 &&
+        isInventoryQuantityPrecisionValid(resource.data.unit, request.resource.data.quantity) &&
+        resource.data.quantity == getAfter(movementPath).data.previousQuantity &&
+        changed.hasOnly(['quantity', 'updatedAt', 'updatedByUid', 'lastMovementId']) &&
+        request.resource.data.updatedByUid == request.auth.uid &&
+        request.resource.data.updatedAt == getAfter(movementPath).data.createdAt;
     }
 
     function procurementOutstandingQuantity(procurementPath, lineIndex) {
@@ -241,6 +309,10 @@ service cloud.firestore {
         request.resource.data.quantity >= 0 &&
         (!request.resource.data.keys().hasAny(['sourceType']) || isValidProcurementReceiptSource(itemId)) &&
         exists(itemPath) &&
+        (!get(itemPath).data.keys().hasAny(['locationId']) ||
+          (request.resource.data.locationId == get(itemPath).data.locationId &&
+           exists(/databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId)) &&
+           get(/databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId)).data.isActive == true)) &&
         isInventoryQuantityPrecisionValid(get(itemPath).data.unit, request.resource.data.previousQuantity) &&
         isInventoryQuantityPrecisionValid(get(itemPath).data.unit, request.resource.data.newQuantity) &&
         isInventoryQuantityPrecisionValid(get(itemPath).data.unit, request.resource.data.quantity) &&
@@ -971,7 +1043,9 @@ service cloud.firestore {
 
     match /inventoryLocationBalances/{balanceId} {
       allow read: if isStaffActive();
-      allow create, update, delete: if false;
+      allow create: if isValidInventoryLocationBalanceCreate(balanceId);
+      allow update: if isValidInventoryLocationBalanceUpdate(balanceId);
+      allow delete: if false;
     }
 
     match /inventoryItems/{id} {
