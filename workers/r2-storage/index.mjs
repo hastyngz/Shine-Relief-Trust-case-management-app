@@ -179,7 +179,7 @@ function validateInventoryMovementPayload(payload) {
 }
 
 function normalizeInventoryLocationName(value) {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en');
+  return value.trim().toLowerCase();
 }
 
 function inventoryLocationDocumentId(normalizedName) {
