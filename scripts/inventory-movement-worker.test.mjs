@@ -340,7 +340,7 @@ try {
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
     const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
-    const balance = { id: 'bal-fixture', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance });
     const response = await send(requestPayload({ type: 'Issued', quantity: 2, locationId: location.id }));
     const body = await response.json();
