@@ -270,3 +270,16 @@ The Trust approves the following quantity standard for inventory records and sto
 - Validate precision and unit consistency at the trusted server boundary as well as in the interface. Client-side validation alone is not authoritative.
 
 This closes the quantity-precision design decision. It does not authorize stock migration, opening-balance creation, transfer activation or production changes. Existing stock remains subject to the approved physical count and Manager/Administrator sign-off process above.
+
+### Quantity precision enforcement delivered on the Replit branch (2026-11-08)
+
+- The Inventory UI validates receipt/issue quantities, stocktake counts and minimum stock levels against the item's registered unit, and uses whole-number or two-decimal input steps as appropriate.
+- The authenticated inventory Worker independently validates movement quantities and resulting balances before committing.
+- Firestore rules enforce the same precision on direct client movement writes and stock balances, and validate minimum stock levels on item creation/update. This prevents bypassing the Worker-only interface.
+- Countable-unit names are recognized in singular/plural forms for bags, pieces, bottles, boxes, packs, trays and units. Measured-unit aliases include kg/kilogram(s), litre(s), liter(s) and L.
+- Unrecognized units fail closed and require Administrator review; no equivalence or conversion is inferred.
+- An item's unit cannot be relabelled through ordinary edits once it has a non-zero balance or movement history. The UI and Firestore rules both enforce this guard.
+
+Automated verification: Worker movement tests, Firestore inventory transaction rules tests, inventory helper tests, TypeScript check, full application build and offline end-to-end tests all passed in GitHub Actions run `42454689090` at commit `dc0d52a6fd687607bfa01942af88b22656092cef`.
+
+This is a bounded quantity-validation slice, not the location-ledger migration. The live/exported inventory still needs a unit audit before this rules change is deployed; legacy or custom unit labels outside the recognized set will be blocked from stock movements until reviewed. No production Firestore rules, Worker deployment, stock data, opening balances or migration were changed.
