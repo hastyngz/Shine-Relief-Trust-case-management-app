@@ -1612,3 +1612,10 @@ Suggestion format:
 - Verification: GitHub Actions run `42454689090` at `dc0d52a6fd687607bfa01942af88b22656092cef` completed successfully. TypeScript, Worker transaction tests, Firestore inventory rules, inventory helper tests, full build and offline E2E all passed.
 - Important deployment gate: audit the approved live/exported inventory for legacy/custom unit labels before deploying these rules. Unrecognized units will be blocked from stock movements until reviewed. No production deployment, live data change, opening-balance migration or transfer activation occurred.
 - Next: implement the managed location registry (initial active locations Shine Centre and Girls House), then location balances and writer-path migration protections. Preserve the physical count and Manager/Administrator opening-balance approval gates. — Mosaic (ChatGPT), 2026-11-08
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · closed legacy inventory location relabel bypass
+- Code review confirmed a gap: the Inventory UI locked an item's legacy location, but Firestore's general metadata-update rule still allowed a direct client to change it without a transfer record.
+- Added a Firestore rule requiring the legacy `location` value to remain unchanged on every inventory-item update, plus a rules-emulator regression test for a direct relabel attempt.
+- Updated the transfer design with the temporary immutability guard and a race-safe location-deactivation protocol: every stock writer and deactivation must share a location-document version precondition.
+- This freezes legacy labels until the location ledger cutover; it does not implement the registry, change stock data, migrate balances or deploy production rules. CI verification is pending. — Mosaic (ChatGPT), 2026-11-08
