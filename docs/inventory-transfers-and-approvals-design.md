@@ -176,7 +176,6 @@ Until these decisions and server/rules/offline protections are implemented and i
 
 
 ### Confirmed procurement receipt destination (2026-11-07)
-
 - Every procurement stock receipt must identify an explicit active destination location; there is no implicit default location.
 - The receiving user selects the location as part of recording the receipt.
 - Server-side receipt processing must validate the location is active and atomically update the location balance, compatibility aggregate quantity, immutable movement record and procurement receipt ledger.
@@ -259,3 +258,15 @@ The Trust approves a physical stock verification process before legacy quantitie
 5. An active Manager or Administrator reviews the evidence and explicitly approves the opening balance before migration.
 
 Items with unresolved quantity or location evidence remain excluded from automatic seeding until formally resolved and signed off. Preserve the original register values and supporting evidence for the audit trail. This is a migration-control policy only: no stock has been counted, approved, backfilled or changed, and no production migration is authorized.
+
+### Confirmed inventory quantity precision and unit consistency (2026-11-08)
+
+The Trust approves the following quantity standard for inventory records and stock operations:
+
+- Countable items (including bags, pieces, bottles, boxes, packs and trays) use whole-number quantities only.
+- Measured stock recorded in kilograms or litres may use up to two decimal places (for example, 2.50 kg or 1.25 L).
+- Each inventory item has one registered unit. Receipts, issues, returns, adjustments, stocktakes, transfers and per-location balances must use that registered unit; incompatible units cannot be combined or transferred.
+- The system must not silently convert between units or infer an equivalence. Any future conversion support requires an explicit, reviewed conversion rule and must preserve the source quantity and unit in the movement history.
+- Validate precision and unit consistency at the trusted server boundary as well as in the interface. Client-side validation alone is not authoritative.
+
+This closes the quantity-precision design decision. It does not authorize stock migration, opening-balance creation, transfer activation or production changes. Existing stock remains subject to the approved physical count and Manager/Administrator sign-off process above.
