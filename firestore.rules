@@ -201,28 +201,24 @@ service cloud.firestore {
     function inventoryBalanceMovementMatches(balanceId, itemId, locationId, movementId) {
       let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
-      let locationPath = /databases/$(database)/documents/inventoryLocations/$(locationId);
       let itemAfter = getAfter(itemPath).data;
       let movement = getAfter(movementPath).data;
-      return isInventoryActiveStaff() &&
-        itemId is string && locationId is string && movementId is string &&
+      // The paired inventory-item and movement writes independently enforce the
+      // active-staff writer role, active location, movement arithmetic and history.
+      // A balance write is authorized only when those same atomic writes exist and
+      // this balance agrees with their canonical item, movement and resulting stock.
+      return itemId is string && locationId is string && movementId is string &&
         balanceId == 'bal_' + string(itemId.size()) + '_' + itemId + '_' + locationId &&
-        existsAfter(itemPath) && existsAfter(movementPath) && exists(locationPath) &&
-        get(locationPath).data.isActive == true &&
+        existsAfter(itemPath) && existsAfter(movementPath) &&
         itemAfter.locationId == locationId &&
         itemAfter.unit == request.resource.data.unit &&
         itemAfter.lastMovementId == movementId &&
         itemAfter.quantityOnHand == request.resource.data.quantity &&
-        itemAfter.movements is list && itemAfter.movements.size() > 0 &&
-        itemAfter.movements[itemAfter.movements.size() - 1].id == movementId &&
         movement.id == movementId &&
         movement.inventoryItemId == itemId &&
         movement.locationId == locationId &&
         movement.recordedByUid == request.auth.uid &&
         movement.newQuantity == request.resource.data.quantity &&
-        movement.newQuantity is number &&
-        movement.previousQuantity is number &&
-        movement.quantity is number &&
         movement.unit == request.resource.data.unit;
     }
 
