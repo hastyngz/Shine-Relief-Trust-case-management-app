@@ -56,9 +56,10 @@ import { calculateBudgetForecast } from '../../services/intelligenceService';
 import { filterBudgetLines, filterBudgetLinesByYear } from '../../services/financialCalculations';
 import { LEGACY_PROGRAMMES, PROGRAMMES, PROGRAMME_BY_ID, ProgrammeId } from '../../data/programmes';
 import type { QualityIssue } from '../../services/qualityRules';
+import type { InventoryLocation } from '../../types';
 import { PlanningModals } from './PlanningModals';
 import { checkProcurementApproval, DEFAULT_PROCUREMENT_QUOTE_THRESHOLD_MWK, normalizeProcurementSupplierIdentity, selectProcurementQuote } from '../../services/procurementWorkflow';
-import { postInventoryMovement } from '../../services/r2StorageClient';
+import { getInventoryLocations, postInventoryMovement } from '../../services/r2StorageClient';
 import { filterProcurementLists, type ProcurementStageFilter } from '../../utils/procurementFiltering';
 import { buildSupplierActivityIndex } from '../../utils/supplierActivity';
 import {
@@ -109,6 +110,9 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const [procurementStatusFilter, setProcurementStatusFilter] = useState<'All' | ProcurementList['status']>('All');
   const [procurementStageFilter, setProcurementStageFilter] = useState<ProcurementStageFilter>('All');
   const [receiptLineChoices, setReceiptLineChoices] = useState<Record<string, string>>({});
+  const [receiptLocationChoices, setReceiptLocationChoices] = useState<Record<string, string>>({});
+  const [managedInventoryLocations, setManagedInventoryLocations] = useState<InventoryLocation[]>([]);
+  const [inventoryLocationLoadError, setInventoryLocationLoadError] = useState('');
   const [receiptPosting, setReceiptPosting] = useState<Record<string, boolean>>({});
   const [receiptPostingStatus, setReceiptPostingStatus] = useState<Record<string, string>>({});
   const [deliveryDrafts, setDeliveryDrafts] = useState<Record<string, { id: string; date: string; reference: string; quantities: string[] }>>({});
@@ -119,6 +123,19 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
   const focusedQualityKey = useRef('');
   const deliveryLocks = useRef(new Set<string>());
   const paymentLocks = useRef(new Set<string>());
+
+  useEffect(() => {
+    let active = true;
+    void getInventoryLocations().then((locations) => {
+      if (!active) return;
+      setManagedInventoryLocations(locations.filter((location) => location.isActive));
+      setInventoryLocationLoadError('');
+    }).catch((error) => {
+      if (!active) return;
+      setInventoryLocationLoadError(error instanceof Error ? error.message : 'Managed store locations could not be loaded.');
+    });
+    return () => { active = false; };
+  }, [staffProfile?.uid]);
 
   useEffect(() => {
     if (!initialProgrammeCreate) return;
@@ -212,13 +229,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         const value = persisted
           ? (persisted.inventoryItemId || NOT_INVENTORY_TRACKED)
           : (receiptLineChoices[key] || '');
-        return { itemIndex, inventoryItemId: value === NOT_INVENTORY_TRACKED ? null : value || null };
+        const inventoryItemId = value === NOT_INVENTORY_TRACKED ? null : value || null;
+        const locationId = savedIntent?.lines.find((line) => line.itemIndex === itemIndex)?.locationId || receiptLocationChoices[key] || '';
+        return { itemIndex, inventoryItemId, locationId: inventoryItemId ? locationId || null : null };
       });
       if (choices.some((choice, index) => !choice.inventoryItemId &&
           !savedIntent?.lines.some((line) => line.itemIndex === index && line.inventoryItemId === null) &&
           receiptLineChoices[`${list.id}:${index}`] !== NOT_INVENTORY_TRACKED)) {
         throw new Error('Choose an inventory item or explicitly mark each line as not inventory tracked.');
       }
+      if (choices.some((choice) => choice.inventoryItemId && !choice.locationId)) throw new Error('Choose the physical destination for every inventory-tracked procurement line before confirming receipt.');
       if (!staffProfile?.uid || typeof window === 'undefined') throw new Error('The signed-in staff identity is unavailable; no inventory movement was submitted.');
       const result = await postProcurementReceiptMovements({
         uid: staffProfile.uid,
@@ -261,13 +281,16 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
         const key = `${list.id}:${itemIndex}`;
         const persisted = pending?.choices.find((choice) => choice.itemIndex === itemIndex);
         const value = persisted ? (persisted.inventoryItemId || NOT_INVENTORY_TRACKED) : (receiptLineChoices[key] || '');
-        return { itemIndex, inventoryItemId: value === NOT_INVENTORY_TRACKED ? null : value || null };
+        const inventoryItemId = value === NOT_INVENTORY_TRACKED ? null : value || null;
+        const locationId = persisted?.locationId || receiptLocationChoices[key] || '';
+        return { itemIndex, inventoryItemId, locationId: inventoryItemId ? locationId || null : null };
       });
       if (choices.some((choice, index) => quantities[index] > 0 && !choice.inventoryItemId &&
         !pending?.choices.some((line) => line.itemIndex === index && line.inventoryItemId === null) &&
         receiptLineChoices[`${list.id}:${index}`] !== NOT_INVENTORY_TRACKED)) {
         throw new Error('Choose an inventory item or explicitly mark every received line as not inventory tracked.');
       }
+      if (choices.some((choice, index) => quantities[index] > 0 && choice.inventoryItemId && !choice.locationId)) throw new Error('Choose the physical destination for every received inventory line before recording the delivery.');
       if (!deliveryId) throw new Error('Start a new delivery attempt before recording quantities.');
       const result = await postProcurementDeliveryMovements({
         uid: staffProfile.uid, list, deliveryId, date, reference, quantities, choices,
@@ -1636,6 +1659,8 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                           : savedDeliveryLine
                             ? (savedDeliveryLine.inventoryItemId || NOT_INVENTORY_TRACKED)
                             : receiptLineChoices[receiptChoiceKey] ?? '';
+                        const receiptStockItem = (db.inventoryItems || []).find((stockItem) => stockItem.id === receiptChoice);
+                        const receiptLocationChoice = savedReceiptLine?.locationId || savedDeliveryLine?.locationId || receiptLocationChoices[receiptChoiceKey] || '';
                         return (
                           <div key={`${list.id}-${item.itemNumber || index}`} className="grid gap-2 p-4 lg:grid-cols-[1.2fr_0.6fr_0.9fr_1fr]">
                             <div className="min-w-0">
@@ -1657,11 +1682,31 @@ export const BudgetsAndWorkplansView: React.FC<BudgetsAndWorkplansViewProps> = (
                                     <option value="">Choose before confirming receipt</option>
                                     <option value={NOT_INVENTORY_TRACKED}>Not inventory tracked</option>
                                     {(db.inventoryItems || []).map((stockItem) => (
-                                      <option key={stockItem.id} value={stockItem.id} disabled={stockItem.unit !== item.unit}>{stockItem.stockCode} · {stockItem.name} ({stockItem.unit}){stockItem.unit !== item.unit ? ' · unit mismatch' : ''}</option>
+                                      <option key={stockItem.id} value={stockItem.id} disabled={stockItem.unit !== item.unit || !stockItem.locationId}>{stockItem.stockCode} · {stockItem.name} ({stockItem.unit}){stockItem.unit !== item.unit ? ' · unit mismatch' : !stockItem.locationId ? ' · location verification required' : ''}</option>
                                     ))}
                                   </select>
                                   <span className="mt-1 block font-normal text-stone-500">For partial deliveries, link every received line to an inventory item. “Not inventory tracked” is available for a single full-receipt acknowledgement only.</span>
                                   {savedReceiptIntent && <span className="mt-1 block font-normal text-amber-900">Saved receipt retry intent; keep this selection unchanged until it completes.</span>}
+                                </label>
+                              )}
+                              {receiptChoice && receiptChoice !== NOT_INVENTORY_TRACKED && (
+                                <label className="mt-2 block text-[11px] font-semibold text-stone-700">
+                                  Physical destination for received stock
+                                  <select
+                                    aria-label={`Physical destination for ${item.description}`}
+                                    className="field mt-1 w-full"
+                                    disabled={!canEdit || Boolean(savedReceiptIntent) || Boolean(savedDeliveryIntent) || Boolean(receiptPosting[list.id]) || Boolean(deliveryPosting[list.id])}
+                                    value={receiptLocationChoice}
+                                    onChange={(event) => setReceiptLocationChoices((current) => ({ ...current, [receiptChoiceKey]: event.target.value }))}
+                                  >
+                                    <option value="">Choose the physical destination</option>
+                                    {managedInventoryLocations.filter((location) => location.id === receiptStockItem?.locationId).map((location) => (
+                                      <option key={location.id} value={location.id}>{location.name}</option>
+                                    ))}
+                                  </select>
+                                  {!receiptStockItem?.locationId && <span className="mt-1 block font-normal text-amber-900">This stock item has not completed physical location verification and cannot receive managed procurement stock.</span>}
+                                  {inventoryLocationLoadError && <span className="mt-1 block font-normal text-rose-800">{inventoryLocationLoadError} Refresh the page when online before posting.</span>}
+                                  <span className="mt-1 block font-normal text-stone-500">Confirm where the supplier’s goods are physically being stored. The destination is locked into the receipt retry record.</span>
                                 </label>
                               )}
                               {list.status === 'purchased' && !list.receivedAt && (
