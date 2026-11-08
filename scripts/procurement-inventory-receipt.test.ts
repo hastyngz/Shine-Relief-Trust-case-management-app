@@ -96,7 +96,7 @@ async function main() {
     const storage = new MemoryStorage();
     let calls = 0;
     await assert.rejects(postProcurementReceiptMovements({
-      uid: 'staff-a', list: baseList(), choices: [{ itemIndex: 0, inventoryItemId: 'stock-books' }], inventoryItems: inventoryItems(), storage,
+      uid: 'staff-a', list: baseList(), choices: [{ itemIndex: 0, inventoryItemId: 'stock-books', locationId: 'loc_shine centre' }], inventoryItems: inventoryItems(), storage,
       postMovement: async () => { calls += 1; return okResult({}); },
     }), /every procurement line/);
     await assert.rejects(postProcurementReceiptMovements({
