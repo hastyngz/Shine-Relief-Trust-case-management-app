@@ -260,27 +260,12 @@ service cloud.firestore {
       return procurement.items[lineIndex].quantity - alreadyReceived;
     }
 
-    function isValidProcurementReceiptLedgerUpdate(id) {
-      let movementId = request.resource.data.get('lastReceiptMovementId', '');
+    function procurementReceiptMovementMatches(id, movementId) {
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
       let movement = getAfter(movementPath).data;
       let itemPath = /databases/$(database)/documents/inventoryItems/$(movement.inventoryItemId);
       let itemAfter = getAfter(itemPath).data;
-      let lineIndex = movement.sourceLineIndex;
-      let oldMap = resource.data.get('receivedQuantitiesByLine', {});
-      let oldArray = resource.data.get('receivedQuantities', []);
-      let newMap = request.resource.data.get('receivedQuantitiesByLine', {});
-      let priorLedger = oldMap.get('line_' + string(lineIndex), oldMap.get(string(lineIndex), 0));
-      let legacy = oldArray.size() > lineIndex ? oldArray[lineIndex] : 0;
-      let prior = priorLedger > legacy ? priorLedger : legacy;
-      return resource.data.id == id &&
-        resource.data.status == 'purchased' &&
-        request.resource.data.status == resource.data.status &&
-        request.resource.data.diff(resource.data).affectedKeys().hasAll(['receivedQuantitiesByLine', 'lastReceiptMovementId']) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedQuantitiesByLine', 'lastReceiptMovementId', 'updatedAt', 'updatedBy']) &&
-        newMap.diff(oldMap).affectedKeys().hasOnly(['line_' + string(lineIndex), string(lineIndex)]) &&
-        movementId is string && movementId.size() > 0 &&
-        existsAfter(movementPath) &&
+      return existsAfter(movementPath) &&
         existsAfter(itemPath) &&
         inventoryManagedBalanceMatches(movement.inventoryItemId, itemAfter, movementId, request.auth.uid) &&
         movement.id == movementId &&
@@ -288,11 +273,37 @@ service cloud.firestore {
         movement.sourceId == id &&
         movement.sourceLineIndex is int &&
         movement.sourceLineIndex >= 0 &&
-        movement.recordedByUid == request.auth.uid &&
-        newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0)) == prior + movement.quantity &&
+        movement.recordedByUid == request.auth.uid;
+    }
+
+    function procurementReceiptLedgerDeltaMatches(lineIndex, movementQuantity) {
+      let oldMap = resource.data.get('receivedQuantitiesByLine', {});
+      let oldArray = resource.data.get('receivedQuantities', []);
+      let newMap = request.resource.data.get('receivedQuantitiesByLine', {});
+      let oldLedger = oldMap.get('line_' + string(lineIndex), oldMap.get(string(lineIndex), 0));
+      let oldLegacy = oldArray.size() > lineIndex ? oldArray[lineIndex] : 0;
+      let prior = oldLedger > oldLegacy ? oldLedger : oldLegacy;
+      let newValue = newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0));
+      return newMap.diff(oldMap).affectedKeys().hasOnly(['line_' + string(lineIndex), string(lineIndex)]) &&
+        newValue == prior + movementQuantity &&
         request.resource.data.items is list &&
         request.resource.data.items.size() > lineIndex &&
-        newMap.get('line_' + string(lineIndex), newMap.get(string(lineIndex), 0)) <= request.resource.data.items[lineIndex].quantity;
+        newValue <= request.resource.data.items[lineIndex].quantity;
+    }
+
+    function isValidProcurementReceiptLedgerUpdate(id) {
+      let movementId = request.resource.data.get('lastReceiptMovementId', '');
+      let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let movement = getAfter(movementPath).data;
+      let lineIndex = movement.sourceLineIndex;
+      return resource.data.id == id &&
+        resource.data.status == 'purchased' &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAll(['receivedQuantitiesByLine', 'lastReceiptMovementId']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedQuantitiesByLine', 'lastReceiptMovementId', 'updatedAt', 'updatedBy']) &&
+        movementId is string && movementId.size() > 0 &&
+        procurementReceiptMovementMatches(id, movementId) &&
+        procurementReceiptLedgerDeltaMatches(lineIndex, movement.quantity);
     }
     function isValidProcurementReceiptSource(itemId) {
       let procurementPath = /databases/$(database)/documents/procurementLists/$(request.resource.data.sourceId);
