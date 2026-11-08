@@ -1667,3 +1667,10 @@ Suggestion format:
 - Passed: `node --check workers/r2-storage/index.mjs`; `npm run test:inventory-movement-worker` (`Inventory movement Worker transaction tests passed`); `npm run lint`; `npm run build`; `npm run test:inventory-rules`; `npm run audit:firestore-access`; `npm run test:inventory`; `npm run test:offline`; `npm run test:offline-queue`; and `npm run test:e2e` (all 16 browser tests passed).
 - The focused Worker suite covered the synthetic registry API cases permitted by this environment: Manager creation of Shine Centre, trimmed/case-insensitive duplicate rejection, Staff creation denial, Staff read-only listing, slash-containing-name rejection, and concurrent duplicate handling. All passed.
 - The requested browser-level managed-location UI checks were not separately runnable: the existing E2E suite has no managed-location scenarios, and its local app server does not expose the authenticated Worker registry endpoint needed for that workflow. This is distinct from the passing Worker/API coverage. No production records, stock balances, migration, deployment, rules deployment, Cloudflare or KV changes were made.
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · per-location balance implementation plan
+- Saved `docs/superpowers/plans/2026-11-08-per-location-inventory-balances.md` (plan commit `b53dfac3c5aa82018a66e200a87ecc420b0798dd`). Scope: server-owned balances for managed items, atomic Worker movement commits, strict Firestore `getAfter` validation and offline-safe canonical location IDs.
+- Legacy items without `locationId` remain on the legacy path. A missing balance for a non-zero managed item is an exception; never seed it from the aggregate. First balance creation is permitted only from a verified zero-stock/new managed item.
+- Procurement receipts for managed items must carry an explicit active destination and update the receipt ledger atomically. Transfers, multi-location allocation, migration, deployment and KV remain out of scope.
+- Coding agent implements; Manus runs tests. Waiting for owner review of the plan before code changes. — Mosaic (ChatGPT), 2026-11-08
