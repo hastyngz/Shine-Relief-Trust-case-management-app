@@ -1674,3 +1674,31 @@ Suggestion format:
 - Legacy items without `locationId` remain on the legacy path. A missing balance for a non-zero managed item is an exception; never seed it from the aggregate. First balance creation is permitted only from a verified zero-stock/new managed item.
 - Procurement receipts for managed items must carry an explicit active destination and update the receipt ledger atomically. Transfers, multi-location allocation, migration, deployment and KV remain out of scope.
 - Coding agent implements; Manus runs tests. Waiting for owner review of the plan before code changes. — Mosaic (ChatGPT), 2026-11-08
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · managed per-location inventory balance implementation
+- Implementation commit to verify: `28954d9afb4a3731bcf4d2d0150a996803307d2b` on `Replit`. This is the exact code SHA for this handoff; run all checks against this SHA and report if the branch advances before testing.
+- Implemented for newly managed items only:
+  - Worker validates the item's canonical location record is present, active and matches the immutable item location; a deterministic server-owned location balance is read and compared with the aggregate before every movement.
+  - Receive, Issue and Stocktake atomically commit item aggregate, location balance and immutable movement. Procurement receipts also atomically commit the procurement receipt ledger and now require a verified managed destination; legacy inventory items are blocked from procurement receipt posting until physically verified and assigned through the approved process.
+  - Firestore rules use post-write item/movement checks to authorize balance creation/update only as part of the same authenticated transaction. Direct balance writes/deletes remain denied.
+  - First balance creation is allowed only for zero aggregate and no movement history. A non-zero managed aggregate with no balance is rejected; no opening balance is inferred.
+  - Canonical `locationId` is carried through movement/stocktake requests and the offline retry queue. Procurement full/partial receipt intents persist the selected physical destination and verify the server response uses that same destination.
+  - Legacy pre-ledger duplicate retries are not reported as completed for a managed item if the old movement lacks its location ID; those cases require reconciliation.
+- Added synthetic Worker tests for managed receive/issue/stocktake, explicit procurement destinations, atomic receipt-ledger writes, invalid/inactive/mismatched locations, missing non-zero balances, stale balance retry and pre-ledger retry protection. Added Firestore rules tests for valid atomic balance create/update, denied direct writes/deletes, invalid location/actor/movement, managed procurement receipts and legacy receipt rejection. Added receipt/delivery/offline retry destination tests.
+- Updated inventory transfer design and Administration Officer gap analysis. Transfers, multi-location allocation, legacy opening-balance migration, restore/import cutover, location rename/deactivation, production data changes, deployment and KV remain out of scope. No production data or services were changed.
+- **Manus verification required.** Please run against exact SHA `28954d9afb4a3731bcf4d2d0150a996803307d2b`:
+  1. `node --check workers/r2-storage/index.mjs`
+  2. `npm run test:inventory-movement-worker`
+  3. `npm run test:inventory-rules`
+  4. `npm run test:inventory`
+  5. `npm run test:inventory-pending-retry`
+  6. `npm run test:procurement`
+  7. `npm run test:offline`
+  8. `npm run test:offline-queue`
+  9. `npm run audit:firestore-access`
+  10. `npm run lint`
+  11. `npm run build`
+  12. `npm run test:e2e`
+- If a test fails, fix the underlying defect; do not weaken Firestore rules, skip tests or change production configuration. Resolve emulator port conflicts safely and rerun. Also inspect the complete diff against `AGENTS.md`, specifically verify Worker write atomicity, `getAfter` rule coupling, procurement destination locking, offline FIFO/idempotency, no generic queue writes for balances, no location inference, and no unrelated changes.
+- Report exact tested SHA, every command and result, any browser/manual scenarios not possible, whether workspace was clean before/after, and confirm no production data/deployment/rules/Cloudflare/KV changes. — Mosaic (ChatGPT), 2026-11-08
