@@ -101,18 +101,18 @@ service cloud.firestore {
     // compact, equivalent role predicates here to avoid repeating the broader
     // application RBAC expression for every document in that batch.
     function isInventoryActiveStaff() {
+      let staff = getStaffDoc(request.auth.uid);
       return isSignedIn() && isPrimaryEmailVerified() && (
-        isHastings() ||
-        getStaffDoc(request.auth.uid).data.get('status', '') == 'Active'
+        isHastings() || staff.data.get('status', '') == 'Active'
       );
     }
 
     function isInventoryWriter() {
+      let staff = getStaffDoc(request.auth.uid);
       return isSignedIn() && isPrimaryEmailVerified() && (
-        isHastings() ||
-        (
-          getStaffDoc(request.auth.uid).data.get('status', '') == 'Active' &&
-          getStaffDoc(request.auth.uid).data.get('role', '') in ['Administrator', 'Manager', 'Staff']
+        isHastings() || (
+          staff.data.get('status', '') == 'Active' &&
+          staff.data.get('role', '') in ['Administrator', 'Manager', 'Staff']
         )
       );
     }
