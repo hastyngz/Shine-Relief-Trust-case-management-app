@@ -267,6 +267,7 @@ service cloud.firestore {
     function isValidProcurementReceiptSource(itemId) {
       let procurementPath = /databases/$(database)/documents/procurementLists/$(request.resource.data.sourceId);
       let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let locationPath = /databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId);
       let lineIndex = request.resource.data.sourceLineIndex;
       return request.resource.data.sourceType == 'procurementReceipt' &&
         request.resource.data.type == 'Received' &&
@@ -277,6 +278,10 @@ service cloud.firestore {
         request.resource.data.reference is string &&
         request.resource.data.reference.size() > 0 &&
         request.resource.data.reference.size() <= 250 &&
+        exists(itemPath) &&
+        get(itemPath).data.locationId is string &&
+        request.resource.data.locationId == get(itemPath).data.locationId &&
+        exists(locationPath) && get(locationPath).data.isActive == true &&
         exists(procurementPath) &&
         get(procurementPath).data.id == request.resource.data.sourceId &&
         get(procurementPath).data.status == 'purchased' &&
