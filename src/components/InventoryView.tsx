@@ -274,6 +274,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       quantity: serverMovement.quantity,
       date: serverMovement.date,
       location: serverMovement.location,
+      locationId: serverMovement.locationId,
       destination: serverMovement.destination,
       reference: serverMovement.reference,
       reason: serverMovement.reason,
@@ -374,7 +375,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     const signature = JSON.stringify({
       itemId: movementTarget.id, type: movement.type, quantity, date: movement.date,
-      destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim(),
+      destination: movement.destination.trim(), locationId: movementTarget.locationId || '', reference: movement.reference.trim(), reason: movement.reason.trim(),
     });
     const queue = currentUser?.uid ? loadPendingInventoryMovements(currentUser.uid) : null;
     if (!currentUser?.uid || !queue) {
@@ -385,7 +386,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     if (queue.length > 0 && !isRetryingHead) {
       const queued = savePendingInventoryMovement(currentUser.uid, {
         id: createInventoryId('mov'), itemId: movementTarget.id, signature, mode: 'movement',
-        payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
+        payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), locationId: movementTarget.locationId, reference: movement.reference.trim(), reason: movement.reason.trim() },
       });
       if (!queued) {
         setError('The new transaction was not queued. Existing pending transactions were preserved; check storage space and try again.');
@@ -400,7 +401,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const movementId = isRetryingHead ? pendingMovementId as string : createInventoryId('mov');
     if (!currentUser?.uid || !savePendingInventoryMovement(currentUser.uid, {
       id: movementId, itemId: movementTarget.id, signature, mode: 'movement',
-      payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), reference: movement.reference.trim(), reason: movement.reason.trim() },
+      payload: { type: movement.type, quantity, date: movement.date, destination: movement.destination.trim(), locationId: movementTarget.locationId, reference: movement.reference.trim(), reason: movement.reason.trim() },
     })) {
       restorePendingInventoryForm();
       setError('No stock movement was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Resolve the pending transaction first; if storage is full, free space and retry.');
@@ -425,6 +426,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         quantity,
         date: movement.date,
         destination: movement.destination.trim() || undefined,
+        locationId: movementTarget.locationId,
         reference: movement.reference.trim() || undefined,
         reason: movement.reason.trim(),
       });
@@ -479,7 +481,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     }
     const signature = JSON.stringify({
       itemId: stocktakeTarget.id, type: 'Adjustment', countedQuantity: counted, date: stocktake.date,
-      reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
+      reference: 'STOCKTAKE', locationId: stocktakeTarget.locationId || '', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
     });
     const queue = currentUser?.uid ? loadPendingInventoryMovements(currentUser.uid) : null;
     if (!currentUser?.uid || !queue) {
@@ -490,7 +492,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     if (queue.length > 0 && !isRetryingHead) {
       const queued = savePendingInventoryMovement(currentUser.uid, {
         id: createInventoryId('mov'), itemId: stocktakeTarget.id, signature, mode: 'stocktake',
-        payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`, formReason: stocktake.reason.trim() },
+        payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', locationId: stocktakeTarget.locationId, reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`, formReason: stocktake.reason.trim() },
       });
       if (!queued) {
         setError('The new transaction was not queued. Existing pending transactions were preserved; check storage space and try again.');
@@ -506,7 +508,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const serverReason = `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`;
     if (!currentUser?.uid || !savePendingInventoryMovement(currentUser.uid, {
       id: movementId, itemId: stocktakeTarget.id, signature, mode: 'stocktake',
-      payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', reason: serverReason, formReason: stocktake.reason.trim() },
+      payload: { countedQuantity: counted, date: stocktake.date, reference: 'STOCKTAKE', locationId: stocktakeTarget.locationId, reason: serverReason, formReason: stocktake.reason.trim() },
     })) {
       restorePendingInventoryForm();
       setError('No stocktake was sent. Another transaction may still be awaiting confirmation, or device storage may be unavailable. Resolve the pending transaction first; if storage is full, free space and retry.');
@@ -529,6 +531,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
         itemId: stocktakeTarget.id,
         type: 'Adjustment',
         countedQuantity: counted,
+        locationId: stocktakeTarget.locationId,
         date: stocktake.date,
         reference: 'STOCKTAKE',
         reason: `Physical stocktake: ${stocktake.reason.trim()}. Counted quantity ${counted} ${stocktakeTarget.unit}.`,
@@ -620,6 +623,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
               quantity: Number(payload.quantity),
               date: String(payload.date || ''),
               destination: String(payload.destination || '') || undefined,
+              locationId: String(payload.locationId || '') || undefined,
               reference: String(payload.reference || '') || undefined,
               reason: String(payload.reason || ''),
             })
@@ -628,6 +632,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
               itemId: pending.itemId,
               type: 'Adjustment',
               countedQuantity: Number(payload.countedQuantity),
+              locationId: String(payload.locationId || '') || undefined,
               date: String(payload.date || ''),
               reference: 'STOCKTAKE',
               reason: String(payload.reason || ''),
