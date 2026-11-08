@@ -219,6 +219,7 @@ service cloud.firestore {
         request.resource.data.quantity >= 0 &&
         isInventoryQuantityPrecisionValid(resource.data.unit, request.resource.data.quantity) &&
         resource.data.quantity == getAfter(movementPath).data.previousQuantity &&
+        resource.data.lastMovementId == get(/databases/$(database)/documents/inventoryItems/$(itemId)).data.lastMovementId &&
         changed.hasOnly(['quantity', 'updatedAt', 'updatedByUid', 'lastMovementId']) &&
         request.resource.data.updatedByUid == request.auth.uid &&
         request.resource.data.updatedAt == getAfter(movementPath).data.createdAt;
