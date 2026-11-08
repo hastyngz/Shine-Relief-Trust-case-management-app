@@ -25,7 +25,7 @@ export function readProcurementDeliveryIntent(storage: ProcurementDeliveryStorag
       typeof value.date !== 'string' || typeof value.reference !== 'string' || !Array.isArray(value.quantities) || !Array.isArray(value.choices) ||
       value.quantities.some((n) => !Number.isFinite(n) || n < 0) ||
       value.choices.some((c) => !Number.isInteger(c.itemIndex) || c.itemIndex < 0 ||
-        (c.inventoryItemId === null ? c.locationId !== null : typeof c.inventoryItemId !== 'string' || typeof c.locationId !== 'string' || !/^loc_[^/]{1,84}$/.test(c.locationId)))) return null;
+        (c.inventoryItemId === null ? c.locationId !== null : typeof c.inventoryItemId !== 'string' || typeof c.locationId !== 'string' || !/^loc_[^\u0000-\u001f\u007f/]{1,84}$/.test(c.locationId)))) return null;
     return value;
   } catch { return null; }
 }
