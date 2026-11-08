@@ -270,12 +270,54 @@ async function handleInventoryMovement(request, staff, idToken) {
     if (existing.locationId !== payload.locationId && (existing.locationId !== undefined || payload.locationId !== undefined)) {
       throw new ApiError('This movement retry does not match its original managed destination. Stop and request a stock reconciliation.', 409);
     }
+    const existingItemDocument = await firestoreGet(itemPath, idToken);
+    if (!existingItemDocument) throw new ApiError('The inventory item for this prior movement is no longer available.', 404);
+    const existingItem = decodeFirestoreFields(existingItemDocument.fields);
     if (existing.locationId === undefined) {
-      const existingItemDocument = await firestoreGet(itemPath, idToken);
-      if (!existingItemDocument) throw new ApiError('The inventory item for this prior movement is no longer available.', 404);
-      const existingItem = decodeFirestoreFields(existingItemDocument.fields);
       if (typeof existingItem.locationId === 'string' && existingItem.locationId.length > 0) {
         throw new ApiError('This movement was recorded before the managed location balance was created. Do not treat it as a completed retry; request a stock reconciliation.', 409);
+      }
+    } else {
+      if (existingItem.locationId !== existing.locationId || payload.locationId !== existing.locationId) {
+        throw new ApiError('The prior movement no longer matches the item’s registered destination. Request a stock reconciliation.', 409);
+      }
+      const locationDocument = await firestoreGet(`inventoryLocations/${encodeURIComponent(existing.locationId)}`, idToken);
+      const balanceId = inventoryLocationBalanceDocumentId(payload.itemId, existing.locationId);
+      const balanceDocument = await firestoreGet(`inventoryLocationBalances/${encodeURIComponent(balanceId)}`, idToken);
+      if (!locationDocument || !balanceDocument) {
+        throw new ApiError('The prior managed movement is missing its registered location or balance. Do not treat it as complete; request a stock reconciliation.', 409);
+      }
+      const location = decodeFirestoreFields(locationDocument.fields);
+      const balance = decodeFirestoreFields(balanceDocument.fields);
+      const movementIsInItemHistory = Array.isArray(existingItem.movements) &&
+        existingItem.movements.some((movement) => movement && movement.id === existing.id);
+      if (location.id !== existing.locationId || location.isActive !== true || location.name !== existingItem.location ||
+          balance.id !== balanceId || balance.inventoryItemId !== payload.itemId ||
+          balance.locationId !== existing.locationId || balance.unit !== existingItem.unit ||
+          balance.quantity !== existingItem.quantityOnHand ||
+          balance.lastMovementId !== existingItem.lastMovementId ||
+          typeof balance.lastMovementId !== 'string' || balance.lastMovementId.length === 0 ||
+          !movementIsInItemHistory) {
+        throw new ApiError('The prior managed movement cannot be confirmed against the current item and location balance. Request a stock reconciliation.', 409);
+      }
+      if (existing.sourceType === 'procurementReceipt') {
+        const procurementDocument = await firestoreGet(`procurementLists/${encodeURIComponent(existing.sourceId)}`, idToken);
+        if (!procurementDocument) throw new ApiError('The prior procurement receipt ledger is missing. Request a stock reconciliation.', 409);
+        const procurement = decodeFirestoreFields(procurementDocument.fields);
+        const lineIndex = existing.sourceLineIndex;
+        const lineMap = procurement.receivedQuantitiesByLine && typeof procurement.receivedQuantitiesByLine === 'object'
+          ? procurement.receivedQuantitiesByLine
+          : {};
+        const legacyReceived = Array.isArray(procurement.receivedQuantities)
+          ? Number(procurement.receivedQuantities[lineIndex] || 0)
+          : 0;
+        const ledgerReceived = Number(lineMap[`line_${lineIndex}`] ?? lineMap[String(lineIndex)] ?? 0);
+        if (procurement.id !== existing.sourceId || procurement.status !== 'purchased' ||
+            !Number.isInteger(lineIndex) || lineIndex < 0 ||
+            !Number.isFinite(ledgerReceived) || !Number.isFinite(legacyReceived) ||
+            Math.max(ledgerReceived, legacyReceived) < existing.quantity) {
+          throw new ApiError('The prior procurement receipt cannot be confirmed against its receipt ledger. Request a stock reconciliation.', 409);
+        }
       }
     }
     return json({ ok: true, duplicate: true, movement: existing }, 200);
