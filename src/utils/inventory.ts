@@ -34,6 +34,23 @@ export function isValidInventoryDate(value: string): boolean {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
 }
 
+const measuredInventoryUnits = new Set(['kg', 'kilogram', 'kilograms', 'litre', 'litres', 'liter', 'liters', 'l']);
+const countableInventoryUnits = new Set(['bag', 'bags', 'piece', 'pieces', 'bottle', 'bottles', 'box', 'boxes', 'pack', 'packs', 'tray', 'trays', 'unit', 'units']);
+
+/** Enforce SHINE's approved precision by registered unit; unknown units fail closed. */
+export function getInventoryQuantityPrecisionError(value: number, unit: string): string | undefined {
+  const normalizedUnit = unit.trim().toLowerCase();
+  if (measuredInventoryUnits.has(normalizedUnit)) {
+    return Math.abs(value * 100 - Math.round(value * 100)) > 1e-8
+      ? 'Measured stock quantities may have no more than two decimal places.'
+      : undefined;
+  }
+  if (countableInventoryUnits.has(normalizedUnit)) {
+    return Number.isInteger(value) ? undefined : 'Countable stock quantities must be whole numbers.';
+  }
+  return 'This inventory unit is not recognised. An Administrator must review the unit before stock can be moved.';
+}
+
 /** Classify a date-only expiry value without relying on local timezone parsing. */
 export function getInventoryExpiryStatus(expiryDate?: string, today = getLocalDateInputValue()): InventoryExpiryResult {
   if (!expiryDate || !isValidInventoryDate(expiryDate) || !isValidInventoryDate(today)) return { status: 'not-tracked', daysRemaining: null };
