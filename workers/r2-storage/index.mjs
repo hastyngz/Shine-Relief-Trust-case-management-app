@@ -369,6 +369,7 @@ async function handleInventoryMovement(request, staff, idToken) {
     const movement = {
       id: payload.id,
       inventoryItemId: payload.itemId,
+      unit: item.unit,
       type: payload.type,
       quantity: movementQuantity,
       date: payload.date,
@@ -389,6 +390,7 @@ async function handleInventoryMovement(request, staff, idToken) {
     const embeddedMovement = {
       id: movement.id,
       inventoryItemId: payload.itemId,
+      unit: item.unit,
       type: movement.type,
       quantity: movement.quantity,
       date: movement.date,
