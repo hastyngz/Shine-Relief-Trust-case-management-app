@@ -1542,9 +1542,9 @@ export interface InventoryMovement {
   previousQuantity?: number; newQuantity?: number;
 }
 
-export interface InventoryItem {
+export interface InventoryLocation {\n  id: string;\n  name: string;\n  normalizedName: string;\n  isActive: boolean;\n  createdAt: string;\n  createdBy: string;\n  createdByUid: string;\n  updatedAt: string;\n  updatedBy: string;\n  updatedByUid: string;\n}\n\nexport interface InventoryItem {
   id: string; stockCode: string; name: string; category: string; description?: string; unit: string;
-  quantityOnHand: number; minimumStockLevel: number; location: string; supplier?: string; unitCostMWK?: number;
+  quantityOnHand: number; minimumStockLevel: number; location: string; /** Canonical managed location for new stock; legacy records remain label-only until verified. */ locationId?: string; supplier?: string; unitCostMWK?: number;
   expiryDate?: string; condition?: 'Good' | 'Fair' | 'Damaged' | 'Expired'; notes?: string; movements: InventoryMovement[];
   createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; createdByUid?: string; updatedByUid?: string;
   /** ID of the last movement atomically committed with this balance. */
