@@ -3,7 +3,7 @@ import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPend
 const values = new Map<string, string>(); let failWrites = false;
 const localStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { if (failWrites) throw new Error('synthetic quota exceeded'); values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage } });
-const makePending = (id: string, quantity: number): PendingInventoryMovementRequest => ({ id, itemId: 'item_synthetic', signature: JSON.stringify({ itemId: 'item_synthetic', type: 'Received', quantity }), mode: 'movement', payload: { type: 'Received', quantity, date: '2026-10-26', reason: 'Synthetic retry test' } });
+const makePending = (id: string, quantity: number): PendingInventoryMovementRequest => ({ id, itemId: 'item_synthetic', signature: JSON.stringify({ itemId: 'item_synthetic', type: 'Received', quantity, locationId: 'loc_shine centre' }), mode: 'movement', payload: { type: 'Received', quantity, date: '2026-10-26', locationId: 'loc_shine centre', reason: 'Synthetic retry test' } });
 const first=makePending('mov_synthetic_first',2), second=makePending('mov_synthetic_second',3), third=makePending('mov_synthetic_third',4);
 assert.equal(savePendingInventoryMovement('uid-a',first),true);
 assert.deepEqual(loadPendingInventoryMovements('uid-a'),[first]);
@@ -56,7 +56,7 @@ assert.equal(savePendingInventoryMovement(flushUid, first), true);
 assert.equal(savePendingInventoryMovement(flushUid, second), true);
 assert.equal(savePendingInventoryMovement(flushUid, third), true);
 const sent: string[] = [];
-const flushed = await flushPendingInventoryMovements(flushUid, async (entry) => { sent.push(entry.id); });
+const flushed = await flushPendingInventoryMovements(flushUid, async (entry) => { sent.push(entry.id); assert.equal(entry.payload.locationId, 'loc_shine centre', 'canonical destination survives reconnect replay'); });
 assert.deepEqual(sent, [first.id, second.id, third.id], 'reconnect flush submits transactions in FIFO order');
 assert.deepEqual(flushed, { status: 'empty', processed: 3 });
 assert.deepEqual(loadPendingInventoryMovements(flushUid), [], 'confirmed entries are removed one by one');
