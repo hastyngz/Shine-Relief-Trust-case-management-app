@@ -73,6 +73,22 @@ export async function postInventoryMovement(payload: Record<string, unknown>): P
 }
 
 
+export async function getInventoryLocations(): Promise<import('../types').InventoryLocation[]> {
+  const response = await requestR2('/api/inventory/locations');
+  const payload = await response.json() as { ok: true; locations: import('../types').InventoryLocation[] };
+  return Array.isArray(payload.locations) ? payload.locations : [];
+}
+
+export async function createInventoryLocation(name: string): Promise<import('../types').InventoryLocation> {
+  const response = await requestR2('/api/inventory/locations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const payload = await response.json() as { ok: true; location: import('../types').InventoryLocation };
+  return payload.location;
+}
+
 export async function createStaffInvitation(payload: {
   email: string;
   fullName: string;
