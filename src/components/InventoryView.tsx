@@ -81,10 +81,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
 
   useEffect(() => {
     let cancelled = false;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached: unknown = JSON.parse(window.localStorage.getItem('shine_inventory_locations_v1') || 'null');
+        if (Array.isArray(cached) && cached.every((entry) =>
+          entry && typeof entry.id === 'string' && typeof entry.name === 'string' &&
+          typeof entry.isActive === 'boolean')) {
+          setManagedLocations(cached as InventoryLocation[]);
+        }
+      } catch { /* A corrupt cache is ignored; the secured server list remains authoritative. */ }
+    }
     setLocationsLoading(true);
     getInventoryLocations()
-      .then((loaded) => { if (!cancelled) setManagedLocations(loaded); })
-      .catch(() => { if (!cancelled) setLocationError('Could not load managed locations. Check your connection and retry.'); })
+      .then((loaded) => {
+        if (cancelled) return;
+        setManagedLocations(loaded);
+        try { window.localStorage.setItem('shine_inventory_locations_v1', JSON.stringify(loaded)); } catch { /* Cache is optional. */ }
+      })
+      .catch(() => { if (!cancelled) setLocationError('Could not refresh managed locations. Any saved location list remains available offline.'); })
       .finally(() => { if (!cancelled) setLocationsLoading(false); });
     return () => { cancelled = true; };
   }, []);
@@ -101,7 +115,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     setLocationsLoading(true);
     try {
       const created = await createInventoryLocation(name);
-      setManagedLocations((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setManagedLocations((current) => {
+        const next = [...current, created].sort((a, b) => a.name.localeCompare(b.name));
+        try { window.localStorage.setItem('shine_inventory_locations_v1', JSON.stringify(next)); } catch { /* Cache is optional. */ }
+        return next;
+      });
       setNewItem((current) => ({ ...current, location: current.location || created.name }));
       setLocationName('');
     } catch (err) {
