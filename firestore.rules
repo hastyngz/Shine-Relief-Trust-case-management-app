@@ -1289,6 +1289,10 @@ service cloud.firestore {
       allow read: if isStaffActive();
       allow create: if isManagerOrStaff() &&
         request.resource.data.quantityOnHand == 0 &&
+        request.resource.data.locationId is string &&
+        exists(/databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId)) &&
+        get(/databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId)).data.isActive == true &&
+        get(/databases/$(database)/documents/inventoryLocations/$(request.resource.data.locationId)).data.name == request.resource.data.location &&
         isInventoryQuantityPrecisionValid(request.resource.data.unit, request.resource.data.minimumStockLevel) &&
         request.resource.data.movements is list &&
         request.resource.data.movements.size() == 0;
@@ -1296,6 +1300,7 @@ service cloud.firestore {
         // Until the location ledger and transfer workflow are live, the legacy
         // single-location field is immutable at the database boundary.
         request.resource.data.location == resource.data.location &&
+        request.resource.data.get('locationId', '') == resource.data.get('locationId', '') &&
         isInventoryQuantityPrecisionValid(request.resource.data.unit, request.resource.data.minimumStockLevel) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['unit']) ||
           (resource.data.quantityOnHand == 0 && resource.data.get('movements', []).size() == 0)) &&
