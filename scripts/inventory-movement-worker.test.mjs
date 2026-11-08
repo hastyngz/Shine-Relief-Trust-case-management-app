@@ -319,12 +319,46 @@ try {
     const mock = setup({ existingMovement });
     const response = await send(payload);
     const body = await response.json();
-    assert.equal(response.status, 200);
-    assert.equal(body.duplicate, true);
-    assert.equal(body.movement.date, '2026-10-25', 'the first accepted server receipt date remains authoritative');
+    assert.equal(response.status, 409, 'a legacy procurement receipt without a managed destination is not a confirmed duplicate');
+    assert.match(body.error, /no verified managed destination/);
     assert.equal(mock.writes.length, 0);
   }
 
+
+  // A managed duplicate is complete only when its current item and location balance agree.
+  {
+    const payload = requestPayload({ locationId: 'loc_shine centre' });
+    const fingerprint = JSON.stringify({
+      id: payload.id, itemId: payload.itemId, type: payload.type, quantity: payload.quantity,
+      countedQuantity: undefined, date: payload.date, destination: undefined, reference: undefined,
+      reason: payload.reason, sourceType: undefined, sourceId: undefined, sourceLineIndex: undefined,
+      sourceDeliveryId: undefined, locationId: payload.locationId,
+    });
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const existingMovement = {
+      id: payload.id, inventoryItemId: payload.itemId, recordedByUid: 'staff-synthetic',
+      requestFingerprint: fingerprint, locationId: location.id, quantity: payload.quantity,
+    };
+    const item = {
+      ...baseItem(), location: location.name, locationId: location.id, quantityOnHand: 13,
+      lastMovementId: payload.id, movements: [{ id: payload.id }],
+    };
+    const missingBalance = setup({ item, locationDocument: location, existingMovement });
+    const rejected = await send(payload);
+    assert.equal(rejected.status, 409);
+    assert.match((await rejected.json()).error, /missing its registered location or balance/);
+    assert.equal(missingBalance.writes.length, 0);
+
+    const balance = {
+      id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: payload.itemId,
+      locationId: location.id, unit: 'packs', quantity: 13, lastMovementId: payload.id,
+    };
+    const verified = setup({ item, locationDocument: location, existingMovement, balanceDocument: balance });
+    const accepted = await send(payload);
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).duplicate, true);
+    assert.equal(verified.writes.length, 0);
+  }
 
   // A pre-ledger movement retry must not be reported as complete for a managed item.
   {
