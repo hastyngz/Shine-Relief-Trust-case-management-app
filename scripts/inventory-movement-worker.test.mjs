@@ -275,6 +275,56 @@ try {
     assert.equal(mock.writes.length, 0);
   }
 
+  // Quantity precision is enforced against the registered inventory unit on the server.
+  {
+    const mock = setup();
+    const response = await send(requestPayload({ quantity: 1.5 }));
+    assert.equal(response.status, 400, 'countable packs cannot be received in fractional quantities');
+    assert.match((await response.json()).error, /whole numbers/);
+    assert.equal(mock.writes.length, 0, 'invalid countable quantities must not write stock');
+  }
+
+  {
+    const mock = setup({ item: { ...baseItem(), unit: 'kg', quantityOnHand: 10 } });
+    const response = await send(requestPayload({ quantity: 1.25 }));
+    const body = await response.json();
+    assert.equal(response.status, 200, 'measured stock may use two decimal places');
+    assert.equal(body.quantityOnHand, 11.25);
+    assert.equal(mock.writes.length, 1);
+  }
+
+  {
+    const mock = setup({ item: { ...baseItem(), unit: 'kg', quantityOnHand: 10 } });
+    const response = await send(requestPayload({ quantity: 1.234 }));
+    assert.equal(response.status, 400, 'measured stock cannot use more than two decimal places');
+    assert.match((await response.json()).error, /two decimal places/);
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup();
+    const response = await send(requestPayload({ type: 'Adjustment', countedQuantity: 10.5 }));
+    assert.equal(response.status, 400, 'countable stocktake balances must be whole numbers');
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const mock = setup({ item: { ...baseItem(), unit: 'litres', quantityOnHand: 10 } });
+    const response = await send(requestPayload({ type: 'Adjustment', countedQuantity: 10.75 }));
+    const body = await response.json();
+    assert.equal(response.status, 200, 'measured stocktake balances may use two decimal places');
+    assert.equal(body.quantityOnHand, 10.75);
+    assert.equal(mock.writes.length, 1);
+  }
+
+  {
+    const mock = setup({ item: { ...baseItem(), unit: 'cartons', quantityOnHand: 10 } });
+    const response = await send(requestPayload());
+    assert.equal(response.status, 400, 'unrecognised units must be reviewed rather than guessed');
+    assert.match((await response.json()).error, /unit is not recognised/);
+    assert.equal(mock.writes.length, 0);
+  }
+
   console.log('Inventory movement Worker transaction tests passed.');
 } finally {
   globalThis.fetch = originalFetch;
