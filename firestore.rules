@@ -169,6 +169,7 @@ service cloud.firestore {
         existsAfter(itemPath) && existsAfter(movementPath) && exists(locationPath) &&
         get(locationPath).data.isActive == true &&
         itemAfter.locationId == locationId &&
+        itemAfter.unit == request.resource.data.unit &&
         itemAfter.lastMovementId == movementId &&
         itemAfter.quantityOnHand == request.resource.data.quantity &&
         itemAfter.movements is list && itemAfter.movements.size() > 0 &&
