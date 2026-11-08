@@ -392,6 +392,20 @@ try {
     assert.deepEqual(balanceWrite.currentDocument, { updateTime: '2026-10-26T10:00:01.000000Z' });
   }
 
+  // Aggregate, quantity and last-movement mismatches in an existing balance fail closed.
+  for (const balance of [
+    { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre', unit: 'packs', quantity: 9, lastMovementId: 'seed-movement' },
+    { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre', unit: 'packs', quantity: 10, lastMovementId: 'different-movement' },
+  ]) {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10, lastMovementId: 'seed-movement' };
+    const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance });
+    const response = await send(requestPayload({ locationId: location.id }));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /location balance does not match/);
+    assert.equal(mock.writes.length, 0);
+  }
+
   // Managed stocktakes update the same location balance as ordinary receipts and issues.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
