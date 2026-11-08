@@ -204,7 +204,7 @@ try {
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
     const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
-    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, procurementList: {
       id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
       items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
@@ -223,7 +223,7 @@ try {
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
     const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id };
-    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, procurementList: {
       id: 'proc-synthetic', status: 'purchased', purchaseOrderReference: 'PO-SYNTHETIC',
       items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
@@ -378,8 +378,8 @@ try {
   // An existing managed balance must match the aggregate before an issue is posted.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
-    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10, lastMovementId: 'seed-movement' };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance });
     const response = await send(requestPayload({ type: 'Issued', quantity: 2, locationId: location.id }));
     const body = await response.json();
@@ -395,8 +395,8 @@ try {
   // Managed stocktakes update the same location balance as ordinary receipts and issues.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
-    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10, lastMovementId: 'seed-movement' };
+    const balance = { id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance });
     const response = await send(requestPayload({ type: 'Adjustment', countedQuantity: 7, locationId: location.id }));
     const body = await response.json();
@@ -410,8 +410,8 @@ try {
   // A stale location balance is re-read and the complete item/balance transaction is retried.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = (read) => ({ ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: read === 1 ? 10 : 12 });
-    const balance = (read) => ({ id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: read === 1 ? 10 : 12 });
+    const managedItem = (read) => ({ ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: read === 1 ? 10 : 12, lastMovementId: 'seed-movement' });
+    const balance = (read) => ({ id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: read === 1 ? 10 : 12, lastMovementId: 'seed-movement' });
     const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance, commitStatuses: [409, 200] });
     const response = await send(requestPayload({ locationId: location.id }));
     const body = await response.json();
@@ -426,7 +426,7 @@ try {
   // A managed item with unverified non-zero aggregate stock must never be seeded implicitly.
   {
     const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
-    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10, lastMovementId: 'seed-movement' };
     const mock = setup({ item: managedItem, locationDocument: location });
     const response = await send(requestPayload({ locationId: location.id }));
     assert.equal(response.status, 409);
