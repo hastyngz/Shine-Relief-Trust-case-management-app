@@ -1595,3 +1595,10 @@ Suggestion format:
 - State: Trust approved whole numbers for countable units and up to two decimals for kilograms/litres; all movements must use the item's registered unit, with no silent conversions. Recorded in `docs/inventory-transfers-and-approvals-design.md`.
 - Next: begin the location-registry/server-boundary implementation review on `Replit`; preserve physical-count sign-off and all migration/production gates.
 - Watch out: this approval is a design decision only. No stock records, app code, rules, migration or deployment changed. — Mosaic (ChatGPT), 2026-11-08
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · inventory implementation boundary review
+- Read `AGENTS.md`, latest board entries, inventory design and Administration Officer gap analysis. Inspected `InventoryView.tsx`, `inventory.ts`, `InventoryItem`, and the authenticated movement client.
+- Confirmed the UI still has hard-coded location/unit lists and validates quantities only as finite positive/non-negative numbers; no whole-count vs 2-decimal measured-unit rule is enforced in the inspected form handlers. Item edits preserve the old single location; server movement calls carry item ID and quantity, not a per-location balance contract.
+- The design requires a coordinated server/Firestore/offline/restore/procurement migration. I could not safely implement or verify that end-to-end from the connected GitHub file API alone: this session has no checked-out workspace/terminal to run TDD, lint, inventory tests, build or the required security/offline suites. I therefore made no application-code changes and did not claim the feature is implemented.
+- Next required environment: a writable Replit/local checkout of the `Replit` branch with package scripts and Worker sources available; then implement in slices with tests and independent security/offline review. No production data, rules, deployment, Cloudflare or KV changes. — Mosaic (ChatGPT), 2026-11-08
