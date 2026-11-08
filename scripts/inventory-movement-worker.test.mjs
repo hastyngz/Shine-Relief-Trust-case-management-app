@@ -57,8 +57,9 @@ const procurementPayload = (overrides = {}) => requestPayload({
   sourceLineIndex: 0,
   ...overrides,
 });
-function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement, procurementList, locationDocument, locationDocuments = [] } = {}) {
+function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], existingMovement, procurementList, locationDocument, locationDocuments = [], balanceDocument } = {}) {
   let itemReads = 0;
+  let balanceReads = 0;
   let commits = 0;
   const writes = [];
   globalThis.fetch = async (input, init = {}) => {
@@ -84,6 +85,12 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
       }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
     }
+    if (url.includes('/documents/inventoryLocationBalances/')) {
+      balanceReads += 1;
+      const liveBalance = typeof balanceDocument === 'function' ? balanceDocument(balanceReads) : balanceDocument;
+      if (liveBalance) return new Response(JSON.stringify({ updateTime: `2026-10-26T10:00:0${balanceReads}.000000Z`, fields: asFields(liveBalance) }), { status: 200 });
+      return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
+    }
     if (url.includes('/documents/inventoryMovements/')) {
       if (existingMovement) return new Response(JSON.stringify({ fields: asFields(existingMovement) }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: 404 } }), { status: 404 });
@@ -106,7 +113,7 @@ function setup({ role = 'Staff', item = baseItem(), commitStatuses = [200], exis
     }
     throw new Error(`Unexpected synthetic network request: ${url}`);
   };
-  return { writes, getCounts: () => ({ itemReads, commits }) };
+  return { writes, getCounts: () => ({ itemReads, balanceReads, commits }) };
 }
 async function sendLocation(name, method = 'POST', envOverrides = env) {
   return worker.fetch(new Request('https://worker.example.invalid/api/inventory/locations', {
@@ -300,6 +307,105 @@ try {
     assert.equal(body.duplicate, true);
     assert.equal(body.movement.date, '2026-10-25', 'the first accepted server receipt date remains authoritative');
     assert.equal(mock.writes.length, 0);
+  }
+
+
+  // Managed items must update the aggregate, canonical location balance and
+  // immutable movement in one server-side commit.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 0, movements: [] };
+    const mock = setup({ item: managedItem, locationDocument: location });
+    const response = await send(requestPayload({ quantity: 4, locationId: location.id }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.quantityOnHand, 4);
+    assert.equal(mock.writes[0].length, 3, 'item, location balance and movement must be atomic');
+    const balanceWrite = mock.writes[0].find((write) => write.update.name.includes('/inventoryLocationBalances/'));
+    assert.ok(balanceWrite);
+    const balance = decode(balanceWrite.update.fields);
+    assert.equal(balance.inventoryItemId, 'item-synthetic');
+    assert.equal(balance.locationId, location.id);
+    assert.equal(balance.unit, 'packs');
+    assert.equal(balance.quantity, 4);
+    assert.equal(balance.lastMovementId, 'mov_synthetic_123');
+    assert.equal(balance.createdByUid, 'staff-synthetic');
+    const movementWrite = mock.writes[0].find((write) => write.update.name.includes('/inventoryMovements/'));
+    assert.equal(decode(movementWrite.update.fields.locationId), location.id);
+    assert.equal(decode(mock.writes[0][0].update.fields.movements)[0].locationId, location.id);
+    assert.deepEqual(balanceWrite.currentDocument, { exists: false });
+  }
+
+  // An existing managed balance must match the aggregate before an issue is posted.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
+    const balance = { id: 'bal-fixture', inventoryItemId: 'item-synthetic', locationId: location.id, unit: 'packs', quantity: 10 };
+    const mock = setup({ item: managedItem, locationDocument: location, balanceDocument: balance });
+    const response = await send(requestPayload({ type: 'Issued', quantity: 2, locationId: location.id }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.quantityOnHand, 8);
+    assert.equal(mock.writes[0].length, 3);
+    const balanceWrite = mock.writes[0].find((write) => write.update.name.includes('/inventoryLocationBalances/'));
+    assert.equal(decode(balanceWrite.update.fields.quantity), 8);
+    assert.equal(decode(balanceWrite.update.fields.lastMovementId), 'mov_synthetic_123');
+    assert.deepEqual(balanceWrite.currentDocument, { updateTime: '2026-10-26T10:00:01.000000Z' });
+  }
+
+  // A managed item with unverified non-zero aggregate stock must never be seeded implicitly.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 10 };
+    const mock = setup({ item: managedItem, locationDocument: location });
+    const response = await send(requestPayload({ locationId: location.id }));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /physical stock verification/);
+    assert.equal(mock.writes.length, 0);
+  }
+
+  // A missing, inactive or mismatched canonical location blocks movement without writes.
+  for (const [locationDocument, requestedLocationId] of [
+    [undefined, 'loc_shine centre'],
+    [{ id: 'loc_shine centre', name: 'Shine Centre', isActive: false }, 'loc_shine centre'],
+    [{ id: 'loc_shine centre', name: 'Shine Centre', isActive: true }, 'loc_other store'],
+  ]) {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 0, movements: [] };
+    const mock = setup({ item: managedItem, locationDocument });
+    const response = await send(requestPayload({ locationId: requestedLocationId }));
+    assert.equal(response.status, 409);
+    assert.equal(mock.writes.length, 0);
+  }
+
+  // Procurement receipts for managed items require an explicit destination.
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 0, movements: [] };
+    const mock = setup({
+      item: managedItem,
+      locationDocument: location,
+      procurementList: { id: 'proc-synthetic', status: 'purchased', items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }] },
+    });
+    const response = await send(procurementPayload());
+    assert.equal(response.status, 409);
+    assert.equal(mock.writes.length, 0);
+  }
+
+  {
+    const location = { id: 'loc_shine centre', name: 'Shine Centre', isActive: true };
+    const managedItem = { ...baseItem(), location: 'Shine Centre', locationId: location.id, quantityOnHand: 0, movements: [] };
+    const mock = setup({
+      item: managedItem,
+      locationDocument: location,
+      procurementList: { id: 'proc-synthetic', status: 'purchased', items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }] },
+    });
+    const response = await send(procurementPayload({ locationId: location.id }));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(mock.writes[0].length, 4, 'item, balance, movement and procurement receipt ledger must commit atomically');
+    assert.equal(body.movement.locationId, location.id);
+    assert.deepEqual(decode(mock.writes[0][3].update.fields.receivedQuantitiesByLine), { line_0: 3 });
   }
 
   // Quantity precision is enforced against the registered inventory unit on the server.
