@@ -107,11 +107,32 @@ service cloud.firestore {
       );
     }
 
+    function inventoryManagedBalanceMatches(itemId, itemAfter, movementId, actorUid) {
+      let locationId = itemAfter.locationId;
+      let balanceId = 'bal_' + string(itemId.size()) + '_' + itemId + '_' + locationId;
+      let balancePath = /databases/$(database)/documents/inventoryLocationBalances/$(balanceId);
+      let balance = getAfter(balancePath).data;
+      return !itemAfter.keys().hasAny(['locationId']) || (
+        locationId is string &&
+        existsAfter(balancePath) &&
+        balance.id == balanceId &&
+        balance.inventoryItemId == itemId &&
+        balance.locationId == locationId &&
+        balance.unit == itemAfter.unit &&
+        balance.quantity == itemAfter.quantityOnHand &&
+        balance.lastMovementId == movementId &&
+        balance.updatedByUid == actorUid
+      );
+    }
+
     function inventoryMovementMatchesItem(itemId, movementId) {
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(itemId);
+      let itemAfter = getAfter(itemPath).data;
       let movement = getAfter(movementPath).data;
       let embedded = request.resource.data.movements[request.resource.data.movements.size() - 1];
       return existsAfter(movementPath) &&
+        inventoryManagedBalanceMatches(itemId, itemAfter, movementId, request.auth.uid) &&
         movement.inventoryItemId == itemId &&
         movement.id == movementId &&
         movement.recordedByUid == request.auth.uid &&
@@ -243,6 +264,8 @@ service cloud.firestore {
       let movementId = request.resource.data.get('lastReceiptMovementId', '');
       let movementPath = /databases/$(database)/documents/inventoryMovements/$(movementId);
       let movement = getAfter(movementPath).data;
+      let itemPath = /databases/$(database)/documents/inventoryItems/$(movement.inventoryItemId);
+      let itemAfter = getAfter(itemPath).data;
       let lineIndex = movement.sourceLineIndex;
       let oldMap = resource.data.get('receivedQuantitiesByLine', {});
       let oldArray = resource.data.get('receivedQuantities', []);
@@ -258,6 +281,8 @@ service cloud.firestore {
         newMap.diff(oldMap).affectedKeys().hasOnly(['line_' + string(lineIndex), string(lineIndex)]) &&
         movementId is string && movementId.size() > 0 &&
         existsAfter(movementPath) &&
+        existsAfter(itemPath) &&
+        inventoryManagedBalanceMatches(movement.inventoryItemId, itemAfter, movementId, request.auth.uid) &&
         movement.id == movementId &&
         movement.sourceType == 'procurementReceipt' &&
         movement.sourceId == id &&
@@ -330,6 +355,7 @@ service cloud.firestore {
         existsAfter(itemPath) &&
         itemAfter.lastMovementId == movementId &&
         itemAfter.quantityOnHand == request.resource.data.newQuantity &&
+        inventoryManagedBalanceMatches(itemId, itemAfter, movementId, request.auth.uid) &&
         get(itemPath).data.quantityOnHand == request.resource.data.previousQuantity &&
         (
           (request.resource.data.type == 'Received' &&
