@@ -123,6 +123,30 @@ async function main() {
     }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
     await assertSucceeds(applyMovement('staff'));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { unit: 'kg' }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await assertFails(applyMovement('staff', { id: 'mov-fractional-pack', quantity: 1.5, previous: 10, next: 11.5 }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
+        ...itemFixture(), unit: 'kg',
+      });
+    });
+    await assertSucceeds(applyMovement('staff', {
+      id: 'mov-measured-two-decimals', quantity: 1.25, previous: 10, next: 11.25,
+    }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
+        ...itemFixture(), unit: 'kg',
+      });
+    });
+    await assertFails(applyMovement('staff', {
+      id: 'mov-measured-three-decimals', quantity: 1.234, previous: 10, next: 11.234,
+    }));
 
     await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
     await assertFails(updateDoc(doc(staffDb, 'inventoryMovements/mov-synthetic'), { quantity: 99 }));
