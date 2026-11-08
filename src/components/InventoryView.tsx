@@ -1,9 +1,9 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Boxes, CalendarClock, CheckCircle2, ClipboardCheck, ClipboardList, FileSpreadsheet, FileText, FileType, Pencil, Plus, Search, X } from 'lucide-react';
-import type { InventoryItem, InventoryMovement } from '../types';
+import type { InventoryItem, InventoryLocation, InventoryMovement } from '../types';
 import { getDatabase, saveDatabase, saveInventoryItem } from '../utils/storage';
 import { getInventoryQuantityPrecisionError } from '../utils/inventory';
-import { postInventoryMovement } from '../services/r2StorageClient';
+import { createInventoryLocation, getInventoryLocations, postInventoryMovement } from '../services/r2StorageClient';
 import { clearPendingInventoryMovement, flushPendingInventoryMovements, loadPendingInventoryMovement, loadPendingInventoryMovements, markPendingInventoryMovementRejected, savePendingInventoryMovement } from '../utils/inventory';
 import { useAuth } from '../contexts/AuthContext';
 import { filterInventoryItems, createInventoryId, getInventoryExpiryStatus, isValidInventoryDate, getInventoryStocktakeAdjustment, getLocalDateInputValue, resolveInventoryLocationForSave, summarizeInventoryExpiry } from '../utils/inventory';
@@ -30,6 +30,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [locationFilter, setLocationFilter] = useState('All locations');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'expiry'>('all');
   const [showAdd, setShowAdd] = useState(false);
+  const [showLocations, setShowLocations] = useState(false);
+  const [managedLocations, setManagedLocations] = useState<InventoryLocation[]>([]);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locationName, setLocationName] = useState('');
+  const [locationError, setLocationError] = useState('');
   const [editingTarget, setEditingTarget] = useState<InventoryItem | null>(null);
   const [movementTarget, setMovementTarget] = useState<InventoryItem | null>(null);
   const [stocktakeTarget, setStocktakeTarget] = useState<InventoryItem | null>(null);
@@ -44,7 +49,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   const [rejectedPendingId, setRejectedPendingId] = useState<string | null>(null);
   const autoFlushInProgress = useRef(false);
   const autoFlushAttempted = useRef(false);
-  const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
+  const [newItem, setNewItem] = useState({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: '', supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   const [movement, setMovement] = useState({ type: 'Received' as 'Received' | 'Issued', quantity: '', date: getLocalDateInputValue(), destination: '', reference: '', reason: '' });
 
   const filtered = useMemo(() => filterInventoryItems(items, {
@@ -72,6 +77,39 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
   };
 
   const actor = staffProfile?.fullName || currentUser?.displayName || currentUser?.email || 'SHINE Staff';
+  const canManageLocations = staffProfile?.role === 'Administrator' || staffProfile?.role === 'Manager';
+
+  useEffect(() => {
+    let cancelled = false;
+    setLocationsLoading(true);
+    getInventoryLocations()
+      .then((loaded) => { if (!cancelled) setManagedLocations(loaded); })
+      .catch(() => { if (!cancelled) setLocationError('Could not load managed locations. Check your connection and retry.'); })
+      .finally(() => { if (!cancelled) setLocationsLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleCreateLocation = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!canManageLocations || locationsLoading) return;
+    setLocationError('');
+    const name = locationName.trim();
+    if (!name || name.length > 80 || name.includes('/')) {
+      setLocationError('Enter a location name of 1–80 characters without a slash.');
+      return;
+    }
+    setLocationsLoading(true);
+    try {
+      const created = await createInventoryLocation(name);
+      setManagedLocations((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewItem((current) => ({ ...current, location: current.location || created.name }));
+      setLocationName('');
+    } catch (err) {
+      setLocationError(err instanceof Error ? err.message : 'Could not create the location.');
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!currentUser?.uid) {
@@ -142,7 +180,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
     const opening = Number(newItem.quantity);
     const minimum = Number(newItem.minimum);
     const cost = newItem.unitCost.trim() ? Number(newItem.unitCost) : undefined;
-    if (!newItem.name.trim() || !newItem.stockCode.trim() || !newItem.unit.trim() || !newItem.location.trim()) {
+    const selectedLocation = managedLocations.find((location) => location.isActive && location.name === newItem.location);
+    if (!newItem.name.trim() || !newItem.stockCode.trim() || !newItem.unit.trim() || !newItem.location.trim() || (!editingTarget && !selectedLocation)) {
       setError('Enter an item name, stock code, unit and storage location.');
       return;
     }
@@ -181,20 +220,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
       if (!persist(updated)) return;
       setShowAdd(false);
       setEditingTarget(null);
-      setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
+      setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: '', supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
       return;
     }
     const openingMovement: InventoryMovement[] = [];
     const item: InventoryItem = {
       id: createInventoryId('inv'), stockCode: newItem.stockCode.trim(), name: newItem.name.trim(), category: newItem.category,
-      unit: newItem.unit, quantityOnHand: 0, minimumStockLevel: minimum, location: newItem.location,
+      unit: newItem.unit, quantityOnHand: 0, minimumStockLevel: minimum, location: newItem.location, locationId: selectedLocation?.id,
       supplier: newItem.supplier.trim() || undefined, unitCostMWK: cost, expiryDate: newItem.expiryDate || undefined, condition: newItem.condition, notes: newItem.notes.trim() || undefined,
       movements: openingMovement, createdAt: now, updatedAt: now, createdBy: actor, updatedBy: actor,
       createdByUid: currentUser?.uid, updatedByUid: currentUser?.uid,
     };
     if (!persist(item)) return;
     setShowAdd(false);
-    setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
+    setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: '', supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' });
   };
 
   const applyConfirmedMovement = (
@@ -633,7 +672,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
               <div className="rounded-2xl bg-white/10 p-3"><Boxes className="h-7 w-7 text-amber-300" /></div>
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">Administration &amp; Operations</p><h1 id="inventory-title" className="mt-1 text-2xl font-bold sm:text-3xl">Inventory &amp; Stores</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-teal-50">Register stock, record receipts and issues, monitor minimum levels and retain a movement history for each item.</p></div>
             </div>
-            {!isViewOnly && <button type="button" onClick={() => { setError(''); setEditingTarget(null); setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: locations[0], supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' }); setShowAdd(true); }} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Add stock item</button>}
+            {canManageLocations && <button type="button" onClick={() => { setLocationError(''); setShowLocations(true); }} className="fx-press inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/40 px-4 py-2 text-sm font-bold text-white">Manage locations</button>}
+            {!isViewOnly && <button type="button" onClick={() => { setError(''); setEditingTarget(null); setNewItem({ name: '', stockCode: '', category: categories[0], unit: units[0], quantity: '0', minimum: '0', location: managedLocations.find((entry) => entry.isActive)?.name || '', supplier: '', unitCost: '', expiryDate: '', condition: 'Good' as NonNullable<InventoryItem['condition']>, notes: '' }); setShowAdd(true); }} className="fx-press fx-btn-main inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"><Plus className="h-4 w-4" /> Add stock item</button>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-5 sm:p-6">
@@ -655,7 +695,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-stone-900">Stock register</h2><p className="text-sm text-stone-600">Showing {filtered.length} of {items.length} items. Narrow the register by category, storage location or alert status.</p></div><div className="flex w-full flex-wrap gap-2 sm:w-auto"><label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 sm:min-w-56"><Search className="h-4 w-4 shrink-0 text-stone-500" /><span className="sr-only">Search inventory</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search item, code, location…" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><button type="button" onClick={() => void handleExport('docx')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileText className="h-4 w-4" /> Word</button><button type="button" onClick={() => void handleExport('xlsx')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" /> Excel</button><button type="button" onClick={() => void handleExport('pdf')} disabled={exporting || filtered.length === 0} className="fx-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-700 disabled:opacity-50"><FileType className="h-4 w-4" /> PDF</button></div></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="text-xs font-semibold text-stone-600">Category<select aria-label="Filter by category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All categories</option>{categories.map((value) => <option key={value}>{value}</option>)}</select></label>
-            <label className="text-xs font-semibold text-stone-600">Storage location<select aria-label="Filter by storage location" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All locations</option>{locations.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="text-xs font-semibold text-stone-600">Storage location<select aria-label="Filter by storage location" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option>All locations</option>{[...new Set([...locations, ...managedLocations.map((entry) => entry.name)])].map((value) => <option key={value}>{value}</option>)}</select></label>
             <label className="text-xs font-semibold text-stone-600">Stock alerts<select aria-label="Filter by stock alert" value={stockFilter} onChange={(e) => setStockFilter(e.target.value as 'all' | 'low' | 'expiry')} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm text-stone-900"><option value="all">All stock</option><option value="low">At/below minimum</option><option value="expiry">Expired / expiring soon</option></select></label>
           </div>
           {(query || categoryFilter !== 'All categories' || locationFilter !== 'All locations' || stockFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategoryFilter('All categories'); setLocationFilter('All locations'); setStockFilter('all'); }} className="min-h-10 rounded-lg border border-stone-300 px-3 text-sm font-semibold text-stone-700">Clear filters</button>}
@@ -690,7 +730,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <label className="text-sm font-semibold text-stone-700">Unit of measure *<select disabled={Boolean(editingTarget && (editingTarget.quantityOnHand !== 0 || (editingTarget.movements?.length ?? 0) > 0))} value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal">{units.map((v) => <option key={v}>{v}</option>)}</select></label>
           {editingTarget && (editingTarget.quantityOnHand !== 0 || (editingTarget.movements?.length ?? 0) > 0) && <p className="text-xs text-amber-800">The unit is locked because this item has stock or movement history. Do not relabel existing quantities; an approved conversion requires a separately reviewed process.</p>}{!editingTarget ? <label className="text-sm font-semibold text-stone-700" >Opening quantity (must be zero)<input type="number" min="0" step="0.01" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label> : <div className="rounded-xl bg-stone-50 p-3 text-sm text-stone-700"><strong>Current balance:</strong> {editingTarget.quantityOnHand} {editingTarget.unit}<p className="mt-1 text-xs">Use Stocktake or Receive/Issue to change quantities with an audit trail.</p></div>}
           <label className="text-sm font-semibold text-stone-700">Minimum stock level<input type="number" min="0" step={["kg", "litres"].includes(newItem.unit) ? "0.01" : "1"} value={newItem.minimum} onChange={(e) => setNewItem({ ...newItem, minimum: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
-          <label className="text-sm font-semibold text-stone-700">Storage location<select value={newItem.location} disabled={Boolean(editingTarget)} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal disabled:cursor-not-allowed disabled:bg-stone-100">{locations.map((v) => <option key={v}>{v}</option>)}</select>{editingTarget && <span className="mt-1 block text-xs font-normal text-amber-800">Location changes are disabled until SHINE has a traceable stock-transfer workflow. This prevents stock from appearing to move without a transfer record.</span>}</label>
+          <label className="text-sm font-semibold text-stone-700">Storage location<select required value={newItem.location} disabled={Boolean(editingTarget) || managedLocations.filter((entry) => entry.isActive).length === 0} onChange={(e) => setNewItem({ ...newItem, location: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 font-normal disabled:cursor-not-allowed disabled:bg-stone-100">{editingTarget ? <option>{newItem.location}</option> : managedLocations.filter((entry) => entry.isActive).map((entry) => <option key={entry.id} value={entry.name}>{entry.name}</option>)}</select>{editingTarget && <span className="mt-1 block text-xs font-normal text-amber-800">Location changes are disabled until SHINE has a traceable stock-transfer workflow. This prevents stock from appearing to move without a transfer record.</span>}{!editingTarget && managedLocations.filter((entry) => entry.isActive).length === 0 && <span className="mt-1 block text-xs font-normal text-amber-800">No active managed locations yet. A Manager or Administrator must add Shine Centre and Girls House before registering new stock.</span>}</label>
           <label className="text-sm font-semibold text-stone-700">Unit cost (MWK)<input type="number" min="0" step="0.01" value={newItem.unitCost} onChange={(e) => setNewItem({ ...newItem, unitCost: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Supplier<input value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
           <label className="text-sm font-semibold text-stone-700">Expiry date (if applicable)<input type="date" value={newItem.expiryDate} onChange={(e) => setNewItem({ ...newItem, expiryDate: e.target.value })} className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label>
@@ -698,6 +738,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ items, onRefresh }
           <label className="text-sm font-semibold text-stone-700 sm:col-span-2">Notes<textarea value={newItem.notes} onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })} rows={2} className="mt-1 w-full rounded-xl border border-stone-300 p-3 font-normal" /></label>
           <div className="flex flex-col-reverse gap-2 pt-2 sm:col-span-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => { setShowAdd(false); setEditingTarget(null); }} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Cancel</button><button type="submit" disabled={saving} className="fx-press fx-btn-main min-h-11 rounded-xl px-5 text-sm font-bold disabled:opacity-50">{saving ? 'Saving…' : editingTarget ? 'Save changes' : 'Save stock item'}</button></div>
         </form></section></div>}
+
+      {showLocations && <div className="fixed inset-0 z-[85] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLocations(false); }}><section role="dialog" aria-modal="true" aria-labelledby="inventory-locations-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-center justify-between gap-3"><div><h2 id="inventory-locations-title" className="text-xl font-bold text-stone-900">Managed stock locations</h2><p className="mt-1 text-sm text-stone-600">Create active locations for new stock. Existing location labels remain unchanged until physical verification.</p></div><button type="button" aria-label="Close locations" onClick={() => setShowLocations(false)} className="rounded-xl p-2 hover:bg-stone-100"><X className="h-5 w-5" /></button></div><form onSubmit={handleCreateLocation} className="flex flex-col gap-2 sm:flex-row"><label className="flex-1 text-sm font-semibold text-stone-700">New location name<input value={locationName} onChange={(event) => setLocationName(event.target.value)} maxLength={80} required placeholder="e.g. Shine Centre" className="mt-1 min-h-11 w-full rounded-xl border border-stone-300 px-3 font-normal" /></label><button type="submit" disabled={locationsLoading || !locationName.trim()} className="fx-btn-main mt-5 min-h-11 rounded-xl px-4 text-sm font-bold disabled:opacity-50">{locationsLoading ? 'Saving…' : 'Add location'}</button></form>{locationError && <p role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{locationError}</p>}<div className="mt-5 space-y-2">{locationsLoading && managedLocations.length === 0 ? <p className="text-sm text-stone-500">Loading locations…</p> : managedLocations.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-stone-600">No managed locations have been created yet. Add Shine Centre and Girls House to begin.</p> : managedLocations.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 p-3"><span className="font-semibold text-stone-800">{entry.name}</span><span className="text-xs font-semibold text-emerald-700">{entry.isActive ? 'Active' : 'Inactive'}</span></div>)}</div><p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">Deactivation is intentionally unavailable until per-location balances and all stock writers can enforce the zero-stock safeguard together. This protects stock history from being stranded at an inactive location.</p><div className="mt-5 flex justify-end"><button type="button" onClick={() => setShowLocations(false)} className="min-h-11 rounded-xl border border-stone-300 px-4 text-sm font-semibold">Close</button></div></section></div>}
 
       {movementTarget && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-stone-950/50 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setMovementTarget(null); }}><section role="dialog" aria-modal="true" aria-labelledby="movement-title" className="fx-sheet-enter max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-7"><div className="mb-5 flex items-start justify-between gap-3"><div><h2 id="movement-title" className="text-xl font-bold">{movement.type === 'Received' ? 'Receive stock' : 'Issue stock'}</h2><p className="mt-1 text-sm text-stone-600">{movementTarget.name} · Balance: {movementTarget.quantityOnHand} {movementTarget.unit}</p></div><button type="button" aria-label="Close movement form" disabled={Boolean(pendingMovementId)} onClick={() => setMovementTarget(null)}><X className="h-5 w-5" /></button></div>
         <form onSubmit={submitMovement} className="space-y-4"><fieldset disabled={saving} className="space-y-4">
