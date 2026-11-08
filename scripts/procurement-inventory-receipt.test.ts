@@ -37,18 +37,18 @@ const baseList = (): ProcurementList => ({
 });
 const inventoryItems = (): InventoryItem[] => [{
   id: 'stock-books', stockCode: 'SYN-BOOKS', name: 'Exercise books', category: 'Stationery', unit: 'packs',
-  quantityOnHand: 4, minimumStockLevel: 1, location: 'Synthetic store', movements: [],
+  quantityOnHand: 4, minimumStockLevel: 1, location: 'Synthetic store', locationId: 'loc_shine centre', movements: [],
   createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
   createdBy: 'synthetic', updatedBy: 'synthetic',
 }, {
   id: 'stock-service', stockCode: 'SYN-SERVICE', name: 'Cleaning service', category: 'Services', unit: 'service',
-  quantityOnHand: 0, minimumStockLevel: 0, location: 'Synthetic store', movements: [],
+  quantityOnHand: 0, minimumStockLevel: 0, location: 'Synthetic store', locationId: 'loc_shine centre', movements: [],
   createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
   createdBy: 'synthetic', updatedBy: 'synthetic',
 }];
 const choices = [
-  { itemIndex: 0, inventoryItemId: 'stock-books' },
-  { itemIndex: 1, inventoryItemId: null },
+  { itemIndex: 0, inventoryItemId: 'stock-books', locationId: 'loc_shine centre' },
+  { itemIndex: 1, inventoryItemId: null, locationId: null },
 ];
 function okResult(payload: Record<string, unknown>, date = String(payload.date), duplicate = false): ProcurementReceiptMovementResult {
   return {
@@ -62,6 +62,7 @@ function okResult(payload: Record<string, unknown>, date = String(payload.date),
       sourceId: payload.sourceId,
       sourceLineIndex: payload.sourceLineIndex,
       date,
+      locationId: payload.locationId,
     },
   };
 }
@@ -85,6 +86,7 @@ async function main() {
     assert.equal(calls[0].sourceType, 'procurementReceipt');
     assert.equal(calls[0].sourceId, 'PRC-1234567');
     assert.equal(calls[0].sourceLineIndex, 0);
+    assert.equal(calls[0].locationId, 'loc_shine centre', 'the explicit destination is sent with the stable receipt movement');
     assert.equal(calls[0].reason, 'Procurement receipt: Synthetic school supplies');
     assert.deepEqual(result.movementIds, ['prc_PRC-1234567_0']);
     assert.equal(readProcurementReceiptIntent(storage, 'staff-a', 'PRC-1234567')?.date, '2026-10-27');
@@ -101,6 +103,18 @@ async function main() {
       uid: 'staff-a', list: baseList(), choices, inventoryItems: [{ ...inventoryItems()[0], unit: 'boxes' }], storage,
       postMovement: async () => { calls += 1; return okResult({}); },
     }), /Unit mismatch/);
+    await assert.rejects(postProcurementReceiptMovements({
+      uid: 'staff-a', list: baseList(), choices: [{ itemIndex: 0, inventoryItemId: 'stock-books', locationId: null }, choices[1]],
+      inventoryItems: inventoryItems(), storage, postMovement: async () => { calls += 1; return okResult({}); },
+    }), /Choose the verified active destination/);
+    await assert.rejects(postProcurementReceiptMovements({
+      uid: 'staff-a', list: baseList(), choices: [{ itemIndex: 0, inventoryItemId: 'stock-books', locationId: 'loc_other store' }, choices[1]],
+      inventoryItems: inventoryItems(), storage, postMovement: async () => { calls += 1; return okResult({}); },
+    }), /Choose the verified active destination/);
+    await assert.rejects(postProcurementReceiptMovements({
+      uid: 'staff-a', list: baseList(), choices, inventoryItems: [{ ...inventoryItems()[0], locationId: undefined }], storage,
+      postMovement: async () => { calls += 1; return okResult({}); },
+    }), /physical location verification/);
     assert.equal(calls, 0, 'invalid receipt choices fail before a network write');
     assert.equal(storage.values.size, 0);
   }
@@ -131,8 +145,8 @@ async function main() {
     const storage = new MemoryStorage();
     const calls: Record<string, unknown>[] = [];
     const trackedChoices = [
-      { itemIndex: 0, inventoryItemId: 'stock-books' },
-      { itemIndex: 1, inventoryItemId: 'stock-service' },
+      { itemIndex: 0, inventoryItemId: 'stock-books', locationId: 'loc_shine centre' },
+      { itemIndex: 1, inventoryItemId: 'stock-service', locationId: 'loc_shine centre' },
     ];
     let firstAttempt = true;
     const postMovement = async (payload: Record<string, unknown>) => {
