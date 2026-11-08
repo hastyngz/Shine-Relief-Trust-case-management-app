@@ -32,7 +32,7 @@
 - Duplicate operation ID with identical payload: return the original confirmed movement; changed payload under the same ID must be rejected.
 - Countable fractional quantities, measured quantities beyond two decimals and incompatible units: reject at the server and rules boundaries.
 - Offline retry or timeout: retain the same operation ID and payload; do not show a stock change before server confirmation.
-- Procurement receipt: require an explicit active destination and include its balance and procurement receipt ledger in the same atomic commit.
+- Every procurement receipt requires an explicit active managed destination and includes its balance and procurement receipt ledger in the same atomic commit. Legacy items without a verified managed location are blocked until physical verification and approved location assignment.
 
 ---
 
@@ -50,7 +50,7 @@
 - [ ] **Step 1: Add failing Worker tests** for first receipt to a zero-stock managed item creating a zero-based balance and committing item + balance + movement together; subsequent receipt, issue and stocktake updating the same balance; insufficient stock; inactive/missing/mismatched location; and a non-zero managed aggregate with no balance being rejected without writes.
 - [ ] **Step 2: Run** `npm run test:inventory-movement-worker` and confirm the new cases fail for the missing managed-balance behavior.
 - [ ] **Step 3: Implement** the managed-item branch in `handleInventoryMovement`. Read and validate the active location and deterministic balance document. Create a balance only when it is absent and the item has zero quantity and no movements; otherwise require the existing balance to match the item, location, unit and aggregate. Update the item, balance and movement in one `firestoreCommit` using item/balance update-time preconditions and movement `exists:false`. Preserve the legacy path for items without `locationId`.
-- [ ] **Step 4: Extend Worker tests** for duplicate retry, changed-payload ID reuse, stale balance retry, no partial writes on any failed precondition, and precision boundaries. Verify procurement receipts for managed items require an explicit active destination and atomically update the procurement receipt ledger with the same balance transaction.
+- [ ] **Step 4: Extend Worker tests** for duplicate retry, changed-payload ID reuse, stale balance retry, no partial writes on any failed precondition, and precision boundaries. Verify every procurement receipt requires an explicit active destination and atomically updates the procurement receipt ledger with the same balance transaction; legacy items without a verified managed location are rejected.
 - [ ] **Step 5: Run** `npm run test:inventory-movement-worker` and `node --check workers/r2-storage/index.mjs`; both must pass.
 
 ### Task 2: Enforce balance transaction integrity in Firestore rules
