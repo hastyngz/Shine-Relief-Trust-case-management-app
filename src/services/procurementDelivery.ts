@@ -102,7 +102,7 @@ export async function postProcurementDeliveryMovements(args: {
     }
     const movement = result?.movement || {};
     if (!result?.ok || movement.id !== id || movement.inventoryItemId !== choice.inventoryItemId || movement.quantity !== quantity ||
-      movement.sourceType !== 'procurementReceipt' || movement.sourceId !== args.list.id || movement.sourceLineIndex !== index) {
+      movement.sourceType !== 'procurementReceipt' || movement.sourceId !== args.list.id || movement.sourceLineIndex !== index || movement.locationId !== choice.locationId) {
       throw new Error(`The server response for delivery line ${index + 1} did not match the request. Keep this delivery pending and contact an Administrator.`);
     }
     if (result.duplicate) duplicateCount++;
