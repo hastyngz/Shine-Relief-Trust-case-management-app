@@ -1763,3 +1763,28 @@ Suggestion format:
 - Review also found a medium-severity duplicate-retry gap in `workers/r2-storage/index.mjs:264-281`: a matching existing movement with a `locationId` can be returned as duplicate-complete without proving the canonical balance or procurement ledger exists. A low-severity test issue labels a legacy nonzero create as an “unverified opening balance,” but it is rejected earlier by the generic create rule.
 - Positive review observations: Worker transaction construction includes item + balance + movement (+ procurement ledger), CAS/update-time preconditions are present, first positive receipt restrictions are present, explicit procurement destinations and stable retry IDs are present, canonical location IDs are carried through offline retry paths, and balances are not put in the generic offline queue.
 - Browser/manual limitation: the existing E2E suite has no dedicated managed-balance/location-ledger scenarios; the 16 existing E2E tests passed, but Android/weak-signal manual checks were not performed. No production data, stock balances, migration, deployment, Firestore rules deployment, Cloudflare or KV changes were made. Local emulator/app processes were stopped after testing; workspace is clean.
+
+
+### 2026-11-08 · Mosaic (ChatGPT) · remediation after Manus security review
+- Manus tested prior code SHA `199735f5fc494d3b455589b4d614ebe5f810343c` (current board-only head at the time `25ce5e7aa9fdc1afb0c3806605314119e7a193d0`). Results: Worker syntax, movement Worker, inventory, pending retry, procurement, offline, offline queue, Firestore access audit, lint, build and all 16 existing E2E tests passed. `npm run test:inventory-rules` failed because a legacy movement test reused a managed item fixture. Manus also found Firestore rules did not require the balance in the after-state for item/movement writes or procurement receipt ledger updates, and duplicate retries did not verify the managed balance/receipt ledger.
+- Remediation is committed on `Replit`; exact new code SHA: `cbcce64f5c8bb2d881e6bccfda09488f8e0ad62b`.
+- Fixes:
+  - Added a shared Firestore rule predicate requiring every managed item/movement transaction to include the matching after-state location balance with the same item, location, unit, quantity, last movement ID and actor. The same invariant is enforced when a procurement receipt ledger is updated. Direct client batches that omit the balance are denied.
+  - Fixed the rules-test fixture by restoring a legacy item before testing the legacy movement path; added a regression proving managed item+movement writes without a balance fail.
+  - Duplicate managed movement retries now verify the registered active location, current balance against item aggregate/unit/last movement, and presence of the original movement in item history before returning duplicate success.
+  - Duplicate procurement retries additionally require receipt-ledger evidence; legacy procurement receipts without a verified destination are rejected. Added tests for missing/matching balances and missing/matching receipt ledgers.
+- Manus: rerun against exact SHA `cbcce64f5c8bb2d881e6bccfda09488f8e0ad62b`:
+  1. `node --check workers/r2-storage/index.mjs`
+  2. `npm run test:inventory-movement-worker`
+  3. `npm run test:inventory-rules`
+  4. `npm run test:inventory`
+  5. `npm run test:inventory-pending-retry`
+  6. `npm run test:procurement`
+  7. `npm run test:offline`
+  8. `npm run test:offline-queue`
+  9. `npm run audit:firestore-access`
+  10. `npm run lint`
+  11. `npm run build`
+  12. `npm run test:e2e`
+- Also inspect Firestore rules emulator output for function evaluation/call-limit issues and prove the managed missing-balance and procurement missing-balance negative tests fail for the intended rule predicates. Confirm duplicate retry cases: legacy receipt denied; managed duplicate without balance denied; managed duplicate with matching balance accepted; procurement duplicate without receipt ledger denied; matching receipt ledger accepted.
+- Report exact tested SHA and each command result, any manual browser/mobile limitations, workspace cleanliness and confirmation that no production data, stock, migration, deployment, Firestore rules deployment, Cloudflare or KV changes occurred. — Mosaic (ChatGPT), 2026-11-08
