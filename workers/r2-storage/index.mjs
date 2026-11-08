@@ -106,6 +106,23 @@ function isValidCalendarDate(value) {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
 }
 
+function getInventoryQuantityPrecisionError(value, unit) {
+  const normalizedUnit = typeof unit === 'string' ? unit.trim().toLowerCase() : '';
+  const measuredUnits = new Set(['kg', 'kilogram', 'kilograms', 'litre', 'litres', 'liter', 'liters', 'l']);
+  const countableUnits = new Set(['bag', 'bags', 'piece', 'pieces', 'bottle', 'bottles', 'box', 'boxes', 'pack', 'packs', 'tray', 'trays', 'unit', 'units']);
+  if (measuredUnits.has(normalizedUnit)) {
+    return Math.abs(value * 100 - Math.round(value * 100)) > 1e-8
+      ? 'Measured stock quantities may have no more than two decimal places.'
+      : undefined;
+  }
+  if (countableUnits.has(normalizedUnit)) {
+    return Number.isInteger(value)
+      ? undefined
+      : 'Countable stock quantities must be whole numbers.';
+  }
+  return 'This inventory unit is not recognised. An Administrator must review the unit before stock can be moved.';
+}
+
 function validateInventoryMovementPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new ApiError('A stock movement is required.');
   const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value);
@@ -211,9 +228,15 @@ async function handleInventoryMovement(request, staff, idToken) {
     const itemDocument = await firestoreGet(itemPath, idToken);
     if (!itemDocument) throw new ApiError('The inventory item was not found in the synced register. Sync and refresh before retrying.', 404);
     const item = decodeFirestoreFields(itemDocument.fields);
+    const unitPrecisionError = getInventoryQuantityPrecisionError(
+      payload.type === 'Adjustment' ? payload.countedQuantity : payload.quantity,
+      item.unit,
+    );
+    if (unitPrecisionError) throw new ApiError(unitPrecisionError, 400);
     const previousQuantity = item.quantityOnHand;
-    if (!Number.isFinite(previousQuantity) || previousQuantity < 0) {
-      throw new ApiError('The inventory record is invalid. Review it before recording a movement.', 409);
+    if (!Number.isFinite(previousQuantity) || previousQuantity < 0 ||
+        getInventoryQuantityPrecisionError(previousQuantity, item.unit)) {
+      throw new ApiError('The inventory record or its recorded quantity precision is invalid. Review it before recording a movement.', 409);
     }
     if (procurementLine && procurementLine.unit !== item.unit) {
       throw new ApiError('The procurement and inventory units do not match. Convert the quantity explicitly before posting.', 409);
@@ -226,8 +249,9 @@ async function handleInventoryMovement(request, staff, idToken) {
     if (payload.type === 'Issued' && payload.quantity > previousQuantity) {
       throw new ApiError(`Insufficient stock: only ${previousQuantity} ${String(item.unit || 'units')} are recorded.`, 409);
     }
-    if (!Number.isFinite(nextQuantity) || nextQuantity < 0 || nextQuantity > 1_000_000_000) {
-      throw new ApiError('The resulting stock balance is outside the allowed range.', 409);
+    if (!Number.isFinite(nextQuantity) || nextQuantity < 0 || nextQuantity > 1_000_000_000 ||
+        getInventoryQuantityPrecisionError(nextQuantity, item.unit)) {
+      throw new ApiError('The resulting stock balance is outside the allowed range or violates the item unit precision.', 409);
     }
 
     const now = new Date().toISOString();
