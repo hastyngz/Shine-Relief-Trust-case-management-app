@@ -283,3 +283,19 @@ This closes the quantity-precision design decision. It does not authorize stock 
 Automated verification: Worker movement tests, Firestore inventory transaction rules tests, inventory helper tests, TypeScript check, full application build and offline end-to-end tests all passed in GitHub Actions run `42454689090` at commit `dc0d52a6fd687607bfa01942af88b22656092cef`.
 
 This is a bounded quantity-validation slice, not the location-ledger migration. The live/exported inventory still needs a unit audit before this rules change is deployed; legacy or custom unit labels outside the recognized set will be blocked from stock movements until reviewed. No production Firestore rules, Worker deployment, stock data, opening balances or migration were changed.
+
+
+### Legacy location-field write containment (2026-11-08)
+
+A focused rules review found that the existing Inventory UI disabled editing an item's legacy `location` field, but the general Firestore metadata-update rule still permitted a direct client update to that field. This meant a modified client, import or restore writer could relabel stock without a transfer ledger, even though the normal UI did not expose that action.
+
+- The Replit branch now requires `request.resource.data.location == resource.data.location` on every `inventoryItems` update. This is a database-boundary guard, not just a UI restriction.
+- A Firestore rules-emulator regression test attempts to change `Main Office` to `Girls House` directly and expects denial.
+- This deliberately freezes legacy location labels until the managed registry and per-location ledger are introduced. It does not rename, migrate or reassign any existing stock.
+- The future migration must replace this narrow immutability guard with a controlled, server-validated location model; do not simply remove it when the registry screen is added.
+
+The current single-location movement Worker still reads the immutable legacy item location and records it in movement history. New location-aware receipt, issue and transfer operations must be introduced together with the authoritative balance ledger and all-writer cutover controls. No production rules deployment or stock mutation is implied by this code change.
+
+### Deactivation concurrency requirement
+
+The non-zero-balance deactivation check must be race-safe, not just a query followed by a location update. Before implementing it, all location-balance writers must participate in a shared location-document precondition/version protocol: each stock-changing commit reads the active location document and writes a monotonic activity/version field under its update-time precondition; deactivation reads the same document, confirms no non-zero balances, and updates the location to inactive using that same precondition. If either operation wins first, the other must retry and re-evaluate. Until every receipt, issue, adjustment, transfer and procurement writer follows this protocol, location deactivation must remain unavailable rather than rely on a racy balance scan.
