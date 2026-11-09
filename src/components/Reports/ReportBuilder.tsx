@@ -124,7 +124,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
       ? { resolution: qualityResolutions.find((entry) => entry.issueId === issue.id) }
       : {}),
   }));
-  const persistQualityAudit = async (format: 'docx' | 'xlsx' | 'pdf' | 'csv') => {
+  const persistQualityAudit = async (format: 'docx' | 'xlsx' | 'pdf') => {
     if (!currentUser) throw new Error('Sign in is required to record report quality history.');
     const timestamp = new Date().toISOString();
     await appendReportHistory({
@@ -262,7 +262,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
     setFixedReportVersion(version);
   };
 
-  const exportCsv = () => {
+  const exportExcel = async () => {
     if (!ensureQualityOverride()) return;
     if (!currentUser) {
       setExportError('Sign in is required to record this report download.');
@@ -286,16 +286,20 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
         hideIdentifyingDetails ? '' : issue.suggestedFix || '',
       ]),
     ];
-    const csv = `\uFEFF${rows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n')}`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const fileName = `SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet(rows);
+    if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Sponsor Report');
+    const blob = new Blob([XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fileName = `SHINE_${audience}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
     void (async () => {
       try {
         await appendReportExport(await createReportExportRecord(blob, {
           reportType: 'sponsor-donor',
           title: qualityConfig.title,
           fileName,
-          format: 'csv',
+          format: 'xlsx',
           openProblems: auditedQualityIssues
             .filter((issue) => issue.status !== 'resolved' && issue.status !== 'overridden')
             .map((issue) => ({ severity: issue.severity, text: qualityMessage(issue).title })),
@@ -313,7 +317,7 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
         link.download = fileName;
         link.click();
         URL.revokeObjectURL(url);
-        await persistQualityAudit('csv');
+        await persistQualityAudit('xlsx');
       } catch (error) {
         setExportError(error instanceof Error ? error.message : 'The report could not be downloaded.');
       }
@@ -342,8 +346,8 @@ export const ReportBuilder: React.FC<ReportBuilderProps> = ({ db, onClose, onOpe
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={exportCsv} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
-            <Download className="h-4 w-4" /> Export CSV
+          <button type="button" onClick={() => void exportExcel()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
+            <Download className="h-4 w-4" /> Export Excel
           </button>
           <button type="button" onClick={printReport} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-stone-300 px-3 text-xs font-bold">
             <Printer className="h-4 w-4" /> Print / Save PDF

@@ -1,25 +1,4 @@
 import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  AlignmentType,
-  HeadingLevel,
-  Header,
-  Footer,
-  PageNumber,
-  BorderStyle,
-  ShadingType,
-  ImageRun,
-} from 'docx';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import {
   AppDatabase,
   Girl,
   Household,
@@ -187,7 +166,7 @@ function privacySafeReportConfig(db: AppDatabase, config: ReportConfig): ReportC
   };
 }
 
-function reportRowsToSheet(rows: Array<Record<string, unknown>>, hideIdentifyingDetails: boolean) {
+function reportRowsToSheet(XLSX: typeof import('xlsx'), rows: Array<Record<string, unknown>>, hideIdentifyingDetails: boolean) {
   if (!hideIdentifyingDetails) return XLSX.utils.json_to_sheet(rows);
   const safeRows = rows.map((row) => Object.fromEntries(Object.entries(row)
     .filter(([key]) => !SENSITIVE_FIELD.test(key) && !/\b(?:id|name|phone|email|contact|school)\b/i.test(key))));
@@ -269,8 +248,8 @@ export function filterDataForReport(db: AppDatabase, config: ReportConfig) {
   let payroll = [...(db.payrollRecords || [])];
   let workplans = [...(db.workplans || [])];
   let schedules = [...(db.schedules || [])];
-  let photos = [...(db.attachments || [])].filter((attachment) => attachment.consent === true);
-  let caseActions = [...(db.caseActions || [])];
+  let photos = [...(db.attachments || [])].filter((attachment) => attachment.consent === true && String(attachment.targetType) !== 'safeguardingCase');
+  let caseActions = [...(db.caseActions || [])].filter((action) => !['safeguarding', 'healthFollowUp'].includes(action.sourceType));
   let caseReviews = [...(db.caseReviews || [])];
   let attendance = [...(db.attendanceRecords || [])];
   let educationHistory = [...(db.educationHistory || [])];
@@ -499,6 +478,11 @@ export function buildRecordedRecommendations(db: AppDatabase, config: ReportConf
 // 1. PROFESSIONAL WORD (.DOCX) GENERATOR
 // ============================================================================
 export async function generateWordReport(db: AppDatabase, config: ReportConfig): Promise<Blob> {
+  const {
+    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+    WidthType, AlignmentType, HeadingLevel, Header, Footer, PageNumber,
+    BorderStyle, ShadingType, ImageRun,
+  } = await import('docx');
   config = privacySafeReportConfig(db, config);
   const qualityIssues = reviewReportQuality(db, config).map((issue) =>
     config.hideIdentifyingDetails ? redactValue(issue, identifyingValues(db)) as QualityIssue : issue);
@@ -1110,7 +1094,8 @@ export async function generateWordReport(db: AppDatabase, config: ReportConfig):
 // ============================================================================
 // 2. PROFESSIONAL MULTI-SHEET EXCEL (.XLSX) GENERATOR
 // ============================================================================
-export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Uint8Array {
+export async function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Promise<Uint8Array> {
+  const XLSX = await import('xlsx');
   config = privacySafeReportConfig(db, config);
   const qualityIssues = reviewReportQuality(db, config).map((issue) =>
     config.hideIdentifyingDetails ? redactValue(issue, identifyingValues(db)) as QualityIssue : issue);
@@ -1169,7 +1154,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Guardian Location': g.guardianInfo?.villageOrLocation || '',
       'Guardian Situation': g.guardianInfo?.situationNotes || '',
     }));
-    const wsGirls = reportRowsToSheet(girlsData, config.hideIdentifyingDetails === true);
+    const wsGirls = reportRowsToSheet(XLSX, girlsData, config.hideIdentifyingDetails === true);
     wsGirls['!cols'] = [{ wch: 10 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 25 }];
     XLSX.utils.book_append_sheet(wb, wsGirls, 'Girls Roster');
   }
@@ -1186,7 +1171,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Monthly Rent (MWK)': h.monthlyRentCost || 0,
       Notes: h.notes || '',
     }));
-    const wsHouse = reportRowsToSheet(houseData, config.hideIdentifyingDetails === true);
+    const wsHouse = reportRowsToSheet(XLSX, houseData, config.hideIdentifyingDetails === true);
     wsHouse['!cols'] = [{ wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 30 }];
     XLSX.utils.book_append_sheet(wb, wsHouse, 'Households');
   }
@@ -1208,7 +1193,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Further action required': item.furtherActionRequired ? 'Yes' : 'No',
       'Next follow-up': item.nextFollowUpDate || '',
     }));
-    const sheet = reportRowsToSheet(activityData, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, activityData, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 30 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 36 }, { wch: 36 }, { wch: 36 }, { wch: 36 }, { wch: 20 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Household Activities');
   }
@@ -1231,7 +1216,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Further Action Required': e.furtherActionRequired ? 'YES' : 'NO',
       'Recorded By': e.recordedBy || '',
     }));
-    const wsEdu = reportRowsToSheet(eduData, config.hideIdentifyingDetails === true);
+    const wsEdu = reportRowsToSheet(XLSX, eduData, config.hideIdentifyingDetails === true);
     wsEdu['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 20 }, { wch: 25 }, { wch: 22 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 12 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, wsEdu, 'Education Follow-ups');
   }
@@ -1249,7 +1234,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Reason for change': item.reasonForChange || '',
       Notes: item.notes || '',
     }));
-    const sheet = reportRowsToSheet(historyData, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, historyData, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 32 }, { wch: 36 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Education History');
   }
@@ -1265,7 +1250,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Support required': item.supportRequired || '',
       Notes: item.notes || '',
     }));
-    const sheet = reportRowsToSheet(examData, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, examData, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 44 }, { wch: 28 }, { wch: 32 }, { wch: 36 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Examinations');
   }
@@ -1282,7 +1267,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       Notes: item.notes || '',
       'Recorded by': item.recordedBy,
     }));
-    const sheet = reportRowsToSheet(attendanceData, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, attendanceData, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 28 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 36 }, { wch: 22 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Attendance');
   }
@@ -1300,7 +1285,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Approved by': item.approvedBy,
       Notes: item.notes || '',
     }));
-    const sheet = reportRowsToSheet(leaveData, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, leaveData, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 22 }, { wch: 36 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Leave and Absence');
   }
@@ -1320,7 +1305,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Next Follow-up Date': h.nextFollowUpDate || '',
       'Recorded By': h.recordedBy || '',
     }));
-    const wsHealth = reportRowsToSheet(healthData, config.hideIdentifyingDetails === true);
+    const wsHealth = reportRowsToSheet(XLSX, healthData, config.hideIdentifyingDetails === true);
     wsHealth['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 25 }, { wch: 22 }, { wch: 25 }, { wch: 22 }, { wch: 15 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, wsHealth, 'Health Follow-ups');
   }
@@ -1338,7 +1323,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Support Provided': f.supportProvided || '',
       'Recorded By': f.recordedBy || '',
     }));
-    const wsFam = reportRowsToSheet(famData, config.hideIdentifyingDetails === true);
+    const wsFam = reportRowsToSheet(XLSX, famData, config.hideIdentifyingDetails === true);
     wsFam['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, wsFam, 'Family Follow-ups');
   }
@@ -1350,7 +1335,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       'Assigned Staff': action.assignedStaffName, Priority: action.priority, Status: action.status,
       'Completion Notes': action.completionNotes || '',
     }));
-    const sheet = reportRowsToSheet(caseActionRows, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, caseActionRows, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 32 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Case Actions');
   }
@@ -1362,7 +1347,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       Progress: review.progress || '', Challenges: review.challenges || '', 'Action Plan': review.actionPlan || '',
       'Next Review': review.nextReviewDate || '',
     }));
-    const sheet = reportRowsToSheet(caseReviewRows, config.hideIdentifyingDetails === true);
+    const sheet = reportRowsToSheet(XLSX, caseReviewRows, config.hideIdentifyingDetails === true);
     sheet['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 32 }, { wch: 14 }];
     XLSX.utils.book_append_sheet(wb, sheet, 'Case Reviews');
   }
@@ -1382,7 +1367,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       Notes: e.notes || '',
       'Recorded By': e.createdBy || '',
     }));
-    const wsExp = reportRowsToSheet(expData, config.hideIdentifyingDetails === true);
+    const wsExp = reportRowsToSheet(XLSX, expData, config.hideIdentifyingDetails === true);
     wsExp['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 10 }, { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 25 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, wsExp, 'Expenses');
   }
@@ -1400,7 +1385,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       Notes: r.notes || '',
       'Recorded By': r.createdBy || '',
     }));
-    const wsRent = reportRowsToSheet(rentData, config.hideIdentifyingDetails === true);
+    const wsRent = reportRowsToSheet(XLSX, rentData, config.hideIdentifyingDetails === true);
     wsRent['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 20 }, { wch: 25 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, wsRent, 'Rent Payments');
   }
@@ -1498,7 +1483,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       Location: w.location,
       Notes: w.notes || '',
     }));
-    const wsWkp = reportRowsToSheet(wkpData, config.hideIdentifyingDetails === true);
+    const wsWkp = reportRowsToSheet(XLSX, wkpData, config.hideIdentifyingDetails === true);
     wsWkp['!cols'] = [
       { wch: 10 },
       { wch: 14 },
@@ -1532,7 +1517,7 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
       Status: s.status,
       Notes: s.notes || '',
     }));
-    const wsSch = reportRowsToSheet(schData, config.hideIdentifyingDetails === true);
+    const wsSch = reportRowsToSheet(XLSX, schData, config.hideIdentifyingDetails === true);
     wsSch['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 25 }, { wch: 20 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 25 }];
     XLSX.utils.book_append_sheet(wb, wsSch, 'Schedules');
   }
@@ -1570,7 +1555,9 @@ export function generateExcelWorkbook(db: AppDatabase, config: ReportConfig): Ui
 // ============================================================================
 // 3. PROFESSIONAL PDF GENERATOR (JSPDF + JSPDF-AUTOTABLE)
 // ============================================================================
-export function generatePdfReport(db: AppDatabase, config: ReportConfig): Blob {
+export async function generatePdfReport(db: AppDatabase, config: ReportConfig): Promise<Blob> {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
   config = privacySafeReportConfig(db, config);
   const qualityIssues = reviewReportQuality(db, config).map((issue) =>
     config.hideIdentifyingDetails ? redactValue(issue, identifyingValues(db)) as QualityIssue : issue);

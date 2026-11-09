@@ -12,7 +12,7 @@ export type ThemeId =
   | 'fire-violet'
   | 'vibrant-shine';
 
-export type AppViewMode = 'classic' | 'ios' | 'foundation';
+export type AppViewMode = 'classic' | 'ios' | 'foundation' | 'sunrise' | 'navy';
 export type MobileViewMode = AppViewMode;
 export type FoundationLook = 'editorial-ink' | 'civic-navy' | 'warm-paper';
 
@@ -35,6 +35,14 @@ export interface ThemeOption {
   primary: string;
   accent: string;
 }
+
+export const appViews: { id: AppViewMode; name: string }[] = [
+  { id: 'classic', name: 'Classic' },
+  { id: 'ios', name: 'iOS' },
+  { id: 'foundation', name: 'Foundation' },
+  { id: 'sunrise', name: 'Sunrise' },
+  { id: 'navy', name: 'Navy' },
+];
 
 export const themes: ThemeOption[] = [
   { id: 'shine', name: 'SHINE brand, true', primary: '#0b3d33', accent: '#f5a623' },
@@ -84,8 +92,8 @@ export const VisualSettingsProvider: React.FC<{ children: ReactNode }> = ({ chil
     const restoredTheme = themes.some((option) => option.id === saved.theme) ? saved.theme! : DEFAULT_THEME;
     const restoredGlass = typeof saved.glassEffect === 'boolean' ? saved.glassEffect : DEFAULT_GLASS_EFFECT;
     const restoredMobileViewMode =
-      saved.mobileViewMode === 'ios' || saved.mobileViewMode === 'foundation' || saved.mobileViewMode === 'classic'
-        ? saved.mobileViewMode
+      appViews.some((view) => view.id === saved.mobileViewMode)
+        ? (saved.mobileViewMode as AppViewMode)
         : DEFAULT_MOBILE_VIEW_MODE;
     const restoredFoundationLook =
       saved.foundationLook === 'editorial-ink' || saved.foundationLook === 'civic-navy' || saved.foundationLook === 'warm-paper'

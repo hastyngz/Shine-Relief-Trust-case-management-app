@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Girl, Household, GirlStatus } from '../../types';
 import { generateGirlId } from '../../utils/storage';
-import { UserPlus, Save, X } from 'lucide-react';
+import { UserPlus, X } from 'lucide-react';
+import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 
 interface GirlFormProps {
@@ -11,7 +12,7 @@ interface GirlFormProps {
   onSave: (
     girlData: Omit<Girl, 'createdAt' | 'updatedAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onCancel: () => void;
 }
 
@@ -50,8 +51,9 @@ export const GirlForm: React.FC<GirlFormProps> = ({
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveButtonStatus>('idle');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) {
       setError('Please provide the full name of the girl.');
@@ -68,7 +70,10 @@ export const GirlForm: React.FC<GirlFormProps> = ({
 
     const id = initialData?.id || generateGirlId(existingGirls);
 
-    onSave(
+    setError('');
+    setSaveStatus('saving');
+    try {
+      const result = await onSave(
       {
         id,
         fullName: fullName.trim(),
@@ -90,11 +95,21 @@ export const GirlForm: React.FC<GirlFormProps> = ({
         notes: notes.trim(),
       },
       pendingPhotos
-    );
+      );
+      if (result === false) {
+        setError('This record was not saved. Check your permissions and try again.');
+        setSaveStatus('error');
+        return;
+      }
+      setSaveStatus('done');
+    } catch {
+      setError('Could not save this girl record. Your changes are still on this form; please try again.');
+      setSaveStatus('error');
+    }
   };
 
   return (
-    <div id="girl-registration-form" className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
+    <div id="girl-registration-form" className="fx-card bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
       <div className="bg-teal-900 text-white px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <UserPlus className="w-5 h-5 text-amber-400" />
@@ -105,7 +120,8 @@ export const GirlForm: React.FC<GirlFormProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-stone-300 hover:text-white p-1 rounded-lg transition-colors"
+          aria-label="Close form"
+          className="fx-press text-stone-300 hover:text-white p-1 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
         >
           <X className="w-5 h-5" />
         </button>
@@ -113,7 +129,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
 
       <form onSubmit={handleSubmit} className="p-5 space-y-6 max-h-[80vh] overflow-y-auto">
         {error && (
-          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+          <div role="alert" aria-live="assertive" className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
             {error}
           </div>
         )}
@@ -358,13 +374,7 @@ export const GirlForm: React.FC<GirlFormProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="px-5 py-2 text-sm font-semibold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            {initialData ? 'Update Profile' : 'Save Registration'}
-          </button>
+          <SaveButton status={saveStatus} idleLabel={initialData ? 'Update Profile' : 'Save Registration'} doneLabel="Saved on this phone" className="fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition-colors" />
         </div>
       </form>
     </div>

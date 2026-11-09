@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth, PRIMARY_ADMIN_EMAIL } from '../contexts/AuthContext';
 import { useVisualSettings } from '../contexts/VisualSettingsContext';
 import { ShineLogo } from './ShineLogo';
+import { getPasswordResetErrorMessage, getPasswordResetSuccessMessage } from '../utils/passwordResetFeedback';
 import { Heart, Lock, Mail, User, ShieldCheck, KeyRound, AlertCircle, CheckCircle2, ArrowRight, ExternalLink } from 'lucide-react';
 
 export const StaffLoginView: React.FC = () => {
@@ -100,19 +101,24 @@ export const StaffLoginView: React.FC = () => {
 
     setLoading(true);
     try {
-      await setupInitialAdmin(password, fullName);
-      setSuccess('Primary Administrator account for Hastings initialized successfully! Logging you in...');
+      const result = await setupInitialAdmin(password, fullName);
+      if (result === 'verification-sent') {
+        setSuccess('A verification link was sent to the primary Administrator email. Verify the address, then return and sign in again. No Administrator profile has been created yet.');
+      } else {
+        setSuccess('Primary Administrator account initialized successfully. Logging you in...');
+      }
     } catch (err: any) {
       if (err.code === 'auth/operation-not-allowed') {
         setIsOperationNotAllowed(true);
         setError('Password setup is disabled in this Firebase project. Please click "Activate Admin with Google" instead.');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError(
-          'An account for hastingszidanamot@gmail.com already exists. Please use "Sign in with Google" to access your dashboard.'
-        );
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        setError('Could not authenticate the primary Administrator account. Use Google sign-in if the account was created with Google, or verify the password.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many setup attempts were made. Wait a while before trying again.');
+      } else if (err instanceof Error && err.message === 'Could not send the verification email. Please retry later or use Google sign-in.') {
+        setError(err.message);
       } else {
-        console.warn('Admin setup notice:', err.message || err);
-        setError(err.message || 'Failed to initialize Administrator account.');
+        setError('Administrator setup could not be completed. Verify the primary email and try again, or use Google sign-in.');
       }
     } finally {
       setLoading(false);
@@ -130,14 +136,9 @@ export const StaffLoginView: React.FC = () => {
     setLoading(true);
     try {
       await sendResetPassword(email);
-      setSuccess(`A password reset link has been dispatched to ${email}. Check your inbox or spam folder.`);
-    } catch (err: any) {
-      console.error('Password reset error:', err);
-      if (err.code === 'auth/user-not-found') {
-        setError('No staff account found with this email address.');
-      } else {
-        setError(err.message || 'Failed to send password reset email.');
-      }
+      setSuccess(getPasswordResetSuccessMessage());
+    } catch (err: unknown) {
+      setError(getPasswordResetErrorMessage(err));
     } finally {
       setLoading(false);
     }

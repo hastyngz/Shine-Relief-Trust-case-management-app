@@ -1,0 +1,287 @@
+/**
+ * "Sunrise" app view (4th option beside Classic, iOS and Foundation).
+ * Warm off-white page, slim white header, soft cards, 4 tabs + More bottom nav.
+ * Everything is scoped to data-mobile-view="sunrise" and reads the active colour
+ * theme through the --theme-* variables, so every colour theme keeps working.
+ * Motion comes from the shared effects layer (effects.css) and respects
+ * prefers-reduced-motion there.
+ */
+
+@keyframes sunrise-bounce {
+	0% { transform: scale(1); }
+	40% { transform: scale(1.22) translateY(-3px); }
+	100% { transform: scale(1); }
+}
+
+#app-shell[data-mobile-view="sunrise"] {
+	background-color: #fffaf5;
+}
+
+/* ---------- Slim white header ---------- */
+#app-shell[data-mobile-view="sunrise"] #app-header {
+	background: #ffffff !important;
+	color: #3b1a06 !important;
+	border-bottom: 1px solid #eadfd3 !important;
+	box-shadow: 0 2px 10px rgb(60 30 10 / 8%) !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header :is(span, p, h1, h2, div, button, a):not(#visual-settings-panel *):not(#user-profile-menu *):not(#mobile-actions-menu *):not(#notification-dropdown-panel *) {
+	color: #3b1a06 !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header svg:not(#visual-settings-panel *):not(#user-profile-menu *):not(#mobile-actions-menu *):not(#notification-dropdown-panel *) {
+	color: inherit !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header button[class*="bg-teal-"]:not(#visual-settings-panel *):not(#user-profile-menu *),
+#app-shell[data-mobile-view="sunrise"] #app-header span[class*="bg-teal-"] {
+	background: #fff4ea !important;
+	border-color: #eadfd3 !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header [class*="bg-emerald-950"] {
+	background: #dcfce7 !important;
+	border-color: #86efac !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header [class*="bg-amber-950"] {
+	background: #fef3c7 !important;
+	border-color: #fcd34d !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header [class*="bg-sky-950"] {
+	background: #e0f2fe !important;
+	border-color: #7dd3fc !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header [class*="bg-rose-950"] {
+	background: #ffe4e6 !important;
+	border-color: #fda4af !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header .header-profile-avatar {
+	background: var(--theme-primary) !important;
+	color: var(--theme-text-on-primary) !important;
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header #quick-add-btn {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--theme-primary) 80%, white), var(--theme-primary)) !important;
+	box-shadow: 0 4px 10px color-mix(in srgb, var(--theme-primary) 35%, transparent), inset 0 1px 0 rgb(255 255 255 / 35%);
+}
+
+#app-shell[data-mobile-view="sunrise"] #app-header #quick-add-btn,
+#app-shell[data-mobile-view="sunrise"] #app-header #quick-add-btn * {
+	color: var(--theme-text-on-primary) !important;
+}
+
+/* ---------- Page and cards ---------- */
+#app-shell[data-mobile-view="sunrise"] main [class~="bg-white"] {
+	box-shadow: 0 1px 2px rgb(60 30 10 / 6%), 0 6px 16px rgb(60 30 10 / 6%);
+}
+
+@media (max-width: 767px) {
+	#app-shell[data-mobile-view="sunrise"] main {
+		padding-bottom: 6.5rem;
+	}
+}
+
+/* ---------- Bottom navigation: 4 tabs + More ---------- */
+.mobile-bottom-nav--sunrise {
+	background: #ffffff;
+	border-top: 1px solid #e4e4e4;
+	box-shadow: 0 -4px 14px rgb(60 30 10 / 8%);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+#app-shell[data-glass-effect="true"] .mobile-bottom-nav--sunrise {
+	background: rgb(255 255 255 / 62%);
+	-webkit-backdrop-filter: blur(14px) saturate(1.4);
+	backdrop-filter: blur(14px) saturate(1.4);
+}
+
+.sunrise-nav-grid {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	height: 4.25rem;
+}
+
+.sunrise-nav-pill {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 20%;
+	height: 4px;
+	display: flex;
+	justify-content: center;
+	transition: transform var(--fx-duration-normal, 300ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+	pointer-events: none;
+}
+
+.sunrise-nav-pill::after {
+	content: "";
+	width: 2.75rem;
+	height: 4px;
+	border-radius: 0 0 4px 4px;
+	background: var(--theme-primary-ink, #c2410c);
+}
+
+.sunrise-nav-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	min-height: 2.75rem;
+	border: 0;
+	background: transparent;
+	color: #44403c;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.2;
+}
+
+.sunrise-nav-item.is-active {
+	color: var(--theme-primary-ink, #c2410c);
+	font-weight: 700;
+}
+
+.sunrise-nav-item:focus-visible,
+.sunrise-sheet-item:focus-visible,
+.sunrise-sheet-head button:focus-visible {
+	outline: 2px solid var(--theme-primary-ink, #c2410c);
+	outline-offset: -2px;
+}
+
+.sunrise-nav-icon {
+	position: relative;
+	display: inline-flex;
+}
+
+.sunrise-nav-item.is-active .sunrise-nav-icon {
+	animation: sunrise-bounce 350ms ease;
+}
+
+.sunrise-nav-badge {
+	position: absolute;
+	top: -4px;
+	right: -10px;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: var(--theme-primary);
+	color: var(--theme-text-on-primary);
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 16px;
+	text-align: center;
+}
+
+/* ---------- "More" bottom sheet ---------- */
+.sunrise-sheet-layer {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+}
+
+.sunrise-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgb(0 0 0 / 45%);
+}
+
+.sunrise-sheet {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	max-height: 82vh;
+	overflow-y: auto;
+	box-sizing: border-box;
+	padding: 0.5rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+	border-radius: 20px 20px 0 0;
+	background: #ffffff;
+	color: #222222;
+	box-shadow: 0 -8px 30px rgb(0 0 0 / 20%);
+}
+
+.sunrise-sheet-handle {
+	width: 40px;
+	height: 4px;
+	margin: 0 auto 0.375rem;
+	border-radius: 2px;
+	background: #d0d0d0;
+}
+
+.sunrise-sheet-head {
+	display: flex;
+	align-items: center;
+	height: 3rem;
+}
+
+.sunrise-sheet-head h2 {
+	flex: 1;
+	margin: 0;
+	font-size: 18px;
+	font-weight: 700;
+}
+
+.sunrise-sheet-head button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: #555555;
+}
+
+.sunrise-sheet-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.5rem;
+	margin-top: 0.375rem;
+}
+
+.sunrise-sheet-item {
+	display: flex;
+	align-items: center;
+	gap: 0.625rem;
+	min-height: 3.5rem;
+	box-sizing: border-box;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid #e4e4e4;
+	border-radius: 12px;
+	background: #ffffff;
+	color: #222222;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: left;
+}
+
+.sunrise-sheet-item > span:first-of-type {
+	flex: 1;
+	min-width: 0;
+}
+
+.sunrise-sheet-item.is-active {
+	border: 2px solid var(--theme-primary-ink, #c2410c);
+	background: #fff4ea;
+	color: #7a2e0b;
+}
+
+.sunrise-sheet-count {
+	flex: none;
+	min-width: 1.5rem;
+	padding: 0 0.375rem;
+	border-radius: 999px;
+	background: #fff4ea;
+	color: #7a2e0b;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.5rem;
+	text-align: center;
+}

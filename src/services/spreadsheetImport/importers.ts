@@ -1,8 +1,10 @@
-import * as XLSX from 'xlsx';
-import { BudgetCategory, BudgetPeriodType, EmployeeRecord, StaffUser, WorkplanPeriodType } from '../../types';
+import type * as XLSX from 'xlsx';
+import { BudgetCategory, BudgetPeriodType, ContractStatus, EmployeeCategory, EmployeeContractFields, EmployeeRecord, EmploymentStatus, WorkplanPeriodType } from '../../types';
 import { ProgrammeId, PROGRAMMES } from '../../data/programmes';
 import { SpreadsheetAnalysis, SpreadsheetCell, SpreadsheetKind } from './detector';
 import { matchNameCandidates } from './nameMatcher';
+import { applySpreadsheetAIMapping } from './applyAIMapping';
+import type { SpreadsheetAIMappingProposal } from './aiMapping';
 
 export interface ImportedBudgetLine {
   kind: 'budget';
@@ -16,6 +18,8 @@ export interface ImportedBudgetLine {
   quantity: number;
   unitCost: number;
   budgetAmount: number;
+  itemNumber?: string;
+  frequency?: number;
   period: string;
   periodType: BudgetPeriodType;
   month?: number;
@@ -115,6 +119,7 @@ export interface ImportedEmployeeLine {
   latestSourcePeriod?: string;
   latestWorkbookPaymentPeriod?: string;
   employmentStatus: 'Active' | 'Completed';
+  contractFields?: Partial<EmployeeContractFields>;
   matchCandidates: Array<{ id: string; name: string }>;
   matchedEmployeeId?: string;
   status: 'matched' | 'unmatched' | 'ambiguous';
@@ -143,8 +148,13 @@ const MONTHS: Array<{ label: RegExp; month: number }> = [
   { label: /^may\b/i, month: 5 }, { label: /^jun(?:e)?\b/i, month: 6 },
   { label: /^jul(?:y)?\b/i, month: 7 }, { label: /^aug(?:ust)?\b/i, month: 8 },
   { label: /^sep(?:t(?:ember)?)?\b/i, month: 9 }, { label: /^oct(?:ober)?\b/i, month: 10 },
-  { label: /^nov(?:ember)?\b/i, month: 11 }, { label: /^dec(?:ember)?\b/i, month: 12 },
+  { label: /^nov(?:e|ember)?\b/i, month: 11 }, { label: /^dec(?:ember)?\b/i, month: 12 },
 ];
+
+function monthFromLabel(value: string): number | undefined {
+  const words = value.match(/[a-z]+/gi) || [];
+  return MONTHS.find(({ label }) => words.some((word) => label.test(word)))?.month;
+}
 
 function text(value: unknown): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -162,10 +172,26 @@ export function isValidPayrollEmployeeName(value: unknown): boolean {
 
 function number(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const cleaned = text(value).replace(/[,\sMWK]/gi, '');
+  const cleaned = text(value).replace(/[ ,MWK]/gi, '');
   if (!cleaned) return undefined;
   const result = Number(cleaned);
   return Number.isFinite(result) ? result : undefined;
+}
+
+function quantityAndUnit(value: unknown): { quantity?: number; unit?: string } {
+  const direct = number(value);
+  if (direct !== undefined) return { quantity: direct };
+  const match = text(value).replace(/,/g, '').match(/^(\d+(?:\.\d+)?)\s*([a-z][a-z -]{0,18})$/i);
+  if (!match) return {};
+  const rawUnit = match[2].trim().toLowerCase().replace(/\s+/g, ' ');
+  const aliases: Record<string, string> = {
+    kg: 'kg', kgs: 'kg', kilogram: 'kg', kilograms: 'kg', g: 'g', gs: 'g', gram: 'g', grams: 'g',
+    litre: 'litre', litres: 'litre', liter: 'litre', liters: 'litre', ltr: 'litre', ltrs: 'litre', l: 'litre', ls: 'litre',
+    bar: 'bar', bars: 'bar', piece: 'piece', pieces: 'piece', pc: 'piece', pcs: 'piece',
+    roll: 'roll', rolls: 'roll', tray: 'tray', trays: 'tray', bag: 'bag', bags: 'bag',
+    bottle: 'bottle', bottles: 'bottle', tube: 'tube', tubes: 'tube', pad: 'pad', pads: 'pad',
+  };
+  return { quantity: Number(match[1]), unit: aliases[rawUnit] || rawUnit };
 }
 
 function labelUnit(raw: string): { label: string; unit?: string } {
@@ -216,30 +242,52 @@ function categoryFrom(value: string): BudgetCategory {
     [/activit|session|event/, 'Programme activities'],
     [/administration|office/, 'Administration'],
     [/education|school|bursary|fees/, 'Education'],
+    [/ufa|maize|flour|rice|sugar|salt|oil|soya|eggs?|beans|bonya|vegg(?:ies|etables?)?|tomatoes?|onions?|fish|meat|milk|bread|groundnuts|nsima/, 'Food'],
+    [/soap|surf|detergent|toothpaste|lotion|glycerine|vaseline|sanitary|pads?|tissues?|toilet paper|jik|bleach/, 'Household supplies'],
+    [/charcoal|firewood|gas|paraffin/, 'Utilities'],
+    [/locks?|padlocks?|bulbs?|buckets?|mats?|blankets?/, 'Equipment'],
   ];
   return categories.find(([pattern]) => pattern.test(normalized(value)))?.[1] || 'Other';
 }
 
 function monthColumn(header: unknown): number | undefined {
-  const value = normalized(header).replace(/\s+20\d{2}$/, '');
-  if (!/^[a-z]+$/.test(value)) return undefined;
-  if (/^septmb?er$/.test(value)) return 9;
-  return MONTHS.find(({ label }) => label.test(value))?.month;
+  const tokens = normalized(header).split(' ').filter(Boolean);
+  const monthTokens = tokens.map((token) => ({
+    token,
+    month: /^sept(?:ember|mber|mb?er)?$/.test(token)
+      ? 9
+      : MONTHS.find(({ label }) => label.test(token))?.month,
+  })).filter((entry): entry is { token: string; month: number } => entry.month !== undefined);
+  if (monthTokens.length !== 1) return undefined;
+
+  const monthDescriptors = new Set([
+    'salary', 'salaries', 'wage', 'wages', 'pay', 'payroll', 'payment', 'payments',
+    'amount', 'amounts', 'gross', 'net', 'monthly', 'total', 'remuneration', 'earning', 'earnings',
+    'mwk', 'kwacha', 'currency',
+  ]);
+  const hasUnexpectedToken = tokens.some((token) =>
+    token !== monthTokens[0].token && !/^20\d{2}$/.test(token) && !monthDescriptors.has(token)
+  );
+  return hasUnexpectedToken ? undefined : monthTokens[0].month;
 }
 
 function nonEmptyRow(row: unknown[]): boolean {
   return row.some((value) => text(value) !== '');
 }
 
-function worksheetRows(sheet: XLSX.WorkSheet): unknown[][] {
+function worksheetRows(XLSX: typeof import('xlsx'), sheet: XLSX.WorkSheet): unknown[][] {
   return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1, raw: true, defval: '', blankrows: false,
   });
 }
 
-function inferYear(sheetName: string, rows: unknown[][]): number {
+function inferYear(sheetName: string, rows: unknown[][], fallbackLabel = ''): number {
+  // Prefer the sheet and its own header/data year over the filename. A file may
+  // be named for the current payroll year while containing historical rows.
   const content = `${sheetName} ${rows.slice(0, 8).flat().map(text).join(' ')}`;
-  return Number(content.match(/\b20\d{2}\b/)?.[0] || new Date().getFullYear());
+  const explicitYear = content.match(/\b20\d{2}\b/)?.[0];
+  const fallbackYear = fallbackLabel.match(/\b20\d{2}\b/)?.[0];
+  return Number(explicitYear || fallbackYear || new Date().getFullYear());
 }
 
 function headerRowIndex(rows: unknown[][], kind: SpreadsheetKind): number {
@@ -270,18 +318,163 @@ function findMonthColumns(headers: unknown[]): Array<{ index: number; month: num
   });
 }
 
+function employeeContractColumns(headers: unknown[]) {
+  return {
+    name: columnIndex(headers, [/employee name/, /staff name/, /worker name/, /personnel name/, /^name$/, /^employee$/]),
+    department: columnIndex(headers, [/^department$/, /^team$/, /^division$/]),
+    position: columnIndex(headers, [/^position$/, /^job title$/, /^designation$/, /^title$/]),
+    category: columnIndex(headers, [/employee category/, /employment category/, /staff category/, /^category$/]),
+    contractStart: columnIndex(headers, [/contract start/, /^start date$/]),
+    contractEnd: columnIndex(headers, [/contract end/, /^end date$/]),
+    contractType: columnIndex(headers, [/contract type/, /agreement type/]),
+    contractDuration: columnIndex(headers, [/contract duration/, /^duration$/]),
+    contractStatus: columnIndex(headers, [/contract status/]),
+    employmentStatus: columnIndex(headers, [/employment status/, /employee status/]),
+    renewalInformation: columnIndex(headers, [/renewal information/, /renewal info/, /renewal notes/]),
+    salary: columnIndex(headers, [/current salary/, /^salary$/]),
+  };
+}
+
+function importedDate(value: unknown): string | undefined {
+  const valueText = text(value);
+  if (!valueText) return undefined;
+  const serial = typeof value === 'number' ? value : Number.NaN;
+  if (Number.isFinite(serial) && serial > 0 && serial < 100000) {
+    return new Date(Date.UTC(1899, 11, 30) + serial * 86400000).toISOString().slice(0, 10);
+  }
+  const parts = valueText.match(/^(\d{1,4})[./-](\d{1,2})[./-](\d{1,4})$/);
+  if (parts) {
+    const first = Number(parts[1]);
+    const second = Number(parts[2]);
+    const third = Number(parts[3]);
+    const year = parts[1].length === 4 ? first : third;
+    const month = second;
+    const day = parts[1].length === 4 ? third : first;
+    if (year >= 1900 && year <= 2200 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day) {
+        return date.toISOString().slice(0, 10);
+      }
+    }
+  }
+  const parsed = new Date(valueText);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString().slice(0, 10);
+}
+
+function parseEmployeeContractFields(row: unknown[], columns: ReturnType<typeof employeeContractColumns>): Partial<EmployeeContractFields> {
+  const fields: Partial<EmployeeContractFields> = {};
+  const position = text(row[columns.position]);
+  if (position) fields.position = position;
+  const category = normalized(row[columns.category]);
+  if (/ground worker|gardener/.test(category)) fields.employeeCategory = 'Ground Worker/Gardener' as EmployeeCategory;
+  else if (/other staff/.test(category)) fields.employeeCategory = 'Other Staff' as EmployeeCategory;
+  const contractStartDate = importedDate(row[columns.contractStart]);
+  const contractEndDate = importedDate(row[columns.contractEnd]);
+  if (contractStartDate) fields.contractStartDate = contractStartDate;
+  if (contractEndDate) fields.contractEndDate = contractEndDate;
+  const contractType = text(row[columns.contractType]);
+  const contractDuration = text(row[columns.contractDuration]);
+  const renewalInformation = text(row[columns.renewalInformation]);
+  if (contractType) fields.contractType = contractType;
+  if (contractDuration) fields.contractDuration = contractDuration;
+  if (renewalInformation) fields.renewalInformation = renewalInformation;
+  const contractStatusMap: Record<string, ContractStatus> = {
+    active: 'Active', current: 'Active', 'expiring soon': 'Expiring Soon', expired: 'Expired',
+    renewed: 'Renewed', completed: 'Completed', terminated: 'Terminated', resigned: 'Resigned',
+  };
+  const contractStatus = contractStatusMap[normalized(row[columns.contractStatus])];
+  if (contractStatus) fields.contractStatus = contractStatus;
+  const employmentStatusMap: Record<string, EmploymentStatus> = {
+    active: 'Active', 'on leave': 'On Leave', completed: 'Completed', terminated: 'Terminated', resigned: 'Resigned',
+  };
+  const employmentStatus = employmentStatusMap[normalized(row[columns.employmentStatus])];
+  if (employmentStatus) fields.employmentStatus = employmentStatus;
+  return fields;
+}
+
+function parseContractRows(
+  sheetName: string,
+  rows: unknown[][],
+  headerIndex: number,
+  employees: EmployeeRecord[],
+  sourceName: string,
+): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
+  const headers = rows[headerIndex] || [];
+  const columns = employeeContractColumns(headers);
+  const employeeNames = employees.map((employee) => ({ id: employee.id, name: employee.fullName }));
+  const output: ImportedEmployeeLine[] = [];
+  const employeesByName = new Map<string, ImportedEmployeeLine>();
+  const sourceYear = inferYear(sheetName, rows, sourceName);
+  let skipped = 0;
+  for (const [offset, row] of rows.slice(headerIndex + 1).entries()) {
+    if (!nonEmptyRow(row)) continue;
+    const employeeName = text(row[columns.name]).trim();
+    if (!isValidPayrollEmployeeName(employeeName)) {
+      skipped += 1;
+      continue;
+    }
+    const contractFields = parseEmployeeContractFields(row, columns);
+    const gratuityIndex = columnIndex(headers, [/^total gratuity$/, /^gratuity amount$/, /^gratuity$/]);
+    const gratuity = gratuityIndex >= 0 ? number(row[gratuityIndex]) : undefined;
+    const otherPayrollAmounts: ImportedEmployeeLine['otherPayrollAmounts'] = gratuity && gratuity > 0
+      ? [{ type: 'gratuity', amount: gratuity, sourceReference: `${sourceName || sheetName}/${sheetName}/${headerIndex + offset + 2}/gratuity` }]
+      : [];
+    if (Object.keys(contractFields).length === 0 && otherPayrollAmounts.length === 0) {
+      skipped += 1;
+      continue;
+    }
+    const existingLine = employeesByName.get(normalized(employeeName));
+    if (existingLine) {
+      existingLine.contractFields = { ...existingLine.contractFields, ...contractFields };
+      existingLine.otherPayrollAmounts.push(...otherPayrollAmounts);
+      continue;
+    }
+    const nameMatches = matchNameCandidates(employeeName, employeeNames);
+    const candidates = nameMatches.exact.length === 1 ? nameMatches.exact : nameMatches.possible.slice(0, 5);
+    const status: ImportedEmployeeLine['status'] = nameMatches.exact.length === 1
+      ? 'matched'
+      : candidates.length > 1 ? 'ambiguous' : 'unmatched';
+    const line: ImportedEmployeeLine = {
+      kind: 'employee',
+      sheet: sheetName,
+      row: headerIndex + offset + 2,
+      employeeName,
+      department: columns.department >= 0 ? text(row[columns.department]) : '',
+      positionTitle: contractFields.position,
+      sourceYear,
+      currentSalary: number(row[columns.salary]) || 0,
+      salaryHistory: [],
+      otherPayrollAmounts,
+      employmentStatus: contractFields.employmentStatus === 'Completed' ? 'Completed' : 'Active',
+      contractFields,
+      matchCandidates: candidates,
+      matchedEmployeeId: nameMatches.exact.length === 1 ? nameMatches.exact[0].id : undefined,
+      status,
+    };
+    employeesByName.set(normalized(employeeName), line);
+    output.push(line);
+  }
+  return { lines: output, imported: output.length, skipped };
+}
+
 function parseBudgetRows(
   sheetName: string,
   rows: unknown[][],
+  options: { sourceName?: string; programmeId?: string; periodMonth?: number } = {},
 ): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
   const headerIndex = headerRowIndex(rows, 'budget-monthly');
   const headers = rows[headerIndex] || [];
   const quantityIndex = columnIndex(headers, [/^qty$/, /quantity/]);
-  const costIndex = columnIndex(headers, [/^cost$/, /unit cost/, /price/]);
-  const labelIndex = columnIndex(headers, [/item/, /description/, /particulars/, /name/]);
+  const costIndex = columnIndex(headers, [/^cost$/, /unit cost/, /cost per item/, /^cost (?:item|each|per)\b/, /price/]);
+  const labelIndex = columnIndex(headers, [/description/, /^item$/, /^item name$/, /particulars/, /^name$/]);
   const programmeIndex = columnIndex(headers, [/^programme$/, /^program$/]);
+  const frequencyIndex = columnIndex(headers, [/frequency/, /times per/, /occurrences/]);
+  const totalIndex = columnIndex(headers, [/^total(?: amount)?$/, /total cost/, /budget amount/]);
+  const itemNumberIndex = columnIndex(headers, [/^item\s*(?:no|number|#)$/i, /^no\.?$/i, /^number$/i]);
   const monthColumns = findMonthColumns(headers);
-  const year = inferYear(sheetName, rows);
+  const year = inferYear(sheetName, rows, options.sourceName || '');
+  const reportingHeaderText = `${sheetName} ${rows.slice(0, headerIndex + 1).flat().map(text).join(' ')}`;
+  const sourcePeriodMonth = options.periodMonth || monthFromLabel(reportingHeaderText) || monthFromLabel(options.sourceName || '');
   let categorySection = '';
   let programmeLabel = '';
   let lastLabel = '';
@@ -292,11 +485,16 @@ function parseBudgetRows(
     if (!nonEmptyRow(row)) return;
     const sourceRow = headerIndex + offset + 2;
     const rawLabel = text(row[labelIndex >= 0 ? labelIndex : 0]);
+    if (/^(?:grand\s*|sub\s*)?total$/i.test(rawLabel)) return;
     if (programmeIndex >= 0 && text(row[programmeIndex])) programmeLabel = text(row[programmeIndex]);
     const unitDetails = labelUnit(rawLabel);
+    const parsedQuantity = quantityAndUnit(row[quantityIndex]);
     const embeddedQuantity = rawLabel.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|bars?|teachers?|boxes|box|litres?|liters?|bags?|pieces?|pcs|months?|days?|visits?|students?|girls?)$/i)?.[1];
-    const quantity = number(row[quantityIndex]) ?? number(embeddedQuantity);
+    const quantity = parsedQuantity.quantity ?? number(embeddedQuantity);
     const unitCost = number(row[costIndex]);
+    const frequency = number(row[frequencyIndex]);
+    const sourceTotal = number(row[totalIndex]);
+    const itemNumber = itemNumberIndex >= 0 ? text(row[itemNumberIndex]) || undefined : undefined;
     if (!rawLabel && quantity === undefined && unitCost === undefined) return;
 
     if (rawLabel && quantity === undefined && unitCost === undefined) {
@@ -318,8 +516,22 @@ function parseBudgetRows(
       return;
     }
     lastLabel = originalLabel;
-    const programme = programmeFrom(programmeLabel, categorySection);
+    const overrideProgramme = options.programmeId
+      ? PROGRAMMES.find((candidate) => candidate.id === options.programmeId)
+      : undefined;
+    const programme = overrideProgramme
+      ? { id: overrideProgramme.id, label: overrideProgramme.name }
+      : (() => {
+        const rowProgramme = programmeFrom(programmeLabel, categorySection);
+        return rowProgramme.id
+          ? rowProgramme
+          : programmeFrom(reportingHeaderText, options.sourceName || '');
+      })();
     const note = `Original label: ${originalLabel}`;
+    const expenseWorkbookWarning = /expense/i.test(options.sourceName || '') && !/actual/i.test(options.sourceName || '')
+      ? '; expense workbook filename but this sheet has budget-style amounts; confirm actual spending is separately evidenced'
+      : '';
+    const unit = text(row[columnIndex(headers, [/^unit$/])]) || parsedQuantity.unit || unitDetails.unit || 'unit';
     const activeMonths = monthColumns.filter(({ index }) => number(row[index]) !== undefined && number(row[index]) !== 0);
     if (activeMonths.length > 0) {
       activeMonths.forEach(({ index, month }) => {
@@ -332,21 +544,43 @@ function parseBudgetRows(
           kind: 'budget', sheet: sheetName, row: sourceRow, programmeId: programme.id,
           programme: programme.label || 'Unassigned - programme review required',
           category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
-          unit: text(row[columnIndex(headers, [/unit/])]) || unitDetails.unit || 'unit',
-          quantity, unitCost, budgetAmount: recomputedAmount, period: `${year}-${String(month).padStart(2, '0')}`,
-          periodType: 'monthly', month, notes: `${note}${amountNote}`,
+          unit,
+          quantity, unitCost, budgetAmount: statedAmount, itemNumber, frequency, period: `${year}-${String(month).padStart(2, '0')}`,
+          periodType: 'monthly', month, notes: `${note}${amountNote}${expenseWorkbookWarning}`,
         });
       });
     } else {
+      const calculatedAmount = quantity * unitCost * (frequency || 1);
+      const budgetAmount = sourceTotal ?? calculatedAmount;
+      const amountNote = sourceTotal !== undefined && Math.abs(sourceTotal - calculatedAmount) > 0.01
+        ? `; source total MWK ${sourceTotal} differs from quantity × frequency × unit cost MWK ${calculatedAmount}; verify before import${frequency !== undefined && quantity > 1 && Math.abs(sourceTotal - unitCost * frequency) <= 0.01
+          ? `. Cost × frequency equals the source total, so the cost looks like a price per pack/lot rather than per ${unit}`
+          : ''}`
+        : '';
+      const frequencyNote = frequency !== undefined ? `; frequency ${frequency}` : '';
       lines.push({
         kind: 'budget', sheet: sheetName, row: sourceRow, programmeId: programme.id,
         programme: programme.label || 'Unassigned - programme review required',
         category: categoryFrom(categorySection || originalLabel), itemDescription: unitDetails.label,
-        unit: text(row[columnIndex(headers, [/unit/])]) || unitDetails.unit || 'unit',
-        quantity, unitCost, budgetAmount: quantity * unitCost, period: `Annual ${year}`,
-        periodType: 'annual', notes: note,
+        unit,
+        quantity, unitCost, budgetAmount, itemNumber, frequency,
+        period: sourcePeriodMonth ? `${year}-${String(sourcePeriodMonth).padStart(2, '0')}` : `Annual ${year}`,
+        periodType: sourcePeriodMonth ? 'monthly' : 'annual', month: sourcePeriodMonth,
+        notes: `${note}${frequencyNote}${amountNote}${expenseWorkbookWarning}`,
       });
     }
+  });
+  const itemNumberRows = new Map<string, Set<string>>();
+  lines.forEach((line) => {
+    if (line.kind !== 'budget' || !line.itemNumber) return;
+    const sourceRowKey = `${line.sheet}:${line.row}`;
+    const rowsForNumber = itemNumberRows.get(line.itemNumber) || new Set<string>();
+    rowsForNumber.add(sourceRowKey);
+    itemNumberRows.set(line.itemNumber, rowsForNumber);
+  });
+  lines.forEach((line) => {
+    if (line.kind !== 'budget' || !line.itemNumber || (itemNumberRows.get(line.itemNumber)?.size || 0) < 2) return;
+    line.notes += `; duplicate item number ${line.itemNumber} appears more than once in this sheet; verify the source row`;
   });
   return { lines, imported: lines.filter((line) => line.kind === 'budget').length, skipped };
 }
@@ -444,7 +678,7 @@ function parseItemListRows(sheetName: string, rows: unknown[][]): ImportedProcur
   const specIndex = columnIndex(headers, [/specification/, /details/]);
   const quantityIndex = columnIndex(headers, [/qty|quantity/]);
   const unitIndex = columnIndex(headers, [/^unit$/]);
-  const priceIndex = columnIndex(headers, [/unit price/, /^price$/, /rate/]);
+  const priceIndex = columnIndex(headers, [/unit price/, /^price$/, /cost per item/, /cost item/, /rate/]);
   const totalIndex = columnIndex(headers, [/total/, /amount/]);
   const noteIndex = columnIndex(headers, [/notes?/, /remarks?/]);
   if (labelIndex < 0 && itemNumberIndex < 0) return null;
@@ -454,17 +688,22 @@ function parseItemListRows(sheetName: string, rows: unknown[][]): ImportedProcur
   rows.slice(headerIndex + 1).forEach((row) => {
     if (!nonEmptyRow(row)) return;
     const description = text(row[labelIndex >= 0 ? labelIndex : 0]) || previousDescription;
-    const quantity = number(row[quantityIndex]) ?? 1;
+    const parsedQuantity = quantityAndUnit(row[quantityIndex]);
+    const rawQuantity = text(row[quantityIndex]);
+    const quantity = parsedQuantity.quantity ?? 1;
     const unitPrice = number(row[priceIndex]);
     const total = number(row[totalIndex]);
-    const note = text(row[noteIndex]);
+    const quantityWarning = rawQuantity && parsedQuantity.quantity === undefined
+      ? `Quantity needs review: ${rawQuantity}`
+      : '';
+    const note = [text(row[noteIndex]), quantityWarning].filter(Boolean).join('; ');
     if (!description || /^(total|grand total)$/i.test(description)) return;
     previousDescription = description;
     items.push({
       description,
       specification: text(row[specIndex]) || undefined,
       quantity,
-      unit: text(row[unitIndex]) || 'item',
+      unit: text(row[unitIndex]) || parsedQuantity.unit || 'item',
       unitPriceMWK: unitPrice,
       totalMWK: total ?? (unitPrice === undefined ? undefined : unitPrice * quantity),
       note: note || undefined,
@@ -536,11 +775,19 @@ function parseProjectionRows(sheetName: string, rows: unknown[][]): ImportedProj
 function parsePayrollRows(
   sheetName: string,
   rows: unknown[][],
-  staff: StaffUser[],
   employees: EmployeeRecord[],
   sourceName: string,
 ): { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number } {
   const headerIndex = rows.slice(0, 10).findIndex((row) => row.some((value) => monthColumn(value)));
+  const contractHeaderIndex = rows.slice(0, 15).findIndex((row) => {
+    const columns = employeeContractColumns(row);
+    return columns.name >= 0 && [columns.position, columns.category, columns.contractStart, columns.contractEnd,
+      columns.contractType, columns.contractDuration, columns.contractStatus, columns.employmentStatus,
+      columns.renewalInformation].some((index) => index >= 0);
+  });
+  if (headerIndex < 0 && contractHeaderIndex >= 0) {
+    return parseContractRows(sheetName, rows, contractHeaderIndex, employees, sourceName);
+  }
   if (headerIndex < 0) {
     const gratuityHeaderIndex = rows.slice(0, 15).findIndex((row) =>
       columnIndex(row, [/name/, /employee/, /staff/, /worker/]) >= 0 &&
@@ -554,11 +801,8 @@ function parsePayrollRows(
       /gratuity/.test(normalized(value)) && !/(?:salary|rate|percent|month)/.test(normalized(value))
     );
     const departmentIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
-    const year = inferYear(sourceName || sheetName, rows);
-    const staffNames = [
-      ...staff.map((person) => ({ id: person.id, name: person.fullName })),
-      ...employees.map((person) => ({ id: person.id, name: person.fullName })),
-    ].filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
+    const year = inferYear(sheetName, rows, sourceName);
+    const employeeNames = employees.map((person) => ({ id: person.id, name: person.fullName }));
     const output: ImportedEmployeeLine[] = [];
     const employeesByName = new Map<string, ImportedEmployeeLine>();
     let currentDepartment = '';
@@ -585,7 +829,7 @@ function parsePayrollRows(
         return;
       }
 
-      const nameMatches = matchNameCandidates(employeeName, staffNames);
+      const nameMatches = matchNameCandidates(employeeName, employeeNames);
       const exact = nameMatches.exact;
       const candidates = exact.length === 1 ? exact : nameMatches.possible.slice(0, 5);
       const status: ImportedEmployeeLine['status'] = exact.length === 1
@@ -617,7 +861,8 @@ function parsePayrollRows(
   const headers = rows[headerIndex];
   const labelledNameIndex = columnIndex(headers, [/employee/, /staff/, /name/, /personnel/]);
   const monthColumns = findMonthColumns(headers);
-  const labelledGroupIndex = columnIndex(headers, [/department/, /group/, /category/, /team/]);
+  const contractColumns = employeeContractColumns(headers);
+  const labelledGroupIndex = columnIndex(headers, [/department/, /group/, /team/, /division/]);
   const isCredibleName = (value: unknown) => isValidPayrollEmployeeName(value)
     && !/^(?:bank credit|salary|wages?|farm|mill|house mums?|driver|watchmen?|administration|admistration|teachers?|ministry|grad?uity)$/i.test(text(value));
   const nameScores = (labelledNameIndex >= 0 ? [labelledNameIndex] : [1, 2, 0]).map((index) => ({
@@ -639,10 +884,7 @@ function parsePayrollRows(
   let department = '';
   const output: ImportedSpreadsheetLine[] = [];
   let skipped = 0;
-  const staffNames = [
-    ...staff.map((person) => ({ id: person.id, name: person.fullName })),
-    ...employees.map((person) => ({ id: person.id, name: person.fullName })),
-  ].filter((person, index, all) => all.findIndex((candidate) => candidate.id === person.id) === index);
+  const employeeNames = employees.map((person) => ({ id: person.id, name: person.fullName }));
   const employeesSeen = new Set<string>();
   const groupDetails = (group: string) => {
     const category = normalized(group);
@@ -654,7 +896,7 @@ function parsePayrollRows(
     if (/^ministry$/.test(category)) return { department: 'Ministry' };
     return { department: group };
   };
-  const year = inferYear(sourceName || sheetName, rows);
+  const year = inferYear(sheetName, rows, sourceName);
   const isGratuitySection = (group: string) => /^grad?uity$/i.test(normalized(group));
   const sourceRows = rows.slice(headerIndex + 1);
   const isGroupHeading = (value: string, row: unknown[]) => {
@@ -694,7 +936,10 @@ function parsePayrollRows(
     })).filter((entry): entry is { month: number; amount: number } => entry.amount !== undefined && entry.amount > 0);
     const specialAmounts = specialColumns.map(({ index, type }) => ({ type, amount: number(row[index]) }))
       .filter((entry): entry is { type: 'loan' | 'arrears'; amount: number } => entry.amount !== undefined && entry.amount !== 0);
-    if (isGroupHeading(groupLabel, row)) {
+    const contractFields = parseEmployeeContractFields(row, contractColumns);
+    if (labelledGroupColumn !== undefined && groupLabel) {
+      department = groupLabel;
+    } else if (isGroupHeading(groupLabel, row)) {
       department = groupLabel;
       if (!rowName) {
         if (monthlyAmounts.length || specialAmounts.length) skipped += 1;
@@ -702,7 +947,7 @@ function parsePayrollRows(
       }
     }
     const employeeSourceName = rowName;
-    if (monthlyAmounts.length === 0 && specialAmounts.length === 0) {
+    if (monthlyAmounts.length === 0 && specialAmounts.length === 0 && Object.keys(contractFields).length === 0) {
       return;
     }
     if (!isValidPayrollEmployeeName(employeeSourceName)
@@ -710,7 +955,7 @@ function parsePayrollRows(
       skipped += 1;
       return;
     }
-    if (!employeeSourceName || monthlyAmounts.length === 0 && specialAmounts.length === 0) {
+    if (!employeeSourceName || monthlyAmounts.length === 0 && specialAmounts.length === 0 && Object.keys(contractFields).length === 0) {
       skipped += 1;
       return;
     }
@@ -758,6 +1003,8 @@ function parsePayrollRows(
       existingEmployeeLine.currentSalary = existingEmployeeLine.salaryHistory.at(-1)?.amount || existingEmployeeLine.currentSalary;
       existingEmployeeLine.latestSourcePeriod = existingEmployeeLine.salaryHistory.at(-1)?.payPeriod || existingEmployeeLine.latestSourcePeriod;
       existingEmployeeLine.otherPayrollAmounts.push(...otherPayrollAmounts);
+      existingEmployeeLine.contractFields = { ...existingEmployeeLine.contractFields, ...contractFields };
+      existingEmployeeLine.positionTitle = contractFields.position || existingEmployeeLine.positionTitle;
       existingEmployeeLine.employmentStatus = existingEmployeeLine.salaryHistory.some((entry) =>
         entry.payPeriod === `${year}-${String(workbookLatestMonth).padStart(2, '0')}`)
         ? 'Active'
@@ -775,7 +1022,7 @@ function parsePayrollRows(
       return;
     }
     employeesSeen.add(employeeKey);
-    const nameMatches = matchNameCandidates(employeeName, staffNames);
+    const nameMatches = matchNameCandidates(employeeName, employeeNames);
     const exact = nameMatches.exact;
     const candidates = exact.length === 1 ? exact : nameMatches.possible.slice(0, 5);
     const status: ImportedEmployeeLine['status'] = exact.length === 1
@@ -795,7 +1042,7 @@ function parsePayrollRows(
       row: sourceRow,
       employeeName,
       department: employeeDetails.department,
-      positionTitle: employeeDetails.positionTitle,
+      positionTitle: contractFields.position || employeeDetails.positionTitle,
       sourceYear: year,
       currentSalary: salaryHistory.at(-1)?.amount || 0,
       salaryHistory,
@@ -805,6 +1052,7 @@ function parsePayrollRows(
         ? `${year}-${String(workbookLatestMonth).padStart(2, '0')}`
         : undefined,
       employmentStatus: hasLatestSalary ? 'Active' : 'Completed',
+      contractFields,
       matchCandidates: candidates,
       matchedEmployeeId: exact.length === 1 ? exact[0].id : undefined,
       status,
@@ -856,24 +1104,36 @@ function formulaDisagreements(analysis: SpreadsheetAnalysis): SpreadsheetImportP
   }));
 }
 
-export function createSpreadsheetImportPreview(
+export async function createSpreadsheetImportPreview(
   workbook: XLSX.WorkBook,
   analysis: SpreadsheetAnalysis,
   kind: SpreadsheetKind,
-  staff: StaffUser[] = [],
   employees: EmployeeRecord[] = [],
   sourceName = '',
-): SpreadsheetImportPreview {
+  mappingProposal?: SpreadsheetAIMappingProposal,
+): Promise<SpreadsheetImportPreview> {
+  const XLSX = await import('xlsx');
+  const sourceWorkbook = mappingProposal
+    ? await applySpreadsheetAIMapping(workbook, mappingProposal)
+    : workbook;
+  const selectedKind = mappingProposal?.kind || kind;
   const lines: ImportedSpreadsheetLine[] = [];
   const procurementGroups: ImportedProcurementLine[] = [];
   const sheetStats = analysis.sheets.map((sheet) => {
-    const rawRows = worksheetRows(workbook.Sheets[sheet.name]);
+    const rawRows = worksheetRows(XLSX, sourceWorkbook.Sheets[sheet.name]);
     let result: { lines: ImportedSpreadsheetLine[]; imported: number; skipped: number };
-    if (kind === 'budget-monthly') {
-      result = parseBudgetRows(sheet.name, rawRows);
-    } else if (kind === 'workplan-matrix') {
+    const aiSheetMapping = mappingProposal?.sheets.find((candidate) => candidate.name === sheet.name);
+    if (mappingProposal && aiSheetMapping && aiSheetMapping.columns.length === 0 && sheet.rowsRead > 0) {
+      result = { lines: [], imported: 0, skipped: 0 };
+    } else if (selectedKind === 'budget-monthly') {
+      result = parseBudgetRows(sheet.name, rawRows, {
+        sourceName,
+        programmeId: mappingProposal?.programmeId,
+        periodMonth: mappingProposal?.periodMonth,
+      });
+    } else if (selectedKind === 'workplan-matrix') {
       result = parseWorkplanRows(sheet.name, rawRows);
-    } else if (kind === 'item-list' || kind === 'back-to-school') {
+    } else if (selectedKind === 'item-list' || selectedKind === 'back-to-school') {
       const procurement = parseItemListRows(sheet.name, rawRows);
       if (procurement) procurementGroups.push(procurement);
       result = {
@@ -881,22 +1141,22 @@ export function createSpreadsheetImportPreview(
         imported: procurement?.items.length || 0,
         skipped: Math.max(0, rawRows.slice(1).filter(nonEmptyRow).length - (procurement?.items.length || 0)),
       };
-    } else if (kind === 'profit-loss') {
+    } else if (selectedKind === 'profit-loss') {
       const projection = parseProjectionRows(sheet.name, rawRows);
       result = { lines: projection ? [projection] : [], imported: projection ? 1 : 0, skipped: projection ? 0 : 1 };
-    } else if (kind === 'payroll-grid') {
-      result = parsePayrollRows(sheet.name, rawRows, staff, employees, sourceName);
+    } else if (selectedKind === 'payroll-grid') {
+      result = parsePayrollRows(sheet.name, rawRows, employees, sourceName);
     } else {
       result = { lines: rawRows.slice(1).filter(nonEmptyRow).map((values, index) => ({
         kind: 'unmapped', sheet: sheet.name, row: index + 2,
-        reason: `No importer is configured for detected kind "${kind}" yet`, values,
+        reason: `No importer is configured for detected kind "${selectedKind}" yet`, values,
       })), imported: 0, skipped: rawRows.slice(1).filter(nonEmptyRow).length };
     }
     lines.push(...result.lines);
     return { sheet: sheet.name, rowsRead: sheet.rowsRead, imported: result.imported, skipped: result.skipped };
   });
 
-  if (kind === 'item-list' || kind === 'back-to-school') {
+  if (selectedKind === 'item-list' || selectedKind === 'back-to-school') {
     const merged = new Map<string, ImportedProcurementLine['items'][number]>();
     procurementGroups.forEach((group) => group.items.forEach((item, index) => {
       const key = item.itemNumber ? `number:${normalized(item.itemNumber)}` : `description:${normalized(item.description)}:${index}`;
@@ -938,7 +1198,7 @@ export function createSpreadsheetImportPreview(
       })),
     })),
   };
-  return { kind, lines, sheetStats, formulaDisagreements: formulaDisagreements(analysis), sourceData };
+  return { kind: selectedKind, lines, sheetStats, formulaDisagreements: formulaDisagreements(analysis), sourceData };
 }
 
 export function availableProgrammeOptions(): Array<{ id: ProgrammeId; name: string }> {

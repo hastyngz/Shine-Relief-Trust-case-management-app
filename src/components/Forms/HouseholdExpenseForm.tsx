@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { Household, HouseholdExpense, ExpenseCategory } from '../../types';
-import { ShoppingBag, Save, X } from 'lucide-react';
+import { ShoppingBag, X } from 'lucide-react';
+import { SaveButton, SaveButtonStatus } from '../ui/SaveButton';
 import { FormPhotoSection, PendingPhoto } from '../Attachments/FormPhotoSection';
 import { PROGRAMMES } from '../../data/programmes';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface HouseholdExpenseFormProps {
   household: Household;
   onSave: (
     data: Omit<HouseholdExpense, 'id' | 'createdAt'>,
     pendingPhotos?: PendingPhoto[]
-  ) => void | Promise<void>;
+  ) => void | boolean | Promise<void | boolean>;
   onCancel: () => void;
 }
 
@@ -31,6 +33,8 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
   onSave,
   onCancel,
 }) => {
+  const { isAdmin, staffProfile } = useAuth();
+  const canRecordPayment = Boolean(isAdmin || staffProfile?.role === 'Manager');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState<ExpenseCategory>('Groceries');
   const [itemDescription, setItemDescription] = useState('');
@@ -47,7 +51,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
   const [programme, setProgramme] = useState('');
   const [budgetCategory, setBudgetCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Payment Outstanding'>('Paid');
+  const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Payment Outstanding'>(canRecordPayment ? 'Paid' : 'Payment Outstanding');
   const [amountDue, setAmountDue] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [datePaid, setDatePaid] = useState(new Date().toISOString().slice(0, 10));
@@ -56,6 +60,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
   const [notes, setNotes] = useState('');
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState<SaveButtonStatus>('idle');
 
   const handleUnitCostChange = (val: string) => {
     setUnitCost(val);
@@ -75,7 +80,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemDescription.trim()) {
       setError('Please provide an item description.');
@@ -91,10 +96,15 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
       return;
     }
 
-    onSave(
+    setError('');
+    setSaveStatus('saving');
+    try {
+      const result = await onSave(
       {
         householdId: household.id,
         date,
+        month: date.slice(0, 7),
+        recordType: 'actual',
         category,
         itemDescription: itemDescription.trim(),
         quantity: quantity.trim() || '1',
@@ -119,11 +129,21 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
         notes: notes.trim() || undefined,
       },
       pendingPhotos
-    );
+      );
+      if (result === false) {
+        setError('This record was not saved. Check your permissions and try again.');
+        setSaveStatus('error');
+        return;
+      }
+      setSaveStatus('done');
+    } catch {
+      setError('Could not save this expense. Your changes are still on this form; please try again.');
+      setSaveStatus('error');
+    }
   };
 
   return (
-    <div id="household-expense-form" className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
+    <div id="household-expense-form" className="fx-card bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
       <div className="bg-teal-900 text-white px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShoppingBag className="w-5 h-5 text-amber-400" />
@@ -137,7 +157,8 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-stone-300 hover:text-white p-1 rounded-lg transition-colors"
+          aria-label="Close form"
+          className="fx-press text-stone-300 hover:text-white p-1 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
         >
           <X className="w-5 h-5" />
         </button>
@@ -145,7 +166,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
 
       <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
         {error && (
-          <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+          <div role="alert" aria-live="assertive" className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
             {error}
           </div>
         )}
@@ -319,13 +340,21 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
         <fieldset className="rounded-lg border border-stone-200 p-3">
           <legend className="px-1 text-xs font-bold text-stone-800">Payment</legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-stone-700">Payment status
-              <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as 'Paid' | 'Payment Outstanding')} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
-                <option value="Paid">Paid</option>
-                <option value="Payment Outstanding">Payment Outstanding</option>
-              </select>
-              {paymentStatus === 'Payment Outstanding' && <span className="mt-1 block font-normal text-stone-600">The expense has been recorded, but the supplier has not yet been paid.</span>}
-            </label>
+            {canRecordPayment ? (
+              <label className="text-xs font-semibold text-stone-700">Payment status
+                <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as 'Paid' | 'Payment Outstanding')} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm">
+                  <option value="Paid">Paid</option>
+                  <option value="Payment Outstanding">Payment Outstanding</option>
+                </select>
+                {paymentStatus === 'Payment Outstanding' && <span className="mt-1 block font-normal text-stone-600">The expense has been recorded, but the supplier has not yet been paid.</span>}
+              </label>
+            ) : (
+              <div className="text-xs text-stone-700">
+                <p className="font-semibold">Payment status</p>
+                <p className="mt-1 font-bold text-amber-800">Payment Outstanding</p>
+                <p className="mt-1 font-normal text-stone-600">Staff can record the expense. A Manager or Administrator records settlement after checking payment evidence.</p>
+              </div>
+            )}
             {paymentStatus === 'Payment Outstanding' ? (
               <>
                 <label className="text-xs font-semibold text-stone-700">Amount due (MWK)
@@ -384,13 +413,7 @@ export const HouseholdExpenseForm: React.FC<HouseholdExpenseFormProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            className="px-5 py-2 text-sm font-semibold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            Save Expense
-          </button>
+          <SaveButton status={saveStatus} idleLabel="Save Expense" doneLabel="Saved on this phone" className="fx-btn-main px-5 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition-colors" />
         </div>
       </form>
     </div>

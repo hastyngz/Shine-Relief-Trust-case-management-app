@@ -3,11 +3,11 @@ import { CalendarDays, CheckCircle2, DollarSign, LineChart, ListPlus, Mic, Plus,
 import type { AppDatabase, FeedingProgramLog, MarketPriceRecord, MeetingRecord, WhatIfScenario } from '../../types';
 import { LEGACY_PROGRAMMES, PROGRAMMES, ProgrammeId } from '../../data/programmes';
 import { useAuth } from '../../contexts/AuthContext';
-import { addEarlyYearsRecord, addFeedingProgramLog, addMarketPrice, addMeetingRecord, addScheduleItem, addWhatIfScenario, addWorkplanItem, updateWorkplanItem, saveAISettings, saveIntelligenceSuggestion } from '../../utils/storage';
+import { addEarlyYearsRecord, saveEarlyYearsAttendance, addFeedingProgramLog, addMarketPrice, addMeetingRecord, addScheduleItem, addWhatIfScenario, addWorkplanItem, updateWorkplanItem, saveAISettings, saveIntelligenceSuggestion } from '../../utils/storage';
 import { AudioDataInput } from './AudioDataInput';
 import { DocumentIntelligencePanel } from './DocumentIntelligencePanel';
 import { calculateBudgetForecast, calculateFeedingCostInsight, calculateMarketPriceInsight, calculateWhatIfScenario, searchOperationalRecords } from '../../services/intelligenceService';
-import { buildIntelligentCaseSummary, detectIntelligenceSuggestions, findPotentialDuplicates, scanDataQuality } from '../../services/caseIntelligenceService';
+import { buildIntelligentCaseSummary, detectIntelligenceSuggestions, filterCaseIntelligenceData, findPotentialDuplicates, scanDataQuality } from '../../services/caseIntelligenceService';
 import { expandWorkplanOccurrences } from '../../services/workplanRecurrence';
 
 interface Phase5OperationsViewProps { db: AppDatabase; onRefresh: () => void; onNavigateToProgramme: (id: ProgrammeId) => void; }
@@ -28,7 +28,7 @@ type OperationsAgendaItem = {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, onRefresh, onNavigateToProgramme }) => {
-  const { canEdit, isAdmin, role, staffProfile, currentUser } = useAuth();
+  const { canEdit, isAdmin, role, staffProfile, currentUser, canViewHealthRecords, canViewCaseReviews } = useAuth();
   const [tab, setTab] = useState<Phase5Tab>('overview');
   const [calendarMode, setCalendarMode] = useState<'month' | 'week' | 'day' | 'agenda'>('agenda');
   const [calendarDate, setCalendarDate] = useState(today());
@@ -47,13 +47,19 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
   const [meetingForm, setMeetingForm] = useState({ title: '', dateTime: `${today()}T10:00`, location: '', attendees: '', minutesText: '', summaryAndOutcomes: '' });
   const [feedingForm, setFeedingForm] = useState({ date: today(), studentsPresent: '', mealsServed: '', foodItems: '', quantities: '', estimatedCost: '', actualCost: '', notes: '' });
   const [priceForm, setPriceForm] = useState({ itemName: '', category: 'Food', unit: '', price: '', currency: 'MWK', dateRecorded: today(), locationOrShop: '' });
-  const [earlyYearsForm, setEarlyYearsForm] = useState({ studentName: '', dateOfBirth: '', guardianName: '', enrollmentDate: today(), classGroup: '', attendanceStatus: 'Present' as 'Present' | 'Absent' | 'Late' | 'Excused', studentStatus: 'Active' as 'Active' | 'Completed' | 'Transferred' | 'Inactive', notes: '' });
+  const [earlyYearsForm, setEarlyYearsForm] = useState({ studentName: '', dateOfBirth: '', guardianName: '', enrollmentDate: today(), classGroup: '', studentStatus: 'Active' as 'Active' | 'Completed' | 'Transferred' | 'Inactive', notes: '' });
+  const [attendanceDate, setAttendanceDate] = useState(today());
   const [scenario, setScenario] = useState<WhatIfScenario>({ id: 'draft', name: 'Scenario', foodPricePercent: 10, fuelPricePercent: 0, transportPercent: 0, studentPopulationPercent: 0, feedingDaysChange: 0, increasedEnrollmentPercent: 0, createdBy: '', createdAt: '' });
   const [aiSettings, setAISettings] = useState(() => db.aiSettings?.[0] || { id: 'default', enabled: true, speechToText: true, textToSpeech: true, documentAnalysis: true, naturalLanguageSearch: true, dailyUsageLimit: 100, updatedByUid: currentUser?.uid || '', updatedAt: new Date().toISOString() });
 
   useEffect(() => {
     setUpdatedAt(new Date());
   }, [db]);
+
+  const intelligenceDb = useMemo(
+    () => filterCaseIntelligenceData(db, { canViewHealthRecords, canViewCaseReviews }),
+    [db, canViewHealthRecords, canViewCaseReviews]
+  );
 
   const meetings = db.meetings || [];
   const feedingLogs = db.feedingProgramLogs || [];
@@ -72,9 +78,9 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     return { category, approved, actual, ratio: approved ? Math.min(100, (actual / approved) * 100) : 0 };
   }), [db.budgets]);
   const searchResults = useMemo(() => searchOperationalRecords(db, search), [db, search]);
-  const suggestions = useMemo(() => detectIntelligenceSuggestions(db).map((suggestion) => db.intelligenceSuggestions?.find((saved) => saved.id === suggestion.id) || suggestion), [db]);
-  const qualityIssues = useMemo(() => scanDataQuality(db), [db]);
-  const duplicateCandidates = useMemo(() => findPotentialDuplicates(db), [db]);
+  const suggestions = useMemo(() => detectIntelligenceSuggestions(intelligenceDb).map((suggestion) => intelligenceDb.intelligenceSuggestions?.find((saved) => saved.id === suggestion.id) || suggestion), [intelligenceDb]);
+  const qualityIssues = useMemo(() => scanDataQuality(intelligenceDb), [intelligenceDb]);
+  const duplicateCandidates = useMemo(() => findPotentialDuplicates(intelligenceDb), [intelligenceDb]);
   const pendingReviewCount = useMemo(() => {
     const pendingSuggestions = suggestions.filter((suggestion) =>
       !reviewStatuses[suggestion.id] && suggestion.reviewStatus === 'suggested'
@@ -121,7 +127,7 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     }
     return '';
   }, [db, askQuestion]);
-  const caseSummary = useMemo(() => summaryGirlId ? buildIntelligentCaseSummary(db, summaryGirlId) : null, [db, summaryGirlId]);
+  const caseSummary = useMemo(() => summaryGirlId ? buildIntelligentCaseSummary(intelligenceDb, summaryGirlId) : null, [intelligenceDb, summaryGirlId]);
 
   const workplanAgenda = useMemo(() => {
     const selectedYear = Number(calendarDate.slice(0, 4));
@@ -243,8 +249,29 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
   const saveEarlyYears = (event: React.FormEvent) => {
     event.preventDefault();
     if (!earlyYearsForm.studentName.trim()) return;
-    addEarlyYearsRecord({ ...earlyYearsForm, reportingPeriod: earlyYearsForm.enrollmentDate.slice(0, 7), sourceDocument: 'Phase 5 manual entry', createdBy: staffProfile?.fullName || 'SHINE Staff' });
-    setShowEarlyYearsForm(false); setEarlyYearsForm({ ...earlyYearsForm, studentName: '', dateOfBirth: '', guardianName: '', notes: '' }); setMessage('Early-years record saved.'); onRefresh();
+    try {
+      addEarlyYearsRecord({ ...earlyYearsForm, reportingPeriod: earlyYearsForm.enrollmentDate.slice(0, 7), sourceDocument: 'Phase 5 manual entry', createdBy: staffProfile?.fullName || 'SHINE Staff' });
+      setShowEarlyYearsForm(false);
+      setEarlyYearsForm({ ...earlyYearsForm, studentName: '', dateOfBirth: '', guardianName: '', notes: '' });
+      setMessage('Child registered successfully.');
+      onRefresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The child could not be registered. Please try again.');
+    }
+  };
+
+  const recordEarlyYearsAttendance = (studentId: string, status: 'Present' | 'Absent' | 'Late' | 'Excused') => {
+    try {
+      const saved = saveEarlyYearsAttendance(studentId, attendanceDate, status, staffProfile?.fullName || 'SHINE Staff');
+      if (!saved) {
+        setMessage('The selected child could not be found in the register.');
+        return;
+      }
+      setMessage('Attendance saved.');
+      onRefresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Attendance could not be saved. Please retry.');
+    }
   };
 
   const tabGroups: Array<{ label: string; tabs: Array<[Phase5Tab, string, React.ComponentType<{ className?: string }>]> }> = [
@@ -293,12 +320,43 @@ export const Phase5OperationsView: React.FC<Phase5OperationsViewProps> = ({ db, 
     {tab === 'feeding' && <Panel title="School feeding management" action={canEdit ? <button type="button" onClick={() => setShowFeedingForm(true)} className="button-primary"><Plus className="h-4 w-4" />Record feeding log</button> : undefined}><div className="grid gap-3 sm:grid-cols-4"><Metric label="Days" value={feedingInsight.days} /><Metric label="Meals" value={feedingInsight.mealsServed} /><Metric label="Daily cost" value={`MWK ${Math.round(feedingInsight.averageDailyCost).toLocaleString()}`} /><Metric label="Cost / meal" value={`MWK ${Math.round(feedingInsight.costPerMeal).toLocaleString()}`} /></div><div className="mt-4 space-y-2">{feedingLogs.map((log) => <div key={log.id} className="rounded-lg border border-stone-200 p-3 text-xs"><strong>{log.date}</strong><span className="ml-3">{log.studentsPresent} students · {log.mealsServed} meals · MWK {(log.actualCost ?? log.estimatedCost).toLocaleString()}</span><div className="text-stone-500">{log.foodItems.join(', ')}</div></div>)}</div></Panel>}
 
     {tab === 'prices' && <Panel title="Market price intelligence" action={canEdit ? <button type="button" onClick={() => setShowPriceForm(true)} className="button-primary"><Plus className="h-4 w-4" />Record price</button> : undefined}><div className="space-y-2">{Array.from(new Set(marketPrices.map((item) => `${item.itemName}|${item.locationOrShop || ''}`))).map((key) => { const [itemName, location] = key.split('|'); const insight = calculateMarketPriceInsight(marketPrices, itemName, location || undefined); return insight ? <div key={key} className="grid gap-2 rounded-lg border border-stone-200 p-3 sm:grid-cols-5 text-xs"><strong>{insight.itemName}</strong><span>Current: MWK {insight.currentPrice.toLocaleString()}</span><span>Average: MWK {Math.round(insight.averagePrice).toLocaleString()}</span><span>Range: {insight.minimumPrice.toLocaleString()} - {insight.maximumPrice.toLocaleString()}</span><span className={insight.trend === 'increasing' ? 'text-rose-700' : 'text-emerald-700'}>{insight.trend}{insight.percentageChange === undefined ? '' : ` (${insight.percentageChange.toFixed(1)}%)`}</span></div> : null; })}{!marketPrices.length && <Empty text="No market prices recorded yet." />}</div></Panel>}
-    {tab === 'early-years' && <Panel title="Early years students and attendance" action={canEdit ? <button type="button" onClick={() => setShowEarlyYearsForm(true)} className="button-primary"><Plus className="h-4 w-4" />Add student record</button> : undefined}><div className="space-y-2">{earlyYearsRecords.map((record) => <div key={record.id} className="grid gap-2 rounded-lg border border-stone-200 p-3 text-xs sm:grid-cols-5"><strong>{record.studentName || 'Unnamed student'}</strong><span>{record.classGroup || 'Group not set'}</span><span>{record.attendanceStatus || 'Attendance not recorded'}</span><span>{record.studentStatus || 'Active'}</span><span className="text-stone-500">Guardian: {record.guardianName || 'Not recorded'}</span></div>)}{!earlyYearsRecords.length && <Empty text="No early-years records recorded yet." />}</div></Panel>}
+    {tab === 'early-years' && <Panel title="Early Years child register & daily attendance" action={canEdit ? <button type="button" onClick={() => setShowEarlyYearsForm(true)} className="button-primary"><Plus className="h-4 w-4" />Register child</button> : undefined}>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-stone-600">Attendance date
+            <input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="field mt-1 block" />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Metric label="Registered" value={earlyYearsRecords.filter((record) => Boolean(record.studentName?.trim())).length} />
+          <Metric label="Present" value={earlyYearsRecords.filter((record) => record.studentName?.trim() && record.studentStatus !== 'Completed' && record.studentStatus !== 'Transferred' && record.attendanceEntries?.some((entry) => entry.date === attendanceDate && entry.status === 'Present')).length} />
+          <Metric label="Absent" value={earlyYearsRecords.filter((record) => record.studentName?.trim() && record.studentStatus !== 'Completed' && record.studentStatus !== 'Transferred' && record.attendanceEntries?.some((entry) => entry.date === attendanceDate && entry.status === 'Absent')).length} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        {earlyYearsRecords.filter((record) => Boolean(record.studentName?.trim())).map((record) => {
+          const active = !record.studentStatus || record.studentStatus === 'Active';
+          const attendance = record.attendanceEntries?.find((entry) => entry.date === attendanceDate);
+          return <div key={record.id} className="grid gap-3 rounded-lg border border-stone-200 p-3 text-xs sm:grid-cols-[1.3fr_0.8fr_1fr_1fr] sm:items-center">
+            <div><strong className="block text-sm text-stone-900">{record.studentName}</strong><span className="text-stone-500">{record.classGroup || 'Group not set'} · {record.studentStatus || 'Active'}</span></div>
+            <div><span className="block text-stone-500">Guardian</span><span>{record.guardianName || 'Not recorded'}</span></div>
+            <div><span className="block text-stone-500">Enrolled</span><span>{record.enrollmentDate || 'Not recorded'}</span></div>
+            <label className="block text-stone-600">Attendance
+              <select disabled={!canEdit || !active} value={attendance?.status || ''} onChange={(event) => recordEarlyYearsAttendance(record.id, event.target.value as 'Present' | 'Absent' | 'Late' | 'Excused')} className="field mt-1 min-h-10 w-full">
+                <option value="">Not marked</option><option value="Present">Present</option><option value="Absent">Absent</option><option value="Late">Late</option><option value="Excused">Excused</option>
+              </select>
+            </label>
+          </div>;
+        })}
+        {!earlyYearsRecords.some((record) => Boolean(record.studentName?.trim())) && <Empty text="No children registered yet. Add each child once, then record their attendance by date." />}
+      </div>
+      <p className="mt-3 text-[11px] text-stone-500">Attendance is stored separately for each date. Changing a child's status for the same date updates that day's entry instead of creating a duplicate.</p>
+    </Panel>}
 
     {showMeetingForm && <Modal title="Create meeting" onClose={() => setShowMeetingForm(false)}><form onSubmit={saveMeeting} className="space-y-3"><Input label="Title" value={meetingForm.title} onChange={(value) => setMeetingForm({ ...meetingForm, title: value })} required /><Input label="Date and time" type="datetime-local" value={meetingForm.dateTime} onChange={(value) => setMeetingForm({ ...meetingForm, dateTime: value })} required /><Input label="Location" value={meetingForm.location} onChange={(value) => setMeetingForm({ ...meetingForm, location: value })} /><Input label="Attendees, comma separated" value={meetingForm.attendees} onChange={(value) => setMeetingForm({ ...meetingForm, attendees: value })} /><AudioDataInput label="Meeting audio" onTranscriptionChange={setMeetingAudioText} /><label className="text-xs text-stone-600">Minutes<textarea value={meetingForm.minutesText} onChange={(event) => setMeetingForm({ ...meetingForm, minutesText: event.target.value })} rows={4} className="field mt-1 w-full" /></label><label className="text-xs text-stone-600">Summary and outcomes<textarea value={meetingForm.summaryAndOutcomes} onChange={(event) => setMeetingForm({ ...meetingForm, summaryAndOutcomes: event.target.value })} rows={3} className="field mt-1 w-full" /></label><button className="button-primary" type="submit"><Save className="h-4 w-4" />Save meeting</button></form></Modal>}
     {showFeedingForm && <Modal title="Record feeding log" onClose={() => setShowFeedingForm(false)}><form onSubmit={saveFeeding} className="space-y-3"><Input label="Date" type="date" value={feedingForm.date} onChange={(value) => setFeedingForm({ ...feedingForm, date: value })} required /><div className="grid grid-cols-2 gap-2"><Input label="Students present" type="number" value={feedingForm.studentsPresent} onChange={(value) => setFeedingForm({ ...feedingForm, studentsPresent: value })} required /><Input label="Meals served" type="number" value={feedingForm.mealsServed} onChange={(value) => setFeedingForm({ ...feedingForm, mealsServed: value })} required /><Input label="Estimated cost" type="number" value={feedingForm.estimatedCost} onChange={(value) => setFeedingForm({ ...feedingForm, estimatedCost: value })} required /><Input label="Actual cost" type="number" value={feedingForm.actualCost} onChange={(value) => setFeedingForm({ ...feedingForm, actualCost: value })} /></div><Input label="Food items, comma separated" value={feedingForm.foodItems} onChange={(value) => setFeedingForm({ ...feedingForm, foodItems: value })} /><Input label="Quantities, e.g. maize:2, beans:1" value={feedingForm.quantities} onChange={(value) => setFeedingForm({ ...feedingForm, quantities: value })} /><Input label="Notes" value={feedingForm.notes} onChange={(value) => setFeedingForm({ ...feedingForm, notes: value })} /><AudioDataInput label="Feeding audio" /><button className="button-primary" type="submit"><Save className="h-4 w-4" />Save feeding log</button></form></Modal>}
     {showPriceForm && <Modal title="Record market price" onClose={() => setShowPriceForm(false)}><form onSubmit={savePrice} className="space-y-3"><Input label="Item name" value={priceForm.itemName} onChange={(value) => setPriceForm({ ...priceForm, itemName: value })} required /><div className="grid grid-cols-2 gap-2"><Input label="Category" value={priceForm.category} onChange={(value) => setPriceForm({ ...priceForm, category: value })} /><Input label="Unit" value={priceForm.unit} onChange={(value) => setPriceForm({ ...priceForm, unit: value })} /><Input label="Price" type="number" value={priceForm.price} onChange={(value) => setPriceForm({ ...priceForm, price: value })} required /><Input label="Currency" value={priceForm.currency} onChange={(value) => setPriceForm({ ...priceForm, currency: value })} /><Input label="Date" type="date" value={priceForm.dateRecorded} onChange={(value) => setPriceForm({ ...priceForm, dateRecorded: value })} /><Input label="Location or shop" value={priceForm.locationOrShop} onChange={(value) => setPriceForm({ ...priceForm, locationOrShop: value })} /></div><AudioDataInput label="Price audio entry" /><button className="button-primary" type="submit"><Save className="h-4 w-4" />Save price</button></form></Modal>}
-    {showEarlyYearsForm && <Modal title="Add early-years student record" onClose={() => setShowEarlyYearsForm(false)}><form onSubmit={saveEarlyYears} className="space-y-3"><Input label="Student name" value={earlyYearsForm.studentName} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, studentName: value })} required /><div className="grid grid-cols-2 gap-2"><Input label="Date of birth" type="date" value={earlyYearsForm.dateOfBirth} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, dateOfBirth: value })} /><Input label="Enrollment date" type="date" value={earlyYearsForm.enrollmentDate} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, enrollmentDate: value })} /><Input label="Guardian" value={earlyYearsForm.guardianName} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, guardianName: value })} /><Input label="Class / group" value={earlyYearsForm.classGroup} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, classGroup: value })} /></div><label className="text-xs text-stone-600">Attendance<select className="field mt-1 w-full" value={earlyYearsForm.attendanceStatus} onChange={(event) => setEarlyYearsForm({ ...earlyYearsForm, attendanceStatus: event.target.value as typeof earlyYearsForm.attendanceStatus })}><option>Present</option><option>Absent</option><option>Late</option><option>Excused</option></select></label><Input label="Notes" value={earlyYearsForm.notes} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, notes: value })} /><button className="button-primary" type="submit"><Save className="h-4 w-4" />Save student record</button></form></Modal>}
+    {showEarlyYearsForm && <Modal title="Add early-years student record" onClose={() => setShowEarlyYearsForm(false)}><form onSubmit={saveEarlyYears} className="space-y-3"><Input label="Student name" value={earlyYearsForm.studentName} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, studentName: value })} required /><div className="grid grid-cols-2 gap-2"><Input label="Date of birth" type="date" value={earlyYearsForm.dateOfBirth} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, dateOfBirth: value })} /><Input label="Enrollment date" type="date" value={earlyYearsForm.enrollmentDate} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, enrollmentDate: value })} /><Input label="Guardian" value={earlyYearsForm.guardianName} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, guardianName: value })} /><Input label="Class / group" value={earlyYearsForm.classGroup} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, classGroup: value })} /></div><Input label="Notes" value={earlyYearsForm.notes} onChange={(value) => setEarlyYearsForm({ ...earlyYearsForm, notes: value })} /><button className="button-primary" type="submit"><Save className="h-4 w-4" />Save student record</button></form></Modal>}
   </div>;
 };
 

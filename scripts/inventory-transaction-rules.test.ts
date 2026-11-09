@@ -1,0 +1,376 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from '@firebase/rules-unit-testing';
+import { collection, deleteDoc, doc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+
+const projectId = 'demo-shine-inventory-transaction-rules';
+let env: RulesTestEnvironment;
+const staff = (uid: string, role: string) => ({
+  id: uid, uid, email: `${uid}@example.test`, fullName: `Synthetic ${uid}`, role, status: 'Active',
+});
+const itemFixture = () => ({
+  id: 'item-synthetic', stockCode: 'SYN-1', name: 'Synthetic stock item', unit: 'packs',
+  location: 'Main Office', quantityOnHand: 10, minimumStockLevel: 0, movements: [],
+  createdAt: '2026-10-26T10:00:00.000Z', updatedAt: '2026-10-26T10:00:00.000Z',
+  createdBy: 'manager', updatedBy: 'manager',
+});
+async function seed() {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'staffUsers/manager'), staff('manager', 'Manager'));
+    await setDoc(doc(db, 'staffUsers/staff'), staff('staff', 'Staff'));
+    await setDoc(doc(db, 'staffUsers/viewer'), staff('viewer', 'View Only'));
+    await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+    await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+      id: 'proc-synthetic', status: 'purchased',
+      items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+    });
+  });
+}
+async function applyMovement(uid: string, options: { id?: string; type?: 'Received' | 'Issued' | 'Adjustment'; quantity?: number; previous?: number; next?: number } = {}) {
+  const id = options.id || 'mov-synthetic';
+  const type = options.type || 'Received';
+  const previous = options.previous ?? 10;
+  const quantity = options.quantity ?? 3;
+  const next = options.next ?? (type === 'Received' ? previous + quantity : type === 'Issued' ? previous - quantity : 7);
+  const db = env.authenticatedContext(uid).firestore();
+  const itemRef = doc(db, 'inventoryItems/item-synthetic');
+  const movementRef = doc(db, `inventoryMovements/${id}`);
+  const movement = {
+    id, inventoryItemId: 'item-synthetic', type, quantity, date: '2026-10-26',
+    location: 'Main Office', reason: 'Synthetic rules fixture', recordedBy: `Synthetic ${uid}`,
+    recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z', previousQuantity: previous, newQuantity: next,
+  };
+  const embedded = {
+    id, type, quantity, date: movement.date, location: movement.location, reason: movement.reason,
+    recordedBy: movement.recordedBy, recordedByUid: uid, createdAt: movement.createdAt,
+    previousQuantity: previous, newQuantity: next,
+  };
+  const batch = writeBatch(db);
+  batch.update(itemRef, {
+    quantityOnHand: next,
+    movements: [embedded],
+    lastMovementId: id,
+    updatedAt: movement.createdAt,
+    updatedBy: movement.recordedBy,
+    updatedByUid: uid,
+  });
+  batch.set(movementRef, movement);
+  await batch.commit();
+}
+
+async function seedManagedInventory(quantity = 0) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'inventoryLocations/loc_shine centre'), {
+      id: 'loc_shine centre', name: 'Shine Centre', normalizedName: 'shine centre', isActive: true,
+    });
+    await setDoc(doc(db, 'inventoryItems/item-synthetic'), {
+      ...itemFixture(), location: 'Shine Centre', locationId: 'loc_shine centre',
+      quantityOnHand: quantity, movements: [], ...(quantity > 0 ? { lastMovementId: 'opening-synthetic' } : {}),
+    });
+    if (quantity > 0) {
+      await setDoc(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), {
+        id: 'bal_14_item-synthetic_loc_shine centre', inventoryItemId: 'item-synthetic',
+        locationId: 'loc_shine centre', unit: 'packs', quantity,
+        createdAt: '2026-10-26T10:00:00.000Z', createdByUid: 'manager',
+        updatedAt: '2026-10-26T10:00:00.000Z', updatedByUid: 'manager',
+        lastMovementId: 'opening-synthetic',
+      });
+    }
+  });
+}
+
+async function applyManagedMovement(uid: string, options: {
+  id?: string; type?: 'Received' | 'Issued' | 'Adjustment'; quantity?: number; previous?: number; next?: number;
+  locationId?: string; includeMovement?: boolean; includeBalance?: boolean; balanceQuantity?: number;
+} = {}) {
+  const id = options.id || 'mov-managed-synthetic';
+  const type = options.type || 'Received';
+  const previous = options.previous ?? 0;
+  const quantity = options.quantity ?? 3;
+  const next = options.next ?? (type === 'Received' ? previous + quantity : type === 'Issued' ? previous - quantity : 7);
+  const locationId = options.locationId || 'loc_shine centre';
+  const db = env.authenticatedContext(uid).firestore();
+  const itemRef = doc(db, 'inventoryItems/item-synthetic');
+  const movementRef = doc(db, `inventoryMovements/${id}`);
+  const balanceId = 'bal_14_item-synthetic_loc_shine centre';
+  const balanceRef = doc(db, `inventoryLocationBalances/${balanceId}`);
+  const movement = {
+    id, inventoryItemId: 'item-synthetic', unit: 'packs', type, quantity, date: '2026-10-26',
+    location: 'Shine Centre', locationId, reason: 'Synthetic managed rules fixture',
+    recordedBy: `Synthetic ${uid}`, recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z',
+    previousQuantity: previous, newQuantity: next,
+  };
+  const embedded = {
+    id, inventoryItemId: 'item-synthetic', unit: 'packs', type, quantity, date: movement.date,
+    location: movement.location, locationId, reason: movement.reason, recordedBy: movement.recordedBy,
+    recordedByUid: uid, createdAt: movement.createdAt, previousQuantity: previous, newQuantity: next,
+  };
+  const batch = writeBatch(db);
+  batch.update(itemRef, {
+    quantityOnHand: next, movements: [embedded], lastMovementId: id,
+    updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
+  });
+  if (options.includeMovement !== false) batch.set(movementRef, movement);
+  if (options.includeBalance !== false) {
+    const balance = {
+      id: balanceId, inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre',
+      unit: 'packs', quantity: options.balanceQuantity ?? next,
+      ...(previous === 0 ? { createdAt: movement.createdAt, createdByUid: uid } : {}),
+      updatedAt: movement.createdAt, updatedByUid: uid, lastMovementId: id,
+    };
+    if (previous === 0) batch.set(balanceRef, balance);
+    else batch.update(balanceRef, balance);
+  }
+  await batch.commit();
+}
+
+async function applyProcurementMovement(uid: string, options: {
+  id?: string; sourceId?: string; sourceLineIndex?: number; quantity?: number; sourceDeliveryId?: string; managed?: boolean; includeBalance?: boolean;
+} = {}) {
+  const id = options.id || 'mov-proc-synthetic';
+  const previous = 10;
+  const quantity = options.quantity ?? 3;
+  const next = previous + quantity;
+  const managed = options.managed !== false;
+  const locationId = managed ? 'loc_shine centre' : undefined;
+  if (managed) await seedManagedInventory(previous);
+  const db = env.authenticatedContext(uid).firestore();
+  const itemRef = doc(db, 'inventoryItems/item-synthetic');
+  const movementRef = doc(db, `inventoryMovements/${id}`);
+  const sourceId = options.sourceId || 'proc-synthetic';
+  const sourceLineIndex = options.sourceLineIndex ?? 0;
+  const movement = {
+    id, inventoryItemId: 'item-synthetic', unit: 'packs', type: 'Received', quantity, date: '2026-10-26',
+    location: managed ? 'Shine Centre' : 'Main Office', ...(locationId ? { locationId } : {}),
+    reference: `Procurement ${sourceId} · line ${sourceLineIndex + 1}`,
+    reason: 'Procurement receipt: synthetic fixture', recordedBy: `Synthetic ${uid}`,
+    recordedByUid: uid, createdAt: '2026-10-26T10:01:00.000Z', previousQuantity: previous, newQuantity: next,
+    sourceType: 'procurementReceipt', sourceId, sourceLineIndex,
+    ...(options.sourceDeliveryId ? { sourceDeliveryId: options.sourceDeliveryId } : {}),
+  };
+  const embedded = {
+    id, inventoryItemId: 'item-synthetic', unit: movement.unit, type: movement.type, quantity, date: movement.date,
+    location: movement.location, ...(locationId ? { locationId } : {}),
+    reference: movement.reference, reason: movement.reason,
+    recordedBy: movement.recordedBy, recordedByUid: uid, createdAt: movement.createdAt,
+    previousQuantity: previous, newQuantity: next, sourceType: movement.sourceType, sourceId, sourceLineIndex,
+    ...(options.sourceDeliveryId ? { sourceDeliveryId: options.sourceDeliveryId } : {}),
+  };
+  const batch = writeBatch(db);
+  batch.update(itemRef, {
+    quantityOnHand: next, movements: [embedded], lastMovementId: id,
+    updatedAt: movement.createdAt, updatedBy: movement.recordedBy, updatedByUid: uid,
+  });
+  batch.set(movementRef, movement);
+  if (managed && options.includeBalance !== false) {
+    batch.update(doc(db, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), {
+      quantity: next, updatedAt: movement.createdAt, updatedByUid: uid, lastMovementId: id,
+    });
+  }
+  const procurementRef = doc(db, 'procurementLists/' + sourceId);
+  const receivedMap: Record<string, number> = {};
+  receivedMap['line_' + sourceLineIndex] = quantity;
+  batch.update(procurementRef, {
+    receivedQuantitiesByLine: receivedMap,
+    lastReceiptMovementId: id,
+    updatedAt: movement.createdAt,
+    updatedBy: movement.recordedBy,
+  });
+  await batch.commit();
+}
+
+async function main() {
+  env = await initializeTestEnvironment({
+    projectId,
+    firestore: { rules: fs.readFileSync('firestore.rules', 'utf8') },
+  });
+  try {
+    await seed();
+
+    const managerDb = env.authenticatedContext('manager').firestore();
+    const staffDb = env.authenticatedContext('staff').firestore();
+    const managedLocation = {
+      id: 'loc_shine centre', name: 'Shine Centre', normalizedName: 'shine centre', isActive: true,
+      createdAt: '2026-10-26T10:00:00.000Z', createdBy: 'Synthetic manager', createdByUid: 'manager',
+      updatedAt: '2026-10-26T10:00:00.000Z', updatedBy: 'Synthetic manager', updatedByUid: 'manager',
+    };
+    await assertSucceeds(setDoc(doc(managerDb, 'inventoryLocations/loc_shine centre'), managedLocation));
+    await assertFails(setDoc(doc(staffDb, 'inventoryLocations/loc_other store'), {
+      ...managedLocation, id: 'loc_other store', name: 'Other Store', normalizedName: 'other store',
+      createdByUid: 'staff', updatedByUid: 'staff',
+    }));
+    await assertFails(setDoc(doc(managerDb, 'inventoryLocations/loc_duplicate'), {
+      ...managedLocation, id: 'loc_duplicate', name: 'SHINE CENTRE', normalizedName: 'shine centre',
+    }));
+    await assertFails(updateDoc(doc(managerDb, 'inventoryLocations/loc_shine centre'), { isActive: false }));
+    await assertSucceeds(setDoc(doc(staffDb, 'inventoryItems/item-new-managed-location'), {
+      ...itemFixture(), id: 'item-new-managed-location', location: 'Shine Centre',
+      locationId: 'loc_shine centre', quantityOnHand: 0, movements: [],
+    }));
+    await assertFails(setDoc(doc(staffDb, 'inventoryItems/item-without-managed-location'), {
+      ...itemFixture(), id: 'item-without-managed-location', quantityOnHand: 0, movements: [],
+    }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-new-managed-location'), {
+      locationId: 'loc_other store',
+    }));
+
+    // A managed stock movement is authorized only as one item + movement + balance batch.
+    await seedManagedInventory(0);
+    await assertFails(applyManagedMovement('staff', { id: 'managed-first-adjustment', type: 'Adjustment', quantity: 7, next: 7 }));
+    await assertSucceeds(applyManagedMovement('staff', { id: 'managed-first-receipt', quantity: 3 }));
+    await assertFails(setDoc(doc(staffDb, 'inventoryLocationBalances/direct-write'), {
+      id: 'direct-write', inventoryItemId: 'item-synthetic', locationId: 'loc_shine centre',
+      unit: 'packs', quantity: 3, createdAt: '2026-10-26T10:01:00.000Z',
+      createdByUid: 'staff', updatedAt: '2026-10-26T10:01:00.000Z',
+      updatedByUid: 'staff', lastMovementId: 'managed-first-receipt',
+    }));
+    await assertFails(applyManagedMovement('staff', { id: 'managed-no-movement', previous: 3, quantity: 1, includeMovement: false }));
+    await assertFails(applyManagedMovement('staff', {
+      id: 'managed-item-movement-without-balance', previous: 3, quantity: 1, next: 4, includeBalance: false,
+    }));
+
+    await assertFails(applyManagedMovement('viewer', { id: 'managed-viewer', previous: 3, quantity: 1 }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre'), { quantity: 99 }));
+    await assertFails(deleteDoc(doc(managerDb, 'inventoryLocationBalances/bal_14_item-synthetic_loc_shine centre')));
+
+    await seedManagedInventory(10);
+    await assertSucceeds(applyManagedMovement('staff', {
+      id: 'managed-existing-issue', type: 'Issued', previous: 10, quantity: 2, next: 8,
+    }));
+    await seedManagedInventory(10);
+    await assertSucceeds(applyManagedMovement('staff', {
+      id: 'managed-existing-stocktake', type: 'Adjustment', previous: 10, quantity: 3, next: 7,
+    }));
+    await seedManagedInventory(10);
+    await assertFails(applyManagedMovement('staff', {
+      id: 'managed-balance-mismatch', previous: 10, quantity: 2, next: 12, balanceQuantity: 11,
+    }));
+    await seedManagedInventory(0);
+    await assertFails(applyManagedMovement('staff', {
+      id: 'managed-wrong-location', locationId: 'loc_other store', quantity: 3,
+    }));
+
+    await assertSucceeds(getDocs(collection(staffDb, 'inventoryItems')));
+    await assertFails(setDoc(doc(staffDb, 'inventoryItems/item-with-unverified-opening-balance'), {
+      ...itemFixture(), id: 'item-with-unverified-opening-balance', quantityOnHand: 5,
+      movements: [{ id: 'opening-movement', type: 'Received', quantity: 5 }],
+    }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await assertSucceeds(applyMovement('staff'));
+    // The UI already locks this field; Firestore must also reject direct edits
+    // from imports, restore paths, or a modified client until transfers exist.
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { location: 'Girls House' }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { unit: 'kg' }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { minimumStockLevel: 1.5 }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await assertFails(applyMovement('staff', { id: 'mov-fractional-pack', quantity: 1.5, previous: 10, next: 11.5 }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
+        ...itemFixture(), unit: 'kg', minimumStockLevel: 0.25,
+      });
+    });
+    await assertSucceeds(applyMovement('staff', {
+      id: 'mov-measured-two-decimals', quantity: 1.25, previous: 10, next: 11.25,
+    }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
+        ...itemFixture(), unit: 'kg',
+      });
+    });
+    await assertFails(applyMovement('staff', {
+      id: 'mov-measured-three-decimals', quantity: 1.234, previous: 10, next: 11.234,
+    }));
+
+    await assertFails(updateDoc(doc(staffDb, 'inventoryItems/item-synthetic'), { quantityOnHand: 999 }));
+    await assertFails(updateDoc(doc(staffDb, 'inventoryMovements/mov-synthetic'), { quantity: 99 }));
+    await assertFails(applyMovement('viewer', { id: 'mov-viewer', previous: 13, next: 14, quantity: 1 }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), itemFixture());
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'legacy-proc-no-destination', managed: false }));
+    await assertFails(applyProcurementMovement('staff', { id: 'managed-proc-without-balance', includeBalance: false }));
+    await assertSucceeds(applyProcurementMovement('staff'));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertSucceeds(applyProcurementMovement('staff', {
+      id: 'mov-proc-partial', quantity: 1, sourceDeliveryId: 'delivery_12345678',
+    }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-wrong-qty', quantity: 4 }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'boxes' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-wrong-unit' }));
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-wrong-line', sourceLineIndex: 1 }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'approved',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-unpurchased' }));
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'inventoryItems/item-synthetic'), itemFixture());
+      await setDoc(doc(db, 'procurementLists/proc-synthetic'), {
+        id: 'proc-synthetic', status: 'purchased', receivedAt: '2026-10-26T10:00:00.000Z',
+        items: [{ description: 'Synthetic stock item', quantity: 3, unit: 'packs' }],
+      });
+    });
+    await assertFails(applyProcurementMovement('staff', { id: 'mov-proc-already-received' }));
+
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'inventoryItems/item-synthetic'), {
+        ...itemFixture(), quantityOnHand: 2, movements: [],
+      });
+    });
+    await assertFails(applyMovement('staff', { id: 'mov-too-much', type: 'Issued', quantity: 3, previous: 2, next: -1 }));
+
+    console.log('Inventory transaction Firestore rules tests passed.');
+  } finally {
+    await env.cleanup();
+  }
+}
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

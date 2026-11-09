@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { QualityIssue } from '../services/qualityRules';
 import { qualityMessage } from '../services/qualityMessages';
 import type { FixedReportFormat } from '../services/qualityFixedReport';
+import { REPORT_RULE_EXPLANATIONS, REPORT_SECTION_EXAMPLES } from '../data/reportWritingHelp';
 
 export interface QualityIssueResolution {
   status: 'resolved' | 'overridden' | 'pending-approval';
@@ -42,6 +43,14 @@ export function toggleQualityGroup(current: string | null, groupKey: string): st
 
 function issueKey(issue: QualityIssue): string {
   return issue.rule;
+}
+
+function writingExampleForRule(rule: string) {
+  if (rule.startsWith('FIN-') || rule.startsWith('FORMULA-')) return REPORT_SECTION_EXAMPLES.finance;
+  if (rule.startsWith('IMPACT-')) return REPORT_SECTION_EXAMPLES.outcome;
+  if (rule.startsWith('DQ-') || rule.startsWith('BASELINE-')) return REPORT_SECTION_EXAMPLES.dataQuality;
+  if (rule.startsWith('QUANT-')) return REPORT_SECTION_EXAMPLES.activity;
+  return REPORT_SECTION_EXAMPLES.followUp;
 }
 
 function renderIssueQuote(issue: QualityIssue): React.ReactNode {
@@ -543,6 +552,12 @@ export const QualityCheckPanel: React.FC<QualityCheckPanelProps> = ({
                       ? renderIdentityPrompt(issue)
                       : <p className="break-words text-stone-800">“{renderIssueQuote(issue)}”</p>}
                     {issue.target && onOpenIssue && canOpenIssue?.(issue) !== false && <button type="button" className="mt-1 text-[11px] text-teal-800 underline" onClick={() => onOpenIssue(issue)}>Show in document</button>}
+                    <details className="mt-2 max-w-2xl rounded border border-stone-200 bg-stone-50 p-2">
+                      <summary className="cursor-pointer font-semibold text-teal-900">How to write this</summary>
+                      <p className="mt-2 text-stone-700">{REPORT_RULE_EXPLANATIONS[issue.rule] || 'Check the source information and explain the result clearly.'}</p>
+                      <p className="mt-2"><strong>Weak:</strong> {writingExampleForRule(issue.rule).weak}</p>
+                      <p className="mt-1"><strong>Stronger:</strong> {writingExampleForRule(issue.rule).strong}</p>
+                    </details>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     {canDecideIdentity(issue) && onResolveIssue ? (

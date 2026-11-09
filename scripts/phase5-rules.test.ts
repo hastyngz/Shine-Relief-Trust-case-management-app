@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -35,6 +35,26 @@ async function run() {
     await assertFails(setDoc(doc(manager, 'aiSettings/default'), { id: 'default', enabled: false }));
     await assertSucceeds(setDoc(doc(admin, 'aiSettings/default'), { id: 'default', enabled: false }));
     await assertSucceeds(getDoc(doc(staff, 'aiSettings/default')));
+
+    // Early Years is readable by all active staff, writable by Staff/Manager/Admin,
+    // and deletable only by an Administrator.
+    const earlyYearsRecord = {
+      id: 'early-years-1',
+      studentName: 'Synthetic ECD Child',
+      dateOfBirth: '2022-03-14',
+      guardianName: 'Synthetic Guardian',
+      enrollmentDate: '2026-11-01',
+      studentStatus: 'Active',
+      attendanceEntries: [],
+    };
+    await assertSucceeds(setDoc(doc(staff, 'earlyYearsRecords/early-years-1'), earlyYearsRecord));
+    await assertSucceeds(getDoc(doc(viewer, 'earlyYearsRecords/early-years-1')));
+    await assertFails(setDoc(doc(viewer, 'earlyYearsRecords/viewer-write'), { ...earlyYearsRecord, id: 'viewer-write' }));
+    await assertSucceeds(setDoc(doc(manager, 'earlyYearsRecords/early-years-1'), { ...earlyYearsRecord, notes: 'Manager update' }));
+    await assertFails(deleteDoc(doc(staff, 'earlyYearsRecords/early-years-1')));
+    await assertFails(deleteDoc(doc(manager, 'earlyYearsRecords/early-years-1')));
+    await assertSucceeds(deleteDoc(doc(admin, 'earlyYearsRecords/early-years-1')));
+
     console.log('Phase 5 Firestore rules tests passed.');
   } finally {
     await testEnvironment.cleanup();

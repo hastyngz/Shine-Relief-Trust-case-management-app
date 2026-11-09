@@ -4,8 +4,16 @@ import * as XLSX from 'xlsx';
 import { analyzeSpreadsheetWorkbook, detectSpreadsheetKind } from '../src/services/spreadsheetImport/detector';
 import { createSpreadsheetImportPreview, isValidPayrollEmployeeName } from '../src/services/spreadsheetImport/importers';
 import { spreadsheetEmployeeLineToPreview } from '../src/services/spreadsheetImport/employeePreview';
+import { applySpreadsheetAIMapping } from '../src/services/spreadsheetImport/applyAIMapping';
+import {
+  createSyntheticSpreadsheetAIRequest,
+  restoreSpreadsheetAIMappingSheetNames,
+  validateSpreadsheetAIRequest,
+  validateSpreadsheetAIMappingProposal,
+} from '../src/services/spreadsheetImport/aiMapping';
 import { matchNameCandidates } from '../src/services/spreadsheetImport/nameMatcher';
 import { extractEarlyYearsMetrics } from '../src/services/docxParserService';
+import { spreadsheetLineToPreview } from '../src/components/Import/importWizardHelpers';
 
 function workbook(rows: Array<Array<string | number>>, sheetName = 'Sheet1'): XLSX.WorkBook {
   const result = XLSX.utils.book_new();
@@ -52,13 +60,13 @@ const detectorFixtures: Array<{ kind: string; rows: Array<Array<string | number>
 ];
 
 for (const fixture of detectorFixtures) {
-  assert.equal(detectSpreadsheetKind(workbook(fixture.rows)), fixture.kind);
+  assert.equal(await detectSpreadsheetKind(workbook(fixture.rows)), fixture.kind);
 }
 
 const formulaWorkbook = workbook([['Amount'], [10]]);
 const formulaSheet = formulaWorkbook.Sheets.Sheet1;
 formulaSheet.A2 = { t: 'n', f: '5+5', v: 9, z: '#,##0' };
-const formulaCell = analyzeSpreadsheetWorkbook(formulaWorkbook).sheets[0].cells.find((cell) => cell.address === 'A2');
+const formulaCell = (await analyzeSpreadsheetWorkbook(formulaWorkbook)).sheets[0].cells.find((cell) => cell.address === 'A2');
 assert.equal(formulaCell?.formula, '5+5');
 assert.equal(formulaCell?.cachedValue, 9);
 assert.equal(formulaCell?.numberFormat, '#,##0');
@@ -68,11 +76,11 @@ const budgetWorkbook = workbook([
   ['Early Years', 'Food', 'Maize 3000kg', 3, 100, 400, 300],
   ['Early Years', 'Food', 'Beans', 2, 50, 0, 100],
 ]);
-const budgetAnalysis = analyzeSpreadsheetWorkbook(budgetWorkbook);
-const budgetPreview = createSpreadsheetImportPreview(budgetWorkbook, budgetAnalysis, 'budget-monthly');
+const budgetAnalysis = await analyzeSpreadsheetWorkbook(budgetWorkbook);
+const budgetPreview = await createSpreadsheetImportPreview(budgetWorkbook, budgetAnalysis, 'budget-monthly');
 const budgetLines = budgetPreview.lines.filter((line) => line.kind === 'budget');
 assert.equal(budgetLines.length, 3);
-assert.equal(budgetLines[0].budgetAmount, 300);
+assert.equal(budgetLines[0].budgetAmount, 400, 'preserve the amount stated in the source month column');
 assert.match(budgetLines[0].notes, /source month amount 400 differs from recomputed/);
 assert.equal(budgetLines[0].programmeId, 'early-years');
 assert.equal(budgetLines[0].unit, 'kg');
@@ -81,10 +89,24 @@ assert.equal(budgetLines[0].itemDescription, 'Maize');
 const listWorkbook = workbook([
   ['Item No', 'Description', 'Quantity', 'Unit', 'Unit Price', 'Notes'],
   ['1', 'Pipe fittings', 4, 'pieces', '', 'Price not clearly written'],
+  ['2', 'Maize meal', '50kgs', '', 500, ''],
 ]);
-const listPreview = createSpreadsheetImportPreview(listWorkbook, analyzeSpreadsheetWorkbook(listWorkbook), 'item-list');
+const listPreview = await createSpreadsheetImportPreview(listWorkbook, await analyzeSpreadsheetWorkbook(listWorkbook), 'item-list');
 const listLine = listPreview.lines.find((line) => line.kind === 'procurement');
 assert.equal(listLine?.items[0].priceStatus, 'unclear');
+assert.equal(listLine?.items[1].quantity, 50);
+assert.equal(listLine?.items[1].unit, 'kg');
+const unreadableQuantityWorkbook = workbook([
+  ['Item No', 'Description', 'Quantity', 'Unit Price'],
+  ['1', 'Synthetic supply', 'unknown', 500],
+]);
+const unreadableQuantityLine = (await createSpreadsheetImportPreview(
+  unreadableQuantityWorkbook,
+  await analyzeSpreadsheetWorkbook(unreadableQuantityWorkbook),
+  'item-list',
+)).lines.find((line) => line.kind === 'procurement');
+assert.match(unreadableQuantityLine?.items[0].note || '', /Quantity needs review/);
+assert.equal(spreadsheetLineToPreview(unreadableQuantityLine!).selected, false);
 
 const projectionWorkbook = workbook([
   ['Fish & Chicken P&L 2026'],
@@ -93,7 +115,7 @@ const projectionWorkbook = workbook([
   ['Chicks', ''],
   ['Incubator', ''],
 ]);
-const projectionPreview = createSpreadsheetImportPreview(projectionWorkbook, analyzeSpreadsheetWorkbook(projectionWorkbook), 'profit-loss');
+const projectionPreview = await createSpreadsheetImportPreview(projectionWorkbook, await analyzeSpreadsheetWorkbook(projectionWorkbook), 'profit-loss');
 const projection = projectionPreview.lines.find((line) => line.kind === 'projection');
 assert.equal(projection?.costLines.filter((line) => line.status === 'unpriced').length, 2);
 assert.equal(projection?.netProfitMWK, undefined);
@@ -101,9 +123,9 @@ assert.equal(projection?.netProfitMWK, undefined);
 const mismatchWorkbook = workbook([['Value', 'Total'], [10, 99]]);
 const mismatchSheet = mismatchWorkbook.Sheets.Sheet1;
 mismatchSheet.B2 = { t: 'n', f: 'A2*2', v: 99 };
-const mismatchPreview = createSpreadsheetImportPreview(
+const mismatchPreview = await createSpreadsheetImportPreview(
   mismatchWorkbook,
-  analyzeSpreadsheetWorkbook(mismatchWorkbook),
+  await analyzeSpreadsheetWorkbook(mismatchWorkbook),
   'unknown',
 );
 assert.equal(mismatchPreview.formulaDisagreements.length, 1);
@@ -112,9 +134,9 @@ const payrollWorkbook = workbook([
   ['Staff Name', 'Salary', 'January', 'SEPTMBER', 'JULY ', 'LOAN', 'Arrears'],
   ['Synthetic Staff', 1000, 1000, 1000, 1000, 50, 40],
 ]);
-const payrollPreview = createSpreadsheetImportPreview(
+const payrollPreview = await createSpreadsheetImportPreview(
   payrollWorkbook,
-  analyzeSpreadsheetWorkbook(payrollWorkbook),
+  await analyzeSpreadsheetWorkbook(payrollWorkbook),
   'payroll-grid',
 );
 const payrollLines = payrollPreview.lines.filter((line) => line.kind === 'payroll');
@@ -131,35 +153,56 @@ const gratuityWorkbook = workbook([
   ['Security', 'Synthetic Worker', 576000, 120000, 0.05, 96],
   ['Security', 'Another Worker', 288000, 80000, 0.05, 48],
 ]);
-const gratuityAnalysis = analyzeSpreadsheetWorkbook(gratuityWorkbook);
+const gratuityAnalysis = await analyzeSpreadsheetWorkbook(gratuityWorkbook);
 assert.equal(gratuityAnalysis.detectedKind, 'payroll-grid');
-const gratuityPreview = createSpreadsheetImportPreview(
+const gratuityPreview = await createSpreadsheetImportPreview(
   gratuityWorkbook,
   gratuityAnalysis,
   gratuityAnalysis.detectedKind,
-  [{ id: 'staff-1', uid: 'staff-1', email: 'worker@example.org', fullName: 'Synthetic Worker', role: 'Staff', status: 'Active', createdAt: '', updatedAt: '' }],
-  [],
+  [{ id: 'employee-1', fullName: 'Synthetic Worker', salaryMWK: 120000, createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' }],
   'Gratuity all workers.xlsx',
 );
 const gratuityEmployees = gratuityPreview.lines.filter((line) => line.kind === 'employee');
 assert.equal(gratuityEmployees.length, 2);
-assert.equal(gratuityEmployees[0].matchedEmployeeId, 'staff-1');
+assert.equal(gratuityEmployees[0].matchedEmployeeId, 'employee-1');
 assert.equal(gratuityEmployees[0].salaryHistory.length, 0);
 assert.equal(gratuityEmployees[0].otherPayrollAmounts[0].type, 'gratuity');
 assert.equal(gratuityEmployees[0].otherPayrollAmounts[0].amount, 576000);
 assert.match(spreadsheetEmployeeLineToPreview(gratuityEmployees[0]).summary, /gratuity MWK 576,000/);
 
+const contractWorkbook = workbook([
+  ['Employee Name', 'Department', 'Position', 'Employee Category', 'Contract Start Date', 'Contract End Date', 'Contract Type', 'Contract Duration', 'Contract Status', 'Employment Status', 'Renewal Information'],
+  ['Synthetic Contract Employee', 'Operations', 'Driver', 'Ground Worker/Gardener', '2026-01-15', '2026-12-31', 'Fixed term', '12 months', 'Active', 'Active', 'Review in November'],
+], 'Employee Contracts 2026');
+const contractAnalysis = await analyzeSpreadsheetWorkbook(contractWorkbook);
+assert.equal(contractAnalysis.detectedKind, 'payroll-grid');
+const contractPreview = await createSpreadsheetImportPreview(
+  contractWorkbook,
+  contractAnalysis,
+  contractAnalysis.detectedKind,
+  [{ id: 'employee-contract-1', fullName: 'Synthetic Contract Employee', salaryMWK: 0, createdAt: '', updatedAt: '', createdBy: '', updatedBy: '' }],
+  'Employee Contracts 2026.xlsx',
+);
+const contractLine = contractPreview.lines.find((line) => line.kind === 'employee');
+assert.equal(contractLine?.matchedEmployeeId, 'employee-contract-1');
+assert.equal(contractLine?.contractFields?.position, 'Driver');
+assert.equal(contractLine?.contractFields?.contractStartDate, '2026-01-15');
+assert.equal(contractLine?.contractFields?.contractEndDate, '2026-12-31');
+assert.equal(contractLine?.contractFields?.contractType, 'Fixed term');
+assert.equal(contractLine?.contractFields?.contractStatus, 'Active');
+assert.equal(contractLine?.contractFields?.employeeCategory, 'Ground Worker/Gardener');
+assert.match(spreadsheetEmployeeLineToPreview(contractLine!).summary, /contract 2026-01-15 to 2026-12-31/);
+
 const uploadedGratuityWorkbook = XLSX.read(
   fs.readFileSync('public/sample_reports/Gratuity all workers.xlsx'),
   { cellFormula: true },
 );
-const uploadedGratuityAnalysis = analyzeSpreadsheetWorkbook(uploadedGratuityWorkbook);
+const uploadedGratuityAnalysis = await analyzeSpreadsheetWorkbook(uploadedGratuityWorkbook);
 assert.equal(uploadedGratuityAnalysis.detectedKind, 'payroll-grid');
-const uploadedGratuityPreview = createSpreadsheetImportPreview(
+const uploadedGratuityPreview = await createSpreadsheetImportPreview(
   uploadedGratuityWorkbook,
   uploadedGratuityAnalysis,
   uploadedGratuityAnalysis.detectedKind,
-  [],
   [],
   'Gratuity all workers.xlsx',
 );
@@ -171,9 +214,9 @@ assert.equal(uploadedGratuityEmployees.flatMap((line) => line.otherPayrollAmount
 assert.ok(uploadedGratuityEmployees.every((line) => line.salaryHistory.length === 0));
 
 const unknownWorkbook = workbook([['Column A', 'Column B'], ['value 1', 'value 2']]);
-const unknownPreview = createSpreadsheetImportPreview(
+const unknownPreview = await createSpreadsheetImportPreview(
   unknownWorkbook,
-  analyzeSpreadsheetWorkbook(unknownWorkbook),
+  await analyzeSpreadsheetWorkbook(unknownWorkbook),
   'unknown',
 );
 assert.ok(unknownPreview.lines.length > 0, 'unknown data stays in the review preview for user classification');
@@ -191,9 +234,9 @@ const payrollWithSummaryRows = workbook([
   ['', 'SUMMARY - STAFF', 1244000, 1244000],
   ['', 'Jane Synthetic', 50000, 55000],
 ], 'PAYMENTS');
-const summaryRowsPreview = createSpreadsheetImportPreview(
+const summaryRowsPreview = await createSpreadsheetImportPreview(
   payrollWithSummaryRows,
-  analyzeSpreadsheetWorkbook(payrollWithSummaryRows),
+  await analyzeSpreadsheetWorkbook(payrollWithSummaryRows),
   'payroll-grid',
 );
 assert.deepEqual(
@@ -216,10 +259,10 @@ const matrixPayrollWorkbook = workbook([
   ['', 'MILL', '', ''],
   ['', '', 'Synthetic Mill Employee', 125000],
 ], 'Employees salary 2026');
-assert.equal(detectSpreadsheetKind(matrixPayrollWorkbook), 'payroll-grid');
-const matrixPayrollPreview = createSpreadsheetImportPreview(
+assert.equal(await detectSpreadsheetKind(matrixPayrollWorkbook), 'payroll-grid');
+const matrixPayrollPreview = await createSpreadsheetImportPreview(
   matrixPayrollWorkbook,
-  analyzeSpreadsheetWorkbook(matrixPayrollWorkbook),
+  await analyzeSpreadsheetWorkbook(matrixPayrollWorkbook),
   'payroll-grid',
 );
 const matrixPayrollLines = matrixPayrollPreview.lines.filter((line) => line.kind === 'employee');
@@ -237,11 +280,10 @@ const repeatedEmployeePayrollWorkbook = workbook([
   ['', 'GRADUITY'],
   ['', '', 'Synthetic Employee', 0, 50000],
 ], 'Payroll 2026');
-const repeatedEmployeePreview = createSpreadsheetImportPreview(
+const repeatedEmployeePreview = await createSpreadsheetImportPreview(
   repeatedEmployeePayrollWorkbook,
-  analyzeSpreadsheetWorkbook(repeatedEmployeePayrollWorkbook),
+  await analyzeSpreadsheetWorkbook(repeatedEmployeePayrollWorkbook),
   'payroll-grid',
-  [],
   [],
   'Payroll 2026.xlsx',
 );
@@ -257,10 +299,10 @@ for (const fileName of [
   'scripts/fixtures/SEPTEMBER SHINE RELEIF SLARY TEMPLATE JUNE 2026-1.xlsx',
 ]) {
   const fixtureWorkbook = XLSX.read(fs.readFileSync(fileName), { cellFormula: true });
-  const fixtureAnalysis = analyzeSpreadsheetWorkbook(fixtureWorkbook);
+  const fixtureAnalysis = await analyzeSpreadsheetWorkbook(fixtureWorkbook);
   assert.equal(fixtureAnalysis.detectedKind, 'payroll-grid', `${fileName} should be detected as payroll`);
-  const fixturePreview = createSpreadsheetImportPreview(
-    fixtureWorkbook, fixtureAnalysis, fixtureAnalysis.detectedKind, [], [], fileName,
+  const fixturePreview = await createSpreadsheetImportPreview(
+    fixtureWorkbook, fixtureAnalysis, fixtureAnalysis.detectedKind, [], fileName,
   );
   const detectedEmployees = fixturePreview.lines.filter((line) => line.kind === 'employee');
   assert.ok(detectedEmployees.length > 0, `${fileName} should produce employee preview rows`);
@@ -293,12 +335,11 @@ const onlySeptemberWorkbook = XLSX.read(
   fs.readFileSync('scripts/fixtures/only sep employees salary 2026.xlsx'),
   { cellFormula: true },
 );
-const onlySeptemberAnalysis = analyzeSpreadsheetWorkbook(onlySeptemberWorkbook);
-const onlySeptemberPreview = createSpreadsheetImportPreview(
+const onlySeptemberAnalysis = await analyzeSpreadsheetWorkbook(onlySeptemberWorkbook);
+const onlySeptemberPreview = await createSpreadsheetImportPreview(
   onlySeptemberWorkbook,
   onlySeptemberAnalysis,
   onlySeptemberAnalysis.detectedKind,
-  [],
   [],
   'only sep employees salary 2026.xlsx',
 );
@@ -315,6 +356,52 @@ for (const card of employeePreviewCards) {
   assert.doesNotMatch(name, /^PAYMENTS!\s*row\s*\d+$/i);
 }
 
+const missingPayrollWorkbook = workbook([
+  ['September 2026 Payroll - Missing Employees Report'],
+  ['Employees listed in the September spreadsheet but missing from payroll'],
+  ['Employee Name', 'September Salary (MWK)', 'Payroll App Status', 'Action Required'],
+  ['Synthetic Farm Worker', 100000, 'Missing from App', 'Add to payroll'],
+  ['Synthetic House Mum', 100000, 'Missing from App', 'Add to payroll'],
+  ['Synthetic Driver', 100000, 'Missing from App', 'Add to payroll'],
+  ['Synthetic Security Guard', 80000, 'Missing from App', 'Verify and add'],
+  ['Total September Salary Unaccounted', 380000, '', ''],
+], 'Sept Payroll Missing Employees');
+const missingPayrollAnalysis = await analyzeSpreadsheetWorkbook(missingPayrollWorkbook);
+assert.equal(missingPayrollAnalysis.detectedKind, 'payroll-grid');
+const missingPayrollPreview = await createSpreadsheetImportPreview(
+  missingPayrollWorkbook,
+  missingPayrollAnalysis,
+  missingPayrollAnalysis.detectedKind,
+  [],
+  'september_2026_missing_payroll_report.xlsx',
+);
+const missingPayrollEmployees = missingPayrollPreview.lines.filter((line) => line.kind === 'employee');
+assert.deepEqual(missingPayrollEmployees.map((line) => [line.employeeName, line.currentSalary, line.latestSourcePeriod]), [
+  ['Synthetic Farm Worker', 100000, '2026-09'],
+  ['Synthetic House Mum', 100000, '2026-09'],
+  ['Synthetic Driver', 100000, '2026-09'],
+  ['Synthetic Security Guard', 80000, '2026-09'],
+]);
+
+const alternatePayrollLayout = workbook([
+  ['Staff payroll exceptions - September 2026'],
+  ['Department', 'Employee Full Name', 'Pay September 2026 (MWK)'],
+  ['Operations', 'Synthetic Layout Employee', 85000],
+], 'September Payroll Exceptions');
+const alternatePayrollAnalysis = await analyzeSpreadsheetWorkbook(alternatePayrollLayout);
+const alternatePayrollPreview = await createSpreadsheetImportPreview(
+  alternatePayrollLayout,
+  alternatePayrollAnalysis,
+  alternatePayrollAnalysis.detectedKind,
+  [],
+  'alternate_september_payroll.xlsx',
+);
+const alternateEmployee = alternatePayrollPreview.lines.find((line) => line.kind === 'employee');
+assert.equal(alternateEmployee?.employeeName, 'Synthetic Layout Employee');
+assert.equal(alternateEmployee?.department, 'Operations');
+assert.equal(alternateEmployee?.currentSalary, 85000);
+assert.equal(alternateEmployee?.latestSourcePeriod, '2026-09');
+
 const aliasMatch = matchNameCandidates('Magret Synthetic', [{ id: 'staff-1', name: 'Margaret Synthetic' }]);
 assert.equal(aliasMatch.exact.length, 0);
 assert.equal(aliasMatch.possible.length, 1);
@@ -330,4 +417,136 @@ assert.equal(cycleMetrics.caregiverCount, 2);
 assert.equal(cycleMetrics.classesStartDate, '21 September 2026');
 assert.equal(cycleMetrics.feedingProgrammeStartDate, '28 September 2026');
 
-console.log('Spreadsheet detection, formula preservation and budget/list/projection preview tests passed.');
+const irregularBudget = workbook([
+  ['CHILD HOUSE BUDGET · NOVEMBER 2026'],
+  ['Items for review'],
+  ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)'],
+  ['1', 'Ufa', '50kgs', 2, 80000, 160000],
+  ['2', 'Rice', '4kgs', 1, 3000, 12000],
+  ['3', 'Cooking Oil', '2L', 1, 14000, 19000],
+  ['4', 'Lamp', 'lampsome', 1, 5000, 5000],
+], 'Budget sheet');
+const syntheticRequest = createSyntheticSpreadsheetAIRequest([{
+  name: 'Budget sheet',
+  rows: [
+    ['Mary Chifundo budget November 2026'],
+    ['Items for review'],
+    ['ITEM NO', 'ITEM', 'QTY', 'FREQUENCY', 'COST/ITEM', 'TOTAL COST(MK)'],
+    ['1', 'Private village and household details', '50kgs', '2', '80000', '160000'],
+  ],
+}]);
+const irregularRequest = validateSpreadsheetAIRequest(syntheticRequest.request);
+const outboundSample = JSON.stringify(irregularRequest);
+assert.equal(outboundSample.includes('Mary Chifundo'), false, 'personal names must never leave the device');
+assert.equal(outboundSample.includes('Private village and household details'), false, 'actual cell values must never leave the device');
+assert.equal(outboundSample.includes('Budget sheet'), false, 'worksheet names must never leave the device');
+assert.equal(outboundSample.includes('SYNTHETIC_NUMBER'), true, 'OpenRouter receives generated value-type examples');
+assert.equal(outboundSample.includes('item no'), true, 'allowlisted column headers are available for mapping');
+assert.throws(() => validateSpreadsheetAIRequest({
+  fileLabel: 'Sanitized spreadsheet structure',
+  sheets: [{
+    name: 'Sheet 1',
+    headerRow: 0,
+    rows: [['employee name'], ['Mary Chifundo'], ['SYNTHETIC_TEXT']],
+  }],
+}), /Only generated synthetic cell examples/, 'the server-side request validator rejects raw spreadsheet values');
+const mappingProposal = validateSpreadsheetAIMappingProposal({
+  kind: 'budget-monthly',
+  confidence: 0.91,
+  programmeId: 'child-house',
+  periodMonth: 11,
+  summary: 'This is a child-house monthly budget with a non-standard item table.',
+  warnings: ['The declared totals do not consistently match quantity × frequency × unit cost.'],
+  sheets: [{
+    name: 'Sheet 1',
+    headerRow: 2,
+    columns: [
+      { sourceColumn: 0, field: 'itemNumber', confidence: 0.95 },
+      { sourceColumn: 1, field: 'description', confidence: 0.96 },
+      { sourceColumn: 2, field: 'quantity', confidence: 0.99 },
+      { sourceColumn: 3, field: 'frequency', confidence: 0.94 },
+      { sourceColumn: 4, field: 'unitCost', confidence: 0.9 },
+      { sourceColumn: 5, field: 'totalAmount', confidence: 0.98 },
+    ],
+    warnings: [],
+  }],
+}, irregularRequest);
+const restoredProposal = restoreSpreadsheetAIMappingSheetNames(mappingProposal, syntheticRequest.originalSheetNames);
+assert.equal(restoredProposal.sheets[0].name, 'Budget sheet', 'original sheet names are restored locally for applying the mapping');
+const mappedWorkbook = await applySpreadsheetAIMapping(irregularBudget, restoredProposal);
+assert.equal(mappedWorkbook.Sheets['Budget sheet']['C3'].v, 'Quantity');
+assert.equal(irregularBudget.Sheets['Budget sheet']['C3'].v, 'QTY', 'AI mapping must not mutate the original workbook');
+const irregularAnalysis = await analyzeSpreadsheetWorkbook(irregularBudget);
+const aiMappedBudget = await createSpreadsheetImportPreview(
+  irregularBudget,
+  irregularAnalysis,
+  'item-list',
+  [],
+  'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+  restoredProposal,
+);
+assert.equal(aiMappedBudget.kind, 'budget-monthly', 'The explicit proposal may override a wrong deterministic kind');
+const mappedBudgetLines = aiMappedBudget.lines.filter((line) => line.kind === 'budget');
+assert.equal(mappedBudgetLines.length, 3);
+assert.equal(mappedBudgetLines[0].itemDescription, 'Ufa');
+assert.equal(mappedBudgetLines[0].quantity, 50);
+assert.equal(mappedBudgetLines[0].unit, 'kg');
+assert.equal(mappedBudgetLines[0].unitCost, 80000);
+assert.equal(mappedBudgetLines[0].budgetAmount, 160000, 'Preserve the reported total rather than silently replacing it with a calculation');
+assert.equal(mappedBudgetLines[0].programmeId, 'child-house');
+assert.equal(mappedBudgetLines[0].period, '2026-11');
+assert.equal(mappedBudgetLines[0].periodType, 'monthly');
+assert.match(mappedBudgetLines[0].notes, /source total MWK 160000 differs/);
+assert.equal(spreadsheetLineToPreview(mappedBudgetLines[0]).selected, false, 'Arithmetic conflicts require deliberate item selection');
+assert.equal(spreadsheetLineToPreview(mappedBudgetLines[1]).selected, true, 'Consistent rows remain available for review');
+assert.ok(aiMappedBudget.lines.some((line) => line.kind === 'unmapped' && line.reason.includes('Missing item label, quantity, or unit cost')));
+
+const explicitAprilBudget = workbook([
+  ['Child House budget · April 2026'],
+  ['Description', 'Quantity', 'Frequency', 'Unit Cost', 'Total Amount'],
+  ['Synthetic maize', 2, 1, 50, 100],
+], 'Budget');
+const aprilBudgetPreview = await createSpreadsheetImportPreview(
+  explicitAprilBudget,
+  await analyzeSpreadsheetWorkbook(explicitAprilBudget),
+  'budget-monthly',
+  [],
+  'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+);
+assert.equal(aprilBudgetPreview.lines.find((line) => line.kind === 'budget')?.period, '2026-04');
+
+const filenameMonthBudget = workbook([
+  ['Programme', 'Item Description', 'QTY', 'Frequency', 'Unit Cost', 'Total Amount'],
+  ['Child House', 'Synthetic rice', 1, 1, 50, 50],
+], 'Budget');
+const filenameMonthPreview = await createSpreadsheetImportPreview(
+  filenameMonthBudget,
+  await analyzeSpreadsheetWorkbook(filenameMonthBudget),
+  'budget-monthly',
+  [],
+  'CHILDHOUSEBUDGET-NOVE-2026-1.xlsx',
+);
+assert.equal(filenameMonthPreview.lines.find((line) => line.kind === 'budget')?.period, '2026-11');
+
+assert.throws(() => validateSpreadsheetAIMappingProposal({
+  kind: 'unknown', confidence: 1, summary: 'bad', sheets: [],
+}, irregularRequest), /unsupported spreadsheet type/);
+assert.throws(() => validateSpreadsheetAIMappingProposal({
+  kind: 'budget-monthly', confidence: 1, summary: 'bad', sheets: [{
+    name: 'Sheet 1', headerRow: 2,
+    columns: [{ sourceColumn: 99, field: 'quantity', confidence: 1 }], warnings: [],
+  }],
+}, irregularRequest), /unsupported column mapping/);
+assert.throws(() => validateSpreadsheetAIRequest({
+  fileLabel: 'Sanitized spreadsheet structure',
+  sheets: [{
+    name: 'Sheet 1',
+    headerRow: 0,
+    rows: [
+      Array.from({ length: 17 }, (_, index) => `Column ${index + 1}`),
+      ['SYNTHETIC_TEXT'],
+      ['SYNTHETIC_TEXT'],
+    ],
+  }],
+}), /too many columns/);
+console.log('Spreadsheet detection, formula preservation, AI mapping validation, and import-preview tests passed.');

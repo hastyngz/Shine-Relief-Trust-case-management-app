@@ -14,7 +14,7 @@ interface CaseManagementViewProps {
 }
 
 const tabs = [
-  ['actions', 'Actions'],
+  ['actions', 'My Work'],
   ['education', 'Education'],
   ['attendance-leave', 'Attendance & Leave'],
   ['reviews', 'Case Reviews'],

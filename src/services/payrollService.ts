@@ -2,11 +2,12 @@ import type {
   EmployeeRecord,
   PayrollRecord,
   SalaryHistoryRecord,
-  StaffUser,
 } from '../types';
+import { isValidInventoryDate } from '../utils/inventory';
 
 export interface MonthlyPayrollEmployee {
   employeeId: string;
+  staffUid?: string | null;
   employeeName: string;
   department?: string;
   positionTitle?: string;
@@ -17,6 +18,34 @@ export interface MonthlyPayrollEmployee {
   status: 'Paid' | 'Partially Paid' | 'Outstanding';
 }
 
+export interface PayrollViewerData {
+  employees: EmployeeRecord[];
+  records: PayrollRecord[];
+}
+
+/** Restrict the client-side payroll view as a second boundary after Firestore rules. */
+export function filterPayrollDataForViewer(
+  employees: EmployeeRecord[],
+  records: PayrollRecord[],
+  viewerUid: string,
+  canProcessPayroll: boolean,
+): PayrollViewerData {
+  if (canProcessPayroll) return { employees, records };
+  if (!viewerUid) return { employees: [], records: [] };
+  const visibleRecords = records.filter((record) => record.staffUid === viewerUid);
+  const visibleEmployees = employees.filter((employee) => employee.staffUid === viewerUid);
+  // Staff cannot read the manager-only employees collection. If their own
+  // payroll record is available, derive a minimal self-only summary profile.
+  if (visibleEmployees.length === 0 && visibleRecords.length > 0) {
+    const latestRecord = [...visibleRecords].sort((left, right) =>
+      right.payPeriodStartDate.localeCompare(left.payPeriodStartDate)
+      || right.updatedAt.localeCompare(left.updatedAt)
+    )[0];
+    visibleEmployees.push(employeeRecordFromPayrollRecord(latestRecord));
+  }
+  return { employees: visibleEmployees, records: visibleRecords };
+}
+
 export interface MonthlyPayrollSummary {
   employees: MonthlyPayrollEmployee[];
   expectedTotal: number;
@@ -24,6 +53,21 @@ export interface MonthlyPayrollSummary {
   outstandingTotal: number;
   paidCount: number;
   outstandingCount: number;
+}
+
+export function employeeRecordFromPayrollRecord(record: PayrollRecord): EmployeeRecord {
+  return {
+    id: record.employeeId,
+    staffUid: record.staffUid,
+    fullName: record.employeeName,
+    department: record.departmentOrProgramme,
+    salaryMWK: record.applicableSalary,
+    employmentStatus: 'Active',
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    createdBy: record.createdBy,
+    updatedBy: record.updatedBy,
+  };
 }
 
 export function monthlyPayrollTaskId(period: string): string {
@@ -64,7 +108,6 @@ function applicableSalary(
 export function buildMonthlyPayrollSummary(
   period: string,
   importedEmployees: EmployeeRecord[],
-  staff: StaffUser[],
   salaryHistory: SalaryHistoryRecord[],
   payrollRecords: PayrollRecord[],
 ): MonthlyPayrollSummary {
@@ -78,23 +121,12 @@ export function buildMonthlyPayrollSummary(
     if (employee.employmentStatus && employee.employmentStatus !== 'Active') return;
     employees.set(employee.id, {
       employeeId: employee.id,
+      staffUid: employee.staffUid,
       employeeName: employee.fullName,
       department: employee.department,
       positionTitle: employee.positionTitle,
     });
   });
-  staff.forEach((person) => {
-    if (person.status !== 'Active' || person.employmentStatus && person.employmentStatus !== 'Active') return;
-    if (!employees.has(person.id)) {
-      employees.set(person.id, {
-        employeeId: person.id,
-        employeeName: person.fullName,
-        department: person.departmentOrTitle,
-        positionTitle: person.position,
-      });
-    }
-  });
-
   const rows = Array.from(employees.values()).flatMap((employee) => {
     const profile = importedEmployees.find((candidate) => candidate.id === employee.employeeId);
     const salaryFallback = profile?.latestSalaryPeriod && profile.latestSalaryPeriod > periodEnd
@@ -153,4 +185,49 @@ export function payrollTaskDescription(
     'Employees:',
     employeeList || 'No active employees with a salary are currently due.',
   ].join('\n');
+}
+
+export interface PayrollSubmissionValidation {
+  employeeName: string;
+  employeeId: string;
+  payPeriod: string;
+  payPeriodStartDate: string;
+  payPeriodEndDate: string;
+  applicableSalary: number;
+  allowancesMWK: number;
+  deductionsMWK: number;
+  expectedAmount: number;
+  paymentAmount: number;
+  datePaid?: string;
+  isPayment: boolean;
+  outstandingAmount?: number;
+}
+
+/** Validate payroll boundaries before any local write; callers still enforce role access. */
+export function getPayrollSubmissionValidationError(input: PayrollSubmissionValidation): string | null {
+  const periodMatch = input.payPeriod.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+  if (!input.employeeName.trim() || !input.employeeId.trim() || !periodMatch
+    || !isValidInventoryDate(input.payPeriodStartDate) || !isValidInventoryDate(input.payPeriodEndDate)) {
+    return 'Enter an employee and a valid YYYY-MM payroll period with real start and end dates.';
+  }
+  if (input.payPeriodStartDate > input.payPeriodEndDate
+    || input.payPeriodStartDate.slice(0, 7) !== input.payPeriod
+    || input.payPeriodEndDate.slice(0, 7) !== input.payPeriod) {
+    return 'Payroll start and end dates must be in order and belong to the selected payroll month.';
+  }
+  const amounts = [input.applicableSalary, input.allowancesMWK, input.deductionsMWK, input.expectedAmount, input.paymentAmount];
+  if (!amounts.every(Number.isFinite) || input.applicableSalary < 0 || input.allowancesMWK < 0
+    || input.deductionsMWK < 0 || input.expectedAmount <= 0 || input.paymentAmount < 0) {
+    return 'Payroll amounts must be valid non-negative MWK values, with an expected amount greater than zero.';
+  }
+  if (!input.isPayment && input.paymentAmount > input.expectedAmount) {
+    return 'Recorded payroll paid amount cannot exceed the expected amount.';
+  }
+  if (input.isPayment && (input.paymentAmount <= 0 || !isValidInventoryDate(input.datePaid || ''))) {
+    return 'Enter a positive payment amount and a real payment date.';
+  }
+  if (input.isPayment && input.outstandingAmount !== undefined && input.paymentAmount > input.outstandingAmount) {
+    return 'Payment exceeds the outstanding balance of MWK ' + input.outstandingAmount.toLocaleString() + '.';
+  }
+  return null;
 }

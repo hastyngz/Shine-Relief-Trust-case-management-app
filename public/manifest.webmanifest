@@ -1,0 +1,25 @@
+{
+  "name": "SHINE Relief Trust Malawi Case Management",
+  "short_name": "SHINE",
+  "description": "Mobile case management and monitoring app for SHINE Relief Trust in Malawi, managing SHINE Girls, households, educational, medical, and family follow-ups, rent, and expenditures.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/shine-logo.png",
+      "sizes": "450x450",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/shine-logo.png",
+      "sizes": "450x450",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

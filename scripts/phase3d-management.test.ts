@@ -4,9 +4,9 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import type { SalaryHistoryRecord } from '../src/types';
 import { buildManagementAnalytics, canAccessManagementDashboard, projectManagementDatabase } from '../src/services/managementAnalytics';
-import { buildManagementReportRows, generateManagementReportWorkbook, MANAGEMENT_REPORTS } from '../src/services/managementReports';
+import { buildManagementReportRows, generateManagementReportCsv, generateManagementReportWorkbook, getCashBookSummary, getCashBookSummaryRows, getCashBookSupplementaryPayments, MANAGEMENT_REPORTS } from '../src/services/managementReports';
 import { buildFactualReportNarrative, buildRecordedRecommendations, filterDataForReport, generateExcelWorkbook, generatePdfReport, generateWordReport, ReportConfig } from '../src/services/reportGenerators';
-import { downloadCSV } from '../src/utils/export';
+import { downloadExcel } from '../src/utils/export';
 
 const db = {
   girls: [
@@ -45,7 +45,7 @@ assert.equal(canAccessManagementDashboard(true, 'Administrator'), true);
 assert.equal(canAccessManagementDashboard(false, 'Manager'), true);
 assert.equal(canAccessManagementDashboard(false, 'Staff'), false);
 assert.equal(canAccessManagementDashboard(false, 'View Only'), false);
-assert.equal(MANAGEMENT_REPORTS.length, 31);
+assert.equal(MANAGEMENT_REPORTS.length, 32);
 
 const analytics = buildManagementAnalytics({
   ...db,
@@ -109,6 +109,11 @@ assert.equal(protectedProjection.healthFollowUps.length, 0);
 assert.deepEqual(protectedProjection.caseActions?.map((item) => item.id), ['visible-action']);
 assert.deepEqual(protectedProjection.attachments?.map((item) => item.id), ['house-photo']);
 assert.deepEqual(protectedProjection.caseReviews, []);
+const adminGeneralProjection = projectManagementDatabase({
+  ...db,
+  caseActions: [{ id: 'restricted-safeguarding', sourceType: 'safeguarding' }, { id: 'visible-action', sourceType: 'manual' }],
+} as any, { canViewHealthRecords: true, canViewSafeguarding: true, canViewCaseReviews: true });
+assert.deepEqual(adminGeneralProjection.caseActions?.map((item) => item.id), ['visible-action']);
 const caseReviewWithoutHealth = projectManagementDatabase({ ...db, caseReviews: [{ id: 'review-1', health: 'restricted', education: 'Progress' }] } as any, { canViewHealthRecords: false, canViewSafeguarding: false, canViewCaseReviews: true });
 assert.equal(caseReviewWithoutHealth.caseReviews?.[0].health, undefined);
 assert.equal(caseReviewWithoutHealth.caseReviews?.[0].education, 'Progress');
@@ -162,7 +167,88 @@ const categoryExpenseReport = buildManagementReportRows('expenditure-category', 
   ],
 } as any, {});
 assert.deepEqual(categoryExpenseReport.rows, [['Food', 2, 150], ['Repairs', 1, 25]]);
-const managementWorkbook = XLSX.read(generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
+const cashBookDb = {
+  ...db,
+  pettyCashTransactions: [
+    { id: 'opening-2026', date: '2026-01-01', type: 'opening_balance', amountMWK: 10000, description: 'Synthetic opening float', reference: 'OPEN-2026', recordedAt: '2026-01-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2026-01-01T08:00:00Z' },
+    { id: 'receipt-2026', date: '2026-02-01', type: 'cash_received', amountMWK: 5000, description: 'Synthetic cash receipt', reference: 'RECEIPT-1', category: 'Float', recordedAt: '2026-02-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2026-02-01T08:00:00Z' },
+    { id: 'expense-2026', date: '2026-03-01', type: 'expense', amountMWK: 1200, description: 'Synthetic expense, with comma', reference: 'VOUCHER-1', category: 'Operations', recordedAt: '2026-03-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2026-03-01T08:00:00Z' },
+    { id: 'outside-2026', date: '2027-01-01', type: 'cash_received', amountMWK: 9000, description: 'Outside period', reference: 'OUTSIDE', recordedAt: '2027-01-01T08:00:00Z', recordedBy: 'Synthetic manager', recordedByUid: 'manager', createdAt: '2027-01-01T08:00:00Z' },
+  ],
+} as any;
+const cashBook = buildManagementReportRows('cash-book', cashBookDb, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.deepEqual(cashBook.rows.map((row) => row[0]), ['2026-01-01', '2026-02-01', '2026-03-01']);
+assert.deepEqual(cashBook.rows.map((row) => row[9]), [10000, 15000, 13800]);
+const supplementaryCashBook = getCashBookSupplementaryPayments({
+  ...cashBookDb,
+  expenses: [
+    { id: 'paid-expense', recordType: 'actual', paymentStatus: 'Paid', datePaid: '2026-04-02', totalCost: 25000, itemDescription: 'Fuel', paymentMethod: 'Bank transfer', paymentReference: 'BANK-REF-1', category: 'Transport' },
+    { id: 'unpaid-expense', recordType: 'actual', paymentStatus: 'Payment Outstanding', date: '2026-04-03', totalCost: 40000, itemDescription: 'Unpaid food' },
+    { id: 'bad-date-expense', recordType: 'actual', paymentStatus: 'Paid', totalCost: 1000, itemDescription: 'Missing date' },
+    { id: 'budget-only', recordType: 'budget', paymentStatus: 'Paid', datePaid: '2026-04-04', totalCost: 99999, itemDescription: 'Budget line' },
+  ],
+  rentPayments: [
+    { id: 'paid-rent', paymentStatus: 'Paid', datePaid: '2026-04-05', amountPaid: 80000, monthCovered: 'April 2026', receiptNumber: 'RENT-1' },
+    { id: 'outside-year-rent', paymentStatus: 'Paid', datePaid: '2027-01-05', amountPaid: 80000, monthCovered: 'January 2027', receiptNumber: 'RENT-2027' },
+  ],
+  procurementLists: [{
+    id: 'proc-1', title: 'Office supplies',
+    payments: [
+      { id: 'proc-payment-1', date: '2026-04-02', amountMWK: 25000, reference: 'BANK-REF-1', method: 'Bank transfer' },
+      { id: 'proc-payment-2', date: '2026-04-06', amountMWK: 12000, reference: 'PO-PAY-2' },
+    ],
+  }],
+  payrollRecords: [{ id: 'payroll-cumulative', amountPaid: 700000, paymentStatus: 'Paid', datePaid: '2026-04-01' }],
+} as any, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.equal(supplementaryCashBook.rows.length, 4);
+assert.deepEqual(supplementaryCashBook.sourceCounts, { expenses: 1, rent: 1, procurement: 2 });
+assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'paid-expense'));
+assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'paid-rent'));
+assert.ok(supplementaryCashBook.rows.some((row) => row[2] === 'proc-1/proc-payment-1'));
+assert.ok(supplementaryCashBook.rows.filter((row) => String(row[7]).includes('Possible duplicate')).length === 2);
+assert.equal(supplementaryCashBook.exceptions.length, 2);
+assert.equal(supplementaryCashBook.exceptions[0][1], 'bad-date-expense');
+assert.equal(supplementaryCashBook.exceptions[1][1], 'outside-year-rent');
+assert.match(String(supplementaryCashBook.exceptions[1][2]), /outside 2026/);
+assert.ok(!supplementaryCashBook.rows.some((row) => row[2] === 'unpaid-expense' || row[2] === 'budget-only' || row[2] === 'payroll-cumulative'));
+const aprilSupplementary = getCashBookSupplementaryPayments({
+  ...cashBookDb,
+  expenses: [{ id: 'may-expense', paymentStatus: 'Paid', datePaid: '2026-05-02', totalCost: 1000, itemDescription: 'May' }],
+} as any, { startDate: '2026-04-01', endDate: '2026-04-30', financialYear: '2026' });
+assert.equal(aprilSupplementary.rows.length, 0);
+const cashBookSummary = getCashBookSummary(cashBookDb, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.deepEqual(cashBookSummary, { periodStart: '2026-01-01', periodEnd: '2026-12-31', openingBalanceMWK: 10000, cashReceivedMWK: 5000, expensesMWK: 1200, cashReturnedMWK: 0, adjustmentsInMWK: 0, adjustmentsOutMWK: 0, closingBalanceMWK: 13800, omittedWithinPeriodCount: 0, outsideYearRecordCount: 1 });
+const filteredCashBookSummary = getCashBookSummary(cashBookDb, { startDate: '2026-02-01', endDate: '2026-03-31', financialYear: '2026', category: 'Operations' });
+assert.deepEqual(filteredCashBookSummary, { periodStart: '2026-02-01', periodEnd: '2026-03-31', openingBalanceMWK: 10000, cashReceivedMWK: 0, expensesMWK: 1200, cashReturnedMWK: 0, adjustmentsInMWK: 0, adjustmentsOutMWK: 0, closingBalanceMWK: 13800, omittedWithinPeriodCount: 1, outsideYearRecordCount: 1 });
+assert.equal(getCashBookSummary(cashBookDb, { startDate: '2026-03-01', endDate: '2026-12-31', financialYear: '2026' }).openingBalanceMWK, 15000);
+assert.equal(getCashBookSummary(cashBookDb, { financialYear: '2027' }).closingBalanceMWK, null);
+const cashBookWithoutOpening = { ...cashBookDb, pettyCashTransactions: cashBookDb.pettyCashTransactions.filter((entry: any) => entry.type !== 'opening_balance') } as any;
+const unverifiedCashBookSummary = getCashBookSummary(cashBookWithoutOpening, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.equal(unverifiedCashBookSummary.openingBalanceMWK, null);
+assert.equal(unverifiedCashBookSummary.closingBalanceMWK, null);
+const unverifiedCashBookRows = buildManagementReportRows('cash-book', cashBookWithoutOpening, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.ok(unverifiedCashBookRows.rows.every((row) => row[9] === 'Not verified' && String(row[12]).includes('Opening float not verified')));
+assert.match(String(getCashBookSummaryRows(unverifiedCashBookSummary).find((row) => row[0] === 'Opening balance (MWK)')?.[1]), /Not verified/);
+const cashBookNoTransactions = getCashBookSummary({ ...cashBookDb, pettyCashTransactions: [] } as any, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' });
+assert.equal(cashBookNoTransactions.openingBalanceMWK, null);
+assert.equal(cashBookNoTransactions.closingBalanceMWK, null);
+const cashBookLateOpening = { ...cashBookDb, pettyCashTransactions: [{ ...cashBookDb.pettyCashTransactions[0], date: '2026-01-02' }, ...cashBookDb.pettyCashTransactions.slice(1)] } as any;
+assert.equal(getCashBookSummary(cashBookLateOpening, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' }).openingBalanceMWK, null);
+assert.equal(getCashBookSummary(cashBookLateOpening, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' }).closingBalanceMWK, null);
+assert.match(generateManagementReportCsv(cashBook, getCashBookSummaryRows(cashBookSummary)), /"Synthetic expense, with comma"/);
+const cashBookWorkbook = XLSX.read(await generateManagementReportWorkbook('cash-book', cashBook, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' }, 'Test user', undefined, [], getCashBookSummaryRows(cashBookSummary)), { type: 'array' });
+assert.equal(cashBookWorkbook.Sheets['Executive Summary']['A15']?.v, 'Opening balance (MWK)');
+assert.equal(cashBookWorkbook.Sheets['Report Data']['J3']?.v, 15000);
+const cashBookWorkbookWithSupplementary = XLSX.read(await generateManagementReportWorkbook(
+  'cash-book', cashBook, { startDate: '2026-01-01', endDate: '2026-12-31', financialYear: '2026' },
+  'Test user', undefined, [], getCashBookSummaryRows(cashBookSummary),
+  { headers: supplementaryCashBook.headers, rows: supplementaryCashBook.rows, exceptions: supplementaryCashBook.exceptions },
+), { type: 'array' });
+assert.ok(cashBookWorkbookWithSupplementary.Sheets['Other Payments']);
+assert.ok(cashBookWorkbookWithSupplementary.Sheets['Payment Exceptions']);
+assert.equal(cashBookWorkbookWithSupplementary.Sheets['Other Payments']['A3']?.v, '2026-04-02');
+
+const managementWorkbook = XLSX.read(await generateManagementReportWorkbook('budget-actual', budgetReport, { financialYear: '2026', month: 1 }, 'Test user'), { type: 'array', cellNF: true });
 assert.deepEqual(managementWorkbook.SheetNames, ['Executive Summary', 'Report Data', 'Quality Issues']);
 assert.equal(managementWorkbook.Sheets['Report Data']['J2']?.v, 20);
 assert.ok(managementWorkbook.Sheets['Report Data']['!autofilter']);
@@ -298,10 +384,10 @@ const caseDocx = await generateWordReport(caseReportDb, caseReportConfig);
 const caseDocxText = await mammoth.extractRawText({ buffer: Buffer.from(await caseDocx.arrayBuffer()) } as any);
 assert.match(caseDocxText.value, /School follow-up/);
 assert.match(caseDocxText.value, /Attendance improved/);
-const caseWorkbook = XLSX.read(generateExcelWorkbook(caseReportDb, caseReportConfig), { type: 'array' });
+const caseWorkbook = XLSX.read(await generateExcelWorkbook(caseReportDb, caseReportConfig), { type: 'array' });
 assert.ok(caseWorkbook.SheetNames.includes('Case Actions'));
 assert.ok(caseWorkbook.SheetNames.includes('Case Reviews'));
-const completeCaseWorkbook = XLSX.read(generateExcelWorkbook({
+const completeCaseWorkbook = XLSX.read(await generateExcelWorkbook({
   ...caseReportDb,
   educationalFollowUps: [{ id: 'edu-x', girlId: 'g1', date: '2026-01-10', school: 'School A', classLevel: 'Form 1', academicIssue: 'Attendance', problemsExperienced: '', supportProvided: 'Visit', progressOutcome: 'Improved', recommendations: '', furtherActionRequired: false }],
   educationHistory: [{ id: 'history-x', girlId: 'g1', academicYear: '2026', school: 'School A', classLevel: 'Form 1', status: 'Current' }],
@@ -316,12 +402,12 @@ const completeCaseWorkbook = XLSX.read(generateExcelWorkbook({
 for (const sheetName of ['Education History', 'Examinations', 'Attendance', 'Leave and Absence', 'Household Activities']) {
   assert.ok(completeCaseWorkbook.SheetNames.includes(sheetName), `${sheetName} worksheet should be exported`);
 }
-const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
+const wordWithAttachmentReferences = await generateWordReport({ ...reportDb, attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.jpg', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: '', contentType: 'image/jpeg', fileSize: 100, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }] } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
   includeSections: { ...reportConfig.includeSections, photoGallery: true },
 });
-const excelReport = generateExcelWorkbook(reportDb, reportConfig);
+const excelReport = await generateExcelWorkbook(reportDb, reportConfig);
 assert.ok(wordReport.size > 0);
 const wordBytes = new Uint8Array(await wordReport.arrayBuffer());
 assert.deepEqual(Array.from(wordBytes.slice(0, 2)), [0x50, 0x4b]);
@@ -330,7 +416,7 @@ assert.ok(excelReport.byteLength > 0 || excelReport.length > 0);
 const selectedWorkbook = XLSX.read(excelReport, { type: 'array' });
 assert.deepEqual(selectedWorkbook.SheetNames, ['Executive Summary', 'Quality Issues']);
 
-const budgetWorkbookBytes = generateExcelWorkbook(reportDb, {
+const budgetWorkbookBytes = await generateExcelWorkbook(reportDb, {
   ...reportConfig,
   includeSections: { ...reportConfig.includeSections, budgets: true },
 });
@@ -345,7 +431,7 @@ assert.ok(budgetSheet['!autofilter']);
 const reportImageFixture = new Uint8Array(readFileSync(new URL('../public/logo.png', import.meta.url)));
 const wordWithEmbeddedPhoto = await generateWordReport({
   ...reportDb,
-  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
@@ -353,9 +439,9 @@ const wordWithEmbeddedPhoto = await generateWordReport({
   includeSections: { ...reportConfig.includeSections, photoGallery: true },
 });
 assert.ok(wordWithEmbeddedPhoto.size > wordReport.size);
-const pdfWithEmbeddedPhoto = generatePdfReport({
+const pdfWithEmbeddedPhoto = await generatePdfReport({
   ...reportDb,
-  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
+  attachments: [{ id: 'photo-1', targetType: 'household', targetId: 'h1', fileName: 'house.png', category: 'Household Condition', date: '2026-01-10', downloadUrl: '', storagePath: 'attachments/household/h1/photo-1', contentType: 'image/png', fileSize: reportImageFixture.byteLength, consent: true, uploadedBy: { uid: 'manager', name: 'Manager', email: 'manager@example.test' } }],
 } as any, {
   ...reportConfig,
   selectedPhotoIds: ['photo-1'],
@@ -373,30 +459,42 @@ const longReportDb = {
   healthFollowUps: Array.from({ length: 35 }, (_, index) => ({ id: `health-long-${index}`, girlId: 'g1', date: '2026-01-01', reasonForVisit: `Visit ${index}`, medicalFacility: 'Clinic', treatmentProvided: 'Recorded' })),
   familyFollowUps: [{ id: 'family-pdf', girlId: 'g1', date: '2026-01-01', contactType: 'Home visit', familySituation: 'Recorded family situation', supportProvided: 'Recorded support' }],
 } as any;
-const longPdf = generatePdfReport(longReportDb, {
+const longPdf = await generatePdfReport(longReportDb, {
   ...reportConfig,
   includeSections: { ...reportConfig.includeSections, educationalFollowUps: true, healthFollowUps: true, familyFollowUps: true },
 });
-const emptyTextPdf = generatePdfReport(reportDb, {
+const emptyTextPdf = await generatePdfReport(reportDb, {
   ...reportConfig,
   includeSections: { ...reportConfig.includeSections, educationalFollowUps: true, healthFollowUps: true, familyFollowUps: true },
 });
 assert.ok((await longPdf.arrayBuffer()).byteLength > (await emptyTextPdf.arrayBuffer()).byteLength);
 
 const originalDocument = globalThis.document;
-let csvDownloaded = false;
-let csvHref = '';
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+let excelDownloaded = false;
+let excelHref = '';
+let excelFilename = '';
+let excelBlobType = '';
 const mockLink = {
-  setAttribute: (name: string, value: string) => { if (name === 'href') csvHref = value; },
-  click: () => { csvDownloaded = true; },
+  set href(value: string) { excelHref = value; },
+  set download(value: string) { excelFilename = value; },
+  click: () => { excelDownloaded = true; },
+  remove: () => undefined,
 };
-globalThis.document = { createElement: () => mockLink, body: { appendChild: () => undefined, removeChild: () => undefined } } as any;
+globalThis.document = { createElement: () => mockLink, body: { appendChild: () => undefined } } as unknown as Document;
+URL.createObjectURL = ((blob: Blob) => { excelBlobType = blob.type; return 'blob:shine-test'; }) as typeof URL.createObjectURL;
+URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
 try {
-  downloadCSV('phase3d-test', [['Budget', 'Actual'], [100, 120]]);
+  await downloadExcel('phase3d-test', [['Budget', 'Actual'], [100, 120]]);
 } finally {
   globalThis.document = originalDocument;
+  URL.createObjectURL = originalCreateObjectURL;
+  URL.revokeObjectURL = originalRevokeObjectURL;
 }
-assert.equal(csvDownloaded, true);
-assert.ok(csvHref.startsWith('data:text/csv'));
+assert.equal(excelDownloaded, true);
+assert.equal(excelHref, 'blob:shine-test');
+assert.match(excelFilename, /phase3d-test_\d{4}-\d{2}-\d{2}\.xlsx$/);
+assert.equal(excelBlobType, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
 console.log('Phase 3D management overview tests passed.');

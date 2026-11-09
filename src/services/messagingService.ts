@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { firestore } from '../firebase';
+import { canReceiveFollowUpNotification } from './healthRecordAccess';
 import {
   COLLECTIONS,
   sanitizeForFirestore,
@@ -940,7 +941,7 @@ export async function checkAndTriggerFollowUpReminders(
     girlId: string;
     girlName: string;
     typeLabel: string;
-    recordType: StaffNotification['relatedRecordType'];
+    recordType: 'educationalFollowUp' | 'healthFollowUp' | 'familyFollowUp';
     targetDateStr: string;
     recordedBy?: string;
   }
@@ -1039,6 +1040,8 @@ export async function checkAndTriggerFollowUpReminders(
     if (timingKey) {
       // Deterministic notification ID ensures absolute deduplication in Firestore!
       for (const staff of targetStaff) {
+        // Health reminders must only reach staff authorized to view health records.
+        if (!canReceiveFollowUpNotification(staff, item.recordType)) continue;
         // If staff member recorded this follow-up, prioritize them, else notify manager/admin
         const isAuthor = item.recordedBy && staff.fullName.toLowerCase().includes(item.recordedBy.toLowerCase());
         const isManager = staff.role === 'Manager' || staff.role === 'Administrator';
@@ -1100,10 +1103,11 @@ export async function requestPushNotificationPermission(
         const { app } = await import('../firebase');
         const messaging = getMessaging(app);
 
-        // Register service worker if available
+        // Register service worker if available. It lives under /push/ so it
+        // has its own scope and never competes with the app-shell worker at /.
         let swReg: ServiceWorkerRegistration | undefined;
         if ('serviceWorker' in navigator) {
-          swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          swReg = await navigator.serviceWorker.register('/push/firebase-messaging-sw.js', { scope: '/push/' });
         }
 
         const token = await getToken(messaging, {

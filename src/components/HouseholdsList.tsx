@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Household, Girl, AppDatabase } from '../types';
 import { formatMWK } from '../utils/export';
 import { useAuth } from '../contexts/AuthContext';
+import { EmptySun } from './ui/EmptySun';
 import { PROGRAMME_BY_ID } from '../data/programmes';
 import {
   Home,
@@ -73,7 +74,7 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
         {!isViewOnly && (
           <button
             onClick={onAddHouse}
-            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95 self-start sm:self-center"
+            className="fx-press fx-btn-main px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-transform min-h-11 self-start sm:self-center"
           >
             <Plus className="w-4 h-4 text-amber-300" />
             <span>Add New Household</span>
@@ -115,7 +116,11 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
       {/* Houses Grid */}
       {filteredHouses.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-stone-200 p-6">
-          <Home className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          {households.length === 0 ? (
+            <div className="flex justify-center mb-2"><EmptySun /></div>
+          ) : (
+            <Home className="w-10 h-10 text-stone-400 mx-auto mb-2" />
+          )}
           <h3 className="text-base font-bold text-stone-800">
             {households.length === 0 ? 'No Households Registered Yet' : 'No Households Found'}
           </h3>
@@ -125,12 +130,14 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
               : 'Try adjusting your search criteria or filters.'}
           </p>
           {households.length === 0 ? (
-            <button
-              onClick={onAddHouse}
-              className="mt-4 px-4 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm transition-colors"
-            >
-              Add First Household
-            </button>
+            !isViewOnly && (
+              <button
+                onClick={onAddHouse}
+                className="mt-4 px-4 py-2 text-xs font-bold text-white bg-teal-800 hover:bg-teal-900 rounded-lg shadow-sm transition-colors"
+              >
+                Add First Household
+              </button>
+            )
           ) : (
             <button
               onClick={() => {
@@ -145,7 +152,7 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredHouses.map((house) => {
+          {filteredHouses.map((house, index) => {
           const houseGirls = girls.filter((g) => g.householdId === house.id);
           const houseRent = db.rentPayments.filter((r) => r.householdId === house.id);
           const houseExpenses = db.expenses.filter((e) => e.householdId === house.id);
@@ -154,7 +161,8 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
           return (
             <div
               key={house.id}
-              className="bg-white rounded-xl border border-stone-200 shadow-xs hover:border-teal-700 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+              style={{ "--i": index } as React.CSSProperties}
+              className="fx-rise fx-card bg-white rounded-xl border border-stone-200 shadow-xs hover:border-teal-700 transition-transform flex flex-col justify-between overflow-hidden"
             >
               {/* Card Header */}
               <div className="p-5 border-b border-stone-100">
@@ -249,34 +257,36 @@ export const HouseholdsList: React.FC<HouseholdsListProps> = ({
 
               {/* Action Buttons Row */}
               <div className="p-3 bg-stone-50/70 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onAddRent(house)}
-                    className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-emerald-900 hover:bg-emerald-50 flex items-center gap-1 transition-colors"
-                    title="Record rent payment for this house"
-                  >
-                    <Banknote className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Rent</span>
-                  </button>
+                {!isViewOnly && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onAddRent(house)}
+                      className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-emerald-900 hover:bg-emerald-50 flex items-center gap-1 transition-colors"
+                      title="Record rent payment for this house"
+                    >
+                      <Banknote className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Rent</span>
+                    </button>
 
-                  <button
-                    onClick={() => onAddExpense(house)}
-                    className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-teal-900 hover:bg-teal-50 flex items-center gap-1 transition-colors"
-                    title="Add groceries or supplies"
-                  >
-                    <ShoppingBag className="w-3.5 h-3.5 text-teal-700" />
-                    <span>Groceries</span>
-                  </button>
+                    <button
+                      onClick={() => onAddExpense(house)}
+                      className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-teal-900 hover:bg-teal-50 flex items-center gap-1 transition-colors"
+                      title="Add groceries or supplies"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5 text-teal-700" />
+                      <span>Groceries</span>
+                    </button>
 
-                  <button
-                    onClick={() => onAddActivity(house)}
-                    className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-amber-900 hover:bg-amber-50 flex items-center gap-1 transition-colors"
-                    title="Record group activity or follow-up"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Activity</span>
-                  </button>
-                </div>
+                    <button
+                      onClick={() => onAddActivity(house)}
+                      className="p-1.5 px-2.5 rounded-lg text-xs font-semibold bg-white border border-stone-200 text-amber-900 hover:bg-amber-50 flex items-center gap-1 transition-colors"
+                      title="Record group activity or follow-up"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Activity</span>
+                    </button>
+                  </div>
+                )}
 
                 <button
                   onClick={() => onSelectHouse(house.id)}
